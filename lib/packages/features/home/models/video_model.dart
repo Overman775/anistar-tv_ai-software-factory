@@ -1,3 +1,5 @@
+import 'dart:core';
+
 /// Model representing a video
 class VideoModel {
   /// Unique identifier for the video
@@ -10,7 +12,7 @@ class VideoModel {
   final String description;
 
   /// URL to the video thumbnail image
-  final String thumbnailUrl;
+  final Uri thumbnailUrl;
 
   /// URL to the video file
   final String videoUrl;
@@ -37,7 +39,7 @@ class VideoModel {
     String? id,
     String? title,
     String? description,
-    String? thumbnailUrl,
+    Uri? thumbnailUrl,
     String? videoUrl,
     Duration? duration,
     String? category,

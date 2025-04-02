@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -16,12 +17,7 @@ class VideoCard extends StatelessWidget {
   final VoidCallback onTap;
 
   /// Constructor
-  const VideoCard({
-    super.key,
-    required this.video,
-    required this.isSelected,
-    required this.onTap,
-  });
+  const VideoCard({super.key, required this.video, required this.isSelected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -33,20 +29,12 @@ class VideoCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border:
-              isSelected
-                  ? Border.all(
-                    color: Theme.of(context).colorScheme.primary,
-                    width: 3,
-                  )
-                  : null,
+          border: isSelected ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3) : null,
           boxShadow:
               isSelected
                   ? [
                     BoxShadow(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.primary.withOpacity(0.5),
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
                       blurRadius: 10,
                       spreadRadius: 2,
                     ),
@@ -60,17 +48,17 @@ class VideoCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // Thumbnail
-              Image.asset(
-                video.thumbnailUrl,
+              CachedNetworkImage(
+                imageUrl: video.thumbnailUrl.toString(),
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: Colors.grey.shade800,
-                    child: const Center(
-                      child: Icon(Icons.movie, size: 48, color: Colors.white54),
+                placeholder:
+                    (context, url) =>
+                        Container(color: Colors.grey.shade800, child: const Center(child: CircularProgressIndicator())),
+                errorWidget:
+                    (context, url, error) => Container(
+                      color: Colors.grey.shade800,
+                      child: const Center(child: Icon(Icons.movie, size: 48, color: Colors.white54)),
                     ),
-                  );
-                },
               ),
 
               // Gradient overlay
@@ -80,10 +68,7 @@ class VideoCard extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.7),
-                      ],
+                      colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
                       stops: const [0.6, 1.0],
                     ),
                   ),
@@ -100,21 +85,14 @@ class VideoCard extends StatelessWidget {
                   children: [
                     Text(
                       video.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${video.duration.inMinutes}:${(video.duration.inSeconds % 60).toString().padLeft(2, '0')} • ${video.category}',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
