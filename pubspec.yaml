@@ -1,6 +1,6 @@
 name: anistar_tv
 description: "A Flutter TV application for watching videos."
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
@@ -44,5 +44,4 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/videos/
-    - assets/images/
+    - assets/
