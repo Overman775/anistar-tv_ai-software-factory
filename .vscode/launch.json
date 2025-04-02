@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Anistar TV (Development)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_dev.dart",
+            "args": [
+                "--flavor",
+                "development"
+            ]
+        },
+        {
+            "name": "Anistar TV (Production)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_prod.dart",
+            "args": [
+                "--flavor",
+                "production",
+                "--release"
+            ]
+        },
+        {
+            "name": "Anistar TV (Profile Mode)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_dev.dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "Anistar TV (Android TV)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_prod.dart",
+            "deviceId": "android-tv"
+        }
+    ]
+}

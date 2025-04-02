@@ -1,0 +1,47 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Flutter: Clean",
+            "type": "shell",
+            "command": "flutter clean",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Pub Get",
+            "type": "shell",
+            "command": "flutter pub get",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Build APK",
+            "type": "shell",
+            "command": "flutter build apk --release",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Build App Bundle",
+            "type": "shell",
+            "command": "flutter build appbundle --release",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Run Tests",
+            "type": "shell",
+            "command": "flutter test",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Format Code",
+            "type": "shell",
+            "command": "flutter format lib",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Analyze Code",
+            "type": "shell",
+            "command": "flutter analyze",
+            "problemMatcher": []
+        }
+    ]
+}
