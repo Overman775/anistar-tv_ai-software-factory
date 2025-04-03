@@ -13,10 +13,7 @@ Future<void> runApplication() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Set preferred orientations for TV
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
 
   // Initialize services
   final sharedPreferences = await SharedPreferences.getInstance();
@@ -25,9 +22,7 @@ Future<void> runApplication() async {
   // Run the app with providers
   runApp(
     MultiProvider(
-      providers: [
-        Provider<PreferencesService>.value(value: preferencesService),
-      ],
+      providers: [Provider<PreferencesService>.value(value: preferencesService)],
       child: const AppProvider(child: App()),
     ),
   );

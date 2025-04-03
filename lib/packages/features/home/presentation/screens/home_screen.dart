@@ -1,3 +1,4 @@
+import 'package:anistar_tv/utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -113,9 +114,10 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Anistar TV'),
         actions: [IconButton(icon: const Icon(Icons.favorite), onPressed: () => context.go(AppRoutes.favorites))],
       ),
-      body: RawKeyboardListener(
+      body: KeyboardListener(
+        // Replace RawKeyboardListener with KeyboardListener
         focusNode: _gridFocusNode,
-        onKey: _handleKeyEvent,
+        onKeyEvent: _handleKeyEvent, // Use onKeyEvent instead of onKey
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -160,8 +162,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _handleKeyEvent(RawKeyEvent event) {
-    if (event is! RawKeyDownEvent) return;
+  void _handleKeyEvent(KeyEvent event) {
+    // Update method signature
+    if (event is! KeyDownEvent) return; // Check for KeyDownEvent
+
+    logger.d('Key pressed: ${event.logicalKey.debugName}'); // Log the key press
     if (_videos.isEmpty) return;
 
     final int videosPerRow = 3;
