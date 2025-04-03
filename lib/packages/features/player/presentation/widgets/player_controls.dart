@@ -53,7 +53,7 @@ class PlayerControls extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         // Semi-transparent background
-        Container(color: Colors.black.withOpacity(0.5)),
+        Container(color: Colors.black.withValues(alpha: .7)),
 
         // Top bar with title and back button
         Positioned(
@@ -66,15 +66,12 @@ class PlayerControls extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                colors: [Colors.black.withValues(alpha: .7), Colors.transparent],
               ),
             ),
             child: Row(
               children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: onBack,
-                ),
+                IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: onBack),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -82,19 +79,9 @@ class PlayerControls extends StatelessWidget {
                     children: [
                       Text(
                         video.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      Text(
-                        video.category,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
+                      Text(video.category, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
                 ),
@@ -117,11 +104,7 @@ class PlayerControls extends StatelessWidget {
             children: [
               _ControlButton(icon: Icons.replay_10, onPressed: onSeekBackward),
               const SizedBox(width: 32),
-              _ControlButton(
-                icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                size: 64,
-                onPressed: onPlayPause,
-              ),
+              _ControlButton(icon: isPlaying ? Icons.pause : Icons.play_arrow, size: 64, onPressed: onPlayPause),
               const SizedBox(width: 32),
               _ControlButton(icon: Icons.forward_10, onPressed: onSeekForward),
             ],
@@ -140,7 +123,7 @@ class PlayerControls extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
-                  colors: [Colors.black.withOpacity(0.7), Colors.transparent],
+                  colors: [Colors.black.withValues(alpha: .7), Colors.transparent],
                 ),
               ),
               child: Column(
@@ -158,14 +141,8 @@ class PlayerControls extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        _formatDuration(controller!.value.position),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      Text(
-                        _formatDuration(controller!.value.duration),
-                        style: const TextStyle(color: Colors.white),
-                      ),
+                      Text(_formatDuration(controller!.value.position), style: const TextStyle(color: Colors.white)),
+                      Text(_formatDuration(controller!.value.duration), style: const TextStyle(color: Colors.white)),
                     ],
                   ),
                 ],
@@ -189,25 +166,13 @@ class _ControlButton extends StatelessWidget {
   final double size;
   final VoidCallback onPressed;
 
-  const _ControlButton({
-    super.key,
-    required this.icon,
-    this.size = 40,
-    required this.onPressed,
-  });
+  const _ControlButton({super.key, required this.icon, this.size = 40, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
-        shape: BoxShape.circle,
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: Colors.white),
-        iconSize: size,
-        onPressed: onPressed,
-      ),
+      decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+      child: IconButton(icon: Icon(icon, color: Colors.white), iconSize: size, onPressed: onPressed),
     );
   }
 }

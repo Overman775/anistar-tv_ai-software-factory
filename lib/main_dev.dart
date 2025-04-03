@@ -1,4 +1,4 @@
-import 'package:anistar_tv/utils/logger.dart';
+import 'package:anistar_tv/utils/logger/logger.dart';
 import 'package:logger/logger.dart';
 
 import 'runner/runner.dart';
