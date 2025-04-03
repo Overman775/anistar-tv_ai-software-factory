@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 
 import '../packages/ui_kit/theme/app_theme.dart';
 import 'app_router.dart';
