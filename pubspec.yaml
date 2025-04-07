@@ -35,11 +35,13 @@ dependencies:
 
   # Utilities
   logger: ^2.5.0
+  flutter_inappwebview: ^6.0.0 # For handling web content and bypassing CF
   html: ^0.15.5 # For parsing HTML
   dio: ^5.8.0+1 # For making HTTP requests
   dio_http2_adapter: ^2.6.0 # HTTP/2 adapter for Dio
   cookie_jar: ^4.0.8 # Cookie manager for Dio
   dio_cookie_manager: ^3.1.1 # Cookie manager interceptor for Dio
+  puppeteer: ^3.17.0
 
 dev_dependencies:
   flutter_test:

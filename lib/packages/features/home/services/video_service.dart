@@ -1,3 +1,6 @@
+import 'package:anistar_tv/utils/html_utils.dart';
+import 'package:anistar_tv/utils/logger/logger.dart';
+
 import '../models/video_model.dart';
 
 /// Service for managing videos
@@ -128,6 +131,25 @@ class VideoService {
   /// [page] - The page number (starting from 1)
   /// [pageSize] - Number of videos per page
   Future<List<VideoModel>> getVideosPaginated(int page, int pageSize) async {
+    String? test;
+    try {
+      logger.i('Attempting to fetch title with Puppeteer for astar.bz...');
+      test = await fetchHtmlTitleWithWebView(
+        // Use the new WebView-based function
+        'https://v6.astar.bz/?action_skin_change=1&skin_name=smartphone',
+        logger: logger, // Pass logger to the function for internal logging
+      );
+      if (test != null) {
+        logger.i('Successfully fetched title with Puppeteer: $test');
+      } else {
+        logger.w('fetchHtmlTitleWithPuppeteer returned null. Check internal logs in html_utils.dart for errors.');
+      }
+    } catch (e, stackTrace) {
+      // Catch any unexpected errors during the call itself
+      logger.e('Error calling fetchHtmlTitleWithPuppeteer in VideoService', error: e, stackTrace: stackTrace);
+      test = null; // Ensure test is null on error
+    }
+
     // Simulate network delay
     await Future.delayed(const Duration(milliseconds: 800));
 

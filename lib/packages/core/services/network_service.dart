@@ -1,6 +1,5 @@
 import 'package:cookie_jar/cookie_jar.dart';
 import 'package:dio/dio.dart';
-import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:dio_http2_adapter/dio_http2_adapter.dart';
 import 'package:flutter/foundation.dart'; // For kDebugMode
 import 'package:path_provider/path_provider.dart'; // To get temp directory for cookies
@@ -36,8 +35,12 @@ class NetworkService {
       baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 30),
+      responseType: ResponseType.plain,
+
       headers: {
-        'Accept': 'application/json',
+        'Accept': 'text/html, application/xhtml+xml, application/xml;q=0.9, image/webp, */*;q=0.8',
+        'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
         // Add other common headers here
       },
       // Validate status to handle different response codes if needed
@@ -56,7 +59,7 @@ class NetworkService {
       ignoreExpires: true, // Store cookies even if they have expired
       storage: FileStorage(cookiesPath),
     );
-    _dio.interceptors.add(CookieManager(_cookieJar));
+    // _dio.interceptors.add(CookieManager(_cookieJar));
 
     // --- HTTP/2 Adapter ---
     _dio.httpClientAdapter = Http2Adapter(
