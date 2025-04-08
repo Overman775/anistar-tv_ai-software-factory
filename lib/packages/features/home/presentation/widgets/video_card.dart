@@ -1,8 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../../../features/favorites/services/favorites_service.dart';
 import '../../models/video_model.dart';
 
 /// Card widget for displaying a video
@@ -21,9 +19,6 @@ class VideoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final favoritesService = Provider.of<FavoritesService>(context);
-    final isFavorite = favoritesService.isFavorite(video.id);
-
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -95,26 +90,6 @@ class VideoCard extends StatelessWidget {
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
-                ),
-              ),
-
-              // Favorite icon
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite ? Colors.red : Colors.white,
-                      size: 20,
-                    ),
-                  ),
                 ),
               ),
             ],

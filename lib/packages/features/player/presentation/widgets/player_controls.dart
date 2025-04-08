@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../../features/favorites/services/favorites_service.dart';
 import '../../../../features/home/models/video_model.dart';
 
 /// Widget for video player controls
@@ -46,9 +44,6 @@ class PlayerControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final favoritesService = Provider.of<FavoritesService>(context);
-    final isFavorite = favoritesService.isFavorite(video.id);
-
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -84,13 +79,6 @@ class PlayerControls extends StatelessWidget {
                       Text(video.category, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
-                ),
-                IconButton(
-                  icon: Icon(
-                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: isFavorite ? Colors.red : Colors.white,
-                  ),
-                  onPressed: onToggleFavorite,
                 ),
               ],
             ),

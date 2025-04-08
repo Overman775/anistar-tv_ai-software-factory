@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../../app/app_routes.dart';
-import '../../../favorites/services/favorites_service.dart';
 import '../../../home/models/video_model.dart';
 import '../../../home/services/video_service.dart';
 import '../widgets/player_controls.dart';
@@ -163,8 +162,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _toggleFavorite() {
-    final favoritesService = Provider.of<FavoritesService>(context, listen: false);
-    favoritesService.toggleFavorite(_video.id);
     _showControls();
   }
 
