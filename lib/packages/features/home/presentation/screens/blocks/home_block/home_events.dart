@@ -20,8 +20,3 @@ class HomeLoadStarted extends HomeEvent {
 class HomeLoadMoreRequested extends HomeEvent {
   const HomeLoadMoreRequested();
 }
-
-// TODO: Consider adding a refresh event if pull-to-refresh is needed.
-// class HomeRefreshed extends HomeEvent {
-//   const HomeRefreshed();
-// }

@@ -11,8 +11,6 @@ part 'home_block.freezed.dart'; // Add part for generated freezed file
 part 'home_events.dart';
 part 'home_states.dart';
 
-const _pageSize = 4; // Same page size as in the original HomeScreen
-
 class HomeBloc extends Bloc<HomeEvent, HomeState> {
   final VideoService _videoService;
   int _currentPage = 1;
@@ -25,10 +23,13 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   Future<void> _onLoadStarted(HomeLoadStarted event, Emitter<HomeState> emit) async {
     emit(const HomeState.loading());
     try {
-      _currentPage = 1; // Reset page for initial load
-      final videos = await _videoService.getVideosPaginated(_currentPage, _pageSize);
-      final hasMore = await _videoService.hasMoreVideos(_currentPage, _pageSize);
-      emit(HomeState.loaded(videos: videos, hasMore: hasMore));
+      final pageModel = await _videoService.getVideosPaginated(_currentPage);
+      if (pageModel != null) {
+        emit(HomeState.loaded(videos: pageModel.videos, hasMore: pageModel.hasMorePages));
+      } else {
+        // Handle case where fetching failed
+        emit(const HomeState.error(message: 'Failed to load videos: Received null page data'));
+      }
     } catch (e) {
       // Consider logging the error e
       emit(HomeState.error(message: 'Failed to load videos: ${e.toString()}'));
@@ -65,9 +66,25 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
 
     try {
       _currentPage++;
-      final newVideos = await _videoService.getVideosPaginated(_currentPage, _pageSize);
-      final hasMore = await _videoService.hasMoreVideos(_currentPage, _pageSize);
-      emit(HomeState.loaded(videos: currentVideos + newVideos, hasMore: hasMore));
+      final pageModel = await _videoService.getVideosPaginated(_currentPage);
+      if (pageModel != null) {
+        emit(
+          HomeState.loaded(
+            videos: currentVideos + pageModel.videos, // Combine old and new videos
+            hasMore: pageModel.hasMorePages, // Use hasMore from the new page data
+          ),
+        );
+      } else {
+        // Handle case where fetching failed, revert page and emit error
+        _currentPage--;
+        emit(
+          HomeState.error(
+            message: 'Failed to load more videos: Received null page data',
+            videos: currentVideos,
+            hasMore: currentHasMore,
+          ),
+        );
+      }
     } catch (e) {
       _currentPage--; // Revert page increment on error
       // Consider logging the error e
