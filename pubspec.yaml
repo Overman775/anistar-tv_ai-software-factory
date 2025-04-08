@@ -18,9 +18,10 @@ dependencies:
 
   # State management
   provider: ^6.1.4
+  flutter_bloc: ^9.1.0 # Add flutter_bloc
+  equatable: ^2.0.7 # Add equatable
 
   # Data models
-  freezed: ^3.0.4
   freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
 
@@ -35,18 +36,14 @@ dependencies:
 
   # Utilities
   logger: ^2.5.0
-  flutter_inappwebview: ^6.0.0 # For handling web content and bypassing CF
+  flutter_inappwebview: ^6.1.5 # For handling web content and bypassing CF
   html: ^0.15.5 # For parsing HTML
-  dio: ^5.8.0+1 # For making HTTP requests
-  dio_http2_adapter: ^2.6.0 # HTTP/2 adapter for Dio
-  cookie_jar: ^4.0.8 # Cookie manager for Dio
-  dio_cookie_manager: ^3.1.1 # Cookie manager interceptor for Dio
-  puppeteer: ^3.17.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  freezed: ^3.0.4 # Move freezed here
   build_runner: ^2.4.15
   json_serializable: ^6.9.4
 

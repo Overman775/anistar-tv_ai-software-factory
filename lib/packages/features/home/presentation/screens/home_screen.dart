@@ -1,15 +1,16 @@
 import 'package:anistar_tv/utils/logger/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart'; // Import Bloc
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 
 import '../../../../../app/app_routes.dart';
 import '../../models/video_model.dart';
 import '../../services/video_service.dart';
 import '../widgets/video_card.dart';
+import 'blocks/home_block/home_block.dart'; // Import BLoC
 
-/// Home screen displaying available videos
+/// Home screen displaying available videos using BLoC
 class HomeScreen extends StatefulWidget {
   /// Constructor
   const HomeScreen({super.key});
@@ -19,23 +20,26 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<VideoModel> _videos = [];
+  // UI specific state remains
   int _selectedIndex = 0;
   final FocusNode _gridFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
-  // Pagination variables
-  int _currentPage = 1;
-  final int _pageSize = 4;
-  bool _isLoading = false;
-  bool _hasMoreVideos = true;
+  // BLoC instance
+  late final HomeBloc _homeBloc;
+
+  // Removed: _videos, _currentPage, _isLoading, _hasMoreVideos
 
   @override
   void initState() {
     super.initState();
+    // Create BLoC instance, injecting VideoService
+    _homeBloc = HomeBloc(videoService: context.read<VideoService>());
+    // Dispatch initial event
+    _homeBloc.add(const HomeLoadStarted());
+
     _gridFocusNode.requestFocus();
     _scrollController.addListener(_scrollListener);
-    _loadInitialVideos();
   }
 
   @override
@@ -43,188 +47,267 @@ class _HomeScreenState extends State<HomeScreen> {
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _gridFocusNode.dispose();
+    _homeBloc.close(); // Close the BLoC
     super.dispose();
   }
 
-  /// Load the initial set of videos
-  Future<void> _loadInitialVideos() async {
-    final videoService = Provider.of<VideoService>(context, listen: false);
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final videos = await videoService.getVideosPaginated(_currentPage, _pageSize);
-      final hasMore = await videoService.hasMoreVideos(_currentPage, _pageSize);
-
-      setState(() {
-        _videos.addAll(videos);
-        _hasMoreVideos = hasMore;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      // Handle error
-    }
-  }
-
-  /// Load more videos when scrolling to the bottom
-  Future<void> _loadMoreVideos() async {
-    if (_isLoading || !_hasMoreVideos) return;
-
-    final videoService = Provider.of<VideoService>(context, listen: false);
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      _currentPage++;
-      final videos = await videoService.getVideosPaginated(_currentPage, _pageSize);
-      final hasMore = await videoService.hasMoreVideos(_currentPage, _pageSize);
-
-      setState(() {
-        _videos.addAll(videos);
-        _hasMoreVideos = hasMore;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _currentPage--;
-        _isLoading = false;
-      });
-      // Handle error
-    }
-  }
+  // Removed: _loadInitialVideos, _loadMoreVideos
 
   /// Scroll listener to detect when user reaches the bottom
   void _scrollListener() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      _loadMoreVideos();
+      final homeState = _homeBloc.state;
+      bool canLoadMore = false;
+
+      // Check if we can load more based on the current state
+      if (homeState is HomeLoaded && homeState.hasMore) {
+        canLoadMore = true;
+      } else if (homeState is HomeError && (homeState.hasMore ?? false)) {
+        // Allow retry/load more even from error state if hasMore was true
+        canLoadMore = true;
+      }
+
+      // Only add event if we can load more and are not already loading more
+      if (canLoadMore && homeState is! HomeLoadingMore) {
+        _homeBloc.add(const HomeLoadMoreRequested());
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Anistar TV'),
-        actions: [IconButton(icon: const Icon(Icons.favorite), onPressed: () => context.go(AppRoutes.favorites))],
-      ),
-      body: KeyboardListener(
-        // Replace RawKeyboardListener with KeyboardListener
-        focusNode: _gridFocusNode,
-        onKeyEvent: _handleKeyEvent, // Use onKeyEvent instead of onKey
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Home', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Expanded(
-                child:
-                    _videos.isEmpty && _isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : GridView.builder(
-                          controller: _scrollController,
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            childAspectRatio: 16 / 9,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          itemCount: _videos.length + (_isLoading && _hasMoreVideos ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            // Show loading indicator at the end
-                            if (index == _videos.length) {
-                              return const Center(
-                                child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()),
-                              );
-                            }
+    // Provide the BLoC instance to the widget tree below
+    return BlocProvider.value(
+      value: _homeBloc,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Anistar TV'),
+          actions: [IconButton(icon: const Icon(Icons.favorite), onPressed: () => context.go(AppRoutes.favorites))],
+        ),
+        body: KeyboardListener(
+          focusNode: _gridFocusNode,
+          onKeyEvent: _handleKeyEvent,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            // Use BlocBuilder to react to state changes
+            child: BlocBuilder<HomeBloc, HomeState>(
+              builder: (context, state) {
+                // Extract videos and hasMore status safely from state
+                List<VideoModel> videos = [];
+                bool isLoadingMore = false;
+                String? errorMessage;
 
-                            final video = _videos[index];
-                            return VideoCard(
-                              video: video,
-                              isSelected: index == _selectedIndex,
-                              onTap: () => _playVideo(video.id),
-                            );
-                          },
-                        ),
-              ),
-            ],
+                switch (state) {
+                  case HomeLoaded(videos: final loadedVideos):
+                    videos = loadedVideos;
+                  case HomeLoadingMore(videos: final loadingMoreVideos):
+                    videos = loadingMoreVideos;
+                    isLoadingMore = true;
+                  case HomeError(videos: final errorVideos, message: final errorMsg):
+                    videos = errorVideos ?? []; // Show previous videos if available
+                    errorMessage = errorMsg;
+                  // Handle other potential states if necessary, or provide a default
+                  case HomeInitial():
+                  case HomeLoading():
+                    // No specific action needed here for video/error extraction
+                    break;
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Home', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 16),
+                    Expanded(child: _buildContent(context, state, videos, isLoadingMore, errorMessage)),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _handleKeyEvent(KeyEvent event) {
-    // Update method signature
-    if (event is! KeyDownEvent) return; // Check for KeyDownEvent
+  Widget _buildContent(
+    BuildContext context,
+    HomeState state,
+    List<VideoModel> videos,
+    bool isLoadingMore,
+    String? errorMessage,
+  ) {
+    // Initial Loading State
+    if (state is HomeInitial || state is HomeLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-    logger.d('Key pressed: ${event.logicalKey.debugName}'); // Log the key press
-    if (_videos.isEmpty) return;
+    // Error State
+    if (errorMessage != null && videos.isEmpty) {
+      // Show error only if there are no videos to display
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 60),
+            Padding(padding: const EdgeInsets.only(top: 16), child: Text('Error: $errorMessage')),
+            const SizedBox(height: 20),
+            ElevatedButton(onPressed: () => _homeBloc.add(const HomeLoadStarted()), child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    // Loaded or Loading More State (or Error with existing videos)
+    if (videos.isEmpty && !isLoadingMore) {
+      return const Center(child: Text('No videos found.'));
+    }
+
+    return GridView.builder(
+      controller: _scrollController,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 16 / 9,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      // Add 1 to item count if loading more
+      itemCount: videos.length + (isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        // Show loading indicator at the end if isLoadingMore
+        if (isLoadingMore && index == videos.length) {
+          return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+        }
+
+        // Handle potential index out of bounds if videos list is modified unexpectedly
+        if (index >= videos.length) {
+          return const SizedBox.shrink(); // Should not happen in normal flow
+        }
+
+        final video = videos[index];
+        return VideoCard(video: video, isSelected: index == _selectedIndex, onTap: () => _playVideo(video.id));
+      },
+    );
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
+
+    final homeState = _homeBloc.state;
+    List<VideoModel> videos = [];
+    bool hasMore = false;
+
+    // Extract videos and hasMore status safely
+    switch (homeState) {
+      case HomeLoaded(videos: final loadedVideos, hasMore: final loadedHasMore):
+        videos = loadedVideos;
+        hasMore = loadedHasMore;
+      case HomeLoadingMore(videos: final loadingMoreVideos):
+        videos = loadingMoreVideos;
+        // Assume hasMore might be true if we are loading more
+        hasMore = true;
+      case HomeError(videos: final errorVideos, hasMore: final errorHasMore):
+        videos = errorVideos ?? [];
+        hasMore = errorHasMore ?? false;
+      // Handle other potential states if necessary, or provide a default
+      case HomeInitial():
+      case HomeLoading():
+        // No specific action needed here for video/hasMore extraction
+        break;
+    }
+
+    logger.d('Key pressed: ${event.logicalKey.debugName}, Videos: ${videos.length}, Selected: $_selectedIndex');
+    if (videos.isEmpty) return;
 
     final int videosPerRow = 3;
-    final int rowCount = (_videos.length / videosPerRow).ceil();
+    final int rowCount = (videos.length / videosPerRow).ceil();
+    int newSelectedIndex = _selectedIndex; // Calculate new index first
 
     if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      setState(() {
-        if (_selectedIndex < _videos.length - 1) {
-          _selectedIndex++;
-          _ensureItemVisible();
-        }
-      });
+      if (_selectedIndex < videos.length - 1) {
+        newSelectedIndex++;
+      }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      setState(() {
-        if (_selectedIndex > 0) {
-          _selectedIndex--;
-          _ensureItemVisible();
-        }
-      });
+      if (_selectedIndex > 0) {
+        newSelectedIndex--;
+      }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() {
-        final int currentRow = _selectedIndex ~/ videosPerRow;
-        if (currentRow < rowCount - 1) {
-          final int nextIndex = _selectedIndex + videosPerRow;
-          _selectedIndex = nextIndex < _videos.length ? nextIndex : _videos.length - 1;
-          _ensureItemVisible();
+      final int currentRow = _selectedIndex ~/ videosPerRow;
+      if (currentRow < rowCount - 1) {
+        final int potentialNextIndex = _selectedIndex + videosPerRow;
+        newSelectedIndex = potentialNextIndex < videos.length ? potentialNextIndex : videos.length - 1;
 
-          // If we're near the bottom, try to load more videos
-          if (_selectedIndex >= _videos.length - videosPerRow && _hasMoreVideos) {
-            _loadMoreVideos();
-          }
+        // If we're near the bottom, try to load more videos
+        if (newSelectedIndex >= videos.length - videosPerRow && hasMore && homeState is! HomeLoadingMore) {
+          _homeBloc.add(const HomeLoadMoreRequested());
         }
-      });
+      }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() {
-        final int currentRow = _selectedIndex ~/ videosPerRow;
-        if (currentRow > 0) {
-          _selectedIndex -= videosPerRow;
-          _ensureItemVisible();
-        }
-      });
+      final int currentRow = _selectedIndex ~/ videosPerRow;
+      if (currentRow > 0) {
+        newSelectedIndex -= videosPerRow;
+      }
     } else if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
-      _playVideo(_videos[_selectedIndex].id);
+      if (_selectedIndex < videos.length) {
+        _playVideo(videos[_selectedIndex].id);
+      }
+      return; // Don't update state or scroll for select/enter
+    }
+
+    // Update state only if index changed
+    if (newSelectedIndex != _selectedIndex) {
+      setState(() {
+        _selectedIndex = newSelectedIndex;
+        _ensureItemVisible();
+      });
     }
   }
 
   /// Ensure the selected item is visible in the viewport
   void _ensureItemVisible() {
-    if (_videos.isEmpty) return;
+    final homeState = _homeBloc.state;
+    List<VideoModel> videos = [];
+
+    // Extract videos safely
+    switch (homeState) {
+      case HomeLoaded(videos: final loadedVideos):
+        videos = loadedVideos;
+      case HomeLoadingMore(videos: final loadingMoreVideos):
+        videos = loadingMoreVideos;
+      case HomeError(videos: final errorVideos):
+        videos = errorVideos ?? [];
+      // Handle other potential states if necessary, or provide a default
+      case HomeInitial():
+      case HomeLoading():
+        // No specific action needed here for video extraction
+        break;
+    }
+
+    if (videos.isEmpty || _selectedIndex >= videos.length) return;
 
     final int videosPerRow = 3;
-    final double itemHeight = MediaQuery.of(context).size.width / videosPerRow / (16 / 9) + 16;
-    final double targetPosition = ((_selectedIndex ~/ videosPerRow) * itemHeight) - 16;
+    // Calculate item height based on aspect ratio and cross axis count
+    final double itemWidth = (MediaQuery.of(context).size.width - (videosPerRow + 1) * 16) / videosPerRow;
+    final double itemHeight = itemWidth / (16 / 9) + 16; // Add spacing
 
-    if (targetPosition < _scrollController.position.pixels ||
-        targetPosition >
-            _scrollController.position.pixels + _scrollController.position.viewportDimension - itemHeight * 2) {
-      _scrollController.animateTo(targetPosition, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+    final double targetPosition = ((_selectedIndex ~/ videosPerRow) * itemHeight) - 16; // Adjust for padding
+
+    // Check if item is outside the visible viewport buffer (e.g., one row above or below)
+    final double buffer = itemHeight;
+    final double currentScroll = _scrollController.position.pixels;
+    final double viewportHeight = _scrollController.position.viewportDimension;
+
+    if (targetPosition < currentScroll - buffer ||
+        targetPosition > currentScroll + viewportHeight - itemHeight + buffer) {
+      // Calculate a clamped position to avoid overscrolling
+      double clampedPosition = targetPosition.clamp(
+        _scrollController.position.minScrollExtent,
+        _scrollController.position.maxScrollExtent,
+      );
+      _scrollController.animateTo(
+        clampedPosition,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     }
   }
 
