@@ -12,7 +12,7 @@ class HtmlParserService {
   HtmlParserService({Logger? logger}) : logger = logger ?? Logger();
 
   /// Fetches the HTML from the given [url] using a headless WebView.
-  Future<String?> fetchHtml(String url, String js, {Duration timeout = const Duration(seconds: 45)}) async {
+  Future<String?> fetchHtml(String url, {Duration timeout = const Duration(seconds: 45)}) async {
     final completer = Completer<String?>();
     HeadlessInAppWebView? headlessWebView;
 
@@ -44,14 +44,16 @@ class HtmlParserService {
             // Wait a brief moment for potential JS challenges to complete
             await Future.delayed(const Duration(seconds: 3));
 
-            // Execute JavaScript to get the document content
-            final dynamic result = await controller.evaluateJavascript(source: js);
+            // // Execute JavaScript to get the document content
+            // final dynamic result = await controller.evaluateJavascript(source: js);
+
+            final dynamic result = await controller.getHtml();
 
             if (result is String) {
-              final title = result.trim();
-              logger.i('Successfully fetched with WebView: $title');
+              final text = result.trim();
+              logger.i('Successfully fetched with WebView: $text');
               if (!completer.isCompleted) {
-                completer.complete(title.isNotEmpty ? title : null);
+                completer.complete(text.isNotEmpty ? text : null);
               }
             } else {
               logger.w('WebView returned non-string: $result');

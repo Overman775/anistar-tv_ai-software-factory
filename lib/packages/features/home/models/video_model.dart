@@ -23,6 +23,9 @@ class VideoModel {
   /// Category of the video
   final String category;
 
+  /// Rating of the video (optional)
+  final double? rating;
+
   /// Constructor
   const VideoModel({
     required this.id,
@@ -32,6 +35,7 @@ class VideoModel {
     required this.videoUrl,
     required this.duration,
     required this.category,
+    this.rating, // Added optional rating
   });
 
   /// Create a copy of this VideoModel with the given fields replaced with new values
@@ -43,6 +47,7 @@ class VideoModel {
     String? videoUrl,
     Duration? duration,
     String? category,
+    double? rating, // Added optional rating
   }) {
     return VideoModel(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class VideoModel {
       videoUrl: videoUrl ?? this.videoUrl,
       duration: duration ?? this.duration,
       category: category ?? this.category,
+      rating: rating ?? this.rating, // Added optional rating
     );
   }
 }

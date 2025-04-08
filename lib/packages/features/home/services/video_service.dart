@@ -131,16 +131,16 @@ class VideoService {
   /// [page] - The page number (starting from 1)
   /// [pageSize] - Number of videos per page
   Future<List<VideoModel>> getVideosPaginated(int page, int pageSize) async {
-    String? test;
+    List<VideoModel>? test;
     try {
       logger.i('Attempting to fetch title with Puppeteer for astar.bz...');
-      test = await fetchHtmlTitleWithWebView(
+      test = await fetchHtmlTitleWithHtmlParserService(
         // Use the new WebView-based function
-        'https://v6.astar.bz/?action_skin_change=1&skin_name=smartphone',
+        'https://v6.astar.bz',
         logger: logger, // Pass logger to the function for internal logging
       );
       if (test != null) {
-        logger.i('Successfully fetched title with Puppeteer: $test');
+        logger.i('Successfully fetched title: ${test.toString()}');
       } else {
         logger.w('fetchHtmlTitleWithPuppeteer returned null. Check internal logs in html_utils.dart for errors.');
       }
