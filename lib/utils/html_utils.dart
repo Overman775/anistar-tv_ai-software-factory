@@ -1,66 +1,11 @@
 import 'dart:async';
 
 import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
-import 'package:anistar_tv/packages/core/services/network_service.dart';
 import 'package:anistar_tv/packages/features/home/models/video_model.dart'; // Import VideoModel
-import 'package:dio/dio.dart';
 import 'package:html/parser.dart' show parse;
 import 'package:logger/logger.dart';
 
 /// Additional utility for fetching HTML title using HtmlParserService
-
-/// Fetches the HTML content from the given [url] using standard HTTP request and parses the title tag.
-///
-/// This method is likely to be blocked by Cloudflare or similar protections.
-/// Returns the text content of the <title> tag, or null if the request fails,
-/// the content is not valid HTML, or the title tag is not found.
-Future<String?> fetchHtmlTitleDirect(String url, {Logger? logger}) async {
-  final log = logger ??= Logger(); // Use provided logger or create a default one
-  try {
-    // Get NetworkService instance
-    final networkService = NetworkService();
-
-    // Make request using NetworkService. Expecting HTML as String.
-    log.t('Attempting direct fetch for title: $url');
-    final response = await networkService.get<String>(
-      url,
-      options: Options(
-        // Ensure we accept HTML
-        headers: {
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          // Keep the User-Agent from NetworkService or override if needed
-        },
-        // Set response type to plain text to parse manually
-        responseType: ResponseType.plain,
-      ),
-    );
-    log.t('Direct fetch response status: ${response.statusCode}');
-
-    // Dio throws DioException for non-2xx status codes by default,
-    // so we can assume success if we reach here.
-    final document = parse(response.data); // Use response.data for Dio
-    final titleElement = document.querySelector('title');
-    final title = titleElement?.text.trim();
-    log.t('Direct fetch extracted title: $title');
-    return title;
-  } on DioException catch (e, stackTrace) {
-    // Log Dio-specific errors
-    log.e(
-      'DioError fetching HTML title directly for URL: $url - ${e.response?.statusCode ?? 'No Status Code'}',
-      error: e,
-      stackTrace: stackTrace,
-    );
-    // If it's a 403, specifically mention Cloudflare possibility
-    if (e.response?.statusCode == 403) {
-      log.w('Received 403 Forbidden, likely Cloudflare blocking direct access.');
-    }
-    return null; // Return null on Dio error
-  } catch (e, stackTrace) {
-    // Catch other potential errors (parsing, etc.)
-    log.e('Error fetching or parsing HTML title directly for URL: $url', error: e, stackTrace: stackTrace);
-    return null;
-  }
-}
 
 /// Fetches the HTML title from the given [url] using HtmlParserService.
 /// This method is designed to parse HTML content directly.

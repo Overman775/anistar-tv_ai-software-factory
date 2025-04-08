@@ -1,5 +1,7 @@
+import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../packages/core/services/preferences_service.dart';
 import '../packages/features/favorites/services/favorites_service.dart';
@@ -8,25 +10,19 @@ import '../packages/features/home/services/video_service.dart';
 /// Global dependency injection provider
 class AppProvider extends StatelessWidget {
   final Widget child;
+  final SharedPreferences sharedPreferences;
 
   /// Constructor
-  const AppProvider({super.key, required this.child});
+  const AppProvider({super.key, required this.sharedPreferences, required this.child});
 
   @override
   Widget build(BuildContext context) {
-    // Access the preferences service from the parent provider
-    final preferencesService = Provider.of<PreferencesService>(
-      context,
-      listen: false,
-    );
-
     return MultiProvider(
       providers: [
-        // Feature services
-        Provider<VideoService>(create: (_) => VideoService()),
-        Provider<FavoritesService>(
-          create: (_) => FavoritesService(preferencesService),
-        ),
+        Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
+        Provider<HtmlParserService>(create: (_) => HtmlParserService()),
+        Provider<VideoService>(create: (context) => VideoService(context.read<HtmlParserService>())),
+        Provider<FavoritesService>(create: (context) => FavoritesService(context.read<PreferencesService>())),
       ],
       child: child,
     );

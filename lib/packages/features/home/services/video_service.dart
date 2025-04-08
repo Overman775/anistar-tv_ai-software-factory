@@ -1,3 +1,4 @@
+import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:anistar_tv/utils/html_utils.dart';
 import 'package:anistar_tv/utils/logger/logger.dart';
 
@@ -5,6 +6,10 @@ import '../models/video_model.dart';
 
 /// Service for managing videos
 class VideoService {
+  final HtmlParserService parser;
+
+  VideoService(this.parser);
+
   // Sample video data
   final List<VideoModel> _allVideos = [
     VideoModel(
