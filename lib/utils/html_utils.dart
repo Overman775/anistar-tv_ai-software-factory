@@ -95,8 +95,8 @@ List<VideoModel> extractVideoCardsFromHtml(String htmlContent, String baseUrl, {
     log.t('Parsing HTML content for video cards...');
     final document = parse(htmlContent);
 
-    // Select all news items that seem to be movie cards
-    final newsElements = document.querySelectorAll('div.news[itemscope][itemtype="http://schema.org/Movie"]');
+    // Select all news items - simplified selector for debugging
+    final newsElements = document.querySelectorAll('div.news');
     log.t('Found ${newsElements.length} potential video card elements.');
 
     for (final element in newsElements) {
