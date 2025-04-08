@@ -28,8 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
   // BLoC instance
   late final HomeBloc _homeBloc;
 
-  // Removed: _videos, _currentPage, _isLoading, _hasMoreVideos
-
   @override
   void initState() {
     super.initState();
