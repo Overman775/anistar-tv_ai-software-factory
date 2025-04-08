@@ -1,63 +1,34 @@
-import 'dart:core';
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'video_model.freezed.dart';
 
 /// Model representing a video
-class VideoModel {
-  /// Unique identifier for the video
-  final String id;
-
-  /// Title of the video
-  final String title;
-
-  /// Description of the video
-  final String description;
-
-  /// URL to the video thumbnail image
-  final Uri thumbnailUrl;
-
-  /// URL to the video file
-  final String videoUrl;
-
-  /// Duration of the video
-  final Duration duration;
-
-  /// Category of the video
-  final String category;
-
-  /// Rating of the video (optional)
-  final double? rating;
-
+@freezed
+abstract class VideoModel with _$VideoModel {
   /// Constructor
-  const VideoModel({
-    required this.id,
-    required this.title,
-    required this.description,
-    required this.thumbnailUrl,
-    required this.videoUrl,
-    required this.duration,
-    required this.category,
-    this.rating, // Added optional rating
-  });
+  const factory VideoModel({
+    /// Unique identifier for the video
+    required String id,
 
-  /// Create a copy of this VideoModel with the given fields replaced with new values
-  VideoModel copyWith({
-    String? id,
-    String? title,
-    String? description,
-    Uri? thumbnailUrl,
-    String? videoUrl,
-    Duration? duration,
-    String? category,
-    double? rating, // Added optional rating
-  }) {
-    return VideoModel(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      description: description ?? this.description,
-      thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
-      videoUrl: videoUrl ?? this.videoUrl,
-      duration: duration ?? this.duration,
-      category: category ?? this.category,
-      rating: rating ?? this.rating, // Added optional rating
-    );
-  }
+    /// Title of the video
+    required String title,
+
+    /// Description of the video
+    required String description,
+
+    /// URL to the video thumbnail image
+    required Uri thumbnailUrl,
+
+    /// URL to the video file
+    required String videoUrl,
+
+    /// Duration of the video
+    required Duration duration,
+
+    /// Category of the video
+    required String category,
+
+    /// Rating of the video (optional)
+    double? rating,
+  }) = _VideoModel;
 }
