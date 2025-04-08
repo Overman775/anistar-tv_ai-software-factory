@@ -1,7 +1,6 @@
+import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-
-import '../../../../features/home/models/video_model.dart';
 
 /// Widget for video player controls
 class PlayerControls extends StatelessWidget {

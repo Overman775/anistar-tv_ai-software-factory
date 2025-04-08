@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../packages/core/services/preferences_service.dart';
-import '../packages/features/home/services/video_service.dart';
+// Removed import for VideoService
 
 /// Global dependency injection provider
 class AppProvider extends StatelessWidget {
@@ -20,7 +20,7 @@ class AppProvider extends StatelessWidget {
       providers: [
         Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
         Provider<HtmlParserService>(create: (_) => HtmlParserService()),
-        Provider<VideoService>(create: (context) => VideoService(context.read<HtmlParserService>())),
+        // Removed Provider<VideoService>
       ],
       child: child,
     );

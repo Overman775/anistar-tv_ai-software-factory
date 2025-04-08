@@ -7,8 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../../../app/app_routes.dart';
-import '../../../home/models/video_model.dart';
-import '../../../home/services/video_service.dart';
+import '../../../video_list/domain/models/video_model.dart';
 import '../widgets/player_controls.dart';
 
 /// Screen for playing videos

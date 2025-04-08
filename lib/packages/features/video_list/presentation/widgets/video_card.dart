@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/video_model.dart';
+import '../../domain/models/video_model.dart'; // Updated import path
 
 /// Card widget for displaying a video
 class VideoCard extends StatelessWidget {
