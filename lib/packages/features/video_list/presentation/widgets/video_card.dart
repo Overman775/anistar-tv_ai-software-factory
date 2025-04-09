@@ -39,55 +39,46 @@ class VideoCard extends StatelessWidget {
         child: Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          child: Stack(
-            fit: StackFit.expand,
+          child: Column(
+            // Changed from Stack to Column
+            crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch children horizontally
             children: [
-              // Thumbnail
-              CachedNetworkImage(
-                imageUrl: video.thumbnailUrl.toString(),
-                fit: BoxFit.cover,
-                placeholder:
-                    (context, url) =>
-                        Container(color: Colors.grey.shade800, child: const Center(child: CircularProgressIndicator())),
-                errorWidget:
-                    (context, url, error) => Container(
-                      color: Colors.grey.shade800,
-                      child: const Center(child: Icon(Icons.movie, size: 48, color: Colors.white54)),
-                    ),
-              ),
-
-              // Gradient overlay
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, Colors.black.withOpacity(0.7)],
-                      stops: const [0.6, 1.0],
-                    ),
-                  ),
+              // Thumbnail - Use AspectRatio to maintain image proportions
+              AspectRatio(
+                aspectRatio: 16 / 9, // Or adjust as needed for the image source
+                child: CachedNetworkImage(
+                  imageUrl: video.thumbnailUrl.toString(),
+                  fit: BoxFit.cover, // Cover the aspect ratio area
+                  placeholder:
+                      (context, url) => Container(
+                        color: Colors.grey.shade800,
+                        child: const Center(child: CircularProgressIndicator()),
+                      ),
+                  errorWidget:
+                      (context, url, error) => Container(
+                        color: Colors.grey.shade800,
+                        child: const Center(child: Icon(Icons.movie, size: 48, color: Colors.white54)),
+                      ),
                 ),
               ),
 
-              // Video info
-              Positioned(
-                bottom: 8,
-                left: 8,
-                right: 8,
+              // Video info below the image
+              Padding(
+                padding: const EdgeInsets.all(8.0), // Add padding around the text
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       video.title,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                      maxLines: 1,
+                      // Use theme text style for consistency
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      maxLines: 2, // Allow two lines for title
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${video.duration.inMinutes}:${(video.duration.inSeconds % 60).toString().padLeft(2, '0')} • ${video.category}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      style: Theme.of(context).textTheme.bodySmall, // Use theme text style
                     ),
                   ],
                 ),

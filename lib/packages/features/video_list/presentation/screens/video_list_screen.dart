@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart'; // Import go_router
 import 'package:logger/logger.dart';
 
+import '../../../../../app/app_routes.dart'; // Import AppRoutes
 import '../../../../../packages/core/services/html_parser_service.dart'; // Added import
 import '../../../../../utils/logger/logger.dart'; // Assuming logger setup is global
 import '../../data/datasources/video_list_remote_datasource.dart';
@@ -208,14 +210,15 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
     // Loaded or Loading More State (or Error with existing videos)
     // Calculate cross axis count based on screen width (example)
-    final screenWidth = MediaQuery.of(context).size.width;
-    final crossAxisCount = (screenWidth / 200).floor().clamp(2, 5); // Adjust 200 based on desired item width
+    // final screenWidth = MediaQuery.of(context).size.width;
+    // final crossAxisCount = (screenWidth / 200).floor().clamp(2, 5); // Adjust 200 based on desired item width
+    const crossAxisCount = 4; // Fixed cross axis count
 
     return GridView.builder(
       controller: _scrollController,
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        childAspectRatio: 16 / 9, // Adjust aspect ratio if needed
+        crossAxisCount: crossAxisCount, // Use the fixed value
+        childAspectRatio: 2 / 3, // Aspect ratio for vertical cards
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
@@ -251,7 +254,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
             setState(() {
               _selectedIndex = index;
             });
-            widget.onVideoTap(video);
+            // widget.onVideoTap(video); // Replace direct callback with navigation
+            context.push(AppRoutes.player, extra: video); // Navigate to player with video object
           },
         );
       },
@@ -284,9 +288,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
     logger.d('Key pressed: ${event.logicalKey.debugName}, Videos: ${videos.length}, Selected: $_selectedIndex');
     if (videos.isEmpty) return;
 
-    // Calculate grid dimensions based on current crossAxisCount
-    final screenWidth = MediaQuery.of(context).size.width;
-    final videosPerRow = (screenWidth / 200).floor().clamp(2, 5);
+    // Calculate grid dimensions based on fixed crossAxisCount
+    // final screenWidth = MediaQuery.of(context).size.width;
+    // final videosPerRow = (screenWidth / 200).floor().clamp(2, 5);
+    const videosPerRow = 4; // Use fixed value
     final int rowCount = (videos.length / videosPerRow).ceil();
     int newSelectedIndex = _selectedIndex; // Calculate new index first
 
@@ -318,7 +323,8 @@ class _VideoListScreenState extends State<VideoListScreen> {
       }
     } else if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
       if (_selectedIndex < videos.length) {
-        widget.onVideoTap(videos[_selectedIndex]); // Use the callback
+        // widget.onVideoTap(videos[_selectedIndex]); // Replace direct callback with navigation
+        context.push(AppRoutes.player, extra: videos[_selectedIndex]); // Navigate to player
       }
       return; // Don't update state or scroll for select/enter
     }
@@ -352,19 +358,18 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
     if (videos.isEmpty || _selectedIndex >= videos.length) return;
 
-    // Calculate item height based on aspect ratio and cross axis count
+    // Calculate item height based on aspect ratio and fixed cross axis count
     final double screenWidth = MediaQuery.of(context).size.width;
     // Subtract padding (16 on each side) and spacing between items
     final double totalHorizontalPadding = 16 * 2;
-    final double totalHorizontalSpacing = 16 * (videosPerRow - 1);
+    final double totalHorizontalSpacing = 16 * (videosPerRow - 1); // videosPerRow is now 4
     final double availableWidth = screenWidth - totalHorizontalPadding - totalHorizontalSpacing;
-    final double itemWidth = availableWidth / videosPerRow;
-    final double itemHeight = itemWidth / (16 / 9) + 16; // Add main axis spacing
+    final double itemWidth = availableWidth / videosPerRow; // videosPerRow is now 4
+    final double itemHeight = itemWidth / (2 / 3) + 16; // Use new aspect ratio and add main axis spacing
 
     final double targetPosition = ((_selectedIndex ~/ videosPerRow) * itemHeight) - 16; // Adjust for top padding
 
     // Check if item is outside the visible viewport buffer (e.g., one row above or below)
-    final double buffer = itemHeight; // One row buffer
     final double currentScroll = _scrollController.position.pixels;
     final double viewportHeight = _scrollController.position.viewportDimension;
 

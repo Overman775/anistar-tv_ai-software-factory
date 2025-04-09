@@ -3,20 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../../../app/app_routes.dart';
 import '../../../video_list/domain/models/video_model.dart';
 import '../widgets/player_controls.dart';
 
 /// Screen for playing videos
 class PlayerScreen extends StatefulWidget {
-  /// ID of the video to play
-  final String videoId;
+  /// The video model to play
+  final VideoModel video;
 
   /// Constructor
-  const PlayerScreen({super.key, required this.videoId});
+  const PlayerScreen({super.key, required this.video});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -26,23 +24,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
   VideoPlayerController? _controller;
   bool _isControlsVisible = true;
   bool _isPlaying = false;
-  late VideoModel _video;
+  // VideoModel is now passed via widget.video
+  // late VideoModel _video;
   Timer? _controlsTimer;
 
   @override
   void initState() {
     super.initState();
 
+    // Initialize video controller directly
+    _initializePlayer();
+
     // Configure system UI for fullscreen video
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
       overlays: [], // Hide all system overlays for fullscreen
     );
-
-    // Load the video after the first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadVideo();
-    });
   }
 
   @override
@@ -56,40 +53,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
-  Future<void> _loadVideo() async {
-    final videoService = Provider.of<VideoService>(context, listen: false);
-    final video = videoService.getVideoById(widget.videoId);
+  // Removed _loadVideo method as VideoModel is passed directly
 
-    if (video == null) {
-      // Video not found, go back to home
-      if (mounted) {
-        context.go(AppRoutes.home);
-      }
-      return;
-    }
-
-    _video = video;
-
-    // Initialize the video player
-    _controller = VideoPlayerController.networkUrl(Uri.parse(video.videoUrl));
+  Future<void> _initializePlayer() async {
+    // Initialize the video player using the passed video model
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.video.videoUrl));
 
     try {
       await _controller!.initialize();
       if (mounted) {
         setState(() {
-          _isPlaying = true;
+          _isPlaying = true; // Start playing automatically
           _controller!.play();
         });
+        // Auto-hide controls after 5 seconds
+        _startControlsTimer();
+        // Listen to player state changes
+        _controller!.addListener(_onVideoStateChanged);
       }
-
-      // Auto-hide controls after 5 seconds
-      _startControlsTimer();
-
-      // Listen to player state changes
-      _controller!.addListener(_onVideoStateChanged);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading video: $e')));
+        // Show error and potentially navigate back or show retry option
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error initializing video: ${e.toString()}')));
+        // Optionally navigate back if initialization fails critically
+        // context.pop();
       }
     }
   }
@@ -191,7 +180,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // Controls overlay
               if (_isControlsVisible)
                 PlayerControls(
-                  video: _video,
+                  video: widget.video, // Use video from widget
                   controller: _controller,
                   isPlaying: _isPlaying,
                   onPlayPause: _togglePlayPause,

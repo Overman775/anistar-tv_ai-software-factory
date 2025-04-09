@@ -6,6 +6,8 @@ import '../packages/features/favorites/presentation/screens/favorites_screen.dar
 // Import new feature screens
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/movie/presentation/screens/movie_screen.dart';
+import '../packages/features/player/presentation/screens/player_screen.dart'; // Import PlayerScreen
+import '../packages/features/video_list/domain/models/video_model.dart'; // Import VideoModel
 import '../utils/logger/logger.dart'; // Import the logger
 import 'app_routes.dart';
 
@@ -44,6 +46,23 @@ class AppRouter {
               return const Scaffold(body: Center(child: Text('Movie ID is missing')));
             }
             return MovieScreen(movieId: movieId); // Use MovieScreen
+          },
+        ),
+        GoRoute(
+          path: AppRoutes.player, // Path: /player
+          builder: (context, state) {
+            // Extract VideoModel from the 'extra' parameter
+            final video = state.extra as VideoModel?;
+            if (video == null) {
+              // Handle error case where VideoModel is missing or not the correct type
+              logger.w('Player route called without valid VideoModel in extra');
+              // Redirect to home or show an error page
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                context.go(AppRoutes.home);
+              });
+              return const Scaffold(body: Center(child: Text('Video data is missing')));
+            }
+            return PlayerScreen(video: video); // Pass the VideoModel
           },
         ),
       ],

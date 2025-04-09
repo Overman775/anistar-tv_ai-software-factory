@@ -8,4 +8,7 @@ class AppRoutes {
 
   /// Movie screen route with movieId parameter
   static const String movie = '/movie/:movieId'; // New route
+
+  /// Player screen route
+  static const String player = '/player'; // Path for the player
 }
