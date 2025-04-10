@@ -1,6 +1,5 @@
 import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:anistar_tv/packages/core/services/jw_scraper/jw_player_scraper_service.dart';
-import 'package:anistar_tv/packages/core/services/jw_scraper/parsers/jw_config_extractor.dart';
 import 'package:anistar_tv/packages/features/series_list/data/datasources/series_list_remote_datasource.dart';
 import 'package:anistar_tv/packages/features/series_list/data/repositories/series_list_repository_impl.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/repositories/series_list_repository.dart';
