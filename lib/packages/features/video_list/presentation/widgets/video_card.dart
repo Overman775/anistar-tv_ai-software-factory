@@ -19,36 +19,32 @@ class VideoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final colorScheme = Theme.of(context).colorScheme;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
-          border: isSelected ? Border.all(color: Theme.of(context).colorScheme.primary, width: 3) : null,
+          border: isSelected ? Border.all(color: colorScheme.primary, width: 3) : null,
           boxShadow:
               isSelected
-                  ? [
-                    BoxShadow(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.5),
-                      blurRadius: 10,
-                      spreadRadius: 2,
-                    ),
-                  ]
+                  ? [BoxShadow(color: colorScheme.primary.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)]
                   : null,
         ),
         child: Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          child: Column(
-            // Changed from Stack to Column
-            crossAxisAlignment: CrossAxisAlignment.stretch, // Stretch children horizontally
+          child: Stack(
+            // Changed from Column to Stack
+            alignment: Alignment.bottomCenter, // Align children to the bottom center
             children: [
-              // Thumbnail - Use AspectRatio to maintain image proportions
-              AspectRatio(
-                aspectRatio: 16 / 9, // Or adjust as needed for the image source
+              // Thumbnail - Takes full space of the card
+              Positioned.fill(
                 child: CachedNetworkImage(
                   imageUrl: video.thumbnailUrl.toString(),
-                  fit: BoxFit.cover, // Cover the aspect ratio area
+                  fit: BoxFit.cover,
                   placeholder:
                       (context, url) => Container(
                         color: Colors.grey.shade800,
@@ -62,27 +58,77 @@ class VideoCard extends StatelessWidget {
                 ),
               ),
 
-              // Video info below the image
-              Padding(
-                padding: const EdgeInsets.all(8.0), // Add padding around the text
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      video.title,
-                      // Use theme text style for consistency
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                      maxLines: 2, // Allow two lines for title
-                      overflow: TextOverflow.ellipsis,
+              // Darkened overlay for text
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.9), // More opaque at the bottom
+                        Colors.black.withOpacity(0.1), // Less transparent at the top
+                      ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${video.duration.inMinutes}:${(video.duration.inSeconds % 60).toString().padLeft(2, '0')} • ${video.category}',
-                      style: Theme.of(context).textTheme.bodySmall, // Use theme text style
-                    ),
-                  ],
+                  ),
+                  padding: const EdgeInsets.all(8.0), // Padding inside the overlay
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, // Take minimum space needed
+                    children: [
+                      Text(
+                        video.title,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white, // Ensure text is visible
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      // Display only category here now
+                      Text(
+                        video.category,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: Colors.white70, // Ensure text is visible
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
+              // Rating in top-right corner
+              if (video.rating != null)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6), // Semi-transparent background
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 14), // Slightly smaller icon
+                        const SizedBox(width: 4),
+                        Text(
+                          video.rating!.toStringAsFixed(1),
+                          style: textTheme.bodySmall?.copyWith(
+                            // Slightly larger text
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
