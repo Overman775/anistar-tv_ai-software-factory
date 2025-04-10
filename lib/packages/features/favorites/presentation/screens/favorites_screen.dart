@@ -12,7 +12,7 @@ class FavoritesScreen extends StatelessWidget {
       baseUrl: '/favorites', // Base URL for the favorites page videos
       onVideoTap: (videoId) {
         // Navigate to the movie screen when a video is tapped
-        context.go(AppRoutes.movie.replaceFirst(':movieId', videoId.id));
+        context.go(AppRoutes.movie, extra: videoId);
       },
     );
   }

@@ -12,7 +12,7 @@ class HomeScreen extends StatelessWidget {
       baseUrl: 'https://v6.astar.bz', // Base URL for the home page videos
       onVideoTap: (video) {
         // Navigate to the movie screen when a video is tapped
-        context.go(AppRoutes.movie.replaceFirst(':movieId', video.id));
+        context.go(AppRoutes.movie, extra: video);
       },
     );
   }

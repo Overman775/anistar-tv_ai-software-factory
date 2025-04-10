@@ -7,7 +7,7 @@ class AppRoutes {
   static const String favorites = '/favorites'; // Path remains the same
 
   /// Movie screen route with movieId parameter
-  static const String movie = '/movie/:movieId'; // New route
+  static const String movie = '/movie'; // Now expects MovieModel as extra
 
   /// Player screen route
   static const String player = '/player'; // Path for the player

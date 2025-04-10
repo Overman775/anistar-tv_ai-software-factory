@@ -33,21 +33,17 @@ class AppRouter {
           builder: (context, state) => const FavoritesScreen(), // Use FavoritesScreen
         ),
         GoRoute(
-          path: AppRoutes.movie, // Path: /movie/:movieId
+          path: AppRoutes.movie, // Path: /movie, expects MovieModel as extra
           builder: (context, state) {
-            // Extract movieId from path parameters
-            final movieId = state.pathParameters['movieId'] ?? '';
-            if (movieId.isEmpty) {
-              // Handle error case where movieId is missing
-              logger.w('Movie route called without movieId');
-              // Redirect to home or show an error page
-              // For simplicity, redirecting home here
+            final extra = state.extra;
+            if (extra is! VideoModel) {
+              logger.w('Movie route called without MovieModel in extra');
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRoutes.home);
               });
-              return const Scaffold(body: Center(child: Text('Movie ID is missing')));
+              return const Scaffold(body: Center(child: Text('Movie data is missing')));
             }
-            return MovieScreen(movieId: movieId); // Use MovieScreen
+            return MovieScreen(movie: extra); // Pass VideoModel to MovieScreen
           },
         ),
         GoRoute(

@@ -1,19 +1,20 @@
 import 'package:anistar_tv/app/app_routes.dart';
+import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
 import 'package:anistar_tv/packages/features/video_list/presentation/screens/video_list_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class MovieScreen extends StatelessWidget {
-  final String movieId;
+  final VideoModel movie;
 
-  const MovieScreen({super.key, required this.movieId});
+  const MovieScreen({super.key, required this.movie});
 
   @override
   Widget build(BuildContext context) {
     // Basic structure: AppBar + Column with placeholder details + Related videos list
     return Scaffold(
       appBar: AppBar(
-        title: Text('Movie ID: $movieId'), // Display the movie ID
+        title: Text(movie.title), // Display the movie title
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -24,7 +25,7 @@ class MovieScreen extends StatelessWidget {
             child: Container(
               height: 150, // Example height
               color: Colors.blueGrey[100],
-              child: Center(child: Text('Details for Movie $movieId will go here')),
+              child: Center(child: Text('Details for Movie ${movie.title} will go here')),
             ),
           ),
           const Padding(
@@ -35,7 +36,7 @@ class MovieScreen extends StatelessWidget {
           Expanded(
             child: VideoListScreen(
               // Construct the baseUrl for related videos using the movieId
-              baseUrl: '/movie/$movieId/related',
+              baseUrl: '/movie/${movie.id}/related',
               onVideoTap: (newVideoId) {
                 // Navigate to another movie screen when a related video is tapped
                 // Use push to keep the navigation history
