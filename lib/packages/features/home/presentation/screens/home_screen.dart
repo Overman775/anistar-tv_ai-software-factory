@@ -9,7 +9,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return VideoListScreen(
-      baseUrl: 'https://v6.astar.bz/?action_skin_change=1&skin_name=new36', // Base URL for the home page videos
+      baseUrl: 'https://v6.astar.bz', // Base URL for the home page videos
       onVideoTap: (videoId) {
         // Navigate to the movie screen when a video is tapped
         context.go(AppRoutes.movie.replaceFirst(':movieId', videoId.id));
