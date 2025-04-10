@@ -24,7 +24,6 @@ dependencies:
   # Data models
   freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
-
   # Storage
   shared_preferences: ^2.5.3
 
