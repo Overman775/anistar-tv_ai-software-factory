@@ -40,13 +40,20 @@ class JwPlayerScraperService {
   ///
   /// Handles both direct file/poster fields and playlist arrays.
   List<JwVideoInfo> _extractVideoInfos(List<String> jwConfigs) {
+    logger.d('_extractVideoInfos called with ${jwConfigs.length} configs');
+
     final results = <JwVideoInfo>[];
 
     for (final config in jwConfigs) {
+      logger.d('Processing config: ${config.substring(0, config.length > 200 ? 200 : config.length)}...');
+
       // Try to extract the setup({ ... }) object using regex.
       final setupRegExp = RegExp(r'setup\s*\(\s*({.*?})\s*\)', dotAll: true);
       final setupMatch = setupRegExp.firstMatch(config);
-      if (setupMatch == null) continue;
+      if (setupMatch == null) {
+        logger.w('No setup() match found in config, skipping.');
+        continue;
+      }
 
       final configJsonLike = setupMatch.group(1)!;
 
@@ -58,6 +65,7 @@ class JwPlayerScraperService {
       final posterMatch = posterRegExp.firstMatch(configJsonLike);
 
       if (fileMatch != null) {
+        logger.i('Extracted video: ${fileMatch.group(1)}, poster: ${posterMatch?.group(2)}');
         results.add(JwVideoInfo(videoUrl: fileMatch.group(1)!, posterUrl: posterMatch?.group(2)));
         continue;
       }
@@ -74,11 +82,15 @@ class JwPlayerScraperService {
         final posterInPlaylist = posterInPlaylistRegExp.firstMatch(playlistContent);
 
         if (fileInPlaylist != null) {
+          logger.i('Extracted from playlist: ${fileInPlaylist.group(1)}, poster: ${posterInPlaylist?.group(2)}');
           results.add(JwVideoInfo(videoUrl: fileInPlaylist.group(1)!, posterUrl: posterInPlaylist?.group(2)));
+        } else {
+          logger.w('No file found in playlist content.');
         }
       }
     }
 
+    logger.d('Extracted ${results.length} JwVideoInfo(s): $results');
     return results;
   }
 }
