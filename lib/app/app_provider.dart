@@ -25,13 +25,8 @@ class AppProvider extends StatelessWidget {
       providers: [
         Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
         Provider<HtmlParserService>(create: (_) => HtmlParserService()),
-        Provider<JwConfigExtractor>(create: (_) => JwConfigExtractor()),
         Provider<JwPlayerScraperService>(
-          create:
-              (context) => JwPlayerScraperService(
-                htmlParserService: context.read<HtmlParserService>(),
-                configExtractor: context.read<JwConfigExtractor>(),
-              ),
+          create: (context) => JwPlayerScraperService(htmlParserService: context.read<HtmlParserService>()),
         ),
         // Series List Feature Dependencies
         Provider<SeriesListRemoteDatasource>(
