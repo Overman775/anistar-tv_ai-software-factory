@@ -1,4 +1,6 @@
 import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
+import 'package:anistar_tv/packages/core/services/jw_scraper/jw_player_scraper_service.dart';
+import 'package:anistar_tv/packages/core/services/jw_scraper/parsers/jw_config_extractor.dart';
 import 'package:anistar_tv/packages/features/series_list/data/datasources/series_list_remote_datasource.dart';
 import 'package:anistar_tv/packages/features/series_list/data/repositories/series_list_repository_impl.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/repositories/series_list_repository.dart';
@@ -23,6 +25,14 @@ class AppProvider extends StatelessWidget {
       providers: [
         Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
         Provider<HtmlParserService>(create: (_) => HtmlParserService()),
+        Provider<JwConfigExtractor>(create: (_) => JwConfigExtractor()),
+        Provider<JwPlayerScraperService>(
+          create:
+              (context) => JwPlayerScraperService(
+                htmlParserService: context.read<HtmlParserService>(),
+                configExtractor: context.read<JwConfigExtractor>(),
+              ),
+        ),
         // Series List Feature Dependencies
         Provider<SeriesListRemoteDatasource>(
           // Use abstract type

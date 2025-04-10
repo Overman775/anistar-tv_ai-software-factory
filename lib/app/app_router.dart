@@ -43,7 +43,13 @@ class AppRouter {
               });
               return const Scaffold(body: Center(child: Text('Movie data is missing')));
             }
-            return MovieScreen(movie: extra); // Pass VideoModel to MovieScreen
+            return MovieScreen(
+              movie: extra,
+              onSeriesTap: (series) {
+                // TODO: Implement series tap handling, e.g. navigate to player or show details
+                debugPrint('Tapped series: \$series');
+              },
+            );
           },
         ),
         GoRoute(
