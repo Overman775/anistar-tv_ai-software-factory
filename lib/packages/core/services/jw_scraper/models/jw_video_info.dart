@@ -1,21 +1,8 @@
-/// Data model representing a JW Player video and its poster.
-class JwVideoInfo {
-  final String videoUrl;
-  final String? posterUrl;
+import 'package:freezed_annotation/freezed_annotation.dart';
 
-  JwVideoInfo({required this.videoUrl, this.posterUrl});
+part 'jw_video_info.freezed.dart';
 
-  @override
-  String toString() => 'JwVideoInfo(videoUrl: \$videoUrl, posterUrl: \$posterUrl)';
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is JwVideoInfo &&
-          runtimeType == other.runtimeType &&
-          videoUrl == other.videoUrl &&
-          posterUrl == other.posterUrl;
-
-  @override
-  int get hashCode => videoUrl.hashCode ^ (posterUrl?.hashCode ?? 0);
+@freezed
+abstract class JwVideoInfo with _$JwVideoInfo {
+  const factory JwVideoInfo({required String videoUrl, String? posterUrl}) = _JwVideoInfo;
 }
