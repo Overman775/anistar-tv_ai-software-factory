@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:go_router/go_router.dart'; // Import go_router
 import 'package:logger/logger.dart';
 
-import '../../../../../app/app_routes.dart'; // Import AppRoutes
 import '../../../../../packages/core/services/html_parser_service.dart'; // Added import
 import '../../../../../utils/logger/logger.dart'; // Assuming logger setup is global
 import '../../data/datasources/video_list_remote_datasource.dart';
@@ -254,8 +252,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
             setState(() {
               _selectedIndex = index;
             });
-            // widget.onVideoTap(video); // Replace direct callback with navigation
-            context.push(AppRoutes.player, extra: video); // Navigate to player with video object
+            widget.onVideoTap(video);
           },
         );
       },
@@ -323,8 +320,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       }
     } else if (event.logicalKey == LogicalKeyboardKey.select || event.logicalKey == LogicalKeyboardKey.enter) {
       if (_selectedIndex < videos.length) {
-        // widget.onVideoTap(videos[_selectedIndex]); // Replace direct callback with navigation
-        context.push(AppRoutes.player, extra: videos[_selectedIndex]); // Navigate to player
+        widget.onVideoTap(videos[_selectedIndex]);
       }
       return; // Don't update state or scroll for select/enter
     }
