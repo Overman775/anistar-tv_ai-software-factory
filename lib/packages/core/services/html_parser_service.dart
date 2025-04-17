@@ -33,8 +33,17 @@ class HtmlParserService {
           javaScriptEnabled: true, // Essential for Cloudflare checks
           domStorageEnabled: true,
           databaseEnabled: true,
-          clearCache: true, // Start fresh each time
-          cacheEnabled: false,
+          clearCache: false, // Start fresh each time
+          cacheEnabled: true,
+          blockNetworkImage: true,
+          blockNetworkLoads: false,
+          mediaPlaybackRequiresUserGesture: true,
+          // contentBlockers: [
+          //   ContentBlocker(
+          //     trigger: ContentBlockerTrigger(urlFilter: adUrlFilters),
+          //     action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+          //   ),
+          // ],
         ),
         onLoadStop: (controller, loadedUrl) async {
           if (completer.isCompleted) return; // Already timed out or completed

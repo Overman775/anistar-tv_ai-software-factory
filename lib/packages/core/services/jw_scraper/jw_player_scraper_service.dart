@@ -1,4 +1,5 @@
-import 'package:html/parser.dart' as html_parser;
+import 'dart:convert';
+
 import 'package:logger/logger.dart';
 
 import '../html_parser_service.dart';
@@ -11,86 +12,126 @@ class JwPlayerScraperService {
 
   JwPlayerScraperService({required this.htmlParserService, Logger? logger}) : logger = logger ?? Logger();
 
-  /// Scrapes the given [url] for JW Player video and poster URLs.
-  ///
-  /// Returns a list of [JwVideoInfo].
+  /// Scrapes JWPlayer video sources and poster from the given URL.
+  /// Throws [JwPlayerConfigParseException] if config or sources are missing/invalid.
   Future<List<JwVideoInfo>> scrape(String url) async {
+    // return [];
+    // 1. Fetch HTML
     final html = await htmlParserService.fetchHtml(url);
-    if (html == null) {
-      logger.w('Failed to fetch HTML for \$url');
-      return [];
+    if (html == null || html.isEmpty) {
+      throw JwPlayerConfigParseException('Failed to fetch HTML for $url');
     }
-    // Extract JW Player config scripts from HTML
-    final document = html_parser.parse(html);
-    final scripts = document.getElementsByTagName('script');
-    final jwConfigs = <String>[];
 
-    for (final script in scripts) {
-      final scriptContent = script.text;
-      if (scriptContent.contains('jwplayer') && scriptContent.contains('setup')) {
-        jwConfigs.add(scriptContent);
+    // 2. Extract JWPlayer config string using multiple strategies
+    String? configStr;
+
+    // Strategy 1: jwplayer("...").setup({...})
+    final jwplayerSetupRegex = RegExp(r'''jwplayer\(["'][^"']*["']\)\.setup\((\{.*?\})\)''', dotAll: true);
+    final setupMatch = jwplayerSetupRegex.firstMatch(html);
+    if (setupMatch != null) {
+      configStr = setupMatch.group(1);
+    }
+
+    // Strategy 2: window.jwplayerConfig = {...}
+    if (configStr == null) {
+      final windowConfigRegex = RegExp(r'window\.jwplayerConfig\s*=\s*(\{.*?\});', dotAll: true);
+      final windowMatch = windowConfigRegex.firstMatch(html);
+      if (windowMatch != null) {
+        configStr = windowMatch.group(1);
       }
     }
 
-    final videoInfos = _extractVideoInfos(jwConfigs);
-    return videoInfos;
+    // Strategy 3: <script>var playerConfig = {...}</script>
+    if (configStr == null) {
+      final scriptConfigRegex = RegExp(r'var\s+\w+\s*=\s*(\{.*?\});', dotAll: true);
+      final scriptMatch = scriptConfigRegex.firstMatch(html);
+      if (scriptMatch != null) {
+        configStr = scriptMatch.group(1);
+      }
+    }
+
+    if (configStr == null) {
+      throw JwPlayerConfigParseException('JWPlayer config not found');
+    }
+
+    // 3. Parse the config string (try JSON, fallback to JS object)
+    Map<String, dynamic>? configObj;
+    try {
+      configObj = _parseJsonLike(configStr);
+    } catch (e) {
+      logger.e('Failed to parse JWPlayer config: $e');
+      throw JwPlayerConfigParseException('Invalid JWPlayer config');
+    }
+
+    if (configObj == null) {
+      throw JwPlayerConfigParseException('Invalid JWPlayer config');
+    }
+
+    // 4. Extract and normalize sources
+    final sourcesRaw = configObj['sources'];
+    if (sourcesRaw == null || sourcesRaw is! List) {
+      throw JwPlayerConfigParseException('No valid video sources found');
+    }
+
+    final List<JwVideoInfo> videos = [];
+    for (final source in sourcesRaw) {
+      if (source is Map && source['file'] is String) {
+        final videoUrl = source['file'] as String;
+        final posterUrl = configObj['image'] as String? ?? configObj['poster'] as String?;
+        videos.add(JwVideoInfo(videoUrl: videoUrl, posterUrl: posterUrl));
+      }
+    }
+
+    if (videos.isEmpty) {
+      throw JwPlayerConfigParseException('No valid video sources found');
+    }
+
+    return videos;
   }
 
-  /// Parses JW Player config scripts and returns a list of [JwVideoInfo].
-  ///
-  /// Handles both direct file/poster fields and playlist arrays.
-  List<JwVideoInfo> _extractVideoInfos(List<String> jwConfigs) {
-    logger.d('_extractVideoInfos called with ${jwConfigs.length} configs');
-
-    final results = <JwVideoInfo>[];
-
-    for (final config in jwConfigs) {
-      logger.d('Processing config: ${config.substring(0, config.length > 200 ? 200 : config.length)}...');
-
-      // Try to extract the setup({ ... }) object using regex.
-      final setupRegExp = RegExp(r'setup\s*\(\s*({.*?})\s*\)', dotAll: true);
-      final setupMatch = setupRegExp.firstMatch(config);
-      if (setupMatch == null) {
-        logger.w('No setup() match found in config, skipping.');
-        continue;
-      }
-
-      final configJsonLike = setupMatch.group(1)!;
-
-      // Use triple quotes for RegExp to avoid quote confusion.
-      final fileRegExp = RegExp(r"""file\s*:\s*['"]([^'"]+)['"]""");
-      final fileMatch = fileRegExp.firstMatch(configJsonLike);
-
-      final posterRegExp = RegExp(r"""(image|poster)\s*:\s*['"]([^'"]+)['"]""");
-      final posterMatch = posterRegExp.firstMatch(configJsonLike);
-
-      if (fileMatch != null) {
-        logger.i('Extracted video: ${fileMatch.group(1)}, poster: ${posterMatch?.group(2)}');
-        results.add(JwVideoInfo(videoUrl: fileMatch.group(1)!, posterUrl: posterMatch?.group(2)));
-        continue;
-      }
-
-      // Try to extract from playlist: [{file:..., image:...}]
-      final playlistRegExp = RegExp(r'playlist\s*:\s*\[(.*?)\]', dotAll: true);
-      final playlistMatch = playlistRegExp.firstMatch(configJsonLike);
-      if (playlistMatch != null) {
-        final playlistContent = playlistMatch.group(1)!;
-        final fileInPlaylistRegExp = RegExp(r"""file\s*:\s*['"]([^'"]+)['"]""");
-        final fileInPlaylist = fileInPlaylistRegExp.firstMatch(playlistContent);
-
-        final posterInPlaylistRegExp = RegExp(r"""(image|poster)\s*:\s*['"]([^'"]+)['"]""");
-        final posterInPlaylist = posterInPlaylistRegExp.firstMatch(playlistContent);
-
-        if (fileInPlaylist != null) {
-          logger.i('Extracted from playlist: ${fileInPlaylist.group(1)}, poster: ${posterInPlaylist?.group(2)}');
-          results.add(JwVideoInfo(videoUrl: fileInPlaylist.group(1)!, posterUrl: posterInPlaylist?.group(2)));
-        } else {
-          logger.w('No file found in playlist content.');
-        }
-      }
+  /// Attempts to parse a JSON-like string into a Map.
+  /// Handles some JS object edge cases (e.g., single quotes, trailing commas).
+  Map<String, dynamic>? _parseJsonLike(String input) {
+    // Try direct JSON decode first
+    try {
+      return input.contains("'")
+          ? _parseLooseJsObject(input)
+          : (input.isNotEmpty ? (input.startsWith('{') ? jsonDecode(input) as Map<String, dynamic> : null) : null);
+    } catch (_) {
+      // Fallback to loose JS object parsing
+      return _parseLooseJsObject(input);
     }
-
-    logger.d('Extracted ${results.length} JwVideoInfo(s): $results');
-    return results;
   }
+
+  /// Very basic JS object to Map parser (for common JWPlayer configs).
+  Map<String, dynamic>? _parseLooseJsObject(String input) {
+    // Remove JS function definitions: "key": function(...) { ... }, key: function(...) { ... }
+    String withoutFunctions = input.replaceAllMapped(
+      RegExp(
+        r'''(["']?\w+["']?\s*:\s*)function\s*\([^)]*\)\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*,?''',
+        multiLine: true,
+        dotAll: true,
+      ),
+      (m) => '',
+    );
+    // Replace single quotes with double quotes, remove trailing commas
+    final normalized = withoutFunctions
+        .replaceAllMapped(RegExp(r'(\w+)\s*:'), (m) => '"${m[1]}":') // unquoted keys
+        .replaceAll("'", '"')
+        .replaceAllMapped(RegExp(r',(\s*[}\]])'), (m) => m[1]!);
+    try {
+      return jsonDecode(normalized) as Map<String, dynamic>;
+    } catch (e) {
+      logger.e('Loose JS object parse failed: $e');
+      return null;
+    }
+  }
+}
+
+/// Exception thrown when JWPlayer config is missing or invalid.
+class JwPlayerConfigParseException implements Exception {
+  final String message;
+  JwPlayerConfigParseException(this.message);
+  @override
+  String toString() => 'JwPlayerConfigParseException: $message';
 }
