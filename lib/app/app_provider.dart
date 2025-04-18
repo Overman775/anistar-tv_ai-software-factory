@@ -23,7 +23,7 @@ class AppProvider extends StatelessWidget {
     return MultiProvider(
       providers: [
         Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
-        Provider<HtmlParserService>(create: (_) => HtmlParserService()),
+        Provider<HtmlParserService>(create: (_) => HtmlParserService(), dispose: (_, service) => service.dispose()),
         Provider<JwPlayerScraperService>(
           create: (context) => JwPlayerScraperService(htmlParserService: context.read<HtmlParserService>()),
         ),

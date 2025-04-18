@@ -8,27 +8,14 @@ import 'package:logger/logger.dart';
 /// A service class for parsing HTML content using a headless WebView.
 class HtmlParserService {
   final Logger logger;
+  HeadlessInAppWebView? _headlessWebView;
 
   HtmlParserService({Logger? logger}) : logger = logger ?? Logger();
 
-  /// Fetches the HTML from the given [url] using a headless WebView.
-  Future<String?> fetchHtml(String url, {Duration timeout = const Duration(seconds: 45)}) async {
-    final completer = Completer<String?>();
-    HeadlessInAppWebView? headlessWebView;
-
-    // Timeout mechanism
-    final timer = Timer(timeout, () {
-      if (!completer.isCompleted) {
-        logger.w('WebView fetch timed out for URL: $url after ${timeout.inSeconds} seconds.');
-        completer.complete(null);
-        headlessWebView?.dispose(); // Attempt to clean up
-      }
-    });
-
-    try {
-      logger.i('Initializing Headless WebView for: $url');
-      headlessWebView = HeadlessInAppWebView(
-        initialUrlRequest: URLRequest(url: WebUri(url)),
+  Future<HeadlessInAppWebView> _getWebView() async {
+    if (_headlessWebView == null || !(_headlessWebView?.isRunning() ?? false)) {
+      logger.i('Initializing Headless WebView');
+      _headlessWebView = HeadlessInAppWebView(
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true, // Essential for Cloudflare checks
           domStorageEnabled: true,
@@ -38,85 +25,70 @@ class HtmlParserService {
           blockNetworkImage: true,
           blockNetworkLoads: false,
           mediaPlaybackRequiresUserGesture: true,
-          // contentBlockers: [
-          //   ContentBlocker(
-          //     trigger: ContentBlockerTrigger(urlFilter: adUrlFilters),
-          //     action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
-          //   ),
-          // ],
         ),
-        onLoadStop: (controller, loadedUrl) async {
-          if (completer.isCompleted) return; // Already timed out or completed
-
-          logger.t('WebView finished loading: ${loadedUrl ?? 'unknown URL'}');
-          try {
-            // Wait a brief moment for potential JS challenges to complete
-            await Future.delayed(const Duration(seconds: 3));
-
-            // // Execute JavaScript to get the document content
-            // final dynamic result = await controller.evaluateJavascript(source: js);
-
-            final dynamic result = await controller.getHtml();
-
-            if (result is String) {
-              final text = result.trim();
-              logger.i('Successfully fetched with WebView: $text');
-              if (!completer.isCompleted) {
-                completer.complete(text.isNotEmpty ? text : null);
-              }
-            } else {
-              logger.w('WebView returned non-string: $result');
-              if (!completer.isCompleted) {
-                completer.complete(null);
-              }
-            }
-          } catch (e, stackTrace) {
-            logger.e('Error evaluating JS in WebView', error: e, stackTrace: stackTrace);
-            if (!completer.isCompleted) {
-              completer.complete(null);
-            }
-          } finally {
-            headlessWebView?.dispose(); // Clean up after getting title or error
-          }
-        },
-        onLoadError: (controller, uri, code, message) {
-          if (completer.isCompleted) return;
-          logger.e('WebView onLoadError for $uri: Code $code - $message');
-          if (!completer.isCompleted) {
-            completer.complete(null);
-          }
-          headlessWebView?.dispose();
-        },
-        onReceivedHttpError: (controller, request, errorResponse) async {
-          if (completer.isCompleted) return;
-          logger.w(
-            'WebView received HTTP error for ${request.url}: ${errorResponse.statusCode} ${errorResponse.reasonPhrase}',
-          );
-        },
         onConsoleMessage: (controller, consoleMessage) {
           logger.d('WebView Console [${consoleMessage.messageLevel}]: ${consoleMessage.message}');
         },
       );
+      await _headlessWebView!.run();
+      logger.t('Headless WebView is running.');
+    }
+    return _headlessWebView!;
+  }
 
-      logger.t('Running Headless WebView...');
-      await headlessWebView.run();
+  /// Fetches the HTML from the given [url] using a headless WebView.
+  Future<String?> fetchHtml(String url) async {
+    logger.i('Attempting to fetch HTML for URL: $url');
+    try {
+      final headlessWebView = await _getWebView();
+      final controller = headlessWebView.webViewController;
 
-      // Wait for the completer (either success, error, or timeout)
-      final result = await completer.future;
-      return result;
+      if (controller == null) {
+        logger.e('WebView controller is null for URL: $url');
+        return null;
+      }
+
+      logger.i('Loading URL in WebView: $url');
+      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+      logger.i('Finished loading URL in WebView: $url');
+
+      // Wait for the page to load and potential JS challenges to complete
+      // This part might need refinement based on specific website behavior
+      await Future.delayed(const Duration(seconds: 5));
+      logger.i('Waited for 5 seconds for page to load.');
+
+      logger.i('Attempting to get HTML from WebView.');
+      final dynamic result = await controller.getHtml();
+      logger.i('Finished getting HTML from WebView.');
+
+      if (result is String) {
+        final text = result.trim();
+        if (text.isNotEmpty) {
+          logger.i('Successfully fetched HTML for URL: $url');
+          return text;
+        } else {
+          logger.w('Fetched HTML is empty for URL: $url');
+          return null;
+        }
+      } else {
+        logger.w('WebView returned non-string result for URL: $url - $result');
+        return null;
+      }
     } catch (e, stackTrace) {
-      logger.e('Error initializing or running Headless WebView for URL: $url', error: e, stackTrace: stackTrace);
-      if (!completer.isCompleted) {
-        completer.complete(null); // Ensure completer finishes on exception
-      }
+      logger.e('Error fetching HTML with WebView for URL: $url', error: e, stackTrace: stackTrace);
       return null;
-    } finally {
-      timer.cancel(); // Cancel the timeout timer
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (headlessWebView?.isRunning() ?? false) {
-        headlessWebView?.dispose();
-        logger.t('WebView disposed in finally block.');
-      }
+    }
+  }
+
+  /// Disposes the headless WebView.
+  void dispose() {
+    logger.i('Attempting to dispose Headless WebView.');
+    if (_headlessWebView?.isRunning() ?? false) {
+      _headlessWebView?.dispose();
+      _headlessWebView = null;
+      logger.t('Headless WebView disposed successfully.');
+    } else {
+      logger.i('Headless WebView is not running or already disposed.');
     }
   }
 }
