@@ -56,11 +56,12 @@ class JwPlayerScraperService {
       final playlistStr = playlistMatch.group(1);
       if (playlistStr != null) {
         try {
-          final playlistJson = jsonDecode(playlistStr) as List;
+          final normalizedJson = normalize_json(playlistStr);
+          final playlistJson = jsonDecode(normalizedJson) as List;
           logger.d('Successfully parsed playlst variable.');
           for (final item in playlistJson) {
             if (item is Map<String, dynamic>) {
-              final videoUrl = item['file'] as String? ?? item['file_h'] as String?;
+              final videoUrl = item['file_h'] as String? ?? item['file'] as String?;
               final posterUrl = item['image'] as String? ?? item['poster'] as String?;
               if (videoUrl != null) {
                 videos.add(JwVideoInfo(videoUrl: videoUrl, posterUrl: posterUrl));
@@ -82,42 +83,8 @@ class JwPlayerScraperService {
     return videos;
   }
 
-  /// Attempts to parse a JSON-like string into a Map.
-  /// Handles some JS object edge cases (e.g., single quotes, trailing commas).
-  Map<String, dynamic>? _parseJsonLike(String input) {
-    // Try direct JSON decode first
-    try {
-      return input.contains("'")
-          ? _parseLooseJsObject(input)
-          : (input.isNotEmpty ? (input.startsWith('{') ? jsonDecode(input) as Map<String, dynamic> : null) : null);
-    } catch (_) {
-      // Fallback to loose JS object parsing
-      return _parseLooseJsObject(input);
-    }
-  }
-
-  /// Very basic JS object to Map parser (for common JWPlayer configs).
-  Map<String, dynamic>? _parseLooseJsObject(String input) {
-    // Remove JS function definitions: "key": function(...) { ... }, key: function(...) { ... }
-    String withoutFunctions = input.replaceAllMapped(
-      RegExp(
-        r'''(["']?\w+["']?\s*:\s*)function\s*\([^)]*\)\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*,?''',
-        multiLine: true,
-        dotAll: true,
-      ),
-      (m) => '',
-    );
-    // Replace single quotes with double quotes, remove trailing commas
-    final normalized = withoutFunctions
-        .replaceAllMapped(RegExp(r'(\w+)\s*:'), (m) => '"${m[1]}":') // unquoted keys
-        .replaceAll("'", '"')
-        .replaceAllMapped(RegExp(r',(\s*[}\]])'), (m) => m[1]!);
-    try {
-      return jsonDecode(normalized) as Map<String, dynamic>;
-    } catch (e) {
-      logger.e('Loose JS object parse failed: $e');
-      return null;
-    }
+  String normalize_json(String json) {
+    return json;
   }
 }
 
