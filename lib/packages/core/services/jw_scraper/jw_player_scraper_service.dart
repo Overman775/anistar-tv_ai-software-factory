@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:core';
 
 import 'package:logger/logger.dart';
 
@@ -15,96 +16,69 @@ class JwPlayerScraperService {
   /// Scrapes JWPlayer video sources and poster from the given URL.
   /// Throws [JwPlayerConfigParseException] if config or sources are missing/invalid.
   Future<List<JwVideoInfo>> scrape(String url) async {
-    logger.i('Scraping JWPlayer config from URL: $url');
+    final uri = Uri.parse(url);
+
+    // Extract base URL
+    final baseUrl = '${uri.scheme}://${uri.host}/';
+
+    // Extract series number
+    final pathSegment = uri.pathSegments.first;
+    final seriesNumber = pathSegment.split('-').first;
+
+    final seriesIframeUrl = '$baseUrl/test/player2/videoas.php?id=10283&hash=909bfcd31586a790885455da4910b469';
+
+    logger.i('Scraping JWPlayer config from URL: $seriesIframeUrl');
     // return [];
     // 1. Fetch HTML
-    final html = await htmlParserService.fetchHtml(url);
+    var html = await htmlParserService.fetchHtml(seriesIframeUrl);
     if (html == null || html.isEmpty) {
-      logger.e('Failed to fetch HTML for $url');
-      throw JwPlayerConfigParseException('Failed to fetch HTML for $url');
+      logger.e('Failed to fetch HTML for $seriesIframeUrl');
+      throw JwPlayerConfigParseException('Failed to fetch HTML for $seriesIframeUrl');
     }
-    logger.i('Successfully fetched HTML for $url');
+    logger.i('Successfully fetched HTML for $seriesIframeUrl');
 
-    // 2. Extract JWPlayer config string using multiple strategies
-    String? configStr;
-
-    // Strategy 1: jwplayer("...").setup({...})
-    logger.d('Attempting config extraction strategy 1: jwplayer("...").setup({...})');
-    final jwplayerSetupRegex = RegExp(r'''jwplayer\(["'][^"']*["']\)\.setup\((\{.*?\})\)''', dotAll: true);
-    final setupMatch = jwplayerSetupRegex.firstMatch(html);
-    if (setupMatch != null) {
-      configStr = setupMatch.group(1);
-      logger.d('Strategy 1 successful.');
+    final iframeHtml = await htmlParserService.fetchHtml(seriesIframeUrl);
+    if (iframeHtml != null && iframeHtml.isNotEmpty) {
+      html = iframeHtml; // Use iframe content for scraping
+      logger.i('Successfully fetched and will use iframe HTML.');
+    } else {
+      logger.w(
+        'Failed to fetch iframe HTML from $seriesIframeUrl or iframe HTML is empty. Proceeding with original HTML.',
+      );
     }
 
-    // Strategy 2: window.jwplayerConfig = {...}
-    if (configStr == null) {
-      logger.d('Attempting config extraction strategy 2: window.jwplayerConfig = {...}');
-      final windowConfigRegex = RegExp(r'window\.jwplayerConfig\s*=\s*(\{.*?\});', dotAll: true);
-      final windowMatch = windowConfigRegex.firstMatch(html);
-      if (windowMatch != null) {
-        configStr = windowMatch.group(1);
-        logger.d('Strategy 2 successful.');
-      }
-    }
-
-    // Strategy 3: <script>var playerConfig = {...}</script>
-    if (configStr == null) {
-      logger.d('Attempting config extraction strategy 3: <script>var playerConfig = {...}</script>');
-      final scriptConfigRegex = RegExp(r'var\s+\w+\s*=\s*(\{.*?\});', dotAll: true);
-      final scriptMatch = scriptConfigRegex.firstMatch(html);
-      if (scriptMatch != null) {
-        configStr = scriptMatch.group(1);
-        logger.d('Strategy 3 successful.');
-      }
-    }
-
-    if (configStr == null) {
-      logger.e('JWPlayer config not found using any strategy.');
-      throw JwPlayerConfigParseException('JWPlayer config not found');
-    }
-    logger.d('Successfully extracted JWPlayer config string.');
-
-    // 3. Parse the config string (try JSON, fallback to JS object)
-    logger.d('Attempting to parse JWPlayer config string.');
-    Map<String, dynamic>? configObj;
-    try {
-      configObj = _parseJsonLike(configStr);
-      logger.d('Successfully parsed JWPlayer config string.');
-    } catch (e) {
-      logger.e('Failed to parse JWPlayer config: $e');
-      throw JwPlayerConfigParseException('Invalid JWPlayer config');
-    }
-
-    if (configObj == null) {
-      logger.e('Parsed config object is null.');
-      throw JwPlayerConfigParseException('Invalid JWPlayer config');
-    }
-
-    // 4. Extract and normalize sources
-    logger.d('Extracting video sources from config.');
-    final sourcesRaw = configObj['sources'];
-    if (sourcesRaw == null || sourcesRaw is! List) {
-      logger.e('No valid video sources found in config.');
-      throw JwPlayerConfigParseException('No valid video sources found');
-    }
-    logger.d('Successfully extracted raw sources.');
-
-    final List<JwVideoInfo> videos = [];
-    for (final source in sourcesRaw) {
-      if (source is Map && source['file'] is String) {
-        final videoUrl = source['file'] as String;
-        final posterUrl = configObj['image'] as String? ?? configObj['poster'] as String?;
-        videos.add(JwVideoInfo(videoUrl: videoUrl, posterUrl: posterUrl));
+    // 3. Extract video sources from playlst variable
+    List<JwVideoInfo> videos = [];
+    logger.d('Attempting to extract video sources from playlst variable.');
+    final playlistRegex = RegExp(r'var\s+playlst\s*=\s*(\[.*?\]);', dotAll: true);
+    final playlistMatch = playlistRegex.firstMatch(html);
+    if (playlistMatch != null) {
+      final playlistStr = playlistMatch.group(1);
+      if (playlistStr != null) {
+        try {
+          final playlistJson = jsonDecode(playlistStr) as List;
+          logger.d('Successfully parsed playlst variable.');
+          for (final item in playlistJson) {
+            if (item is Map<String, dynamic>) {
+              final videoUrl = item['file'] as String? ?? item['file_h'] as String?;
+              final posterUrl = item['image'] as String? ?? item['poster'] as String?;
+              if (videoUrl != null) {
+                videos.add(JwVideoInfo(videoUrl: videoUrl, posterUrl: posterUrl));
+              }
+            }
+          }
+        } catch (e) {
+          logger.e('Failed to parse playlst variable: $e');
+        }
       }
     }
 
     if (videos.isEmpty) {
-      logger.e('No valid video sources found after processing.');
+      logger.e('No valid video sources found after processing playlst.');
       throw JwPlayerConfigParseException('No valid video sources found');
     }
 
-    logger.i('Successfully scraped ${videos.length} video sources.');
+    logger.i('Successfully scraped ${videos.length} video sources from playlst.');
     return videos;
   }
 
