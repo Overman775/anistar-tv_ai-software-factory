@@ -83,8 +83,60 @@ class JwPlayerScraperService {
     return videos;
   }
 
-  String normalize_json(String json) {
-    return json;
+  /// Normalizes a JavaScript-like array literal string into a valid JSON array string.
+  /// Minimal version focusing on key quoting, comment removal, and trailing commas.
+  String normalize_json(String rawJson) {
+    String processed = rawJson; // Start with raw input
+
+    // Remove extra whitespace (tabs and spaces) while preserving necessary spaces within strings and structure.
+    // This is a basic approach and might need refinement for complex cases.
+    processed = processed.split('\n').map((line) => line.trim()).join('');
+    processed = processed.replaceAll(RegExp(r'\s+', multiLine: true), ' ');
+
+    // 1. Remove JS comments (single line) - Safely target comments at line ends
+    // Matches optional whitespace followed by // and the rest of the line.
+    // processed = processed.replaceAll(RegExp(r'\s*\/\/.*$', multiLine: true), '');
+    // Remove single-line comments (match until next structural char or end)
+    processed = processed.replaceAll(RegExp(r'(?<!https:)//[^{}\[\],]*'), '');
+
+    // Replace single quotes around values with double quotes
+    processed = processed.replaceAll(RegExp(r"'(.*?)'", multiLine: true), r'"$1"');
+
+    // Add double quotes around keys that are not already quoted using replaceAllMapped
+    processed = processed.replaceAllMapped(
+      RegExp(r'(^|[\{,]\s*)(\w+)(?=\s*:)'),
+      (match) => '${match.group(1)!}"${match.group(2)!}"',
+    );
+
+    // Remove commas followed immediately by another comma
+    processed = processed.replaceAll(RegExp(r',(?=\s*,)'), '');
+
+    // Remove trailing commas in objects and arrays (before } or ])
+    processed = processed.replaceAll(RegExp(r',(\s*[}\]])'), '},');
+    // // Remove commas followed immediately by another comma
+    processed = processed.replaceAll(RegExp(r',(?=\s*,)'), '');
+    processed = processed.replaceAll(',},', ']');
+
+    // 4. Trim final result
+    processed = processed.trim();
+
+    // 5. Validate
+    try {
+      // Attempt to decode. If it fails, log details and re-throw.
+      jsonDecode(processed);
+      logger.i('Json valid');
+
+      return processed; // It's valid JSON
+    } catch (e) {
+      logger.e('Error normalizing JSON (minimal attempt)', error: e);
+      logger.e(
+        'Problematic string fragment (minimal attempt): ${processed.substring(0, (processed.length > 400 ? 400 : processed.length))}...',
+      ); // Log snippet
+      // Re-throw a detailed exception
+      throw FormatException(
+        'Failed to normalize to valid JSON string (minimal attempt): $e\nOriginal (raw): ${rawJson.substring(0, (rawJson.length > 400 ? 400 : rawJson.length))}...',
+      );
+    }
   }
 }
 
