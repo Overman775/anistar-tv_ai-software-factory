@@ -6,6 +6,8 @@ import 'package:anistar_tv/packages/features/video_list/domain/models/video_mode
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../domain/models/movie_model.dart';
+
 class MovieScreen extends StatefulWidget {
   final VideoModel movie;
   final void Function(Series) onSeriesTap;
@@ -17,7 +19,7 @@ class MovieScreen extends StatefulWidget {
 }
 
 class _MovieScreenState extends State<MovieScreen> {
-  late Future<List<Series>> _seriesFuture;
+  late Future<Iterable<Movie>> _seriesFuture;
 
   @override
   void initState() {
@@ -32,7 +34,7 @@ class _MovieScreenState extends State<MovieScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.movie.title)),
-      body: FutureBuilder<List<Series>>(
+      body: FutureBuilder<Iterable<Movie>>(
         future: _seriesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -45,7 +47,6 @@ class _MovieScreenState extends State<MovieScreen> {
               return const Center(child: Text('No series available'));
             }
             return ListView.builder(
-              itemCount: seriesList.length,
               itemBuilder: (context, index) {
                 final series = seriesList[index];
                 return SeriesCard(series: series, isFocused: false, onTap: () => widget.onSeriesTap(series));
