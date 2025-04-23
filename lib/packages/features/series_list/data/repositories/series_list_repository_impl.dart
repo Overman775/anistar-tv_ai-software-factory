@@ -1,4 +1,3 @@
-import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:anistar_tv/packages/features/series_list/data/datasources/series_list_remote_datasource.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/models/series_model.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/repositories/series_list_repository.dart';
@@ -7,16 +6,11 @@ import 'package:logger/logger.dart';
 
 class SeriesListRepositoryImpl implements SeriesListRepository {
   final SeriesListRemoteDatasource _remoteDatasource;
-  final HtmlParserService _htmlParserService;
   final Logger _logger;
 
-  SeriesListRepositoryImpl({
-    required SeriesListRemoteDatasource remoteDatasource,
-    required HtmlParserService htmlParserService,
-    Logger? logger,
-  }) : _remoteDatasource = remoteDatasource,
-       _htmlParserService = htmlParserService,
-       _logger = logger ?? Logger();
+  SeriesListRepositoryImpl({required SeriesListRemoteDatasource remoteDatasource, Logger? logger})
+    : _remoteDatasource = remoteDatasource,
+      _logger = logger ?? Logger();
 
   @override
   Future<List<Series>> getSeriesList(String url) async {

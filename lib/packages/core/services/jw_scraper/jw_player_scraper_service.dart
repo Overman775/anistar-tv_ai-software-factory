@@ -90,9 +90,11 @@ class JwPlayerScraperService {
           for (final item in playlistJson) {
             if (item is Map<String, dynamic>) {
               final videoUrl = item['file_h'] as String? ?? item['file'] as String?;
-              final posterUrl = item['image'] as String? ?? item['poster'] as String?;
+              final title = item['title'] as String? ?? '';
+              final posterUrl = item['image'] as String?;
+              final viewing = item['viewing'] as bool? ?? false;
               if (videoUrl != null) {
-                videos.add(JwVideoInfo(videoUrl: videoUrl, posterUrl: posterUrl));
+                videos.add(JwVideoInfo(videoUrl: videoUrl, title: title, posterUrl: posterUrl, isViewed: viewing));
               }
             }
           }

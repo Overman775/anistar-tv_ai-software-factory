@@ -42,7 +42,6 @@ class AppProvider extends StatelessWidget {
           create:
               (context) => SeriesListRepositoryImpl(
                 remoteDatasource: context.read<SeriesListRemoteDatasource>(), // Correct parameter name
-                htmlParserService: context.read<HtmlParserService>(), // Add missing parameter
                 // Logger can be added here
               ),
         ),
