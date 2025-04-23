@@ -19,13 +19,41 @@ class JwPlayerScraperService {
     final uri = Uri.parse(url);
 
     // Extract base URL
-    final baseUrl = '${uri.scheme}://${uri.host}/';
+    final baseUrl = '${uri.scheme}://${uri.host}';
 
-    // Extract series number
-    final pathSegment = uri.pathSegments.first;
-    final seriesNumber = pathSegment.split('-').first;
+    logger.i('Fetching initial page HTML from URL: $url');
+    final initialPageHtml = await htmlParserService.fetchHtml(url);
+    if (initialPageHtml == null || initialPageHtml.isEmpty) {
+      logger.e('Failed to fetch initial page HTML for $url');
+      throw JwPlayerConfigParseException('Failed to fetch initial page HTML for $url');
+    }
+    logger.i('Successfully fetched initial page HTML for $url');
 
-    final seriesIframeUrl = '$baseUrl/test/player2/videoas.php?id=10283&hash=909bfcd31586a790885455da4910b469';
+    // Find the iframe with videoas.php in its src
+    final iframeRegex = RegExp(r'<iframe[^>]+src="([^"]*videoas\.php[^"]*)"');
+    final iframeMatch = iframeRegex.firstMatch(initialPageHtml);
+
+    if (iframeMatch == null) {
+      logger.e('Could not find iframe with videoas.php in src on page: $url');
+      throw JwPlayerConfigParseException('Could not find iframe with videoas.php in src');
+    }
+
+    final iframeSrc = iframeMatch.group(1)!;
+    logger.i('Found iframe src: $iframeSrc');
+
+    // Extract id and hash from iframe src
+    final iframeUri = Uri.parse(iframeSrc);
+    final id = iframeUri.queryParameters['id'];
+    final hash = iframeUri.queryParameters['hash'];
+
+    if (id == null || hash == null) {
+      logger.e('Could not extract id or hash from iframe src: $iframeSrc');
+      throw JwPlayerConfigParseException('Could not extract id or hash from iframe src');
+    }
+
+    logger.i('Extracted id: $id, hash: $hash');
+
+    final seriesIframeUrl = '$baseUrl/test/player2/videoas.php?id=$id&hash=$hash';
 
     logger.i('Scraping JWPlayer config from URL: $seriesIframeUrl');
     // return [];
