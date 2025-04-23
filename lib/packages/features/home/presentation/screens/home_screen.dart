@@ -1,19 +1,17 @@
-import 'package:anistar_tv/app/app_routes.dart';
+import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
 import 'package:anistar_tv/packages/features/video_list/presentation/screens/video_list_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  final void Function(VideoModel) onVideoTap;
+
+  const HomeScreen({super.key, required this.onVideoTap});
 
   @override
   Widget build(BuildContext context) {
     return VideoListScreen(
       baseUrl: 'https://v7.astar.bz', // Base URL for the home page videos
-      onVideoTap: (video) {
-        // Navigate to the movie screen when a video is tapped
-        context.go(AppRoutes.movie, extra: video);
-      },
+      onVideoTap: onVideoTap,
     );
   }
 }

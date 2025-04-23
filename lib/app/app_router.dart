@@ -26,7 +26,13 @@ class AppRouter {
       routes: [
         GoRoute(
           path: AppRoutes.home, // Path: /home
-          builder: (context, state) => const HomeScreen(), // Use HomeScreen
+          builder:
+              (context, state) => HomeScreen(
+                onVideoTap: (video) {
+                  // Navigate to the movie screen when a video is tapped
+                  context.go(AppRoutes.movie, extra: video);
+                },
+              ), // Use HomeScreen
         ),
         GoRoute(
           path: AppRoutes.favorites, // Path: /favorites
@@ -36,37 +42,42 @@ class AppRouter {
           path: AppRoutes.movie, // Path: /movie, expects MovieModel as extra
           builder: (context, state) {
             final extra = state.extra;
+            // Check for Movie model instead of VideoModel
             if (extra is! VideoModel) {
-              logger.w('Movie route called without MovieModel in extra');
+              logger.w('Movie route called without Movie model in extra');
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRoutes.home);
               });
               return const Scaffold(body: Center(child: Text('Movie data is missing')));
             }
+            // Pass the Movie object and the required onMovieTap callback
             return MovieScreen(
-              movie: extra,
-              onSeriesTap: (series) {
-                // TODO: Implement series tap handling, e.g. navigate to player or show details
-                debugPrint('Tapped series: \$series');
+              video: extra, // extra is now confirmed to be a Movie
+              onMovieTap: (tappedMovie) {
+                // Navigate to player screen with title and videoUrl in a Map
+                final playerData = {'title': tappedMovie.title, 'videoUrl': tappedMovie.videoUrl};
+                context.push(AppRoutes.player, extra: playerData);
+                logger.i('Tapped movie: ${tappedMovie.title}, navigating to player.');
               },
             );
           },
         ),
         GoRoute(
-          path: AppRoutes.player, // Path: /player
+          path: AppRoutes.player, // Path: /player, expects Map<String, String> as extra
           builder: (context, state) {
-            // Extract VideoModel from the 'extra' parameter
-            final video = state.extra as VideoModel?;
-            if (video == null) {
-              // Handle error case where VideoModel is missing or not the correct type
-              logger.w('Player route called without valid VideoModel in extra');
+            // Extract Map<String, String> from the 'extra' parameter
+            final playerData = state.extra as Map<String, String>?;
+            if (playerData == null || !playerData.containsKey('title') || !playerData.containsKey('videoUrl')) {
+              // Handle error case where data is missing or not the correct type
+              logger.w('Player route called without valid title/videoUrl Map in extra');
               // Redirect to home or show an error page
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 context.go(AppRoutes.home);
               });
-              return const Scaffold(body: Center(child: Text('Video data is missing')));
+              return const Scaffold(body: Center(child: Text('Player data is missing')));
             }
-            return PlayerScreen(video: video); // Pass the VideoModel
+            // Pass title and videoUrl to PlayerScreen
+            return PlayerScreen(title: playerData['title']!, videoUrl: playerData['videoUrl']!);
           },
         ),
         GoRoute(

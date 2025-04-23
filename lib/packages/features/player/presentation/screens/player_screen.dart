@@ -5,16 +5,27 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
-import '../../../video_list/domain/models/video_model.dart';
+// Remove VideoModel import
+// import '../../../video_list/domain/models/video_model.dart';
 import '../widgets/player_controls.dart';
 
 /// Screen for playing videos
 class PlayerScreen extends StatefulWidget {
-  /// The video model to play
-  final VideoModel video;
+  // Remove video model field
+  // final VideoModel video;
+  // Add title and videoUrl fields
+  final String title;
+  final String videoUrl;
 
   /// Constructor
-  const PlayerScreen({super.key, required this.video});
+  const PlayerScreen({
+    super.key,
+    // Remove video parameter
+    // required this.video,
+    // Add title and videoUrl parameters
+    required this.title,
+    required this.videoUrl,
+  });
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -56,8 +67,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Removed _loadVideo method as VideoModel is passed directly
 
   Future<void> _initializePlayer() async {
-    // Initialize the video player using the passed video model
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.video.videoUrl));
+    // Initialize the video player using the passed videoUrl
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
 
     try {
       await _controller!.initialize();
@@ -180,7 +191,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               // Controls overlay
               if (_isControlsVisible)
                 PlayerControls(
-                  video: widget.video, // Use video from widget
+                  // Pass title instead of video object
+                  title: widget.title,
                   controller: _controller,
                   isPlaying: _isPlaying,
                   onPlayPause: _togglePlayPause,

@@ -1,11 +1,14 @@
-import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
+// Remove VideoModel import
+// import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 /// Widget for video player controls
 class PlayerControls extends StatelessWidget {
-  /// The video being played
-  final VideoModel video;
+  // Remove video field
+  // final VideoModel video;
+  // Add title field
+  final String title;
 
   /// The video player controller
   final VideoPlayerController? controller;
@@ -31,7 +34,10 @@ class PlayerControls extends StatelessWidget {
   /// Constructor
   const PlayerControls({
     super.key,
-    required this.video,
+    // Remove video parameter
+    // required this.video,
+    // Add title parameter
+    required this.title,
     required this.controller,
     required this.isPlaying,
     required this.onPlayPause,
@@ -72,10 +78,14 @@ class PlayerControls extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        video.title,
+                        // Use title field
+                        title,
                         style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        maxLines: 1, // Ensure title doesn't wrap excessively
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      Text(video.category, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                      // Remove category display
+                      // Text(video.category, style: const TextStyle(color: Colors.white70, fontSize: 14)),
                     ],
                   ),
                 ),
