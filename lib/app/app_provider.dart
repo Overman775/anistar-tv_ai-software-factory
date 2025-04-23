@@ -1,28 +1,29 @@
 import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:anistar_tv/packages/core/services/jw_scraper/jw_player_scraper_service.dart';
+import 'package:anistar_tv/packages/core/services/secure_storage.dart';
+import 'package:anistar_tv/packages/core/services/shared_preferences_storage.dart';
 import 'package:anistar_tv/packages/features/series_list/data/datasources/series_list_remote_datasource.dart';
 import 'package:anistar_tv/packages/features/series_list/data/repositories/series_list_repository_impl.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/repositories/series_list_repository.dart';
 import 'package:anistar_tv/packages/features/series_list/domain/usecases/get_series_list_usecase.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import '../packages/core/services/preferences_service.dart';
 
 /// Global dependency injection provider
 class AppProvider extends StatelessWidget {
   final Widget child;
-  final SharedPreferences sharedPreferences;
+  final SharedPreferencesStorage sharedPreferences;
+  final SecureStorage secureStorage;
 
   /// Constructor
-  const AppProvider({super.key, required this.sharedPreferences, required this.child});
+  const AppProvider({super.key, required this.sharedPreferences, required this.secureStorage, required this.child});
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        Provider<PreferencesService>(create: (_) => PreferencesService(sharedPreferences)),
+        Provider<SharedPreferencesStorage>.value(value: sharedPreferences),
+        Provider<SecureStorage>.value(value: secureStorage),
         Provider<HtmlParserService>(create: (_) => HtmlParserService(), dispose: (_, service) => service.dispose()),
         Provider<JwPlayerScraperService>(
           create: (context) => JwPlayerScraperService(htmlParserService: context.read<HtmlParserService>()),
