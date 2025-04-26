@@ -11,10 +11,4 @@ class AppRoutes {
 
   /// Player screen route
   static const String player = '/player'; // Path for the player
-
-  /// Video list screen route (expects dataUrl as extra)
-  static const String videoList = '/videos';
-
-  /// Series list screen route (expects anime page url as extra)
-  static const String seriesList = '/series';
 }

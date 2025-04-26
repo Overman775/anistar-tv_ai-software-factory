@@ -7,9 +7,7 @@ import '../packages/features/favorites/presentation/screens/favorites_screen.dar
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/movie/presentation/screens/movie_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
-import '../packages/features/series_list/presentation/screens/series_list_screen.dart'; // Import SeriesListScreen
 import '../packages/features/video_list/domain/models/video_model.dart';
-import '../packages/features/video_list/presentation/screens/video_list_screen.dart'; // Import VideoListScreen
 import '../utils/logger/logger.dart';
 import 'app_routes.dart';
 
@@ -78,42 +76,6 @@ class AppRouter {
             }
             // Pass title and videoUrl to PlayerScreen
             return PlayerScreen(title: playerData['title']!, videoUrl: playerData['videoUrl']!);
-          },
-        ),
-        GoRoute(
-          path: AppRoutes.seriesList, // Path: /series
-          name: AppRoutes.seriesList, // Optional: Add name for named routing
-          builder: (context, state) {
-            final url = state.extra as String?;
-            if (url == null || url.isEmpty) {
-              logger.w('SeriesList route called without valid URL in extra');
-              // Redirect or show error
-              WidgetsBinding.instance.addPostFrameCallback((_) => context.go(AppRoutes.home));
-              return const Scaffold(body: Center(child: Text('Series URL is missing')));
-            }
-            return SeriesListScreen(url: url);
-          },
-        ),
-        GoRoute(
-          path: AppRoutes.videoList, // Path: /videos
-          name: AppRoutes.videoList, // Optional: Add name for named routing
-          builder: (context, state) {
-            final dataUrl = state.extra as String?;
-            if (dataUrl == null || dataUrl.isEmpty) {
-              logger.w('VideoList route called without valid dataUrl in extra');
-              // Redirect or show error
-              WidgetsBinding.instance.addPostFrameCallback((_) => context.go(AppRoutes.home));
-              return const Scaffold(body: Center(child: Text('Video data URL is missing')));
-            }
-            // Pass dataUrl as baseUrl and define onVideoTap callback
-            return VideoListScreen(
-              baseUrl: dataUrl,
-              onVideoTap: (video) {
-                context.push(AppRoutes.seriesList, extra: video.videoUrl);
-              },
-              // Optionally pass a title based on context if needed
-              // title: 'Videos for Series',
-            );
           },
         ),
       ],

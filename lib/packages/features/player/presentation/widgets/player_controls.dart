@@ -163,7 +163,7 @@ class _ControlButton extends StatelessWidget {
   final double size;
   final VoidCallback onPressed;
 
-  const _ControlButton({super.key, required this.icon, this.size = 40, required this.onPressed});
+  const _ControlButton({required this.icon, this.size = 40, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {

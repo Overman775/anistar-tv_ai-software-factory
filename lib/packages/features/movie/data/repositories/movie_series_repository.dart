@@ -1,6 +1,5 @@
 import 'package:anistar_tv/packages/core/services/jw_scraper/jw_player_scraper_service.dart';
 import 'package:anistar_tv/packages/core/services/jw_scraper/models/jw_video_info.dart';
-import 'package:anistar_tv/packages/features/series_list/domain/models/series_model.dart';
 
 import '../../domain/models/movie_model.dart';
 
