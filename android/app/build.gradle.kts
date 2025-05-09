@@ -31,12 +31,12 @@ defaultConfig {
 
 flavorDimensions += "environment"
 productFlavors {
-    create("development") {
+    create("dev") {
         dimension = "environment"
         applicationIdSuffix = ".dev"
         versionNameSuffix = "-dev"
     }
-    create("production") {
+    create("prod") {
         dimension = "environment"
     }
     }

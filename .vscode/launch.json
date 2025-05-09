@@ -8,7 +8,7 @@
             "program": "lib/main_dev.dart",
             "args": [
                 "--flavor",
-                "development"
+                "dev"
             ]
         },
         {
@@ -18,7 +18,7 @@
             "program": "lib/main_prod.dart",
             "args": [
                 "--flavor",
-                "production",
+                "prod",
                 "--release"
             ]
         },
@@ -28,13 +28,6 @@
             "type": "dart",
             "program": "lib/main_dev.dart",
             "flutterMode": "profile"
-        },
-        {
-            "name": "Anistar TV (Android TV)",
-            "request": "launch",
-            "type": "dart",
-            "program": "lib/main_prod.dart",
-            "deviceId": "android-tv"
         }
     ]
 }
