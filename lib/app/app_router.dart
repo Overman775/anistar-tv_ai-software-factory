@@ -1,13 +1,13 @@
+import 'package:anistar_tv/packages/features/common/presentation/widgets/error_screen.dart';
 import 'package:anistar_tv/utils/logger/logging_navigator_observer.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../packages/features/favorites/presentation/screens/favorites_screen.dart';
-// Import new feature screens
 import '../packages/features/home/presentation/screens/home_screen.dart';
-import '../packages/features/movie/presentation/screens/movie_screen.dart';
-import '../packages/features/player/presentation/screens/player_screen.dart';
-import '../packages/features/video_list/domain/models/video_model.dart';
+import '../packages/features/movie/presentation/screens/movie_screen.dart'; // Added import
+import '../packages/features/player/presentation/screens/player_screen.dart'; // Added import
+import '../packages/features/video_list/domain/models/video_model.dart'; // Added import
 import '../utils/logger/logger.dart';
 import 'app_routes.dart';
 
@@ -27,62 +27,72 @@ class AppRouter {
           builder:
               (context, state) => HomeScreen(
                 onVideoTap: (video) {
-                  // Navigate to the movie screen when a video is tapped
-                  context.go(AppRoutes.movie, extra: video);
+                  // Navigate to the movie screen under home
+                  context.go('${AppRoutes.home}/${AppRoutes.movie}', extra: video);
                 },
-              ), // Use HomeScreen
+              ),
+          routes: _buildMovieAndPlayerRoutes(AppRoutes.home),
         ),
         GoRoute(
           path: AppRoutes.favorites, // Path: /favorites
-          builder: (context, state) => const FavoritesScreen(), // Use FavoritesScreen
-        ),
-        GoRoute(
-          path: AppRoutes.movie, // Path: /movie, expects MovieModel as extra
-          builder: (context, state) {
-            final extra = state.extra;
-            // Check for Movie model instead of VideoModel
-            if (extra is! VideoModel) {
-              logger.w('Movie route called without Movie model in extra');
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                context.go(AppRoutes.home);
-              });
-              return const Scaffold(body: Center(child: Text('Movie data is missing')));
-            }
-            // Pass the Movie object and the required onMovieTap callback
-            return MovieScreen(
-              video: extra, // extra is now confirmed to be a Movie
-              onMovieTap: (tappedMovie) {
-                // Navigate to player screen with title and videoUrl in a Map
-                final playerData = {'title': tappedMovie.title, 'videoUrl': tappedMovie.videoUrl};
-                context.push(AppRoutes.player, extra: playerData);
-                logger.i('Tapped movie: ${tappedMovie.title}, navigating to player.');
-              },
-            );
-          },
-        ),
-        GoRoute(
-          path: AppRoutes.player, // Path: /player, expects Map<String, String> as extra
-          builder: (context, state) {
-            // Extract Map<String, String> from the 'extra' parameter
-            final playerData = state.extra as Map<String, String>?;
-            if (playerData == null || !playerData.containsKey('title') || !playerData.containsKey('videoUrl')) {
-              // Handle error case where data is missing or not the correct type
-              logger.w('Player route called without valid title/videoUrl Map in extra');
-              // Redirect to home or show an error page
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                context.go(AppRoutes.home);
-              });
-              return const Scaffold(body: Center(child: Text('Player data is missing')));
-            }
-            // Pass title and videoUrl to PlayerScreen
-            return PlayerScreen(title: playerData['title']!, videoUrl: playerData['videoUrl']!);
-          },
+          builder: (context, state) => const FavoritesScreen(), // Removed onVideoTap
+          routes: _buildMovieAndPlayerRoutes(AppRoutes.favorites),
         ),
       ],
       errorBuilder: (context, state) {
         logger.e('Routing error: ${state.error}', error: state.error);
-        return Scaffold(body: Center(child: Text('Error: ${state.error}')));
+        return ErrorScreen(text: state.error?.message ?? 'Router error');
       },
     );
+  }
+
+  List<RouteBase> _buildMovieAndPlayerRoutes(String parentPath) {
+    return [
+      GoRoute(
+        path: AppRoutes.movie, // Relative path: 'movie'
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is! VideoModel) {
+            logger.w('Movie route called without VideoModel in extra under $parentPath');
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              // Go to the parent path if data is missing
+              context.go(parentPath);
+            });
+            return const ErrorScreen(text: 'Movie data is missing');
+          }
+          return MovieScreen(
+            video: extra,
+            onMovieTap: (tappedMovie) {
+              final playerData = {'title': tappedMovie.title, 'videoUrl': tappedMovie.videoUrl};
+              // Use push to navigate to the player, ensuring the path is correctly formed
+              context.push('$parentPath/${AppRoutes.movie}/${AppRoutes.player}', extra: playerData);
+              logger.i('Tapped movie: ${tappedMovie.title}, navigating to player under $parentPath.');
+            },
+          );
+        },
+        routes: [
+          GoRoute(
+            path: AppRoutes.player, // Relative path: 'player'
+            builder: (context, state) {
+              final playerData = state.extra as Map<String, String>?;
+              if (playerData == null || !playerData.containsKey('title') || !playerData.containsKey('videoUrl')) {
+                logger.w(
+                  'Player route called without valid title/videoUrl Map in extra under $parentPath/${AppRoutes.movie}',
+                );
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  // Go to the parent movie path if data is missing
+                  context.go(
+                    '$parentPath/${AppRoutes.movie}',
+                    extra: state.extra,
+                  ); // Attempt to preserve movie extra if possible
+                });
+                return const ErrorScreen(text: 'Player data is missing');
+              }
+              return PlayerScreen(title: playerData['title']!, videoUrl: playerData['videoUrl']!);
+            },
+          ),
+        ],
+      ),
+    ];
   }
 }
