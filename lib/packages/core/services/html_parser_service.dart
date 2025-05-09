@@ -12,7 +12,7 @@ class HtmlParserService {
 
   HtmlParserService({Logger? logger}) : logger = logger ?? Logger();
 
-  Future<HeadlessInAppWebView> _getWebView() async {
+  Future<HeadlessInAppWebView> getWebView() async {
     if (_headlessWebView == null || !(_headlessWebView?.isRunning() ?? false)) {
       logger.i('Initializing Headless WebView');
       _headlessWebView = HeadlessInAppWebView(
@@ -36,11 +36,30 @@ class HtmlParserService {
     return _headlessWebView!;
   }
 
+  Future<void> navigate(String url) async {
+    final headlessWebView = await getWebView();
+    final controller = headlessWebView.webViewController;
+
+    if (controller == null) {
+      logger.e('WebView controller is null for URL: $url');
+      return;
+    }
+
+    logger.i('Loading URL in WebView: $url');
+    await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    logger.i('Finished loading URL in WebView: $url');
+
+    // Wait for the page to load and potential JS challenges to complete
+    // This part might need refinement based on specific website behavior
+    await Future.delayed(const Duration(seconds: 2));
+    logger.i('Waited for 2 seconds for page to load.');
+  }
+
   /// Fetches the HTML from the given [url] using a headless WebView.
   Future<String?> fetchHtml(String url) async {
     logger.i('Attempting to fetch HTML for URL: $url');
     try {
-      final headlessWebView = await _getWebView();
+      final headlessWebView = await getWebView();
       final controller = headlessWebView.webViewController;
 
       if (controller == null) {
@@ -48,14 +67,7 @@ class HtmlParserService {
         return null;
       }
 
-      logger.i('Loading URL in WebView: $url');
-      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-      logger.i('Finished loading URL in WebView: $url');
-
-      // Wait for the page to load and potential JS challenges to complete
-      // This part might need refinement based on specific website behavior
-      await Future.delayed(const Duration(seconds: 5));
-      logger.i('Waited for 5 seconds for page to load.');
+      await navigate(url);
 
       logger.i('Attempting to get HTML from WebView.');
       final dynamic result = await controller.getHtml();
