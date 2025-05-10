@@ -84,7 +84,7 @@ class JwPlayerScraperService {
       final playlistStr = playlistMatch.group(1);
       if (playlistStr != null) {
         try {
-          final normalizedJson = normalize_json(playlistStr);
+          final normalizedJson = normalizeJson(playlistStr);
           final playlistJson = jsonDecode(normalizedJson) as List;
           logger.d('Successfully parsed playlst variable.');
           for (final item in playlistJson) {
@@ -115,7 +115,7 @@ class JwPlayerScraperService {
 
   /// Normalizes a JavaScript-like array literal string into a valid JSON array string.
   /// Minimal version focusing on key quoting, comment removal, and trailing commas.
-  String normalize_json(String rawJson) {
+  String normalizeJson(String rawJson) {
     String processed = rawJson; // Start with raw input
 
     // Remove extra whitespace (tabs and spaces) while preserving necessary spaces within strings and structure.

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:video_player/video_player.dart';
 
 /// Screen for playing videos
 class PlayerScreen extends StatefulWidget {
@@ -30,13 +29,6 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  VideoPlayerController? _controller;
-  final bool _isControlsVisible = true;
-  final bool _isPlaying = false;
-  // VideoModel is now passed via widget.video
-  // late VideoModel _video;
-  Timer? _controlsTimer;
-
   @override
   void initState() {
     super.initState();
