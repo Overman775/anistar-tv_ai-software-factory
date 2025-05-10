@@ -168,7 +168,7 @@ class _ControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Colors.black.withOpacity(0.5), shape: BoxShape.circle),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
       child: IconButton(icon: Icon(icon, color: Colors.white), iconSize: size, onPressed: onPressed),
     );
   }

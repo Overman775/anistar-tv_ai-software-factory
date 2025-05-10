@@ -30,7 +30,7 @@ class VideoCard extends StatelessWidget {
           border: isSelected ? Border.all(color: colorScheme.primary, width: 3) : null,
           boxShadow:
               isSelected
-                  ? [BoxShadow(color: colorScheme.primary.withOpacity(0.5), blurRadius: 10, spreadRadius: 2)]
+                  ? [BoxShadow(color: colorScheme.primary.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 2)]
                   : null,
         ),
         child: Card(
@@ -69,8 +69,8 @@ class VideoCard extends StatelessWidget {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: [
-                        Colors.black.withOpacity(0.9), // More opaque at the bottom
-                        Colors.black.withOpacity(0.1), // Less transparent at the top
+                        Colors.black.withValues(alpha: 0.9), // More opaque at the bottom
+                        Colors.black.withValues(alpha: 0.1), // Less transparent at the top
                       ],
                     ),
                   ),
@@ -109,7 +109,7 @@ class VideoCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6), // Semi-transparent background
+                      color: Colors.black.withValues(alpha: 0.6), // Semi-transparent background
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(

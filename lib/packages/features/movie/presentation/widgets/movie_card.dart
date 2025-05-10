@@ -85,7 +85,7 @@ class MovieCard extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5), // Semi-transparent background
+                            color: Colors.black.withValues(alpha: 0.5), // Semi-transparent background
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
