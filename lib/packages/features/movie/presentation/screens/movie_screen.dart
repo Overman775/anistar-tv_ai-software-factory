@@ -4,18 +4,17 @@ import 'package:anistar_tv/packages/features/movie/presentation/widgets/movie_ca
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../video_list/domain/models/video_model.dart';
 import '../../domain/models/movie_model.dart';
 
 class MovieScreen extends StatefulWidget {
-  // Use Movie model instead of VideoModel
-  final VideoModel video;
-  // Rename callback and update type
+  final String title;
+  final String videoUrl;
   final void Function(Movie) onMovieTap;
 
   const MovieScreen({
     super.key,
-    required this.video,
+    required this.title,
+    required this.videoUrl,
     required this.onMovieTap, // Updated parameter name
   });
 
@@ -36,14 +35,14 @@ class _MovieScreenState extends State<MovieScreen> {
     // Assuming fetchSeriesList actually fetches related movies or episodes based on the URL
     // If this needs to fetch *this* movie's details, the logic might need adjustment
     // For now, we assume it fetches a list of movies related to the input movie's videoUrl
-    _moviesFuture = repo.fetchSeriesList(widget.video.videoUrl);
+    _moviesFuture = repo.fetchSeriesList(widget.videoUrl);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       // Use the movie title passed in the constructor
-      appBar: AppBar(title: Text(widget.video.title)),
+      appBar: AppBar(title: Text(widget.title)),
       body: FutureBuilder<Iterable<Movie>>(
         future: _moviesFuture, // Use renamed future
         builder: (context, snapshot) {
