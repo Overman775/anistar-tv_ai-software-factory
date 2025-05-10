@@ -13,6 +13,100 @@ part of 'video_list_bloc.dart';
 // dart format off
 T _$identity<T>(T value) => value;
 /// @nodoc
+mixin _$VideoListEvent {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoListEvent);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'VideoListEvent()';
+}
+
+
+}
+
+/// @nodoc
+class $VideoListEventCopyWith<$Res>  {
+$VideoListEventCopyWith(VideoListEvent _, $Res Function(VideoListEvent) __);
+}
+
+
+/// @nodoc
+
+
+class VideoListLoadStarted implements VideoListEvent {
+  const VideoListLoadStarted();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoListLoadStarted);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'VideoListEvent.loadStarted()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class VideoListLoadMoreRequested implements VideoListEvent {
+  const VideoListLoadMoreRequested();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoListLoadMoreRequested);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'VideoListEvent.loadMoreRequested()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
 mixin _$VideoListState {
 
 

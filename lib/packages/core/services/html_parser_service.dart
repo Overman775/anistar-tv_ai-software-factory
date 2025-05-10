@@ -1,5 +1,3 @@
-// lib/packages/core/services/html_parser_service.dart
-
 import 'dart:async';
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';

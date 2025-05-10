@@ -308,7 +308,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
         // If we're near the bottom, try to load more videos
         if (newSelectedIndex >= videos.length - videosPerRow && hasMore && videoListState is! VideoListLoadingMore) {
-          _videoListBloc.add(const VideoListLoadMoreRequested());
+          _videoListBloc.add(const VideoListEvent.loadMoreRequested());
         }
       }
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
