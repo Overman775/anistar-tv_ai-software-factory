@@ -39,11 +39,18 @@ dependencies:
   flutter_inappwebview: ^6.1.5 # For handling web content and bypassing CF
   html: ^0.15.5 # For parsing HTML
 
+  # Splash and icons
+  flutter_native_splash: ^2.4.6
+
+  # UI Kit
+  ui_kit:
+    path: lib/packages/ui_kit
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
-  freezed: ^3.0.4 # Move freezed here
+  freezed: ^3.0.4
   json_serializable: ^6.9.4
   go_router_builder: ^2.9.0
   build_runner: ^2.4.15

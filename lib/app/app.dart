@@ -1,7 +1,7 @@
+import 'package:anistar_tv/packages/ui_kit/lib/ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../packages/ui_kit/theme/app_theme.dart';
 import 'app_router.dart';
 
 /// Root widget of the application
