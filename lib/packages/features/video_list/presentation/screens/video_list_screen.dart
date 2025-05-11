@@ -1,10 +1,13 @@
+import 'package:anistar_tv/app/app_config.dart';
+import 'package:anistar_tv/app/app_routes.dart';
+import 'package:anistar_tv/utils/logger/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:logger/logger.dart';
 
 import '../../../../../packages/core/services/html_parser_service.dart'; // Added import
-import '../../../../../utils/logger/logger.dart'; // Assuming logger setup is global
 import '../../data/datasources/video_list_remote_datasource.dart';
 import '../../data/repositories/video_list_repository_impl.dart';
 import '../../domain/models/video_model.dart';
@@ -71,7 +74,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
     _videoListBloc = VideoListBloc(
       getVideosPaginatedUseCase: _createUseCase(context), // Create/Get UseCase
       baseUrl: widget.baseUrl,
-      logger: logger, // Use global logger instance
+      logger: logger, // Use the underlying Logger instance from AppLogger
     );
     // Dispatch initial event
     _videoListBloc.add(const VideoListLoadStarted());
@@ -126,6 +129,14 @@ class _VideoListScreenState extends State<VideoListScreen> {
               onPressed: () => _videoListBloc.add(const VideoListLoadStarted()),
               tooltip: 'Refresh',
             ),
+            if (AppConfig.isDevFlavor) // Show log button only in dev flavor
+              IconButton(
+                icon: const Icon(Icons.article_outlined), // Or Icons.description, Icons.list_alt
+                tooltip: 'View Logs',
+                onPressed: () {
+                  context.push(AppRoutes.logViewer);
+                },
+              ),
           ],
         ),
         body: KeyboardListener(

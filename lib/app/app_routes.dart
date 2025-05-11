@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../packages/features/home/presentation/screens/home_screen.dart';
+import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart'; // Added import
 import '../packages/features/movie/presentation/screens/movie_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
 
@@ -20,6 +21,19 @@ class AppRoutes {
 
   /// Player screen route, relative to its parent (e.g., home or favorites)
   static const String player = 'player'; // Path for the player, relative path
+
+  /// Log Viewer screen route
+  static const String logViewer = '/logs'; // Top-level route for log viewer
+}
+
+@TypedGoRoute<LogViewerRoute>(path: AppRoutes.logViewer)
+class LogViewerRoute extends GoRouteData {
+  const LogViewerRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) {
+    return const LogViewerScreen();
+  }
 }
 
 @TypedGoRoute<HomeRoute>(

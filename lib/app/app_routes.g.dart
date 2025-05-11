@@ -6,7 +6,29 @@ part of 'app_routes.dart';
 // GoRouterGenerator
 // **************************************************************************
 
-List<RouteBase> get $appRoutes => [$homeRoute];
+List<RouteBase> get $appRoutes => [$logViewerRoute, $homeRoute];
+
+RouteBase get $logViewerRoute => GoRouteData.$route(
+  path: '/logs',
+
+  factory: $LogViewerRouteExtension._fromState,
+);
+
+extension $LogViewerRouteExtension on LogViewerRoute {
+  static LogViewerRoute _fromState(GoRouterState state) =>
+      const LogViewerRoute();
+
+  String get location => GoRouteData.$location('/logs');
+
+  void go(BuildContext context) => context.go(location);
+
+  Future<T?> push<T>(BuildContext context) => context.push<T>(location);
+
+  void pushReplacement(BuildContext context) =>
+      context.pushReplacement(location);
+
+  void replace(BuildContext context) => context.replace(location);
+}
 
 RouteBase get $homeRoute => GoRouteData.$route(
   path: '/home',

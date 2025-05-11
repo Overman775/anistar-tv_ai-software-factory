@@ -18,7 +18,8 @@ dependencies:
 
   # State management
   provider: ^6.1.4
-  flutter_bloc: ^9.1.0 # Add flutter_bloc
+  flutter_bloc: ^9.1.0
+  equatable: ^2.0.5 # Add equatable
 
   # Data models
   freezed_annotation: ^3.0.0
@@ -38,6 +39,9 @@ dependencies:
   logger: ^2.5.0
   flutter_inappwebview: ^6.1.5 # For handling web content and bypassing CF
   html: ^0.15.5 # For parsing HTML
+  path_provider: ^2.0.0 # Add path_provider
+  intl: ^0.19.0 # Add intl
+  share_plus: ^11.0.0 # Add share_plus (optional), upgraded to resolve conflict
 
   # Splash and icons
   flutter_native_splash: ^2.4.6
@@ -55,6 +59,8 @@ dev_dependencies:
   go_router_builder: ^2.9.0
   build_runner: ^2.4.15
   flutter_launcher_icons: ^0.14.3
+  mocktail: ^1.0.0 # Added for mocking
+  bloc_test: ^10.0.0 # Added for bloc testing
 
 flutter:
   uses-material-design: true
