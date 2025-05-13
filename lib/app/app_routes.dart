@@ -67,7 +67,7 @@ class MovieRoute extends GoRouteData {
       title: title,
       videoUrl: videoUrl,
       onMovieTap: (tappedMovie) {
-        PlayerRoute(title: title, videoUrl: videoUrl).go(context);
+        PlayerRoute(title: tappedMovie.title, videoUrl: tappedMovie.videoUrl).go(context);
       },
     );
   }
