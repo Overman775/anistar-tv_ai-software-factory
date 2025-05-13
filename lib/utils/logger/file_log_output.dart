@@ -49,8 +49,8 @@ class FileLogOutput implements LogOutput {
 
   @override
   Future<void> init() async {
-    final appDocsDir = await getApplicationDocumentsDirectory();
-    _logDirectory = directoryCreator('${appDocsDir.path}/logs'); // Use creator
+    final dir = await getApplicationCacheDirectory();
+    _logDirectory = directoryCreator('${dir.path}/logs'); // Use creator
     if (!await _logDirectory!.exists()) {
       await _logDirectory!.create(recursive: true);
     }

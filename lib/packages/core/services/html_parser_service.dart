@@ -49,8 +49,8 @@ class HtmlParserService {
 
     // Wait for the page to load and potential JS challenges to complete
     // This part might need refinement based on specific website behavior
-    await Future.delayed(const Duration(seconds: 2));
-    logger.i('Waited for 2 seconds for page to load.');
+    await Future.delayed(const Duration(seconds: 3));
+    logger.i('Waited for 3 seconds for page to load.');
   }
 
   /// Fetches the HTML from the given [url] using a headless WebView.
