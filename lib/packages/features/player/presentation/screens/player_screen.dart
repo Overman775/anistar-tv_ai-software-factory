@@ -1,9 +1,5 @@
-import 'dart:async';
-
-import 'package:anistar_tv/packages/core/services/html_parser_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// Screen for playing videos
@@ -33,8 +29,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
 
-    _initializePlayer();
-
     // Configure system UI for fullscreen video
     SystemChrome.setEnabledSystemUIMode(
       SystemUiMode.manual,
@@ -50,30 +44,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
-  // Removed _loadVideo method as VideoModel is passed directly
-
-  Future<HeadlessInAppWebView> _initializePlayer() async {
-    final service = context.read<HtmlParserService>();
-    await service.navigate('https://v7.astar.bz/${widget.videoUrl}');
-
-    return service.getWebView();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: FutureBuilder<HeadlessInAppWebView>(
-        future: _initializePlayer(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          } else {
-            return InAppWebView(headlessWebView: snapshot.data);
-          }
-        },
+      body: InAppWebView(
+        initialUrlRequest: URLRequest(url: WebUri('https://v7.astar.bz/${widget.videoUrl}')),
+        headlessWebView: HeadlessInAppWebView(
+          findInteractionController: FindInteractionController(),
+          initialSettings: InAppWebViewSettings(
+            mediaPlaybackRequiresUserGesture: true,
+            allowsInlineMediaPlayback: true,
+          ),
+        ),
       ),
     );
   }
