@@ -71,7 +71,10 @@ class PlayerControls extends StatelessWidget {
             ),
             child: Row(
               children: [
-                IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: onBack),
+                IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: onBack,
+                ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -169,7 +172,11 @@ class _ControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
-      child: IconButton(icon: Icon(icon, color: Colors.white), iconSize: size, onPressed: onPressed),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white),
+        iconSize: size,
+        onPressed: onPressed,
+      ),
     );
   }
 }

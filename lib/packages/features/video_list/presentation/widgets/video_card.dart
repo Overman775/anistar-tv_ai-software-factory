@@ -28,10 +28,9 @@ class VideoCard extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           border: isSelected ? Border.all(color: colorScheme.primary, width: 3) : null,
-          boxShadow:
-              isSelected
-                  ? [BoxShadow(color: colorScheme.primary.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 2)]
-                  : null,
+          boxShadow: isSelected
+              ? [BoxShadow(color: colorScheme.primary.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: 2)]
+              : null,
         ),
         child: Card(
           margin: EdgeInsets.zero,
@@ -45,16 +44,14 @@ class VideoCard extends StatelessWidget {
                 child: CachedNetworkImage(
                   imageUrl: video.thumbnailUrl.toString(),
                   fit: BoxFit.cover,
-                  placeholder:
-                      (context, url) => Container(
-                        color: Colors.grey.shade800,
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                  errorWidget:
-                      (context, url, error) => Container(
-                        color: Colors.grey.shade800,
-                        child: const Center(child: Icon(Icons.movie, size: 48, color: Colors.white54)),
-                      ),
+                  placeholder: (context, url) => Container(
+                    color: Colors.grey.shade800,
+                    child: const Center(child: CircularProgressIndicator()),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    color: Colors.grey.shade800,
+                    child: const Center(child: Icon(Icons.movie, size: 48, color: Colors.white54)),
+                  ),
                 ),
               ),
 

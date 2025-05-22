@@ -8,15 +8,10 @@ part of 'app_routes.dart';
 
 List<RouteBase> get $appRoutes => [$logViewerRoute, $homeRoute];
 
-RouteBase get $logViewerRoute => GoRouteData.$route(
-  path: '/logs',
-
-  factory: $LogViewerRouteExtension._fromState,
-);
+RouteBase get $logViewerRoute => GoRouteData.$route(path: '/logs', factory: $LogViewerRouteExtension._fromState);
 
 extension $LogViewerRouteExtension on LogViewerRoute {
-  static LogViewerRoute _fromState(GoRouterState state) =>
-      const LogViewerRoute();
+  static LogViewerRoute _fromState(GoRouterState state) => const LogViewerRoute();
 
   String get location => GoRouteData.$location('/logs');
 
@@ -24,8 +19,7 @@ extension $LogViewerRouteExtension on LogViewerRoute {
 
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   void replace(BuildContext context) => context.replace(location);
 }
@@ -39,13 +33,7 @@ RouteBase get $homeRoute => GoRouteData.$route(
       path: 'movie',
 
       factory: $MovieRouteExtension._fromState,
-      routes: [
-        GoRouteData.$route(
-          path: 'player',
-
-          factory: $PlayerRouteExtension._fromState,
-        ),
-      ],
+      routes: [GoRouteData.$route(path: 'player', factory: $PlayerRouteExtension._fromState)],
     ),
   ],
 );
@@ -59,50 +47,38 @@ extension $HomeRouteExtension on HomeRoute {
 
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   void replace(BuildContext context) => context.replace(location);
 }
 
 extension $MovieRouteExtension on MovieRoute {
-  static MovieRoute _fromState(GoRouterState state) => MovieRoute(
-    title: state.uri.queryParameters['title']!,
-    videoUrl: state.uri.queryParameters['video-url']!,
-  );
+  static MovieRoute _fromState(GoRouterState state) =>
+      MovieRoute(title: state.uri.queryParameters['title']!, videoUrl: state.uri.queryParameters['video-url']!);
 
-  String get location => GoRouteData.$location(
-    '/home/movie',
-    queryParams: {'title': title, 'video-url': videoUrl},
-  );
+  String get location => GoRouteData.$location('/home/movie', queryParams: {'title': title, 'video-url': videoUrl});
 
   void go(BuildContext context) => context.go(location);
 
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   void replace(BuildContext context) => context.replace(location);
 }
 
 extension $PlayerRouteExtension on PlayerRoute {
-  static PlayerRoute _fromState(GoRouterState state) => PlayerRoute(
-    title: state.uri.queryParameters['title']!,
-    videoUrl: state.uri.queryParameters['video-url']!,
-  );
+  static PlayerRoute _fromState(GoRouterState state) =>
+      PlayerRoute(title: state.uri.queryParameters['title']!, videoUrl: state.uri.queryParameters['video-url']!);
 
-  String get location => GoRouteData.$location(
-    '/home/movie/player',
-    queryParams: {'title': title, 'video-url': videoUrl},
-  );
+  String get location =>
+      GoRouteData.$location('/home/movie/player', queryParams: {'title': title, 'video-url': videoUrl});
 
   void go(BuildContext context) => context.go(location);
 
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   void replace(BuildContext context) => context.replace(location);
 }

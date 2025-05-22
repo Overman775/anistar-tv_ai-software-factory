@@ -26,8 +26,8 @@ class AppProvider extends StatelessWidget {
           dispose: (_, service) => service.dispose(),
         ),
         Provider<JwPlayerScraperService>(
-          create:
-              (context) => JwPlayerScraperService(htmlParserService: context.read<HtmlParserService>(), logger: logger),
+          create: (context) =>
+              JwPlayerScraperService(htmlParserService: context.read<HtmlParserService>(), logger: logger),
         ),
         // Series List Feature Dependencies
       ],

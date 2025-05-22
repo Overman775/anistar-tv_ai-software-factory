@@ -39,7 +39,10 @@ class LogViewerRoute extends GoRouteData {
 @TypedGoRoute<HomeRoute>(
   path: AppRoutes.home,
   routes: [
-    TypedGoRoute<MovieRoute>(path: AppRoutes.movie, routes: [TypedGoRoute<PlayerRoute>(path: AppRoutes.player)]),
+    TypedGoRoute<MovieRoute>(
+      path: AppRoutes.movie,
+      routes: [TypedGoRoute<PlayerRoute>(path: AppRoutes.player)],
+    ),
   ],
 )
 class HomeRoute extends GoRouteData {

@@ -113,13 +113,12 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
                       value: state.selectedLogFile,
                       hint: const Text('Select a log file'),
                       isExpanded: true,
-                      items:
-                          state.logFiles.map((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
+                      items: state.logFiles.map((String value) {
+                        return DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(value, overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
                       onChanged: (String? newValue) {
                         if (newValue != null) {
                           context.read<LogViewerCubit>().loadLogContent(newValue);
@@ -133,29 +132,28 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
                     child: Text(state.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   ),
                 Expanded(
-                  child:
-                      (state.selectedLogFile != null && state.logContent != null)
-                          ? Scrollbar(
-                            thumbVisibility: true,
+                  child: (state.selectedLogFile != null && state.logContent != null)
+                      ? Scrollbar(
+                          thumbVisibility: true,
+                          controller: _scrollController,
+                          child: SingleChildScrollView(
                             controller: _scrollController,
-                            child: SingleChildScrollView(
-                              controller: _scrollController,
-                              padding: const EdgeInsets.all(16.0),
-                              child: SelectableText(
-                                state.logContent!,
-                                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                              ),
-                            ),
-                          )
-                          : (state.selectedLogFile != null && state.logContent == null && state.error == null)
-                          ? const Center(child: Text('Loading log content...'))
-                          : Center(
-                            child: Text(
-                              state.logFiles.isEmpty
-                                  ? 'Create some logs first.'
-                                  : 'Select a log file to view its content.',
+                            padding: const EdgeInsets.all(16.0),
+                            child: SelectableText(
+                              state.logContent!,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
                             ),
                           ),
+                        )
+                      : (state.selectedLogFile != null && state.logContent == null && state.error == null)
+                      ? const Center(child: Text('Loading log content...'))
+                      : Center(
+                          child: Text(
+                            state.logFiles.isEmpty
+                                ? 'Create some logs first.'
+                                : 'Select a log file to view its content.',
+                          ),
+                        ),
                 ),
               ],
             );

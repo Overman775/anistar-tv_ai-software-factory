@@ -28,10 +28,9 @@ class MovieCard extends StatelessWidget {
         elevation: isFocused ? 8.0 : 2.0, // Add elevation for focus effect
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8.0),
-          side:
-              isFocused
-                  ? BorderSide(color: theme.primaryColor, width: 2.0) // Highlight border when focused
-                  : BorderSide.none,
+          side: isFocused
+              ? BorderSide(color: theme.primaryColor, width: 2.0) // Highlight border when focused
+              : BorderSide.none,
         ),
         child: SizedBox(
           width: cardWidth,
@@ -56,15 +55,14 @@ class MovieCard extends StatelessWidget {
                             if (loadingProgress == null) return child;
                             return Center(
                               child: CircularProgressIndicator(
-                                value:
-                                    loadingProgress.expectedTotalBytes != null
-                                        ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
-                                        : null,
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    : null,
                               ),
                             );
                           },
-                          errorBuilder:
-                              (context, error, stackTrace) => const Center(child: Icon(Icons.movie, size: 40)),
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Center(child: Icon(Icons.movie, size: 40)),
                         ),
                       )
                     else

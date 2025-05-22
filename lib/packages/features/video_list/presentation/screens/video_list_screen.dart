@@ -236,7 +236,9 @@ class _VideoListScreenState extends State<VideoListScreen> {
       itemBuilder: (context, index) {
         // Show loading indicator at the end if isLoadingMore
         if (isLoadingMore && index == videos.length) {
-          return const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()));
+          return const Center(
+            child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()),
+          );
         }
 
         // Show error message at the bottom if applicable (and not already showing full-screen error)
