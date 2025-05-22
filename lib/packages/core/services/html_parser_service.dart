@@ -49,7 +49,7 @@ class HtmlParserService {
 
     // Wait for the page to load and potential JS challenges to complete
     // This part might need refinement based on specific website behavior
-    await Future.delayed(const Duration(seconds: 3));
+    await Future<void>.delayed(const Duration(seconds: 3));
     logger.i('Waited for 3 seconds for page to load.');
   }
 
