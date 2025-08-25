@@ -30,3 +30,123 @@ analyzer:
 
 formatter:
   page_width: 120
+
+dart_code_metrics:
+  metrics:
+    cyclomatic-complexity: 20
+    number-of-parameters: 4
+    maximum-nesting-level: 5
+  exclude:
+    metrics:
+      - test/**
+  rules:
+    - avoid-dynamic
+    - avoid-passing-async-when-sync-expected
+    - avoid-redundant-async
+    - avoid-unnecessary-type-assertions
+    - avoid-unnecessary-type-casts
+    - avoid-unrelated-type-assertions
+    - avoid-unused-parameters
+    - avoid-nested-conditional-expressions
+    - newline-before-return
+    - no-boolean-literal-compare
+    - no-empty-block
+    - prefer-conditional-expressions
+    - no-equal-then-else
+    - prefer-moving-to-variable
+    - prefer-match-file-name
+    - avoid-incomplete-copy-with
+    - avoid-self-compare
+    - avoid-self-assignment
+    - avoid-cascade-after-if-null
+    - avoid-collection-methods-with-unrelated-types
+    - avoid-commented-out-code
+    - avoid-double-slash-imports
+    - avoid-duplicate-exports
+    - avoid-duplicate-mixins
+    - avoid-duplicate-named-imports
+    - avoid-duplicate-test-assertions
+    - avoid-explicit-pattern-field-name
+    - avoid-generics-shadowing
+    - avoid-global-state
+    - avoid-missed-calls
+    - avoid-non-null-assertion:
+        skip-checked-fields: true
+    - avoid-nullable-tostring
+    - avoid-passing-self-as-argument
+    - avoid-throw-in-catch-block
+    - avoid-unnecessary-conditionals
+    - binary-expression-operand-order
+    - double-literal-format:
+        explicit-trailing-zero: false
+    - member-ordering:
+        alphabetize: true
+        order:
+          - static-fields
+          - static-methods
+
+          - constructors
+          - named-constructors
+          - factory-constructors
+
+          - public-fields
+          - public-getters-setters
+          - public-methods
+
+          - overridden-fields
+          - overridden-getters-setters
+          - overridden-methods
+
+          - private-fields
+          - private-getters-setters
+          - private-methods
+        widgets-order:
+          - constructor
+          - init-state-method
+          - did-change-dependencies-method
+          - did-update-widget-method
+          - dispose-method
+          - build-method
+    # https://dcm.dev/docs/rules/flutter
+    - avoid-border-all
+    - avoid-expanded-as-spacer
+    - avoid-returning-widgets
+    - avoid-shrink-wrap-in-lists
+    - avoid-unnecessary-setstate
+    - avoid-unnecessary-stateful-widgets
+    - avoid-wrapping-in-padding
+    - check-for-equals-in-render-object-setters
+    - consistent-update-render-object
+    - prefer-const-border-radius
+    - prefer-correct-edge-insets-constructor
+    - prefer-define-hero-tag
+    - prefer-extracting-callbacks:
+        allowed-line-count: 3
+    - prefer-single-widget-per-file:
+        ignore-private-widgets: true
+    - prefer-text-rich
+    - prefer-using-list-view
+    - use-setstate-synchronously
+    # https://dcm.dev/docs/rules/block
+    - avoid-bloc-public-fields
+    - avoid-bloc-public-methods
+    - avoid-cubits
+    - avoid-duplicate-bloc-event-handlers
+    - avoid-empty-build-when
+    - avoid-existing-instances-in-bloc-provider
+    - avoid-instantiating-in-bloc-value-provider
+    - avoid-passing-bloc-to-bloc
+    - avoid-passing-build-context-to-blocs
+    - avoid-returning-value-from-cubit-methods
+    - check-is-not-closed-after-async-gap
+    - emit-new-bloc-state-instances
+    - handle-bloc-event-subclasses
+    - prefer-bloc-event-suffix
+    - prefer-bloc-extensions
+    - prefer-bloc-state-suffix
+    - prefer-correct-bloc-provider
+    - prefer-immutable-bloc-events
+    - prefer-immutable-bloc-state
+    - prefer-multi-bloc-provider
+    - prefer-sealed-bloc-events
+    - prefer-sealed-bloc-state
