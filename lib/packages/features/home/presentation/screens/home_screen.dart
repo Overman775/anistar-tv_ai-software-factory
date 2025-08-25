@@ -3,9 +3,9 @@ import 'package:anistar_tv/packages/features/video_list/presentation/screens/vid
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatelessWidget {
-  final void Function(VideoModel) onVideoTap;
-
   const HomeScreen({super.key, required this.onVideoTap});
+
+  final void Function(VideoModel) onVideoTap;
 
   @override
   Widget build(BuildContext context) {

@@ -39,6 +39,10 @@ dart_code_metrics:
   exclude:
     metrics:
       - test/**
+  formatter:
+    indent: 0
+    line-length: 120
+    cascading-widget-extensions: true
   rules:
     - avoid-dynamic
     - avoid-passing-async-when-sync-expected

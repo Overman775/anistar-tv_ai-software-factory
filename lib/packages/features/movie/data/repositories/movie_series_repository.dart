@@ -10,11 +10,12 @@ class MovieSeriesRepository {
   MovieSeriesRepository({required this.scraperService});
 
   /// Fetches series data from the given [url] and maps it to a list of [Series].
-  Future<Iterable<Movie>> fetchSeriesList(String url) async {
+  Future<Iterable<MovieModel>> fetchSeriesList(String url) async {
     final List<JwVideoInfo> jwSeriesList = await scraperService.scrape(url);
 
-    final Iterable<Movie> movieList = jwSeriesList.map(
-      (info) => Movie(title: info.title, imageUrl: info.posterUrl, isViewed: info.isViewed, videoUrl: info.videoUrl),
+    final Iterable<MovieModel> movieList = jwSeriesList.map(
+      (info) =>
+          MovieModel(title: info.title, imageUrl: info.posterUrl, isViewed: info.isViewed, videoUrl: info.videoUrl),
     );
 
     return movieList;

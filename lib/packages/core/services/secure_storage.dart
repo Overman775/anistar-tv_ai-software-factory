@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorage {
+  late final FlutterSecureStorage _storage;
+
   SecureStorage() {
     _storage = const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
   }
-
-  late final FlutterSecureStorage _storage;
 
   Future<String?> get(String key, {String? defaultValue}) async {
     final result = await _storage.read(key: key);
@@ -23,11 +23,11 @@ class SecureStorage {
     await _storage.delete(key: key);
   }
 
-  Future<bool> containsKey(String key) async {
+  Future<bool> containsKey(String key) {
     return _storage.containsKey(key: key);
   }
 
-  Future<void> clear() async {
+  Future<void> clear() {
     return _storage.deleteAll(aOptions: const AndroidOptions(resetOnError: true));
   }
 }

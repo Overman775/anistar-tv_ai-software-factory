@@ -28,9 +28,6 @@ class PlayerControls extends StatelessWidget {
   /// Callback when favorite button is pressed
   final VoidCallback onToggleFavorite;
 
-  /// Callback when back button is pressed
-  final VoidCallback onBack;
-
   /// Constructor
   const PlayerControls({
     super.key,
@@ -46,6 +43,16 @@ class PlayerControls extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onBack,
   });
+
+  /// Callback when back button is pressed
+  final VoidCallback onBack;
+
+  @override
+  String _formatDuration(Duration duration) {
+    final minutes = duration.inMinutes.toString().padLeft(2, '0');
+    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -152,21 +159,15 @@ class PlayerControls extends StatelessWidget {
       ],
     );
   }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.toString().padLeft(2, '0');
-    final seconds = (duration.inSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
 }
 
 /// Button for player controls
 class _ControlButton extends StatelessWidget {
+  const _ControlButton({required this.icon, this.size = 40, required this.onPressed});
+
   final IconData icon;
   final double size;
   final VoidCallback onPressed;
-
-  const _ControlButton({required this.icon, this.size = 40, required this.onPressed});
 
   @override
   Widget build(BuildContext context) {

@@ -20,6 +20,7 @@ class GetVideosPaginatedUseCase {
     try {
       final result = await _repository.getVideosPaginated(url, page);
       _logger.d('UseCase: Received result for page $page.');
+
       return result;
     } catch (e, stackTrace) {
       _logger.e('UseCase: Error executing GetVideosPaginated for page $page', error: e, stackTrace: stackTrace);

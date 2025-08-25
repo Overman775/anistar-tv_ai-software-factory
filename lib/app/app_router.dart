@@ -21,6 +21,7 @@ class AppRouter {
       routes: $appRoutes,
       errorBuilder: (context, state) {
         logger.e('Routing error: ${state.error}', error: state.error);
+
         return ErrorScreen(text: state.error?.message ?? 'Router error');
       },
       navigatorKey: rootNavigatorKey,

@@ -28,12 +28,6 @@ class _LogViewerScreenView extends StatefulWidget {
 class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
   final ScrollController _scrollController = ScrollController();
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -48,6 +42,12 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(0.0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -76,6 +76,7 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
                   },
                 );
               }
+
               return const SizedBox.shrink();
             },
           ),
@@ -110,7 +111,7 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
                     padding: const EdgeInsets.all(8.0),
                     child: DropdownButtonFormField<String>(
                       decoration: const InputDecoration(labelText: 'Select Log File', border: OutlineInputBorder()),
-                      value: state.selectedLogFile,
+                      initialValue: state.selectedLogFile,
                       hint: const Text('Select a log file'),
                       isExpanded: true,
                       items: state.logFiles.map((String value) {
@@ -165,6 +166,7 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
               ),
             );
           }
+
           return const Center(child: Text('Something went wrong.'));
         },
       ),
@@ -190,6 +192,7 @@ class _LogViewerScreenViewState extends State<_LogViewerScreenView> {
               ],
             );
           }
+
           return const SizedBox.shrink();
         },
       ),

@@ -1,6 +1,5 @@
-// dart format width=80
-// coverage:ignore-file
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// coverage:ignore-file
 // ignore_for_file: type=lint
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
@@ -41,6 +40,142 @@ class $VideoListEventCopyWith<$Res>  {
 $VideoListEventCopyWith(VideoListEvent _, $Res Function(VideoListEvent) __);
 }
 
+
+/// Adds pattern-matching-related methods to [VideoListEvent].
+extension VideoListEventPatterns on VideoListEvent {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoListLoadStarted value)?  loadStarted,TResult Function( VideoListLoadMoreRequested value)?  loadMoreRequested,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case VideoListLoadStarted() when loadStarted != null:
+return loadStarted(_that);case VideoListLoadMoreRequested() when loadMoreRequested != null:
+return loadMoreRequested(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoListLoadStarted value)  loadStarted,required TResult Function( VideoListLoadMoreRequested value)  loadMoreRequested,}){
+final _that = this;
+switch (_that) {
+case VideoListLoadStarted():
+return loadStarted(_that);case VideoListLoadMoreRequested():
+return loadMoreRequested(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoListLoadStarted value)?  loadStarted,TResult? Function( VideoListLoadMoreRequested value)?  loadMoreRequested,}){
+final _that = this;
+switch (_that) {
+case VideoListLoadStarted() when loadStarted != null:
+return loadStarted(_that);case VideoListLoadMoreRequested() when loadMoreRequested != null:
+return loadMoreRequested(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  loadStarted,TResult Function()?  loadMoreRequested,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case VideoListLoadStarted() when loadStarted != null:
+return loadStarted();case VideoListLoadMoreRequested() when loadMoreRequested != null:
+return loadMoreRequested();case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  loadStarted,required TResult Function()  loadMoreRequested,}) {final _that = this;
+switch (_that) {
+case VideoListLoadStarted():
+return loadStarted();case VideoListLoadMoreRequested():
+return loadMoreRequested();case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  loadStarted,TResult? Function()?  loadMoreRequested,}) {final _that = this;
+switch (_that) {
+case VideoListLoadStarted() when loadStarted != null:
+return loadStarted();case VideoListLoadMoreRequested() when loadMoreRequested != null:
+return loadMoreRequested();case _:
+  return null;
+
+}
+}
+
+}
 
 /// @nodoc
 
@@ -135,6 +270,160 @@ class $VideoListStateCopyWith<$Res>  {
 $VideoListStateCopyWith(VideoListState _, $Res Function(VideoListState) __);
 }
 
+
+/// Adds pattern-matching-related methods to [VideoListState].
+extension VideoListStatePatterns on VideoListState {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoListInitial value)?  initial,TResult Function( VideoListLoading value)?  loading,TResult Function( VideoListLoadingMore value)?  loadingMore,TResult Function( VideoListLoaded value)?  loaded,TResult Function( VideoListError value)?  error,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case VideoListInitial() when initial != null:
+return initial(_that);case VideoListLoading() when loading != null:
+return loading(_that);case VideoListLoadingMore() when loadingMore != null:
+return loadingMore(_that);case VideoListLoaded() when loaded != null:
+return loaded(_that);case VideoListError() when error != null:
+return error(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoListInitial value)  initial,required TResult Function( VideoListLoading value)  loading,required TResult Function( VideoListLoadingMore value)  loadingMore,required TResult Function( VideoListLoaded value)  loaded,required TResult Function( VideoListError value)  error,}){
+final _that = this;
+switch (_that) {
+case VideoListInitial():
+return initial(_that);case VideoListLoading():
+return loading(_that);case VideoListLoadingMore():
+return loadingMore(_that);case VideoListLoaded():
+return loaded(_that);case VideoListError():
+return error(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoListInitial value)?  initial,TResult? Function( VideoListLoading value)?  loading,TResult? Function( VideoListLoadingMore value)?  loadingMore,TResult? Function( VideoListLoaded value)?  loaded,TResult? Function( VideoListError value)?  error,}){
+final _that = this;
+switch (_that) {
+case VideoListInitial() when initial != null:
+return initial(_that);case VideoListLoading() when loading != null:
+return loading(_that);case VideoListLoadingMore() when loadingMore != null:
+return loadingMore(_that);case VideoListLoaded() when loaded != null:
+return loaded(_that);case VideoListError() when error != null:
+return error(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  initial,TResult Function()?  loading,TResult Function( List<VideoModel> videos)?  loadingMore,TResult Function( List<VideoModel> videos,  bool hasMore)?  loaded,TResult Function( String message,  List<VideoModel>? videos,  bool? hasMore)?  error,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case VideoListInitial() when initial != null:
+return initial();case VideoListLoading() when loading != null:
+return loading();case VideoListLoadingMore() when loadingMore != null:
+return loadingMore(_that.videos);case VideoListLoaded() when loaded != null:
+return loaded(_that.videos,_that.hasMore);case VideoListError() when error != null:
+return error(_that.message,_that.videos,_that.hasMore);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  initial,required TResult Function()  loading,required TResult Function( List<VideoModel> videos)  loadingMore,required TResult Function( List<VideoModel> videos,  bool hasMore)  loaded,required TResult Function( String message,  List<VideoModel>? videos,  bool? hasMore)  error,}) {final _that = this;
+switch (_that) {
+case VideoListInitial():
+return initial();case VideoListLoading():
+return loading();case VideoListLoadingMore():
+return loadingMore(_that.videos);case VideoListLoaded():
+return loaded(_that.videos,_that.hasMore);case VideoListError():
+return error(_that.message,_that.videos,_that.hasMore);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  initial,TResult? Function()?  loading,TResult? Function( List<VideoModel> videos)?  loadingMore,TResult? Function( List<VideoModel> videos,  bool hasMore)?  loaded,TResult? Function( String message,  List<VideoModel>? videos,  bool? hasMore)?  error,}) {final _that = this;
+switch (_that) {
+case VideoListInitial() when initial != null:
+return initial();case VideoListLoading() when loading != null:
+return loading();case VideoListLoadingMore() when loadingMore != null:
+return loadingMore(_that.videos);case VideoListLoaded() when loaded != null:
+return loaded(_that.videos,_that.hasMore);case VideoListError() when error != null:
+return error(_that.message,_that.videos,_that.hasMore);case _:
+  return null;
+
+}
+}
+
+}
 
 /// @nodoc
 

@@ -7,9 +7,8 @@ class SharedPreferencesStorage {
 
   /// init storage
   Future<SharedPreferences> init() async {
-    _preferences ??= await SharedPreferences.getInstance();
-
-    return _preferences!;
+    final prefs = _preferences ??= await SharedPreferences.getInstance();
+    return prefs;
   }
 
   /// Reads a value of [T] type from persistent storage.

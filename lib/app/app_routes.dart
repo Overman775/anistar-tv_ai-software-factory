@@ -59,10 +59,10 @@ class HomeRoute extends GoRouteData {
 }
 
 class MovieRoute extends GoRouteData {
-  const MovieRoute({required this.title, required this.videoUrl});
-
   final String title;
   final String videoUrl;
+
+  const MovieRoute({required this.title, required this.videoUrl});
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
@@ -77,10 +77,10 @@ class MovieRoute extends GoRouteData {
 }
 
 class PlayerRoute extends GoRouteData {
-  const PlayerRoute({required this.title, required this.videoUrl});
-
   final String title;
   final String videoUrl;
+
+  const PlayerRoute({required this.title, required this.videoUrl});
 
   @override
   Widget build(BuildContext context, GoRouterState state) {

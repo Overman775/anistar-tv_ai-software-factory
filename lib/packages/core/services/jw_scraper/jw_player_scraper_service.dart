@@ -38,7 +38,11 @@ class JwPlayerScraperService {
       throw JwPlayerConfigParseException('Could not find iframe with videoas.php in src');
     }
 
-    final iframeSrc = iframeMatch.group(1)!;
+    final iframeSrc = iframeMatch.group(1);
+    if (iframeSrc == null) {
+      logger.e('Could not extract iframe src group(1) from match: $iframeMatch');
+      throw JwPlayerConfigParseException('Could not extract iframe src');
+    }
     logger.i('Found iframe src: $iframeSrc');
 
     // Extract id and hash from iframe src
@@ -56,24 +60,13 @@ class JwPlayerScraperService {
     final seriesIframeUrl = '$baseUrl/test/player2/videoas.php?id=$id&hash=$hash';
 
     logger.i('Scraping JWPlayer config from URL: $seriesIframeUrl');
-    // return [];
-    // 1. Fetch HTML
-    var html = await htmlParserService.fetchHtml(seriesIframeUrl);
+    final html = await htmlParserService.fetchHtml(seriesIframeUrl); // Fetch once
+
     if (html == null || html.isEmpty) {
       logger.e('Failed to fetch HTML for $seriesIframeUrl');
       throw JwPlayerConfigParseException('Failed to fetch HTML for $seriesIframeUrl');
     }
     logger.i('Successfully fetched HTML for $seriesIframeUrl');
-
-    final iframeHtml = await htmlParserService.fetchHtml(seriesIframeUrl);
-    if (iframeHtml != null && iframeHtml.isNotEmpty) {
-      html = iframeHtml; // Use iframe content for scraping
-      logger.i('Successfully fetched and will use iframe HTML.');
-    } else {
-      logger.w(
-        'Failed to fetch iframe HTML from $seriesIframeUrl or iframe HTML is empty. Proceeding with original HTML.',
-      );
-    }
 
     // 3. Extract video sources from playlst variable
     List<JwVideoInfo> videos = [];
@@ -110,6 +103,7 @@ class JwPlayerScraperService {
     }
 
     logger.i('Successfully scraped ${videos.length} video sources from playlst.');
+
     return videos;
   }
 
@@ -123,9 +117,6 @@ class JwPlayerScraperService {
     processed = processed.split('\n').map((line) => line.trim()).join('');
     processed = processed.replaceAll(RegExp(r'\s+', multiLine: true), ' ');
 
-    // 1. Remove JS comments (single line) - Safely target comments at line ends
-    // Matches optional whitespace followed by // and the rest of the line.
-    // processed = processed.replaceAll(RegExp(r'\s*\/\/.*$', multiLine: true), '');
     // Remove single-line comments (match until next structural char or end)
     processed = processed.replaceAll(RegExp(r'(?<!https:)//[^{}\[\],]*'), '');
 
@@ -135,7 +126,7 @@ class JwPlayerScraperService {
     // Add double quotes around keys that are not already quoted using replaceAllMapped
     processed = processed.replaceAllMapped(
       RegExp(r'(^|[\{,]\s*)(\w+)(?=\s*:)'),
-      (match) => '${match.group(1)!}"${match.group(2)!}"',
+      (match) => '${match.group(1) ?? ''}"${match.group(2) ?? ''}"',
     );
 
     // Remove commas followed immediately by another comma
@@ -143,7 +134,7 @@ class JwPlayerScraperService {
 
     // Remove trailing commas in objects and arrays (before } or ])
     processed = processed.replaceAll(RegExp(r',(\s*[}\]])'), '},');
-    // // Remove commas followed immediately by another comma
+    // Remove commas followed immediately by another comma
     processed = processed.replaceAll(RegExp(r',(?=\s*,)'), '');
     processed = processed.replaceAll(',},', ']');
 
@@ -157,14 +148,17 @@ class JwPlayerScraperService {
       logger.i('Json valid');
 
       return processed; // It's valid JSON
-    } catch (e) {
+    } catch (e, stackTrace) {
       logger.e('Error normalizing JSON (minimal attempt)', error: e);
       logger.e(
         'Problematic string fragment (minimal attempt): ${processed.substring(0, (processed.length > 400 ? 400 : processed.length))}...',
       ); // Log snippet
       // Re-throw a detailed exception
-      throw FormatException(
-        'Failed to normalize to valid JSON string (minimal attempt): $e\nOriginal (raw): ${rawJson.substring(0, (rawJson.length > 400 ? 400 : rawJson.length))}...',
+      Error.throwWithStackTrace(
+        FormatException(
+          'Failed to normalize to valid JSON string (minimal attempt): $e\nOriginal (raw): ${rawJson.substring(0, (rawJson.length > 400 ? 400 : rawJson.length))}...',
+        ),
+        stackTrace,
       );
     }
   }

@@ -33,17 +33,9 @@ class VideoListRemoteDataSourceImpl implements VideoListRemoteDataSource {
     // Construct the URL for the requested page.
     // This logic is specific to the source site (e.g., astar.bz)
     // Consider making this part more configurable if supporting multiple site structures.
-    final String url;
-    if (page <= 1) {
-      // Assuming the base URL is the first page or needs specific params.
-      // This might need adjustment based on how the target site handles the first page.
-      // Example for astar.bz:
-      url = '$baseUrl?action_skin_change=1&skin_name=new36';
-    } else {
-      // Assuming '/page/N/' structure for subsequent pages.
-      // Example for astar.bz:
-      url = '$baseUrl/page/$page/?action_skin_change=1&skin_name=new36';
-    }
+    final String url = page <= 1
+        ? '$baseUrl?action_skin_change=1&skin_name=new36'
+        : '$baseUrl/page/$page/?action_skin_change=1&skin_name=new36';
 
     _logger.i('Attempting to fetch page data from: $url');
 
@@ -52,6 +44,7 @@ class VideoListRemoteDataSourceImpl implements VideoListRemoteDataSource {
 
       if (html == null || html.isEmpty) {
         _logger.w('Received empty HTML content from $url');
+
         return null;
       }
 
@@ -75,10 +68,12 @@ class VideoListRemoteDataSourceImpl implements VideoListRemoteDataSource {
       // Construct and return the PageModel
       final pageModel = PageModel(title: pageTitle, videos: videoCards, hasMorePages: hasMorePages);
       _logger.i('Successfully parsed page: ${pageModel.title} (${pageModel.videos.length} videos)');
+
       return pageModel;
     } catch (e, stackTrace) {
       _logger.e('Error fetching or parsing HTML for URL: $url', error: e, stackTrace: stackTrace);
       // Depending on error handling strategy, could return null or throw specific exception
+
       return null;
     }
   }
@@ -150,10 +145,12 @@ class VideoListRemoteDataSourceImpl implements VideoListRemoteDataSource {
       }
     } catch (e, stackTrace) {
       _logger.e('Failed to parse HTML content or extract video cards', error: e, stackTrace: stackTrace);
+
       return []; // Return empty list on major parsing failure
     }
 
     _logger.i('Finished extraction. Found ${videoCards.length} video cards.');
+
     return videoCards;
   }
 }

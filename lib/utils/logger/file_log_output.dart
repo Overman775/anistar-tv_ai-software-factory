@@ -14,23 +14,25 @@ class FileLogOutput implements LogOutput {
   static Directory? _logDirectory;
   static ReceivePort? _receivePortForTest; // To allow closing in tests
 
+  // ignore: avoid_global_state
+  @visibleForTesting
+  static Isolate? fileIsolate; // To capture spawned isolate
+  // ignore: avoid_global_state
+  @visibleForTesting
+  static Directory Function(String path) directoryCreator = (path) => Directory(path);
+  // ignore: avoid_global_state
+  @visibleForTesting
+  static File Function(String path) fileCreator = (path) => File(path);
+
   @visibleForTesting
   static SendPort? get sendPortForTest => _sendPort;
-  @visibleForTesting
   static List<String> get logBufferForTest => _logBuffer;
   @visibleForTesting
   static String? get currentLogFileNameForTest => _currentLogFileName;
   @visibleForTesting
   static Directory? get logDirectoryForTest => _logDirectory;
   @visibleForTesting
-  static Isolate? fileIsolate; // To capture spawned isolate
-  @visibleForTesting
   static ReceivePort? get receivePortForTest => _receivePortForTest;
-
-  @visibleForTesting
-  static Directory Function(String path) directoryCreator = (path) => Directory(path);
-  @visibleForTesting
-  static File Function(String path) fileCreator = (path) => File(path);
 
   @visibleForTesting
   static void resetForTest() {
@@ -51,8 +53,9 @@ class FileLogOutput implements LogOutput {
   Future<void> init() async {
     final dir = await getApplicationCacheDirectory();
     _logDirectory = directoryCreator('${dir.path}/logs'); // Use creator
-    if (!await _logDirectory!.exists()) {
-      await _logDirectory!.create(recursive: true);
+    final logDir = _logDirectory; // Local non-nullable variable
+    if (logDir != null && !await logDir.exists()) {
+      await logDir.create(recursive: true);
     }
 
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
@@ -61,15 +64,15 @@ class FileLogOutput implements LogOutput {
     _receivePortForTest = ReceivePort(); // Store for potential closing in reset
     fileIsolate = await Isolate.spawn(
       _logIsolateEntryPoint,
-      _receivePortForTest!.sendPort,
+      _receivePortForTest?.sendPort,
       // Pass other params if your spawner mock needs them
     );
-    _sendPort = await _receivePortForTest!.first as SendPort?;
+    _sendPort = await _receivePortForTest?.first as SendPort?;
 
     // Send initial data to isolate
     if (_sendPort != null) {
-      _sendPort!.send({
-        'logFilePath': '${_logDirectory!.path}/$_currentLogFileName',
+      _sendPort?.send({
+        'logFilePath': '${_logDirectory?.path}/$_currentLogFileName',
         'initialBuffer': List<String>.from(_logBuffer),
       });
       _logBuffer.clear();
@@ -96,28 +99,18 @@ class FileLogOutput implements LogOutput {
     }
 
     final logEntry = _formatLog(event.origin.level, event.origin.message, event.origin.error, event.origin.stackTrace);
-    _sendPort!.send(logEntry);
-  }
-
-  String _formatLog(Level level, dynamic message, [dynamic error, StackTrace? stackTrace]) {
-    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
-    String logStr = '$timestamp [${level.name.toUpperCase()}] $message';
-    if (error != null) {
-      logStr += '\nError: $error';
-    }
-    if (stackTrace != null) {
-      logStr += '\nStackTrace: $stackTrace';
-    }
-    return logStr;
+    _sendPort?.send(logEntry);
   }
 
   static Future<List<String>> getLogFiles() async {
-    if (_logDirectory == null || !await _logDirectory!.exists()) {
+    final logDir = _logDirectory; // Local non-nullable variable
+    if (logDir == null || !await logDir.exists()) {
       return [];
     }
     // Use try-catch for safety, as directory listing can fail.
     try {
-      final files = await _logDirectory!.list().toList();
+      final files = await logDir.list().toList() ?? [];
+
       return files
           .where((fsEntity) => fsEntity is File && fsEntity.path.endsWith('.txt'))
           .map((fsEntity) => fsEntity.path.split('/').last)
@@ -135,12 +128,8 @@ class FileLogOutput implements LogOutput {
       return 'Log directory not available.';
     }
     try {
-      final file = fileCreator('${_logDirectory!.path}/$fileName'); // Use creator
-      if (await file.exists()) {
-        return await file.readAsString();
-      } else {
-        return 'File not found: $fileName';
-      }
+      final file = fileCreator('${_logDirectory?.path}/$fileName'); // Use creator
+      return await file.exists() ? await file.readAsString() : 'File not found: $fileName';
     } catch (e) {
       debugPrint('Error reading log file $fileName (appLogger not ready): $e');
 
@@ -153,12 +142,25 @@ class FileLogOutput implements LogOutput {
     // TODO: implement destroy
     throw UnimplementedError();
   }
+
+  String _formatLog(Level level, Object? message, [Object? error, StackTrace? stackTrace]) {
+    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
+    String logStr = '$timestamp [${level.name.toUpperCase()}] $message';
+    if (error != null) {
+      logStr += '\nError: $error';
+    }
+    if (stackTrace != null) {
+      logStr += '\nStackTrace: $stackTrace';
+    }
+
+    return logStr;
+  }
 }
 
 // Isolate entry point
-void _logIsolateEntryPoint(SendPort sendPort) {
+void _logIsolateEntryPoint(SendPort? sendPort) {
   final receivePort = ReceivePort();
-  sendPort.send(receivePort.sendPort);
+  sendPort?.send(receivePort.sendPort);
 
   // Use the same fileCreator as the main isolate for consistency,
   // though it's a separate isolate. For tests, this doesn't matter as much
@@ -171,27 +173,36 @@ void _logIsolateEntryPoint(SendPort sendPort) {
   List<String> writeBuffer = [];
   Timer? flushTimer;
 
-  receivePort.listen((dynamic data) async {
+  receivePort.listen((Object? data) {
     if (data is Map && data.containsKey('logFilePath')) {
       // Initialization message from main isolate
       logFile = isoFileCreator(data['logFilePath'] as String); // Use creator
       final initialBuffer = data['initialBuffer'] as List<String>?;
       if (initialBuffer != null && initialBuffer.isNotEmpty) {
-        await logFile!.writeAsString('${initialBuffer.join('\n')}\n', mode: FileMode.append);
+        Future.microtask(() async {
+          final nonNullableLogFile = logFile;
+          if (nonNullableLogFile != null) {
+            await nonNullableLogFile.writeAsString('${initialBuffer.join('\n')}\n', mode: FileMode.append);
+          }
+        });
       }
       debugPrint('Log isolate initialized. Logging to: ${logFile?.path}');
     } else if (data is String && logFile != null) {
       writeBuffer.add(data);
       // Flush buffer if it's large enough or if timer is not active
-      if (writeBuffer.length >= 50 || flushTimer == null || !flushTimer!.isActive) {
-        _flushLogs(logFile!, writeBuffer);
+      if (writeBuffer.length >= 50 || flushTimer == null || !(flushTimer?.isActive ?? false)) {
+        final nonNullableLogFile = logFile;
+        if (nonNullableLogFile != null) {
+          _flushLogs(nonNullableLogFile, writeBuffer);
+        }
         writeBuffer.clear();
         flushTimer?.cancel(); // Cancel existing timer
       }
       // Set a timer to flush logs periodically if there's infrequent logging
       flushTimer ??= Timer.periodic(const Duration(seconds: 5), (timer) {
-        if (writeBuffer.isNotEmpty && logFile != null) {
-          _flushLogs(logFile!, writeBuffer);
+        final nonNullableLogFile = logFile;
+        if (writeBuffer.isNotEmpty && nonNullableLogFile != null) {
+          _flushLogs(nonNullableLogFile, writeBuffer);
           writeBuffer.clear();
         } else if (writeBuffer.isEmpty) {
           timer.cancel(); // Stop timer if buffer is empty

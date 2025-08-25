@@ -43,16 +43,16 @@ GetVideosPaginatedUseCase _createUseCase(BuildContext context) {
 /// Requires a [baseUrl] to fetch the video list and an [onVideoTap] callback
 /// function that is executed when a video card is tapped.
 class VideoListScreen extends StatefulWidget {
-  final String baseUrl;
-  final Function(VideoModel video) onVideoTap;
-  final String title; // Optional title for the AppBar
-
   const VideoListScreen({
     required this.baseUrl,
     required this.onVideoTap,
     this.title = 'Videos', // Default title
     super.key,
   });
+
+  final String baseUrl;
+  final Function(VideoModel video) onVideoTap;
+  final String title; // Optional title for the AppBar
 
   @override
   State<VideoListScreen> createState() => _VideoListScreenState();
@@ -66,31 +66,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
 
   // BLoC instance
   late final VideoListBloc _videoListBloc;
-
-  @override
-  void initState() {
-    super.initState();
-    // Create BLoC instance, injecting UseCase and baseUrl
-    _videoListBloc = VideoListBloc(
-      getVideosPaginatedUseCase: _createUseCase(context), // Create/Get UseCase
-      baseUrl: widget.baseUrl,
-      logger: logger, // Use the underlying Logger instance from AppLogger
-    );
-    // Dispatch initial event
-    _videoListBloc.add(const VideoListLoadStarted());
-
-    _gridFocusNode.requestFocus();
-    _scrollController.addListener(_scrollListener);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_scrollListener);
-    _scrollController.dispose();
-    _gridFocusNode.dispose();
-    _videoListBloc.close(); // Close the BLoC
-    super.dispose();
-  }
 
   /// Scroll listener to detect when user reaches the bottom for pagination.
   void _scrollListener() {
@@ -111,74 +86,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
         _videoListBloc.add(const VideoListLoadMoreRequested());
       }
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Provide the BLoC instance to the widget tree below
-    return BlocProvider.value(
-      value: _videoListBloc,
-      child: Scaffold(
-        // AppBar can be customized or removed depending on usage context
-        appBar: AppBar(
-          title: Text(widget.title),
-          // Example action: Refresh button
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: () => _videoListBloc.add(const VideoListLoadStarted()),
-              tooltip: 'Refresh',
-            ),
-            if (AppConfig.isDevFlavor) // Show log button only in dev flavor
-              IconButton(
-                icon: const Icon(Icons.article_outlined), // Or Icons.description, Icons.list_alt
-                tooltip: 'View Logs',
-                onPressed: () {
-                  context.push(AppRoutes.logViewer);
-                },
-              ),
-          ],
-        ),
-        body: KeyboardListener(
-          focusNode: _gridFocusNode,
-          onKeyEvent: _handleKeyEvent,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            // Use BlocBuilder to react to state changes
-            child: BlocBuilder<VideoListBloc, VideoListState>(
-              builder: (context, state) {
-                // Extract videos and status safely from state
-                List<VideoModel> videos = [];
-                bool isLoadingMore = false;
-                String? errorMessage;
-                bool hasMore = true; // Assume true initially
-
-                // Use pattern matching on the state
-                switch (state) {
-                  case VideoListLoaded(videos: final loadedVideos, hasMore: final loadedHasMore):
-                    videos = loadedVideos;
-                    hasMore = loadedHasMore;
-                  case VideoListLoadingMore(videos: final loadingMoreVideos):
-                    videos = loadingMoreVideos;
-                    isLoadingMore = true;
-                  // hasMore is implicitly true if we are loading more
-                  case VideoListError(message: final errorMsg, videos: final errorVideos, hasMore: final errorHasMore):
-                    videos = errorVideos ?? []; // Show previous videos if available
-                    errorMessage = errorMsg;
-                    hasMore = errorHasMore ?? false; // Use stored hasMore or default to false
-                  case VideoListInitial():
-                  case VideoListLoading():
-                    // Handled by _buildContent's initial loading check
-                    break;
-                }
-
-                return _buildContent(context, state, videos, isLoadingMore, errorMessage, hasMore);
-              },
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildContent(
@@ -403,5 +310,98 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
 
     _scrollController.animateTo(scrollTarget, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Create BLoC instance, injecting UseCase and baseUrl
+    _videoListBloc = VideoListBloc(
+      getVideosPaginatedUseCase: _createUseCase(context), // Create/Get UseCase
+      baseUrl: widget.baseUrl,
+      logger: logger, // Use the underlying Logger instance from AppLogger
+    );
+    // Dispatch initial event
+    _videoListBloc.add(const VideoListLoadStarted());
+
+    _gridFocusNode.requestFocus();
+    _scrollController.addListener(_scrollListener);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_scrollListener);
+    _scrollController.dispose();
+    _gridFocusNode.dispose();
+    _videoListBloc.close(); // Close the BLoC
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Provide the BLoC instance to the widget tree below
+    return BlocProvider.value(
+      value: _videoListBloc,
+      child: Scaffold(
+        // AppBar can be customized or removed depending on usage context
+        appBar: AppBar(
+          title: Text(widget.title),
+          // Example action: Refresh button
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () => _videoListBloc.add(const VideoListLoadStarted()),
+              tooltip: 'Refresh',
+            ),
+            if (AppConfig.isDevFlavor) // Show log button only in dev flavor
+              IconButton(
+                icon: const Icon(Icons.article_outlined), // Or Icons.description, Icons.list_alt
+                tooltip: 'View Logs',
+                onPressed: () {
+                  context.push(AppRoutes.logViewer);
+                },
+              ),
+          ],
+        ),
+        body: KeyboardListener(
+          focusNode: _gridFocusNode,
+          onKeyEvent: _handleKeyEvent,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            // Use BlocBuilder to react to state changes
+            child: BlocBuilder<VideoListBloc, VideoListState>(
+              builder: (context, state) {
+                // Extract videos and status safely from state
+                List<VideoModel> videos = [];
+                bool isLoadingMore = false;
+                String? errorMessage;
+                bool hasMore = true; // Assume true initially
+
+                // Use pattern matching on the state
+                switch (state) {
+                  case VideoListLoaded(videos: final loadedVideos, hasMore: final loadedHasMore):
+                    videos = loadedVideos;
+                    hasMore = loadedHasMore;
+                  case VideoListLoadingMore(videos: final loadingMoreVideos):
+                    videos = loadingMoreVideos;
+                    isLoadingMore = true;
+                  // hasMore is implicitly true if we are loading more
+                  case VideoListError(message: final errorMsg, videos: final errorVideos, hasMore: final errorHasMore):
+                    videos = errorVideos ?? []; // Show previous videos if available
+                    errorMessage = errorMsg;
+                    hasMore = errorHasMore ?? false; // Use stored hasMore or default to false
+                  case VideoListInitial():
+                  case VideoListLoading():
+                    // Handled by _buildContent's initial loading check
+                    break;
+                }
+
+                return _buildContent(context, state, videos, isLoadingMore, errorMessage, hasMore);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

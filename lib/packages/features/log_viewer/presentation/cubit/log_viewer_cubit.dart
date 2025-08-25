@@ -35,6 +35,7 @@ class LogViewerCubit extends Cubit<LogViewerState> {
     if (state is! LogViewerLoaded) {
       // Should not happen if UI calls this only when files are loaded
       emit(const LogViewerError('Log files not loaded yet.'));
+
       return;
     }
 

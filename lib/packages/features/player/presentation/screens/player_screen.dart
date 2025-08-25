@@ -4,21 +4,11 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 /// Screen for playing videos
 class PlayerScreen extends StatefulWidget {
-  // Remove video model field
-  // final VideoModel video;
-  // Add title and videoUrl fields
   final String title;
   final String videoUrl;
 
   /// Constructor
-  const PlayerScreen({
-    super.key,
-    // Remove video parameter
-    // required this.video,
-    // Add title and videoUrl parameters
-    required this.title,
-    required this.videoUrl,
-  });
+  const PlayerScreen({super.key, required this.title, required this.videoUrl});
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();

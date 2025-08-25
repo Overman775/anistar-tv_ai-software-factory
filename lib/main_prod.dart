@@ -21,6 +21,7 @@ void main() {
 
   // Disable standard debug prints in production
   if (kReleaseMode) {
+    // ignore: no-empty-block
     debugPrint = (String? message, {int? wrapWidth}) {};
     logger.i('Standard debugPrint disabled for release mode.');
   } else {

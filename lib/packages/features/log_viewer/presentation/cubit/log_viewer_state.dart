@@ -1,10 +1,10 @@
 part of 'log_viewer_cubit.dart';
 
 abstract class LogViewerState extends Equatable {
-  const LogViewerState();
-
   @override
   List<Object?> get props => [];
+
+  const LogViewerState();
 }
 
 class LogViewerInitial extends LogViewerState {}
@@ -17,10 +17,10 @@ class LogViewerLoaded extends LogViewerState {
   final String? logContent;
   final String? error;
 
-  const LogViewerLoaded({required this.logFiles, this.selectedLogFile, this.logContent, this.error});
-
   @override
   List<Object?> get props => [logFiles, selectedLogFile, logContent, error];
+
+  const LogViewerLoaded({required this.logFiles, this.selectedLogFile, this.logContent, this.error});
 
   LogViewerLoaded copyWith({
     List<String>? logFiles,
@@ -43,8 +43,8 @@ class LogViewerLoaded extends LogViewerState {
 class LogViewerError extends LogViewerState {
   final String message;
 
-  const LogViewerError(this.message);
-
   @override
   List<Object?> get props => [message];
+
+  const LogViewerError(this.message);
 }

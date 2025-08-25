@@ -6,7 +6,7 @@ import 'package:logger/logger.dart'; // Keep for existing logger setup if still 
 import 'runner/runner.dart';
 
 /// Entry point for development version
-Future<void> main() async {
+void main() {
   // Make main async
   WidgetsFlutterBinding.ensureInitialized(); // Ensure bindings are initialized
 

@@ -8,14 +8,14 @@ class VideoCard extends StatelessWidget {
   /// The video to display
   final VideoModel video;
 
+  /// Constructor
+  const VideoCard({super.key, required this.video, required this.isSelected, required this.onTap});
+
   /// Whether this card is currently selected
   final bool isSelected;
 
   /// Callback when the card is tapped
   final VoidCallback onTap;
-
-  /// Constructor
-  const VideoCard({super.key, required this.video, required this.isSelected, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

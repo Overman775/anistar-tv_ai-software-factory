@@ -13,7 +13,7 @@ class HtmlParserService {
   Future<HeadlessInAppWebView> getWebView() async {
     if (_headlessWebView == null || !(_headlessWebView?.isRunning() ?? false)) {
       logger.i('Initializing Headless WebView');
-      _headlessWebView = HeadlessInAppWebView(
+      final newWebView = HeadlessInAppWebView(
         initialSettings: InAppWebViewSettings(
           javaScriptEnabled: true, // Essential for Cloudflare checks
           domStorageEnabled: true,
@@ -28,10 +28,16 @@ class HtmlParserService {
           logger.d('WebView Console [${consoleMessage.messageLevel}]: ${consoleMessage.message}');
         },
       );
-      await _headlessWebView!.run();
+      _headlessWebView = newWebView;
+      await newWebView.run();
       logger.t('Headless WebView is running.');
     }
-    return _headlessWebView!;
+    final webView = _headlessWebView;
+    if (webView != null) {
+      return webView;
+    } else {
+      throw StateError('Headless WebView failed to initialize.');
+    }
   }
 
   Future<void> navigate(String url) async {
@@ -40,6 +46,7 @@ class HtmlParserService {
 
     if (controller == null) {
       logger.e('WebView controller is null for URL: $url');
+
       return;
     }
 
@@ -62,30 +69,35 @@ class HtmlParserService {
 
       if (controller == null) {
         logger.e('WebView controller is null for URL: $url');
+
         return null;
       }
 
       await navigate(url);
 
       logger.i('Attempting to get HTML from WebView.');
-      final dynamic result = await controller.getHtml();
+      final String? result = await controller.getHtml();
       logger.i('Finished getting HTML from WebView.');
 
       if (result is String) {
         final text = result.trim();
         if (text.isNotEmpty) {
           logger.i('Successfully fetched HTML for URL: $url');
+
           return text;
         } else {
           logger.w('Fetched HTML is empty for URL: $url');
+
           return null;
         }
       } else {
         logger.w('WebView returned non-string result for URL: $url - $result');
+
         return null;
       }
     } catch (e, stackTrace) {
       logger.e('Error fetching HTML with WebView for URL: $url', error: e, stackTrace: stackTrace);
+
       return null;
     }
   }

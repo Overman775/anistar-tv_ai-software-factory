@@ -10,7 +10,7 @@ import '../../domain/models/movie_model.dart';
 class MovieScreen extends StatefulWidget {
   final String title;
   final String videoUrl;
-  final void Function(Movie) onMovieTap;
+  final void Function(MovieModel) onMovieTap;
 
   const MovieScreen({super.key, required this.title, required this.videoUrl, required this.onMovieTap});
 
@@ -19,13 +19,13 @@ class MovieScreen extends StatefulWidget {
 }
 
 class _MovieScreenState extends State<MovieScreen> {
-  late Future<Iterable<Movie>> _moviesFuture;
+  late Future<Iterable<MovieModel>> _moviesFuture;
   int _selectedIndex = 0; // Track selected index
   final FocusNode _gridFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
   // Add state variable for movies list
-  List<Movie> _moviesList = [];
+  List<MovieModel> _moviesList = [];
 
   @override
   void initState() {
@@ -42,66 +42,6 @@ class _MovieScreenState extends State<MovieScreen> {
     _scrollController.dispose();
     _gridFocusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
-      body: KeyboardListener(
-        focusNode: _gridFocusNode,
-        onKeyEvent: _handleKeyEvent,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: FutureBuilder<Iterable<Movie>>(
-            future: _moviesFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              } else if (snapshot.hasError) {
-                return Center(child: Text('Failed to load movies: ${snapshot.error}'));
-              } else if (snapshot.hasData) {
-                // Store the movies list in the state
-                _moviesList = snapshot.data!.toList();
-                if (_moviesList.isEmpty) {
-                  return const Center(child: Text('No movies available'));
-                }
-
-                // Use GridView.builder for 3 columns
-                return GridView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(0), // Padding is already on the parent Padding widget
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3, // 3 items per row
-                    crossAxisSpacing: 16.0, // Spacing between columns
-                    mainAxisSpacing: 16.0, // Spacing between rows
-                    childAspectRatio: 16 / 11, // Adjust aspect ratio (width/height) for horizontal card + title
-                  ),
-                  itemCount: _moviesList.length,
-                  itemBuilder: (context, index) {
-                    final movieItem = _moviesList[index];
-                    final isSelected = _selectedIndex == index;
-
-                    return MovieCard(
-                      movie: movieItem,
-                      isFocused: isSelected, // Use isSelected for isFocused
-                      onTap: () {
-                        setState(() {
-                          _selectedIndex = index;
-                        });
-                        widget.onMovieTap(movieItem);
-                      },
-                    );
-                  },
-                );
-              } else {
-                return const Center(child: Text('No movies found'));
-              }
-            },
-          ),
-        ),
-      ),
-    );
   }
 
   void _handleKeyEvent(KeyEvent event) {
@@ -153,7 +93,7 @@ class _MovieScreenState extends State<MovieScreen> {
 
     // Calculate item height based on aspect ratio and fixed cross axis count
     final double screenWidth = MediaQuery.of(context).size.width;
-    final double totalHorizontalPadding = 16 * 2; // Padding on both sides of the grid
+    final double totalHorizontalPadding = 2 * 16; // Padding on both sides of the grid
     final double totalHorizontalSpacing = 16 * (itemsPerRow - 1); // Spacing between items
     final double availableWidth = screenWidth - totalHorizontalPadding - totalHorizontalSpacing;
     final double itemWidth = availableWidth / itemsPerRow;
@@ -180,5 +120,68 @@ class _MovieScreenState extends State<MovieScreen> {
     );
 
     _scrollController.animateTo(scrollTarget, duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+  }
+
+  void _onMovieCardTap(MovieModel movieItem, int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    widget.onMovieTap(movieItem);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.title)),
+      body: KeyboardListener(
+        focusNode: _gridFocusNode,
+        onKeyEvent: _handleKeyEvent,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: FutureBuilder<Iterable<MovieModel>>(
+            future: _moviesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              } else if (snapshot.hasError) {
+                return Center(child: Text('Failed to load movies: ${snapshot.error}'));
+              } else if (snapshot.hasData) {
+                // Store the movies list in the state
+                _moviesList = snapshot.data?.toList() ?? [];
+                if (_moviesList.isEmpty) {
+                  return const Center(child: Text('No movies available'));
+                }
+
+                // Use GridView.builder for 3 columns
+
+                return GridView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(0), // Padding is already on the parent Padding widget
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3, // 3 items per row
+                    crossAxisSpacing: 16.0, // Spacing between columns
+                    mainAxisSpacing: 16.0, // Spacing between rows
+                    childAspectRatio: 16 / 11, // Adjust aspect ratio (width/height) for horizontal card + title
+                  ),
+                  itemCount: _moviesList.length,
+                  itemBuilder: (context, index) {
+                    final movieItem = _moviesList[index];
+                    final isSelected = _selectedIndex == index;
+
+                    return MovieCard(
+                      movie: movieItem,
+                      isFocused: isSelected, // Use isSelected for isFocused
+                      onTap: () => _onMovieCardTap(movieItem, index),
+                    );
+                  },
+                );
+              } else {
+                return const Center(child: Text('No movies found'));
+              }
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

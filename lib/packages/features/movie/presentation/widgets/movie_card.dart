@@ -2,11 +2,11 @@ import 'package:anistar_tv/packages/features/movie/domain/models/movie_model.dar
 import 'package:flutter/material.dart';
 
 class MovieCard extends StatelessWidget {
-  final Movie movie;
+  const MovieCard({super.key, required this.movie, required this.isFocused, this.onTap});
+
+  final MovieModel movie;
   final bool isFocused;
   final VoidCallback? onTap;
-
-  const MovieCard({super.key, required this.movie, required this.isFocused, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +27,7 @@ class MovieCard extends StatelessWidget {
         color: cardColor,
         elevation: isFocused ? 8.0 : 2.0, // Add elevation for focus effect
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8.0),
+          borderRadius: const BorderRadius.all(Radius.circular(8.0)),
           side: isFocused
               ? BorderSide(color: theme.primaryColor, width: 2.0) // Highlight border when focused
               : BorderSide.none,
@@ -52,11 +52,14 @@ class MovieCard extends StatelessWidget {
                           fit: BoxFit.cover, // Cover the area
                           // Optional: Add loading/error builders for better UX
                           loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+
                             return Center(
                               child: CircularProgressIndicator(
                                 value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    ? loadingProgress.cumulativeBytesLoaded / (loadingProgress.expectedTotalBytes ?? 1)
                                     : null,
                               ),
                             );
@@ -83,7 +86,7 @@ class MovieCard extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.5), // Semi-transparent background
+                            color: Colors.black.withOpacity(0.5), // Semi-transparent background
                             shape: BoxShape.circle,
                           ),
                           child: const Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),

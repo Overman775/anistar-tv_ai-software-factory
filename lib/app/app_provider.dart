@@ -8,12 +8,12 @@ import 'package:provider/provider.dart';
 
 /// Global dependency injection provider
 class AppProvider extends StatelessWidget {
+  /// Constructor
+  const AppProvider({super.key, required this.sharedPreferences, required this.secureStorage, required this.child});
+
   final Widget child;
   final SharedPreferencesStorage sharedPreferences;
   final SecureStorage secureStorage;
-
-  /// Constructor
-  const AppProvider({super.key, required this.sharedPreferences, required this.secureStorage, required this.child});
 
   @override
   Widget build(BuildContext context) {
