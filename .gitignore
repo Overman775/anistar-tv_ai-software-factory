@@ -48,10 +48,8 @@ app.*.map.json
 # FVM Version Cache
 .fvm/
 
-# Graphify machine-local state. Keep graph.json, graph.html, and
-# GRAPH_REPORT.md portable for project-wide code navigation.
-graphify-out/.graphify_*
-graphify-out/manifest.json
-graphify-out/cost.json
-graphify-out/cache/
-graphify-out/*/
+# Graphify is local developer tooling and must not be committed.
+/.codex/
+/.graphifyignore
+/AGENTS.md
+/graphify-out/
