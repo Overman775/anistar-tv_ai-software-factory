@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
@@ -7,7 +9,7 @@ import 'app_router.dart';
 
 /// Root widget of the application
 class App extends StatefulWidget {
-  const App({super.key, required this.logger});
+  const App({required this.logger, super.key});
 
   final Logger logger;
 
@@ -23,18 +25,16 @@ class _AppState extends State<App> {
     super.initState();
     _appRouter = AppRouter(widget.logger);
 
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp.router(
-      title: 'Anistar TV',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
-      routerConfig: _appRouter.router,
-    );
-  }
+  Widget build(BuildContext context) => MaterialApp.router(
+    title: 'Anistar TV',
+    debugShowCheckedModeBanner: false,
+    theme: AppTheme.lightTheme,
+    darkTheme: AppTheme.darkTheme,
+    themeMode: ThemeMode.dark,
+    routerConfig: _appRouter.router,
+  );
 }

@@ -27,5 +27,5 @@ Future<void> main() async {
 
   appLogger.i('Production initialized');
 
-  await runApplication(logger: appLogger);
+  await runApplication(logger: appLogger, allowLocalApiFallback: false);
 }

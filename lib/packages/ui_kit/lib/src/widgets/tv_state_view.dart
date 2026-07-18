@@ -4,9 +4,9 @@ import '../theme/app_palette.dart';
 
 class TvStateView extends StatelessWidget {
   const TvStateView({
-    super.key,
     required this.icon,
     required this.title,
+    super.key,
     this.message,
     this.actionLabel,
     this.onAction,

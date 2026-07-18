@@ -1,7 +1,7 @@
-import 'package:anistar_tv/utils/logger/file_log_output.dart';
 import 'package:logger/logger.dart';
 
 import 'runner/runner.dart';
+import 'utils/logger/file_log_output.dart';
 
 /// Runs the development application with verbose file logging.
 Future<void> main() async {
@@ -18,5 +18,5 @@ Future<void> main() async {
   );
   Logger.level = Level.all;
 
-  await runApplication(logger: appLogger);
+  await runApplication(logger: appLogger, allowLocalApiFallback: true);
 }

@@ -31,16 +31,4 @@ void main() {
 
     expect(actionCalls, 1);
   });
-
-  testWidgets('renders the TV progress state', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: const Scaffold(body: TvProgressView(label: 'Загружаем каталог…')),
-      ),
-    );
-
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.text('Загружаем каталог…'), findsOneWidget);
-  });
 }

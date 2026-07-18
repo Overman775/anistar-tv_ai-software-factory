@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
+import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
-import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
 
 part 'app_routes.g.dart';
@@ -28,9 +28,7 @@ class LogViewerRoute extends GoRouteData with $LogViewerRoute {
   const LogViewerRoute();
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return const LogViewerScreen();
-  }
+  Widget build(BuildContext context, GoRouterState state) => const LogViewerScreen();
 }
 
 @TypedGoRoute<HomeRoute>(
@@ -46,13 +44,11 @@ class HomeRoute extends GoRouteData with $HomeRoute {
   const HomeRoute();
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return HomeScreen(
-      onAnimeTap: (anime) {
-        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title).go(context);
-      },
-    );
-  }
+  Widget build(BuildContext context, GoRouterState state) => HomeScreen(
+    onAnimeTap: (anime) {
+      AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title).go(context);
+    },
+  );
 }
 
 class AnimeRoute extends GoRouteData with $AnimeRoute {
@@ -63,27 +59,25 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
   const AnimeRoute({required this.animeId, required this.slug, required this.title});
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return AnimeScreen(
-      animeId: animeId,
-      slug: slug,
-      fallbackTitle: title,
-      onEpisodeTap: (episode) {
-        PlayerRoute(animeId: animeId, episodeNumber: episode.number, title: title).go(context);
-      },
-    );
-  }
+  Widget build(BuildContext context, GoRouterState state) => AnimeScreen(
+    animeId: animeId,
+    slug: slug,
+    fallbackTitle: title,
+    onEpisodeTap: (episode) {
+      PlayerRoute(animeId: animeId, episodeNumber: episode.number, slug: slug, title: title).go(context);
+    },
+  );
 }
 
 class PlayerRoute extends GoRouteData with $PlayerRoute {
   final int animeId;
   final int episodeNumber;
+  final String slug;
   final String title;
 
-  const PlayerRoute({required this.animeId, required this.episodeNumber, required this.title});
+  const PlayerRoute({required this.animeId, required this.episodeNumber, required this.slug, required this.title});
 
   @override
-  Widget build(BuildContext context, GoRouterState state) {
-    return PlayerScreen(animeId: animeId, episodeNumber: episodeNumber, title: title);
-  }
+  Widget build(BuildContext context, GoRouterState state) =>
+      PlayerScreen(animeId: animeId, episodeNumber: episodeNumber, title: title);
 }

@@ -7,7 +7,6 @@ import 'player_overlay.dart';
 
 class PlayerView extends StatelessWidget {
   const PlayerView({
-    super.key,
     required this.controller,
     required this.controlsVisible,
     required this.episodeNumber,
@@ -17,6 +16,7 @@ class PlayerView extends StatelessWidget {
     required this.onShowControls,
     required this.session,
     required this.title,
+    super.key,
   });
 
   final VideoPlayerController controller;
@@ -30,61 +30,59 @@ class PlayerView extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<VideoPlayerValue>(
-      valueListenable: controller,
-      builder: (context, value, child) {
-        if (value.hasError) {
-          return TvStateView(
-            icon: Icons.play_disabled_rounded,
-            title: 'Воспроизведение прервано',
-            message: value.errorDescription ?? 'Не удалось продолжить HLS-поток.',
-            actionLabel: 'Создать новую сессию',
-            onAction: onRetry,
-          );
-        }
-        final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onShowControls,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Center(
-                child: AspectRatio(aspectRatio: aspectRatio, child: VideoPlayer(controller)),
-              ),
-              AnimatedOpacity(
-                opacity: controlsVisible ? 1 : 0,
-                duration: AppMotion.fast,
-                child: IgnorePointer(
-                  ignoring: !controlsVisible,
-                  child: ExcludeFocus(
-                    child: PlayerOverlay(
-                      title: title,
-                      episodeNumber: episodeNumber,
-                      session: session,
-                      value: value,
-                      onPlayPause: onPlayPause,
-                      onSeek: onSeek,
-                    ),
-                  ),
-                ),
-              ),
-              if (value.isBuffering)
-                Center(
-                  child: DecoratedBox(
-                    decoration: const BoxDecoration(color: Color(0xB8000000), shape: BoxShape.circle),
-                    child: const Padding(
-                      padding: EdgeInsets.all(AppSpacing.md),
-                      child: SizedBox.square(dimension: 48, child: CircularProgressIndicator(strokeWidth: 4)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+  Widget build(BuildContext context) => ValueListenableBuilder<VideoPlayerValue>(
+    valueListenable: controller,
+    builder: (context, value, child) {
+      if (value.hasError) {
+        return TvStateView(
+          icon: Icons.play_disabled_rounded,
+          title: 'Воспроизведение прервано',
+          message: value.errorDescription ?? 'Не удалось продолжить HLS-поток.',
+          actionLabel: 'Создать новую сессию',
+          onAction: onRetry,
         );
-      },
-    );
-  }
+      }
+      final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;
+
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onShowControls,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Center(
+              child: AspectRatio(aspectRatio: aspectRatio, child: VideoPlayer(controller)),
+            ),
+            AnimatedOpacity(
+              opacity: controlsVisible ? 1 : 0,
+              duration: AppMotion.fast,
+              child: IgnorePointer(
+                ignoring: !controlsVisible,
+                child: ExcludeFocus(
+                  child: PlayerOverlay(
+                    title: title,
+                    episodeNumber: episodeNumber,
+                    session: session,
+                    value: value,
+                    onPlayPause: onPlayPause,
+                    onSeek: onSeek,
+                  ),
+                ),
+              ),
+            ),
+            if (value.isBuffering)
+              const Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: Color(0xB8000000), shape: BoxShape.circle),
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.md),
+                    child: SizedBox.square(dimension: 48, child: CircularProgressIndicator(strokeWidth: 4)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    },
+  );
 }

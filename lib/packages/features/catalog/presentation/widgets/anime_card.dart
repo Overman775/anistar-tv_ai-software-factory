@@ -5,7 +5,7 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../domain/models/anime_summary.dart';
 
 class AnimeCard extends StatelessWidget {
-  const AnimeCard({super.key, required this.anime, required this.onTap, this.autofocus = false, this.onFocusChanged});
+  const AnimeCard({required this.anime, required this.onTap, super.key, this.autofocus = false, this.onFocusChanged});
 
   final AnimeSummary anime;
   final bool autofocus;

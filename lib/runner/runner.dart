@@ -1,14 +1,13 @@
-import 'package:anistar_tv/packages/core/services/secure_storage.dart';
-import 'package:anistar_tv/packages/core/services/shared_preferences_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:logger/logger.dart';
 
 import '../app/app.dart';
 import '../app/app_provider.dart';
+import '../packages/core/core.dart';
 
 /// Application entry point that initializes services and runs the app
-Future<void> runApplication({required Logger logger}) async {
+Future<void> runApplication({required Logger logger, required bool allowLocalApiFallback}) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
@@ -17,9 +16,11 @@ Future<void> runApplication({required Logger logger}) async {
   await sharedPreferencesStorage.init();
 
   final secureStorage = SecureStorage();
+  final apiBaseUri = AnistarApiConfig.baseUri(allowLocalFallback: allowLocalApiFallback);
 
   runApp(
     AppProvider(
+      apiBaseUri: apiBaseUri,
       logger: logger,
       sharedPreferences: sharedPreferencesStorage,
       secureStorage: secureStorage,

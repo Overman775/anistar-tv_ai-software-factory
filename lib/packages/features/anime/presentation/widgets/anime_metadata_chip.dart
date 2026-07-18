@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 class AnimeMetadataChip extends StatelessWidget {
-  const AnimeMetadataChip({super.key, required this.label, this.icon});
+  const AnimeMetadataChip({required this.label, super.key, this.icon});
 
   final IconData? icon;
   final String label;

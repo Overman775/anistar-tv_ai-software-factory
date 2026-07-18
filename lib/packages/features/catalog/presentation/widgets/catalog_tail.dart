@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 class CatalogTail extends StatelessWidget {
-  const CatalogTail({super.key, required this.onRetry, this.error});
+  const CatalogTail({required this.onRetry, super.key, this.error});
 
   final String? error;
   final VoidCallback onRetry;

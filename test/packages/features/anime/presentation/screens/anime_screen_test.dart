@@ -1,3 +1,5 @@
+import 'package:anistar_tv/packages/core/domain/either.dart';
+import 'package:anistar_tv/packages/core/domain/failure.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
@@ -56,21 +58,23 @@ final class AnimeScreenTest implements AnimeRepository {
   const AnimeScreenTest();
 
   @override
-  Future<AnimeScreenData> getAnime({required int id, required String slug}) async => AnimeScreenData(
-    details: const AnimeDetails(
-      id: 1,
-      slug: 'test-anime',
-      title: 'Тестовое аниме',
-      genres: ['Приключения'],
-      isOngoing: true,
-      description: 'Короткое описание, которое должно оставаться видимым при открытии экрана.',
-      seriesInfo: '3 серии',
-      year: '2026',
-    ),
-    episodes: List.generate(
-      3,
-      (index) => AnimeEpisode(number: index + 1, title: 'Серия ${index + 1}'),
-      growable: false,
+  Future<Either<Failure, AnimeScreenData>> getAnime({required int id, required String slug}) async => Either.right(
+    AnimeScreenData(
+      details: const AnimeDetails(
+        id: 1,
+        slug: 'test-anime',
+        title: 'Тестовое аниме',
+        genres: ['Приключения'],
+        isOngoing: true,
+        description: 'Короткое описание, которое должно оставаться видимым при открытии экрана.',
+        seriesInfo: '3 серии',
+        year: '2026',
+      ),
+      episodes: List.generate(
+        3,
+        (index) => AnimeEpisode(number: index + 1, title: 'Серия ${index + 1}'),
+        growable: false,
+      ),
     ),
   );
 }

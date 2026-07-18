@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -10,11 +12,11 @@ import '../widgets/episode_card.dart';
 
 class AnimeScreen extends StatefulWidget {
   const AnimeScreen({
-    super.key,
     required this.animeId,
     required this.slug,
     required this.fallbackTitle,
     required this.onEpisodeTap,
+    super.key,
   });
 
   final int animeId;
@@ -51,7 +53,6 @@ class _AnimeScreenState extends State<AnimeScreen> {
     }
     final data = snapshot.requireData;
     final episodes = data.episodes;
-    final textTheme = Theme.of(context).textTheme;
 
     return CustomScrollView(
       controller: _scrollController,
@@ -66,12 +67,12 @@ class _AnimeScreenState extends State<AnimeScreen> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.sm),
           sliver: SliverToBoxAdapter(
-            child: Row(
-              children: [
-                Text('Серии', style: textTheme.headlineSmall?.copyWith(color: AppPalette.textPrimary)),
-                const SizedBox(width: AppSpacing.sm),
-                Text('${episodes.length}', style: textTheme.titleMedium?.copyWith(color: AppPalette.textSecondary)),
-              ],
+            child: TvSectionHeader(
+              title: 'Серии',
+              trailing: Text(
+                '${episodes.length}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppPalette.textSecondary),
+              ),
             ),
           ),
         ),
@@ -120,26 +121,29 @@ class _AnimeScreenState extends State<AnimeScreen> {
   }
 
   void _load() {
-    _future = context.read<AnimeRepository>().getAnime(id: widget.animeId, slug: widget.slug);
+    _future = context
+        .read<AnimeRepository>()
+        .getAnime(id: widget.animeId, slug: widget.slug)
+        .then((result) => result.fold(onLeft: (failure) => throw failure, onRight: (data) => data));
   }
 
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
 
   void _onEpisodeFocusChanged(BuildContext episodeContext, bool focused) {
     if (!focused) return;
-    Scrollable.ensureVisible(
-      episodeContext,
-      alignment: 0.58,
-      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-      duration: AppMotion.standard,
-      curve: Curves.easeOutCubic,
+    unawaited(
+      Scrollable.ensureVisible(
+        episodeContext,
+        alignment: 0.58,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+        duration: AppMotion.standard,
+        curve: Curves.easeOutCubic,
+      ),
     );
   }
 
   void _retry() {
-    setState(() {
-      _load();
-    });
+    setState(_load);
   }
 
   @override
@@ -149,20 +153,18 @@ class _AnimeScreenState extends State<AnimeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 80,
-        titleSpacing: AppSpacing.lg,
-        title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      toolbarHeight: 80,
+      titleSpacing: AppSpacing.lg,
+      title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+    ),
+    body: TvBackdrop(
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),
       ),
-      body: TvBackdrop(
-        child: SafeArea(
-          top: false,
-          minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-          child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

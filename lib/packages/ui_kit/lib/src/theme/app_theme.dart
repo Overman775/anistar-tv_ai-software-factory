@@ -112,7 +112,7 @@ abstract final class AppTheme {
         thickness: const WidgetStatePropertyAll(6),
       ),
       tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(color: AppPalette.surfaceElevated, borderRadius: AppRadii.small),
+        decoration: const BoxDecoration(color: AppPalette.surfaceElevated, borderRadius: AppRadii.small),
         textStyle: textTheme.bodyMedium?.copyWith(color: AppPalette.textPrimary),
       ),
     );

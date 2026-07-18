@@ -1,5 +1,5 @@
-import 'package:anistar_tv/packages/features/log_viewer/domain/repositories/log_repository.dart';
-import 'package:anistar_tv/utils/logger/file_log_output.dart';
+import '../../../../../utils/logger/file_log_output.dart';
+import '../../domain/repositories/log_repository.dart';
 
 final class FileLogRepository implements LogRepository {
   const FileLogRepository();

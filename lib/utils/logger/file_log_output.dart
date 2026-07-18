@@ -14,11 +14,11 @@ class FileLogOutput implements LogOutput {
 
   @visibleForTesting
   // ignore: avoid-global-state
-  static Directory Function(String path) directoryCreator = (path) => Directory(path);
+  static Directory Function(String path) directoryCreator = Directory.new;
 
   @visibleForTesting
   // ignore: avoid-global-state
-  static File Function(String path) fileCreator = (path) => File(path);
+  static File Function(String path) fileCreator = File.new;
 
   static SendPort? _sendPort;
   static final List<String> _logBuffer = [];
@@ -45,8 +45,8 @@ class FileLogOutput implements LogOutput {
     _receivePortForTest?.close();
     _receivePortForTest = null;
     fileIsolate = null;
-    directoryCreator = (path) => Directory(path);
-    fileCreator = (path) => File(path);
+    directoryCreator = Directory.new;
+    fileCreator = File.new;
   }
 
   @override
@@ -54,6 +54,7 @@ class FileLogOutput implements LogOutput {
     final dir = await getApplicationCacheDirectory();
     _logDirectory = directoryCreator('${dir.path}/logs');
     final logDir = _logDirectory;
+    // ignore: avoid_slow_async_io, initialization must not block the UI isolate.
     if (logDir != null && !await logDir.exists()) {
       await logDir.create(recursive: true);
     }
@@ -91,10 +92,12 @@ class FileLogOutput implements LogOutput {
 
   static Future<List<String>> getLogFiles() async {
     final logDir = _logDirectory;
+    // ignore: avoid_slow_async_io, log discovery must not block the UI isolate.
     if (logDir == null || !await logDir.exists()) {
       return [];
     }
     try {
+      // ignore: avoid_slow_async_io, directory listing must not block the UI isolate.
       final files = await logDir.list().toList();
 
       return files
@@ -102,7 +105,7 @@ class FileLogOutput implements LogOutput {
           .map((fsEntity) => fsEntity.path.split('/').last)
           .toList()
         ..sort((a, b) => b.compareTo(a));
-    } catch (e) {
+    } on FileSystemException catch (e) {
       debugPrint('Error listing log files (appLogger not ready): $e');
 
       return [];
@@ -116,8 +119,9 @@ class FileLogOutput implements LogOutput {
     try {
       final file = fileCreator('${_logDirectory?.path}/$fileName');
 
+      // ignore: avoid_slow_async_io, reading logs must not block the UI isolate.
       return await file.exists() ? await file.readAsString() : 'File not found: $fileName';
-    } catch (e) {
+    } on FileSystemException catch (e) {
       debugPrint('Error reading log file $fileName (appLogger not ready): $e');
 
       return 'Error reading log file: $e';
@@ -135,7 +139,7 @@ class FileLogOutput implements LogOutput {
 
   String _formatLog(Level level, Object? message, [Object? error, StackTrace? stackTrace]) {
     final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
-    String logStr = '$timestamp [${level.name.toUpperCase()}] $message';
+    var logStr = '$timestamp [${level.name.toUpperCase()}] $message';
     if (error != null) {
       logStr += '\nError: $error';
     }
@@ -151,10 +155,10 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
   final receivePort = ReceivePort();
   sendPort?.send(receivePort.sendPort);
 
-  final File Function(String path) isoFileCreator = FileLogOutput.fileCreator;
+  final isoFileCreator = FileLogOutput.fileCreator;
 
   File? logFile;
-  List<String> writeBuffer = [];
+  final writeBuffer = <String>[];
   Timer? flushTimer;
 
   receivePort.listen((Object? data) {
@@ -162,12 +166,14 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
       logFile = isoFileCreator(data['logFilePath'] as String);
       final initialBuffer = data['initialBuffer'] as List<String>?;
       if (initialBuffer != null && initialBuffer.isNotEmpty) {
-        Future.microtask(() async {
-          final nonNullableLogFile = logFile;
-          if (nonNullableLogFile != null) {
-            await nonNullableLogFile.writeAsString('${initialBuffer.join('\n')}\n', mode: FileMode.append);
-          }
-        });
+        unawaited(
+          Future.microtask(() async {
+            final nonNullableLogFile = logFile;
+            if (nonNullableLogFile != null) {
+              await nonNullableLogFile.writeAsString('${initialBuffer.join('\n')}\n', mode: FileMode.append);
+            }
+          }),
+        );
       }
       debugPrint('Log isolate initialized. Logging to: ${logFile?.path}');
     } else if (data is String && logFile != null) {
@@ -175,7 +181,7 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
       if (writeBuffer.length >= 50 || flushTimer == null || !(flushTimer?.isActive ?? false)) {
         final nonNullableLogFile = logFile;
         if (nonNullableLogFile != null) {
-          _flushLogs(nonNullableLogFile, writeBuffer);
+          unawaited(_flushLogs(nonNullableLogFile, writeBuffer));
         }
         writeBuffer.clear();
         flushTimer?.cancel();
@@ -184,7 +190,7 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
       flushTimer ??= Timer.periodic(const Duration(seconds: 5), (timer) {
         final nonNullableLogFile = logFile;
         if (writeBuffer.isNotEmpty && nonNullableLogFile != null) {
-          _flushLogs(nonNullableLogFile, writeBuffer);
+          unawaited(_flushLogs(nonNullableLogFile, writeBuffer));
           writeBuffer.clear();
         } else if (writeBuffer.isEmpty) {
           timer.cancel();
@@ -204,7 +210,7 @@ Future<void> _flushLogs(File logFile, List<String> logs) async {
   if (logs.isEmpty) return;
   try {
     await logFile.writeAsString('${logs.join('\n')}\n', mode: FileMode.append);
-  } catch (e, s) {
+  } on FileSystemException catch (e, s) {
     debugPrint('Log isolate error writing to file: $e\n$s');
   }
 }

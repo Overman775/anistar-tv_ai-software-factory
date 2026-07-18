@@ -21,11 +21,7 @@ class SecureStorage {
     await _storage.delete(key: key);
   }
 
-  Future<bool> containsKey(String key) {
-    return _storage.containsKey(key: key);
-  }
+  Future<bool> containsKey(String key) => _storage.containsKey(key: key);
 
-  Future<void> clear() {
-    return _storage.deleteAll(aOptions: const AndroidOptions(resetOnError: true));
-  }
+  Future<void> clear() => _storage.deleteAll(aOptions: const AndroidOptions(resetOnError: true));
 }

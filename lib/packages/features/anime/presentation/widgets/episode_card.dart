@@ -6,9 +6,9 @@ import '../../domain/models/anime_episode.dart';
 
 class EpisodeCard extends StatelessWidget {
   const EpisodeCard({
-    super.key,
     required this.episode,
     required this.onTap,
+    super.key,
     this.autofocus = false,
     this.onFocusChanged,
   });

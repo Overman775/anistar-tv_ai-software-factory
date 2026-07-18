@@ -1,3 +1,5 @@
+import 'package:anistar_tv/packages/core/domain/either.dart';
+import 'package:anistar_tv/packages/core/domain/failure.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/repositories/catalog_repository.dart';
@@ -72,13 +74,16 @@ final class CatalogScreenTest implements CatalogRepository {
   const CatalogScreenTest();
 
   @override
-  Future<AnimePage> getPage(int page) async => AnimePage(
-    items: List.generate(
-      12,
-      (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}', posterUri: Uri()),
-      growable: false,
+  Future<Either<Failure, AnimePage>> getPage(int page) async => Either.right(
+    AnimePage(
+      items: List.generate(
+        12,
+        (index) =>
+            AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}', posterUri: Uri()),
+        growable: false,
+      ),
+      page: 1,
+      hasNext: false,
     ),
-    page: 1,
-    hasNext: false,
   );
 }

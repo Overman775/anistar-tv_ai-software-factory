@@ -2,7 +2,7 @@ import 'package:anistar_tv/packages/features/log_viewer/presentation/bloc/log_vi
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'fake_log_repository.dart';
+import '../../../../../mocks/features/log_viewer/fake_log_repository.dart';
 
 void main() {
   group(LogViewerBloc, () {

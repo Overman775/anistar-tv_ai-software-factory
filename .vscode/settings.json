@@ -4,8 +4,8 @@
     120
   ],
   "editor.codeActionsOnSave": {
-    "source.fixAll": "always",
-    "source.organizeImports": "always"
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit"
   },
   "dart.lineLength": 120,
   "dart.previewFlutterUiGuides": true,
@@ -20,6 +20,9 @@
     "**/.hg": true,
     "**/CVS": true,
     "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/.fvm": true,
+    "**/.dart_tool": true,
     "**/*.freezed.dart": false,
     "**/*.g.dart": false
   },
@@ -27,6 +30,7 @@
     "editor.defaultFormatter": "Dart-Code.dart-code",
     "editor.formatOnSave": true,
     "editor.formatOnType": true,
+    "files.insertFinalNewline": true,
     "editor.rulers": [
       120
     ],
@@ -36,11 +40,33 @@
     "editor.tabCompletion": "onlySnippets",
     "editor.wordBasedSuggestions": "currentDocument"
   },
+  "search.exclude": {
+    "**/.fvm": true,
+    "**/.dart_tool": true
+  },
+  "files.watcherExclude": {
+    "**/.fvm": true,
+    "**/.dart_tool": true,
+    "**/build": true,
+    "**/graphify-out": true
+  },
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.patterns": {
-    "*.dart": "${capture}.g.dart, ${capture}.freezed.dart"
+    "pubspec.yaml": ".flutter-plugins, .packages, .flutter-plugins-dependencies, .metadata, pubspec.lock, pubspec_overrides.yaml, .fvmrc, flutter_launcher_icons*.yaml, flutter_native_splash*.yaml",
+    "analysis_options.yaml": "dcm_global.yaml",
+    "*.dart": "${capture}.g.dart, ${capture}.freezed.dart",
+    "readme*": "changelog*, codeowners, LICENSE"
   },
   "dart.flutterSdkPath": ".fvm/versions/3.44.2",
+  "files.trimTrailingWhitespace": true,
+  "files.trimFinalNewlines": true,
+  "markdown.validate.enabled": true,
+  "markdown.validate.fileLinks.enabled": "error",
+  "markdown.validate.fragmentLinks.enabled": "error",
+  "markdown.validate.referenceLinks.enabled": "error",
+  "markdown.validate.duplicateLinkDefinitions.enabled": "error",
+  "markdown.validate.unusedLinkDefinitions.enabled": "error",
+  "markdown.updateLinksOnFileMove.enabled": "prompt",
   "cSpell.words": [
     "anistar",
     "astar",

@@ -11,7 +11,7 @@ import '../../domain/repositories/playback_repository.dart';
 import '../widgets/player_view.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.animeId, required this.episodeNumber, required this.title});
+  const PlayerScreen({required this.animeId, required this.episodeNumber, required this.title, super.key});
 
   final int animeId;
   final int episodeNumber;
@@ -33,7 +33,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
     _future = _initialize(++_initializationId);
     _focusNode.requestFocus();
   }
@@ -89,7 +89,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<_PlayerData> _initialize(int initializationId) async {
     final repository = context.read<PlaybackRepository>();
-    final session = await repository.createSession(animeId: widget.animeId, episodeNumber: widget.episodeNumber);
+    final sessionResult = await repository.createSession(animeId: widget.animeId, episodeNumber: widget.episodeNumber);
+    final session = sessionResult.fold(onLeft: (failure) => throw failure, onRight: (session) => session);
     if (!_isCurrent(initializationId)) throw const _PlaybackInitializationCancelled();
     final controller = VideoPlayerController.networkUrl(
       session.manifestUri,
@@ -177,22 +178,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final controller = _controller;
     if (controller != null) unawaited(controller.dispose());
     _focusNode.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Focus(
-        autofocus: true,
-        focusNode: _focusNode,
-        onKeyEvent: _handleKey,
-        child: FutureBuilder<_PlayerData>(future: _future, builder: _buildFuture),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: Colors.black,
+    body: Focus(
+      autofocus: true,
+      focusNode: _focusNode,
+      onKeyEvent: _handleKey,
+      child: FutureBuilder<_PlayerData>(future: _future, builder: _buildFuture),
+    ),
+  );
 }
 
 final class _PlayerData {

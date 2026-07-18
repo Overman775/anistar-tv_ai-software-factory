@@ -6,9 +6,9 @@ typedef TvFocusBuilder = Widget Function(BuildContext context, bool focused);
 /// A remote-friendly focus target that keeps activation and visual focus in sync.
 class TvFocusable extends StatefulWidget {
   const TvFocusable({
-    super.key,
     required this.builder,
     required this.onPressed,
+    super.key,
     this.autofocus = false,
     this.onFocusChanged,
     this.semanticLabel,
@@ -66,25 +66,23 @@ class _TvFocusableState extends State<TvFocusable> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Focus(
-      autofocus: widget.autofocus,
-      focusNode: _focusNode,
-      onFocusChange: _onFocusChange,
-      onKeyEvent: _onKeyEvent,
-      child: Semantics(
-        button: true,
-        focused: _focused,
-        label: widget.semanticLabel,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _onTap,
-            child: widget.builder(context, _focused),
-          ),
+  Widget build(BuildContext context) => Focus(
+    autofocus: widget.autofocus,
+    focusNode: _focusNode,
+    onFocusChange: _onFocusChange,
+    onKeyEvent: _onKeyEvent,
+    child: Semantics(
+      button: true,
+      focused: _focused,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onTap,
+          child: widget.builder(context, _focused),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

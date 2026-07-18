@@ -32,6 +32,96 @@ analyzer:
 formatter:
   page_width: 120
 
+# Adapted from the companion mobile application. Generated OpenAPI files are
+# excluded above, so the policy applies only to code maintained in this app.
+linter:
+  rules:
+    avoid_catching_errors: true
+    avoid_dynamic_calls: true
+    avoid_returning_null_for_void: true
+    avoid_slow_async_io: true
+    avoid_type_to_string: true
+    avoid_void_async: true
+    await_only_futures: true
+    cast_nullable_to_non_nullable: true
+    discarded_futures: true
+    empty_catches: true
+    exhaustive_cases: true
+    hash_and_equals: true
+    no_logic_in_create_state: true
+    no_runtimeType_toString: true
+    only_throw_errors: true
+    unawaited_futures: true
+    use_build_context_synchronously: true
+
+    avoid_unnecessary_containers: true
+    avoid_web_libraries_in_flutter: true
+    sized_box_for_whitespace: true
+    sized_box_shrink_expand: true
+    sort_child_properties_last: true
+    use_colored_box: true
+    use_decorated_box: true
+    use_full_hex_values_for_flutter_colors: true
+    use_key_in_widget_constructors: true
+
+    always_declare_return_types: true
+    always_put_required_named_parameters_first: true
+    annotate_overrides: true
+    avoid_annotating_with_dynamic: true
+    avoid_catches_without_on_clauses: true
+    avoid_function_literals_in_foreach_calls: true
+    avoid_relative_lib_imports: true
+    avoid_unused_constructor_parameters: true
+    combinators_ordering: true
+    directives_ordering: true
+    eol_at_end_of_file: true
+    file_names: true
+    library_private_types_in_public_api: true
+    no_default_cases: true
+    omit_local_variable_types: true
+    prefer_asserts_in_initializer_lists: true
+    prefer_collection_literals: true
+    prefer_conditional_assignment: true
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_expression_function_bodies: true
+    prefer_final_fields: true
+    prefer_final_locals: true
+    prefer_for_elements_to_map_fromIterable: true
+    prefer_function_declarations_over_variables: true
+    prefer_if_null_operators: true
+    prefer_initializing_formals: true
+    prefer_is_empty: true
+    prefer_is_not_empty: true
+    prefer_iterable_whereType: true
+    prefer_null_aware_method_calls: true
+    prefer_relative_imports: true
+    prefer_single_quotes: true
+    prefer_spread_collections: true
+    require_trailing_commas: true
+    type_annotate_public_apis: true
+    unnecessary_await_in_return: true
+    unnecessary_lambdas: true
+    unnecessary_late: true
+    unnecessary_null_aware_assignments: true
+    unnecessary_null_in_if_null_operators: true
+    unnecessary_overrides: true
+    unnecessary_parenthesis: true
+    unnecessary_string_interpolations: true
+    use_super_parameters: true
+    use_test_throws_matchers: true
+
+    depend_on_referenced_packages: true
+    secure_pubspec_urls: true
+    sort_pub_dependencies: true
+
+    document_ignores: true
+    flutter_style_todos: true
+    provide_deprecation_message: true
+    slash_for_doc_comments: true
+
 dart_code_metrics:
   metrics:
     cyclomatic-complexity: 20

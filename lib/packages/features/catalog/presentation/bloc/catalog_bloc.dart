@@ -26,18 +26,18 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     final currentItems = current.items;
     emit(CatalogReady(items: currentItems, hasMore: true, isLoadingMore: true));
 
-    try {
-      final nextPage = await _repository.getPage(_page + 1);
-      if (isClosed || emit.isDone || generation != _loadGeneration) return;
-      _page = nextPage.page;
-      final knownIds = currentItems.map((item) => item.id).toSet();
-      final newItems = nextPage.items.where((item) => knownIds.add(item.id));
-      emit(CatalogReady(items: [...currentItems, ...newItems], hasMore: nextPage.hasNext));
-    } on Object catch (error, stackTrace) {
-      _logger.e('Catalog pagination failed', error: error, stackTrace: stackTrace);
-      if (isClosed || emit.isDone || generation != _loadGeneration) return;
-      emit(CatalogFailure(message: error.toString(), items: currentItems, hasMore: current.hasMore));
-    }
+    final result = await _repository.getPage(_page + 1);
+    if (isClosed || emit.isDone || generation != _loadGeneration) return;
+    result.fold(
+      onLeft: (failure) =>
+          emit(CatalogFailure(message: failure.message, items: currentItems, hasMore: current.hasMore)),
+      onRight: (nextPage) {
+        _page = nextPage.page;
+        final knownIds = currentItems.map((item) => item.id).toSet();
+        final newItems = nextPage.items.where((item) => knownIds.add(item.id));
+        emit(CatalogReady(items: [...currentItems, ...newItems], hasMore: nextPage.hasNext));
+      },
+    );
   }
 
   Future<void> _onStarted(CatalogStarted event, Emitter<CatalogState> emit) async {
@@ -45,15 +45,17 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     emit(const CatalogLoading());
     _page = 1;
 
-    try {
-      final page = await _repository.getPage(_page);
-      if (isClosed || emit.isDone || generation != _loadGeneration) return;
-      _page = page.page;
-      emit(CatalogReady(items: page.items, hasMore: page.hasNext));
-    } on Object catch (error, stackTrace) {
-      _logger.e('Catalog load failed', error: error, stackTrace: stackTrace);
-      if (isClosed || emit.isDone || generation != _loadGeneration) return;
-      emit(CatalogFailure(message: error.toString()));
-    }
+    final result = await _repository.getPage(_page);
+    if (isClosed || emit.isDone || generation != _loadGeneration) return;
+    result.fold(
+      onLeft: (failure) {
+        _logger.e('Catalog load failed: ${failure.message}', error: failure.cause, stackTrace: failure.stackTrace);
+        emit(CatalogFailure(message: failure.message));
+      },
+      onRight: (page) {
+        _page = page.page;
+        emit(CatalogReady(items: page.items, hasMore: page.hasNext));
+      },
+    );
   }
 }

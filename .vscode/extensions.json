@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "Dart-Code.dart-code",
+    "dcmdev.dcm-vscode-extension",
+    "streetsidesoftware.code-spell-checker",
+    "streetsidesoftware.code-spell-checker-russian",
+    "yzhang.markdown-all-in-one",
+    "DavidAnson.vscode-markdownlint",
+    "bierner.markdown-mermaid",
+    "redhat.vscode-yaml"
+  ]
+}

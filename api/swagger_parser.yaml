@@ -1,0 +1,35 @@
+swagger_parser:
+  schema_path: ../openapi/anistar.openapi.json
+  output_directory: lib/src
+  language: dart
+
+  client_postfix: Client
+  root_client: false
+  export_file: true
+  merge_clients: false
+  put_clients_in_folder: true
+
+  json_serializer: freezed
+  use_freezed3: true
+  fallback_union: unknown
+  infer_required_from_nullable: false
+  use_multipart_file: true
+  fallback_client: unknown
+
+  path_method_name: true
+  original_http_response: false
+  enums_parent_prefix: false
+  unknown_enum_value: true
+  mark_files_as_generated: true
+
+  replacement_rules:
+    - pattern: "Schema$"
+      replacement: ""
+    - pattern: "Enum$"
+      replacement: ""
+    - pattern: "ID"
+      replacement: "Id"
+    - pattern: "[^a-zA-Z0-9]"
+      replacement: ""
+    - pattern: "$"
+      replacement: "Dto"

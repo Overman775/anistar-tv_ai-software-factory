@@ -9,50 +9,38 @@ environment:
   flutter: ">=3.44.0 <4.0.0"
 
 dependencies:
+  api:
+    path: api
+  cached_network_image: ^3.4.1
+  dio: ^5.10.0
+  dio_smart_retry: ^7.0.1
+  equatable: ^2.1.0
   flutter:
     sdk: flutter
-
-  # Generated AniStar Parser API client
-  anistar_api:
-    path: packages/anistar_api
-
-  # Navigation
-  go_router: ^17.3.0
-
-  # State management
-  provider: ^6.1.4
   flutter_bloc: ^9.1.0
-  # Data models
-  # Storage
-  shared_preferences: ^2.5.3
   flutter_secure_storage: ^10.3.1
-
-  # Image handling
-  cached_network_image: ^3.4.1
-
-  # Utilities
+  go_router: ^17.3.0
+  http: ^1.6.0
+  intl: ^0.20.3
   logger: ^2.5.0
   path_provider: ^2.0.0
-  intl: ^0.20.3
+  provider: ^6.1.4
   share_plus: ^13.2.1
-
-  # UI Kit
+  shared_preferences: ^2.5.3
   ui_kit:
     path: lib/packages/ui_kit
-  dio: ^5.10.0
   video_player: ^2.13.0
-  equatable: ^2.1.0
 
 dev_dependencies:
+  bloc_test: ^10.0.0
+  build_runner: ^2.4.15
+  flutter_launcher_icons: ^0.14.3
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.8
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
   go_router_builder: ^4.3.1
-  build_runner: ^2.4.15
-  flutter_native_splash: ^2.4.8
-  flutter_launcher_icons: ^0.14.3
   http_mock_adapter: ^0.6.1
-  bloc_test: ^10.0.0
 flutter:
   uses-material-design: true
 

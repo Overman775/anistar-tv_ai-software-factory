@@ -1,15 +1,12 @@
-import 'dart:async';
-
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
-import 'package:anistar_tv/packages/features/catalog/domain/repositories/catalog_repository.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_event.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
 
-import 'fake_catalog_repository.dart';
+import '../../../../../mocks/features/catalog/fake_catalog_repository.dart';
 
 void main() {
   test('loads the first page and appends the next one', () async {
@@ -32,7 +29,7 @@ void main() {
   });
 
   test('discards an outdated pagination result after catalog refresh', () async {
-    final repository = CatalogBlocTest();
+    final repository = ControlledCatalogRepository();
     final bloc = CatalogBloc(repository: repository, logger: Logger());
     final states = <CatalogState>[];
     final subscription = bloc.stream.listen(states.add);
@@ -65,16 +62,3 @@ AnimePage _page({required int id, required int page, required bool hasNext}) => 
   page: page,
   hasNext: hasNext,
 );
-
-final class CatalogBlocTest implements CatalogRepository {
-  final Completer<AnimePage> pagination = Completer<AnimePage>();
-  int _firstPageCalls = 0;
-
-  @override
-  Future<AnimePage> getPage(int page) {
-    if (page == 2) return pagination.future;
-    _firstPageCalls++;
-
-    return Future.value(_page(id: _firstPageCalls == 1 ? 1 : 101, page: 1, hasNext: true));
-  }
-}

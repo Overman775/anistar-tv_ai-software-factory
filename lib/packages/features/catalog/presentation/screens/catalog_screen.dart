@@ -1,22 +1,24 @@
-import 'package:anistar_tv/app/app_config.dart';
-import 'package:anistar_tv/app/app_routes.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:logger/logger.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../../../app/app_config.dart';
+import '../../../../../app/app_routes.dart';
 import '../../domain/models/anime_summary.dart';
 import '../../domain/repositories/catalog_repository.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
 import '../widgets/anime_card.dart';
-import '../widgets/catalog_tail.dart';
 import '../widgets/catalog_heading.dart';
+import '../widgets/catalog_tail.dart';
 
 class CatalogScreen extends StatefulWidget {
-  const CatalogScreen({super.key, required this.onAnimeTap});
+  const CatalogScreen({required this.onAnimeTap, super.key});
 
   final ValueChanged<AnimeSummary> onAnimeTap;
 
@@ -119,12 +121,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
     if (!focused) return;
     _selectedIndex = index;
     if (index > 0) {
-      Scrollable.ensureVisible(
-        cardContext,
-        alignment: 0.5,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-        duration: AppMotion.standard,
-        curve: Curves.easeOutCubic,
+      unawaited(
+        Scrollable.ensureVisible(
+          cardContext,
+          alignment: 0.5,
+          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+          duration: AppMotion.standard,
+          curve: Curves.easeOutCubic,
+        ),
       );
     }
     final preloadDistance = _columnCount(MediaQuery.sizeOf(context).width) * 2;
@@ -150,43 +154,41 @@ class _CatalogScreenState extends State<CatalogScreen> {
     _scrollController
       ..removeListener(_loadMoreNearEnd)
       ..dispose();
-    _bloc.close();
+    unawaited(_bloc.close());
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return BlocProvider.value(
-      value: _bloc,
-      child: Scaffold(
-        appBar: AppBar(
-          toolbarHeight: 88,
-          titleSpacing: AppSpacing.xxl,
-          title: Row(
-            children: [
-              Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: AppSpacing.sm),
-              const Text('AniStar TV'),
-            ],
-          ),
-          actions: [
-            IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
-            if (AppConfig.isDevFlavor)
-              IconButton(onPressed: _openLogs, tooltip: 'Открыть логи', icon: const Icon(Icons.article_outlined)),
-            const SizedBox(width: AppSpacing.xl),
+  Widget build(BuildContext context) => BlocProvider.value(
+    value: _bloc,
+    child: Scaffold(
+      appBar: AppBar(
+        toolbarHeight: 88,
+        titleSpacing: AppSpacing.xxl,
+        title: Row(
+          children: [
+            Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: AppSpacing.sm),
+            const Text('AniStar TV'),
           ],
         ),
-        body: TvBackdrop(
-          child: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-            child: BlocBuilder<CatalogBloc, CatalogState>(
-              buildWhen: (previous, current) => previous != current,
-              builder: _buildState,
-            ),
+        actions: [
+          IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
+          if (AppConfig.isDevFlavor)
+            IconButton(onPressed: _openLogs, tooltip: 'Открыть логи', icon: const Icon(Icons.article_outlined)),
+          const SizedBox(width: AppSpacing.xl),
+        ],
+      ),
+      body: TvBackdrop(
+        child: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          child: BlocBuilder<CatalogBloc, CatalogState>(
+            buildWhen: (previous, current) => previous != current,
+            builder: _buildState,
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

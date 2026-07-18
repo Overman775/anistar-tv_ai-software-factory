@@ -1,5 +1,5 @@
-import 'package:anistar_api/anistar_api.dart';
 import 'package:anistar_tv/packages/features/anime/data/repositories/anistar_anime_repository.dart';
+import 'package:api/api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http_mock_adapter/http_mock_adapter.dart';
@@ -32,9 +32,12 @@ void main() {
         },
       ]);
     });
-    final repository = AnistarAnimeRepository(AnistarApi(dio: dio, interceptors: []).getAnimeApi());
+    final repository = AnistarAnimeRepository(AnimeClient(dio));
 
-    final data = await repository.getAnime(id: 10921, slug: '10921-test-anime');
+    final data = (await repository.getAnime(
+      id: 10921,
+      slug: '10921-test-anime',
+    )).fold(onLeft: (failure) => fail(failure.message), onRight: (value) => value);
 
     expect(data.details.title, 'Тестовое аниме');
     expect(data.details.isOngoing, isTrue);

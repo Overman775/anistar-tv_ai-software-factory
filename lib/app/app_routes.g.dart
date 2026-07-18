@@ -92,6 +92,7 @@ mixin $PlayerRoute on GoRouteData {
   static PlayerRoute _fromState(GoRouterState state) => PlayerRoute(
     animeId: int.parse(state.uri.queryParameters['anime-id']!),
     episodeNumber: int.parse(state.uri.queryParameters['episode-number']!),
+    slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
   );
 
@@ -103,6 +104,7 @@ mixin $PlayerRoute on GoRouteData {
     queryParams: {
       'anime-id': _self.animeId.toString(),
       'episode-number': _self.episodeNumber.toString(),
+      'slug': _self.slug,
       'title': _self.title,
     },
   );

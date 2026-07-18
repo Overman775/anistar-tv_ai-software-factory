@@ -6,13 +6,13 @@ import '../../domain/models/playback_session.dart';
 
 class PlayerOverlay extends StatelessWidget {
   const PlayerOverlay({
-    super.key,
     required this.title,
     required this.episodeNumber,
     required this.session,
     required this.value,
     required this.onPlayPause,
     required this.onSeek,
+    super.key,
   });
 
   static String _format(Duration value) {

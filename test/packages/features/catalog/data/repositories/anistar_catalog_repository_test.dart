@@ -1,5 +1,5 @@
-import 'package:anistar_api/anistar_api.dart';
 import 'package:anistar_tv/packages/features/catalog/data/repositories/anistar_catalog_repository.dart';
+import 'package:api/api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http_mock_adapter/http_mock_adapter.dart';
@@ -26,9 +26,11 @@ void main() {
       }),
       queryParameters: {'page': 1},
     );
-    final repository = AnistarCatalogRepository(AnistarApi(dio: dio, interceptors: []).getAnimeApi());
+    final repository = AnistarCatalogRepository(AnimeClient(dio));
 
-    final page = await repository.getPage(1);
+    final page = (await repository.getPage(
+      1,
+    )).fold(onLeft: (failure) => fail(failure.message), onRight: (value) => value);
     final item = page.items.single;
 
     expect(page.page, 1);

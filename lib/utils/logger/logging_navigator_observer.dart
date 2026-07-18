@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart' show Route, NavigatorObserver;
+import 'package:flutter/widgets.dart' show NavigatorObserver, Route;
 import 'package:logger/logger.dart';
 
 /// Navigator Observer to log route changes

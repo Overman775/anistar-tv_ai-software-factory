@@ -30,17 +30,14 @@ final class LogViewerLoadedState extends LogViewerState {
 
   const LogViewerLoadedState({required this.logFiles, this.selectedLogFile, this.logContent, this.error});
 
-  LogViewerLoadedState selecting(String fileName) {
-    return LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName);
-  }
+  LogViewerLoadedState selecting(String fileName) =>
+      LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName);
 
-  LogViewerLoadedState withContent({required String fileName, required String content}) {
-    return LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName, logContent: content);
-  }
+  LogViewerLoadedState withContent({required String fileName, required String content}) =>
+      LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName, logContent: content);
 
-  LogViewerLoadedState withError({required String fileName, required String message}) {
-    return LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName, error: message);
-  }
+  LogViewerLoadedState withError({required String fileName, required String message}) =>
+      LogViewerLoadedState(logFiles: logFiles, selectedLogFile: fileName, error: message);
 }
 
 @immutable

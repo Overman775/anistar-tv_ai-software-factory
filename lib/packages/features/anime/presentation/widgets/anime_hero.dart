@@ -6,7 +6,7 @@ import '../../domain/models/anime_screen_data.dart';
 import 'anime_metadata_chip.dart';
 
 class AnimeHero extends StatelessWidget {
-  const AnimeHero({super.key, required this.data, this.onPlayFirstEpisode});
+  const AnimeHero({required this.data, super.key, this.onPlayFirstEpisode});
 
   final AnimeScreenData data;
   final VoidCallback? onPlayFirstEpisode;

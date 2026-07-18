@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:anistar_tv/packages/features/log_viewer/presentation/bloc/log_viewer_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ui_kit/ui_kit.dart';
+
+import '../bloc/log_viewer_bloc.dart';
 
 class LogViewerView extends StatefulWidget {
   const LogViewerView({super.key});
@@ -16,21 +17,19 @@ class LogViewerView extends StatefulWidget {
 class _LogViewerViewState extends State<LogViewerView> {
   final ScrollController _scrollController = ScrollController();
 
-  Widget _buildBody(BuildContext context, LogViewerState state) {
-    return switch (state) {
-      LogViewerInitialState() || LogViewerLoadingState() => const TvProgressView(label: 'Загружаем логи…'),
-      // Private composition helpers keep scroll ownership in this state object.
-      // ignore: avoid-returning-widgets
-      LogViewerLoadedState() => _buildLoadedBody(context, state),
-      LogViewerErrorState() => TvStateView(
-        icon: Icons.folder_off_outlined,
-        title: 'Логи недоступны',
-        message: state.message,
-        actionLabel: 'Обновить',
-        onAction: () => _refreshLogs(context),
-      ),
-    };
-  }
+  Widget _buildBody(BuildContext context, LogViewerState state) => switch (state) {
+    LogViewerInitialState() || LogViewerLoadingState() => const TvProgressView(label: 'Загружаем логи…'),
+    // Private composition helpers keep scroll ownership in this state object.
+    // ignore: avoid-returning-widgets
+    LogViewerLoadedState() => _buildLoadedBody(context, state),
+    LogViewerErrorState() => TvStateView(
+      icon: Icons.folder_off_outlined,
+      title: 'Логи недоступны',
+      message: state.message,
+      actionLabel: 'Обновить',
+      onAction: () => _refreshLogs(context),
+    ),
+  };
 
   Widget _buildFloatingActions(BuildContext context, LogViewerState state) {
     if (state is! LogViewerLoadedState || state.logContent == null) return const SizedBox.shrink();
@@ -201,36 +200,34 @@ class _LogViewerViewState extends State<LogViewerView> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 76,
-        title: Text('Логи приложения', style: Theme.of(context).textTheme.headlineSmall),
-        actions: [
-          BlocBuilder<LogViewerBloc, LogViewerState>(
-            buildWhen: (previous, current) => previous != current,
-            builder: _buildShareAction,
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Обновить логи',
-            onPressed: () => _refreshLogs(context),
-          ),
-          const SizedBox(width: AppSpacing.md),
-        ],
-      ),
-      body: TvBackdrop(
-        child: BlocConsumer<LogViewerBloc, LogViewerState>(
-          listenWhen: (previous, current) => previous != current,
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      toolbarHeight: 76,
+      title: Text('Логи приложения', style: Theme.of(context).textTheme.headlineSmall),
+      actions: [
+        BlocBuilder<LogViewerBloc, LogViewerState>(
           buildWhen: (previous, current) => previous != current,
-          listener: _handleStateChanged,
-          builder: _buildBody,
+          builder: _buildShareAction,
         ),
-      ),
-      floatingActionButton: BlocBuilder<LogViewerBloc, LogViewerState>(
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded),
+          tooltip: 'Обновить логи',
+          onPressed: () => _refreshLogs(context),
+        ),
+        const SizedBox(width: AppSpacing.md),
+      ],
+    ),
+    body: TvBackdrop(
+      child: BlocConsumer<LogViewerBloc, LogViewerState>(
+        listenWhen: (previous, current) => previous != current,
         buildWhen: (previous, current) => previous != current,
-        builder: _buildFloatingActions,
+        listener: _handleStateChanged,
+        builder: _buildBody,
       ),
-    );
-  }
+    ),
+    floatingActionButton: BlocBuilder<LogViewerBloc, LogViewerState>(
+      buildWhen: (previous, current) => previous != current,
+      builder: _buildFloatingActions,
+    ),
+  );
 }
