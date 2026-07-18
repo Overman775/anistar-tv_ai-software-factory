@@ -1,0 +1,43 @@
+# Version control, SDK caches, and local tooling.
+.git/
+.fvm/
+.dart_tool/
+.gradle/
+.idea/
+.vscode/
+.local-chrome/
+.codex/
+AGENTS.md
+
+# Generated build and dependency artifacts.
+build/
+**/build/
+.pub-cache/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/pubspec.lock
+graphify-out/
+
+# Generated Dart sources are derivable from their declarations.
+**/*.g.dart
+**/*.freezed.dart
+**/*.mocks.dart
+lib/generated_plugin_registrant.dart
+packages/anistar_api/
+openapi/
+
+# Binary assets do not contribute to the code architecture graph.
+assets/
+resources/
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.gif
+**/*.ico
+
+# OS and editor leftovers.
+.DS_Store
+*.iml
+*.log
+*.swp

@@ -2,8 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../packages/features/home/presentation/screens/home_screen.dart';
-import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart'; // Added import
-import '../packages/features/movie/presentation/screens/movie_screen.dart';
+import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
+import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
 
 part 'app_routes.g.dart';
@@ -11,23 +11,20 @@ part 'app_routes.g.dart';
 /// Routes for the application
 class AppRoutes {
   /// Home screen route
-  static const String home = '/home'; // Updated path
+  static const String home = '/home';
 
-  /// Favorites screen route
-  static const String favorites = '/favorites'; // Path remains the same
+  /// Movie screen route, relative to its parent.
+  static const String anime = 'anime';
 
-  /// Movie screen route, relative to its parent (e.g., home or favorites)
-  static const String movie = 'movie'; // Now expects MovieModel as extra, relative path
-
-  /// Player screen route, relative to its parent (e.g., home or favorites)
-  static const String player = 'player'; // Path for the player, relative path
+  /// Player screen route, relative to its parent.
+  static const String player = 'player';
 
   /// Log Viewer screen route
-  static const String logViewer = '/logs'; // Top-level route for log viewer
+  static const String logViewer = '/logs';
 }
 
 @TypedGoRoute<LogViewerRoute>(path: AppRoutes.logViewer)
-class LogViewerRoute extends GoRouteData {
+class LogViewerRoute extends GoRouteData with $LogViewerRoute {
   const LogViewerRoute();
 
   @override
@@ -39,51 +36,54 @@ class LogViewerRoute extends GoRouteData {
 @TypedGoRoute<HomeRoute>(
   path: AppRoutes.home,
   routes: [
-    TypedGoRoute<MovieRoute>(
-      path: AppRoutes.movie,
+    TypedGoRoute<AnimeRoute>(
+      path: AppRoutes.anime,
       routes: [TypedGoRoute<PlayerRoute>(path: AppRoutes.player)],
     ),
   ],
 )
-class HomeRoute extends GoRouteData {
+class HomeRoute extends GoRouteData with $HomeRoute {
   const HomeRoute();
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
     return HomeScreen(
-      onVideoTap: (video) {
-        MovieRoute(title: video.title, videoUrl: video.videoUrl).go(context);
+      onAnimeTap: (anime) {
+        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title).go(context);
       },
     );
   }
 }
 
-class MovieRoute extends GoRouteData {
+class AnimeRoute extends GoRouteData with $AnimeRoute {
+  final int animeId;
+  final String slug;
   final String title;
-  final String videoUrl;
 
-  const MovieRoute({required this.title, required this.videoUrl});
+  const AnimeRoute({required this.animeId, required this.slug, required this.title});
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return MovieScreen(
-      title: title,
-      videoUrl: videoUrl,
-      onMovieTap: (tappedMovie) {
-        PlayerRoute(title: tappedMovie.title, videoUrl: tappedMovie.videoUrl).go(context);
+    return AnimeScreen(
+      animeId: animeId,
+      slug: slug,
+      fallbackTitle: title,
+      onEpisodeTap: (episode) {
+        PlayerRoute(animeId: animeId, episodeNumber: episode.number, title: title).go(context);
       },
     );
   }
 }
 
-class PlayerRoute extends GoRouteData {
+class PlayerRoute extends GoRouteData with $PlayerRoute {
+  final int animeId;
+  final int episodeNumber;
   final String title;
-  final String videoUrl;
 
-  const PlayerRoute({required this.title, required this.videoUrl});
+  const PlayerRoute({required this.animeId, required this.episodeNumber, required this.title});
 
   @override
   Widget build(BuildContext context, GoRouterState state) {
-    return PlayerScreen(title: title, videoUrl: videoUrl);
+    return PlayerScreen(animeId: animeId, episodeNumber: episodeNumber, title: title);
   }
 }

@@ -40,7 +40,7 @@
   "explorer.fileNesting.patterns": {
     "*.dart": "${capture}.g.dart, ${capture}.freezed.dart"
   },
-  "dart.flutterSdkPath": ".fvm/versions/3.35.1",
+  "dart.flutterSdkPath": ".fvm/versions/3.44.2",
   "cSpell.words": [
     "anistar",
     "astar",

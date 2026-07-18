@@ -1,35 +1,31 @@
-import 'package:anistar_tv/utils/logger/logger.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 import 'runner/runner.dart';
 
 /// Entry point for production version
-void main() {
-  // Set up logging for production
-  Logger.level = Level.warning; // Only log warnings and errors
-  logger = Logger(
+Future<void> main() async {
+  Logger.level = Level.warning;
+  final appLogger = Logger(
     printer: PrettyPrinter(
-      methodCount: 0, // Don't show method calls
+      methodCount: 0,
       errorMethodCount: 5,
       lineLength: 100,
       colors: false,
       printEmojis: false,
-      dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart, // Include timestamp for production logs
+      dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
     ),
   );
 
-  // Disable standard debug prints in production
   if (kReleaseMode) {
     // ignore: no-empty-block
     debugPrint = (String? message, {int? wrapWidth}) {};
-    logger.i('Standard debugPrint disabled for release mode.');
+    appLogger.i('Standard debugPrint disabled for release mode.');
   } else {
-    logger.w('Running in Debug/Profile mode, but using production entry point!');
+    appLogger.w('Running in Debug/Profile mode with the production entry point.');
   }
 
-  logger.i('Production initialized');
+  appLogger.i('Production initialized');
 
-  // Run the application
-  runApplication();
+  await runApplication(logger: appLogger);
 }

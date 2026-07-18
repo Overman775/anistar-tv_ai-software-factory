@@ -8,6 +8,7 @@ class SharedPreferencesStorage {
   /// init storage
   Future<SharedPreferences> init() async {
     final prefs = _preferences ??= await SharedPreferences.getInstance();
+
     return prefs;
   }
 
@@ -34,7 +35,7 @@ class SharedPreferencesStorage {
     } else if (value is List<String>) {
       await instance.setStringList(key, value);
     } else {
-      throw Exception("Does't support type ${value.runtimeType} yet.");
+      throw UnsupportedError('Unsupported preference type: ${value.runtimeType}.');
     }
   }
 

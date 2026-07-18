@@ -8,101 +8,114 @@ part of 'app_routes.dart';
 
 List<RouteBase> get $appRoutes => [$logViewerRoute, $homeRoute];
 
-RouteBase get $logViewerRoute => GoRouteData.$route(
-  path: '/logs',
+RouteBase get $logViewerRoute => GoRouteData.$route(path: '/logs', factory: $LogViewerRoute._fromState);
 
-  factory: $LogViewerRouteExtension._fromState,
-);
+mixin $LogViewerRoute on GoRouteData {
+  static LogViewerRoute _fromState(GoRouterState state) => const LogViewerRoute();
 
-extension $LogViewerRouteExtension on LogViewerRoute {
-  static LogViewerRoute _fromState(GoRouterState state) =>
-      const LogViewerRoute();
-
+  @override
   String get location => GoRouteData.$location('/logs');
 
+  @override
   void go(BuildContext context) => context.go(location);
 
+  @override
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
+  @override
   void replace(BuildContext context) => context.replace(location);
 }
 
 RouteBase get $homeRoute => GoRouteData.$route(
   path: '/home',
-
-  factory: $HomeRouteExtension._fromState,
+  factory: $HomeRoute._fromState,
   routes: [
     GoRouteData.$route(
-      path: 'movie',
-
-      factory: $MovieRouteExtension._fromState,
-      routes: [
-        GoRouteData.$route(
-          path: 'player',
-
-          factory: $PlayerRouteExtension._fromState,
-        ),
-      ],
+      path: 'anime',
+      factory: $AnimeRoute._fromState,
+      routes: [GoRouteData.$route(path: 'player', factory: $PlayerRoute._fromState)],
     ),
   ],
 );
 
-extension $HomeRouteExtension on HomeRoute {
+mixin $HomeRoute on GoRouteData {
   static HomeRoute _fromState(GoRouterState state) => const HomeRoute();
 
+  @override
   String get location => GoRouteData.$location('/home');
 
+  @override
   void go(BuildContext context) => context.go(location);
 
+  @override
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
+  @override
   void replace(BuildContext context) => context.replace(location);
 }
 
-extension $MovieRouteExtension on MovieRoute {
-  static MovieRoute _fromState(GoRouterState state) => MovieRoute(
+mixin $AnimeRoute on GoRouteData {
+  static AnimeRoute _fromState(GoRouterState state) => AnimeRoute(
+    animeId: int.parse(state.uri.queryParameters['anime-id']!),
+    slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
-    videoUrl: state.uri.queryParameters['video-url']!,
   );
 
+  AnimeRoute get _self => this as AnimeRoute;
+
+  @override
   String get location => GoRouteData.$location(
-    '/home/movie',
-    queryParams: {'title': title, 'video-url': videoUrl},
+    '/home/anime',
+    queryParams: {'anime-id': _self.animeId.toString(), 'slug': _self.slug, 'title': _self.title},
   );
 
+  @override
   void go(BuildContext context) => context.go(location);
 
+  @override
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
+  @override
   void replace(BuildContext context) => context.replace(location);
 }
 
-extension $PlayerRouteExtension on PlayerRoute {
+mixin $PlayerRoute on GoRouteData {
   static PlayerRoute _fromState(GoRouterState state) => PlayerRoute(
+    animeId: int.parse(state.uri.queryParameters['anime-id']!),
+    episodeNumber: int.parse(state.uri.queryParameters['episode-number']!),
     title: state.uri.queryParameters['title']!,
-    videoUrl: state.uri.queryParameters['video-url']!,
   );
 
+  PlayerRoute get _self => this as PlayerRoute;
+
+  @override
   String get location => GoRouteData.$location(
-    '/home/movie/player',
-    queryParams: {'title': title, 'video-url': videoUrl},
+    '/home/anime/player',
+    queryParams: {
+      'anime-id': _self.animeId.toString(),
+      'episode-number': _self.episodeNumber.toString(),
+      'title': _self.title,
+    },
   );
 
+  @override
   void go(BuildContext context) => context.go(location);
 
+  @override
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
+  @override
   void replace(BuildContext context) => context.replace(location);
 }

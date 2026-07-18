@@ -8,6 +8,7 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - "packages/anistar_api/**"
     - "temp/**"
     - "build/**"
     - test/.test_coverage.dart
@@ -39,6 +40,9 @@ dart_code_metrics:
   exclude:
     metrics:
       - test/**
+      - packages/anistar_api/**
+    rules:
+      - packages/anistar_api/**
   formatter:
     indent: 0
     line-length: 120

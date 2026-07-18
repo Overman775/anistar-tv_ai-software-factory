@@ -3,11 +3,9 @@ import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorage {
-  late final FlutterSecureStorage _storage;
+  final FlutterSecureStorage _storage;
 
-  SecureStorage() {
-    _storage = const FlutterSecureStorage(aOptions: AndroidOptions(encryptedSharedPreferences: true));
-  }
+  SecureStorage({FlutterSecureStorage? storage}) : _storage = storage ?? const FlutterSecureStorage();
 
   Future<String?> get(String key, {String? defaultValue}) async {
     final result = await _storage.read(key: key);

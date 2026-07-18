@@ -1,17 +1,14 @@
-import 'package:anistar_tv/packages/features/video_list/domain/models/video_model.dart';
-import 'package:anistar_tv/packages/features/video_list/presentation/screens/video_list_screen.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.onVideoTap});
+  const HomeScreen({super.key, required this.onAnimeTap});
 
-  final void Function(VideoModel) onVideoTap;
+  final ValueChanged<AnimeSummary> onAnimeTap;
 
   @override
   Widget build(BuildContext context) {
-    return VideoListScreen(
-      baseUrl: 'https://v7.astar.bz', // Base URL for the home page videos
-      onVideoTap: onVideoTap,
-    );
+    return CatalogScreen(onAnimeTap: onAnimeTap);
   }
 }

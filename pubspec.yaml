@@ -5,69 +5,56 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.0
-  flutter: ">=3.35.0 <4.0.0"
+  sdk: ^3.12.0
+  flutter: ">=3.44.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.8
+
+  # Generated AniStar Parser API client
+  anistar_api:
+    path: packages/anistar_api
 
   # Navigation
-  go_router: ^15.1.2
+  go_router: ^17.3.0
 
   # State management
   provider: ^6.1.4
   flutter_bloc: ^9.1.0
-  equatable: ^2.0.5 # Add equatable
-
   # Data models
-  freezed_annotation: ^3.0.0
-  json_annotation: ^4.9.0
-
   # Storage
   shared_preferences: ^2.5.3
-  flutter_secure_storage: ^9.2.4
-
-  # Video player
-  video_player: ^2.9.5
+  flutter_secure_storage: ^10.3.1
 
   # Image handling
   cached_network_image: ^3.4.1
 
   # Utilities
   logger: ^2.5.0
-  flutter_inappwebview: ^6.1.5 # For handling web content and bypassing CF
-  html: ^0.15.5 # For parsing HTML
-  path_provider: ^2.0.0 # Add path_provider
-  intl: ^0.19.0 # Add intl
-  share_plus: ^11.0.0 # Add share_plus (optional), upgraded to resolve conflict
-
-  # Splash and icons
-  flutter_native_splash: ^2.4.6
+  path_provider: ^2.0.0
+  intl: ^0.20.3
+  share_plus: ^13.2.1
 
   # UI Kit
   ui_kit:
     path: lib/packages/ui_kit
+  dio: ^5.10.0
+  video_player: ^2.13.0
+  equatable: ^2.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
-  freezed: ^3.0.4
-  json_serializable: ^6.9.4
-  go_router_builder: ^2.9.0
+  flutter_lints: ^6.0.0
+  go_router_builder: ^4.3.1
   build_runner: ^2.4.15
+  flutter_native_splash: ^2.4.8
   flutter_launcher_icons: ^0.14.3
-  mocktail: ^1.0.0 # Added for mocking
-  bloc_test: ^10.0.0 # Added for bloc testing
-
+  http_mock_adapter: ^0.6.1
+  bloc_test: ^10.0.0
 flutter:
   uses-material-design: true
-
-  # To add assets to your application, add an assets section, like this:
-  assets:
-    - assets/
 
 flutter_launcher_icons:
   android: "launcher_icon"

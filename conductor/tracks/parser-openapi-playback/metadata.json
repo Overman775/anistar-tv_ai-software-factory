@@ -1,0 +1,8 @@
+{
+  "id": "parser-openapi-playback",
+  "type": "feature-architecture",
+  "priority": "high",
+  "status": "completed",
+  "started": "2026-07-18",
+  "owner": "codex"
+}

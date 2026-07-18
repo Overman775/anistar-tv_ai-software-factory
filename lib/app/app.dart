@@ -1,13 +1,15 @@
-import 'package:anistar_tv/packages/ui_kit/lib/ui_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:logger/logger.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import 'app_router.dart';
 
 /// Root widget of the application
 class App extends StatefulWidget {
-  /// Constructor
-  const App({super.key});
+  const App({super.key, required this.logger});
+
+  final Logger logger;
 
   @override
   State<App> createState() => _AppState();
@@ -19,13 +21,9 @@ class _AppState extends State<App> {
   @override
   void initState() {
     super.initState();
-    _appRouter = AppRouter();
+    _appRouter = AppRouter(widget.logger);
 
-    // Configure system UI for TV
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: [], // Hide all system overlays for TV
-    );
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
   }
 
   @override
@@ -35,7 +33,7 @@ class _AppState extends State<App> {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark, // TV apps typically use dark theme
+      themeMode: ThemeMode.dark,
       routerConfig: _appRouter.router,
     );
   }
