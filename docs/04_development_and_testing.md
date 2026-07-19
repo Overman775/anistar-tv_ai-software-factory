@@ -12,11 +12,19 @@
 
 ## 2. Первый запуск
 
+Скопируйте шаблон production-конфига и укажите реальный HTTPS endpoint Parser:
+
+```bash
+cp env/prod.example.json env/prod.json
+```
+
+`env/prod.json` игнорируется Git. `env/dev.json` содержит безопасный адрес Android Emulator и хранится в репозитории.
+
 ```bash
 fvm install
 fvm flutter pub get
 fvm flutter run --flavor dev -t lib/main_dev.dart \
-  --dart-define=ANISTAR_API_URL=http://10.0.2.2:8001/
+  --dart-define-from-file=env/dev.json
 ```
 
 Для physical TV замените `10.0.2.2` на адрес компьютера в локальной сети. Устройство и parser должны видеть друг друга.
@@ -36,11 +44,12 @@ fvm flutter run --flavor dev -t lib/main_dev.dart \
 
 ```bash
 # Debug APK
-fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart
+fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart \
+  --dart-define-from-file=env/dev.json
 
 # Production entry point
 fvm flutter build apk --release --flavor prod -t lib/main_prod.dart \
-  --dart-define=ANISTAR_API_URL=https://parser.example.com/
+  --dart-define-from-file=env/prod.json
 ```
 
 Release signing перед публикацией настраивается отдельно в Android-проекте.
@@ -60,7 +69,8 @@ fvm flutter test
 fvm dart analyze api
 
 # Android TV сборка
-fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart
+fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart \
+  --dart-define-from-file=env/dev.json
 ```
 
 ## 6. Тестовая стратегия
@@ -112,6 +122,8 @@ expect(tester.takeException(), isNull);
 
 Golden-тесты пока не являются обязательными. Их стоит добавить, когда дизайн экранов стабилизируется и pixel-level regression станет полезнее стоимости поддержки эталонов.
 
+Для UIKit тестируйте общий контракт: typography, fallback удалённого изображения, skeleton и loading/error state. Feature-тест проверяет собственную форму skeleton layout и TV-навигацию, а не внутреннюю реализацию UIKit.
+
 ## 7. Ручной smoke-check на TV
 
 Перед заметным изменением player или focus-навигации проверьте:
@@ -143,3 +155,4 @@ Golden-тесты пока не являются обязательными. И�
 - lifecycle playback-сессии;
 - команд запуска, Flutter или Android toolchain;
 - базового поведения пульта и TV-layout.
+- состава `env/*.json`, Riverpod providers или общих UIKit primitives.

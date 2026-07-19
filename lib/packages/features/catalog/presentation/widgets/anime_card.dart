@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -11,16 +10,6 @@ class AnimeCard extends StatelessWidget {
   final bool autofocus;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback onTap;
-
-  Widget _buildImageError(BuildContext context, String url, Object error) => const ColoredBox(
-    color: AppPalette.surfaceElevated,
-    child: Center(child: Icon(Icons.broken_image_outlined, color: AppPalette.textSecondary, size: 48)),
-  );
-
-  Widget _buildImagePlaceholder(BuildContext context, String url) => const ColoredBox(
-    color: AppPalette.surfaceElevated,
-    child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -65,18 +54,13 @@ class AnimeCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (posterUri.hasScheme)
-                    Hero(
-                      tag: 'anime-poster-${anime.id}',
-                      child: CachedNetworkImage(
-                        imageUrl: posterUrl,
-                        fit: BoxFit.cover,
-                        errorWidget: _buildImageError,
-                        placeholder: _buildImagePlaceholder,
-                      ),
-                    )
-                  else
-                    _buildImageError(context, posterUrl, const FormatException('Invalid poster URL')),
+                  Hero(
+                    tag: 'anime-poster-${anime.id}',
+                    child: AppNetworkImage(
+                      imageUrl: posterUri.hasScheme ? posterUrl : null,
+                      semanticLabel: anime.title,
+                    ),
+                  ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(

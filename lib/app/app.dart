@@ -2,28 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:logger/logger.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'app_providers.dart';
 import 'app_router.dart';
 
 /// Root widget of the application
-class App extends StatefulWidget {
-  const App({required this.logger, super.key});
-
-  final Logger logger;
+class App extends ConsumerStatefulWidget {
+  const App({super.key});
 
   @override
-  State<App> createState() => _AppState();
+  ConsumerState<App> createState() => _AppState();
 }
 
-class _AppState extends State<App> {
+class _AppState extends ConsumerState<App> {
   late final AppRouter _appRouter;
 
   @override
   void initState() {
     super.initState();
-    _appRouter = AppRouter(widget.logger);
+    _appRouter = AppRouter(ref.read(loggerProvider));
 
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
   }

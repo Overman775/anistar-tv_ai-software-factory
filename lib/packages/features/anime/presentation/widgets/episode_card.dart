@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -56,7 +55,7 @@ class EpisodeCard extends StatelessWidget {
               fit: StackFit.expand,
               children: [
                 if (preview != null)
-                  CachedNetworkImage(imageUrl: preview.toString(), fit: BoxFit.cover)
+                  AppNetworkImage(imageUrl: preview.toString(), semanticLabel: episode.title)
                 else
                   const ColoredBox(
                     color: AppPalette.surfaceElevated,

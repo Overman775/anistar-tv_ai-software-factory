@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -33,7 +32,7 @@ class AnimeHero extends StatelessWidget {
                   heightFactor: 1,
                   child: Opacity(
                     opacity: 0.24,
-                    child: CachedNetworkImage(imageUrl: posterUrl, fit: BoxFit.cover),
+                    child: AppNetworkImage(imageUrl: posterUrl, semanticLabel: details.title),
                   ),
                 ),
               ),
@@ -64,7 +63,11 @@ class AnimeHero extends StatelessWidget {
                           ),
                           child: ClipRRect(
                             borderRadius: AppRadii.large,
-                            child: CachedNetworkImage(imageUrl: posterUrl, fit: BoxFit.cover),
+                            child: AppNetworkImage(
+                              imageUrl: posterUrl,
+                              borderRadius: AppRadii.large,
+                              semanticLabel: details.title,
+                            ),
                           ),
                         ),
                       ),

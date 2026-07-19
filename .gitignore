@@ -53,3 +53,6 @@ app.*.map.json
 /.graphifyignore
 /AGENTS.md
 /graphify-out/
+
+# Machine-specific production endpoint for --dart-define-from-file.
+/env/prod.json

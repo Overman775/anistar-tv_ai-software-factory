@@ -17,10 +17,11 @@
   транспорта, `Either`, `Failure`, `BaseRepository` и локальных storage.
 - `core` не содержит feature-моделей, UI, навигации или бизнес-логики
   каталога/плеера.
-- `ui_kit` экспортирует только токены темы и маленькие TV-примитивы:
-  backdrop, focus target, состояния и заголовок секции.
-- Сложные feature-виджеты (карточка аниме, hero, player overlay) остаются
-  рядом с feature до появления второго реального потребителя.
+- `ui_kit` экспортирует только TV-токены и общие примитивы: Inter typography,
+  backdrop, focus target, `AppNetworkImage`, skeleton, состояния и заголовок
+  секции.
+- Сложные feature-виджеты и layouts (карточка аниме, hero, grid, player overlay)
+  остаются рядом с feature до появления второго реального потребителя.
 
 ## Последствия
 
@@ -35,3 +36,5 @@ WebView и mobile-компоненты из `mobile-app`; новый компо�
 
 - [ADR-0002](0002-use-swagger-parser-retrofit-networking.md) — transport и
   generated API, которые использует `core`.
+- [ADR-0004](0004-use-riverpod-for-app-di.md) — composition root, который
+  поставляет зависимости features.

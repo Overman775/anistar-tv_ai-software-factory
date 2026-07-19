@@ -4,8 +4,8 @@
 
 ## Основные документы
 
-1. [🏛️ Архитектура и структура](01_architecture_and_structure.md) — слои, зависимости, модули и пользовательский поток.
-2. [📏 Рекомендации по коду и TV UI](02_code_style_and_tv_guidelines.md) — стиль Dart, работа с состоянием и правила интерфейса для пульта.
+1. [🏛️ Архитектура и структура](01_architecture_and_structure.md) — слои, Riverpod DI, UIKit, модули и пользовательский поток.
+2. [📏 Рекомендации по коду и TV UI](02_code_style_and_tv_guidelines.md) — стиль Dart, Riverpod, UIKit и правила интерфейса для пульта.
 3. [🌐 Сеть, OpenAPI и HLS](03_network_openapi_and_playback.md) — контракт parser, генерация клиента и жизненный цикл playback-сессии.
 4. [🧪 Разработка и тестирование](04_development_and_testing.md) — запуск, проверки, тестовая стратегия и troubleshooting.
 

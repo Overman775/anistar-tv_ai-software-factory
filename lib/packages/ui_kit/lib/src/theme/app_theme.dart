@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_palette.dart';
+import 'tv_typography.dart';
 
 abstract final class AppTheme {
   static final ThemeData lightTheme = _createTheme(Brightness.light);
@@ -33,17 +34,7 @@ abstract final class AppTheme {
 
       return BorderSide(color: focused ? baseScheme.onPrimary : Colors.transparent, width: focused ? 3 : 0);
     });
-    final textTheme = baseTextTheme.copyWith(
-      displaySmall: baseTextTheme.displaySmall?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -1),
-      headlineLarge: baseTextTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.6),
-      headlineMedium: baseTextTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -0.4),
-      headlineSmall: baseTextTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-      titleLarge: baseTextTheme.titleLarge?.copyWith(fontSize: 24, fontWeight: FontWeight.w700),
-      titleMedium: baseTextTheme.titleMedium?.copyWith(fontSize: 19, fontWeight: FontWeight.w600),
-      bodyLarge: baseTextTheme.bodyLarge?.copyWith(fontSize: 18, height: 1.45),
-      bodyMedium: baseTextTheme.bodyMedium?.copyWith(fontSize: 16, height: 1.4),
-      labelLarge: baseTextTheme.labelLarge?.copyWith(fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.2),
-    );
+    final textTheme = TvTypography.apply(baseTextTheme);
 
     return ThemeData(
       useMaterial3: true,

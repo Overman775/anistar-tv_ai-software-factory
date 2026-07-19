@@ -1,3 +1,4 @@
+import 'package:anistar_tv/app/app_providers.dart';
 import 'package:anistar_tv/packages/core/domain/either.dart';
 import 'package:anistar_tv/packages/core/domain/failure.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
@@ -7,9 +8,9 @@ import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalo
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:logger/logger.dart';
-import 'package:provider/provider.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 void main() {
@@ -56,10 +57,10 @@ void main() {
 }
 
 Future<void> _pumpCatalog(WidgetTester tester, ValueChanged<int> onOpen) => tester.pumpWidget(
-  MultiProvider(
-    providers: [
-      Provider<CatalogRepository>.value(value: const CatalogScreenTest()),
-      Provider<Logger>.value(value: Logger()),
+  ProviderScope(
+    overrides: [
+      catalogRepositoryProvider.overrideWithValue(const CatalogScreenTest()),
+      loggerProvider.overrideWithValue(Logger()),
     ],
     child: MaterialApp(
       theme: AppTheme.darkTheme,

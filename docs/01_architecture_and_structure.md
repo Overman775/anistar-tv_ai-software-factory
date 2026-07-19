@@ -17,6 +17,9 @@
 ```mermaid
 flowchart LR
   Remote["Пульт"] --> UI["TV UI"]
+  Runner["runner + ProviderScope"] --> UI
+  UI --> DI["Riverpod app providers"]
+  DI --> Domain
   UI --> Domain["Domain models и repository interfaces"]
   Domain --> Data["Repository implementations"]
   Data --> Client["Generated Retrofit API package"]
@@ -46,9 +49,10 @@ AniStar TV не парсит HTML, не извлекает ссылки из Web
 - `core/core.dart` — публичная граница для `Either`, `Failure`,
   `BaseRepository`, Dio/HTTP и storage. Features не импортируют его внутренние
   файлы по отдельности.
-- `ui_kit` содержит только общие TV-токены и маленькие виджеты: focus target,
-  backdrop, loading/error state и заголовок секции. Карточки и player остаются
-  внутри feature, пока не появится второй потребитель.
+- `ui_kit` содержит только общие TV-токены и примитивы: Inter typography,
+  focus target, backdrop, `AppNetworkImage`, skeleton, loading/error state и
+  заголовок секции. Карточки, grid layouts и player controls остаются внутри
+  feature, пока не появится второй независимый потребитель.
 
 ### Result-поток
 
@@ -59,8 +63,9 @@ AniStar TV не парсит HTML, не извлекает ссылки из Web
 ```text
 .
 ├── android/                       # Android TV manifest, flavors и Gradle
+├── env/                           # Dev Dart define и production-шаблон
 ├── lib/
-│   ├── app/                       # App, DI и typed GoRouter routes
+│   ├── app/                       # App, Riverpod composition root и typed GoRouter routes
 │   ├── runner/                    # Инициализация сервисов и запуск Flutter
 │   ├── packages/
 │   │   ├── core/                  # Публичный core, API config, transport, ошибки и storage
@@ -82,7 +87,7 @@ AniStar TV не парсит HTML, не извлекает ссылки из Web
 
 ## 5. Сборка приложения и DI
 
-`runner.dart` инициализирует Flutter, storage и logger до `runApp()`. `AppProvider` собирает общие зависимости через `provider`:
+`runner.dart` инициализирует Flutter, storage и logger до `runApp()`. Затем он создаёт единственный `ProviderScope` Riverpod и передаёт в него runtime-зависимости через overrides. `app_providers.dart` — composition root: он собирает остальные зависимости:
 
 - один настроенный `Dio`, `AnimeClient` и `VideoClient`;
 - repository interface → конкретная реализация;
@@ -90,9 +95,14 @@ AniStar TV не парсит HTML, не извлекает ссылки из Web
 
 Репозитории получают зависимости через конструктор. Они не ищут их через `BuildContext`, поэтому остаются простыми для тестирования.
 
+Riverpod — единственный DI-контейнер приложения. `provider` не используется в коде приложения; BLoC остаётся механизмом управления состоянием feature, а не вторым способом собирать зависимости.
+
+Тест заменяет repository или logger через `ProviderScope.overrides`, не создавая реальный Dio или Parser-клиент.
+
 ## 6. Состояние и навигация
 
 - `flutter_bloc` используется для каталога и пагинации, где есть последовательность событий и состояний.
+- `flutter_riverpod` используется только для DI; presentation читает repository/logger providers, а domain/data остаются от Riverpod независимыми.
 - Локальная асинхронная загрузка экрана аниме остаётся `Future`, пока более сложное состояние не требуется.
 - Typed routes объявлены в `lib/app/`. Экраны сообщают о выборе через callbacks, а app-слой решает, куда перейти.
 - Player всегда создаёт и освобождает собственный `VideoPlayerController` в рамках экрана.

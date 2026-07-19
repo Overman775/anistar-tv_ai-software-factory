@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../../app/app_providers.dart';
 import '../../domain/models/playback_session.dart';
-import '../../domain/repositories/playback_repository.dart';
 import '../widgets/player_view.dart';
 
-class PlayerScreen extends StatefulWidget {
+class PlayerScreen extends ConsumerStatefulWidget {
   const PlayerScreen({required this.animeId, required this.episodeNumber, required this.title, super.key});
 
   final int animeId;
@@ -18,10 +18,10 @@ class PlayerScreen extends StatefulWidget {
   final String title;
 
   @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
+  ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late Future<_PlayerData> _future;
   final FocusNode _focusNode = FocusNode();
   Timer? _controlsTimer;
@@ -88,7 +88,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<_PlayerData> _initialize(int initializationId) async {
-    final repository = context.read<PlaybackRepository>();
+    final repository = ref.read(playbackRepositoryProvider);
     final sessionResult = await repository.createSession(animeId: widget.animeId, episodeNumber: widget.episodeNumber);
     final session = sessionResult.fold(onLeft: (failure) => throw failure, onRight: (session) => session);
     if (!_isCurrent(initializationId)) throw const _PlaybackInitializationCancelled();

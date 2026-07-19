@@ -1,16 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../../../app/app_providers.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
-import '../../domain/repositories/anime_repository.dart';
 import '../widgets/anime_hero.dart';
+import '../widgets/anime_skeleton.dart';
 import '../widgets/episode_card.dart';
 
-class AnimeScreen extends StatefulWidget {
+class AnimeScreen extends ConsumerStatefulWidget {
   const AnimeScreen({
     required this.animeId,
     required this.slug,
@@ -25,10 +26,10 @@ class AnimeScreen extends StatefulWidget {
   final String slug;
 
   @override
-  State<AnimeScreen> createState() => _AnimeScreenState();
+  ConsumerState<AnimeScreen> createState() => _AnimeScreenState();
 }
 
-class _AnimeScreenState extends State<AnimeScreen> {
+class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final ScrollController _scrollController = ScrollController();
   late Future<AnimeScreenData> _future;
 
@@ -40,7 +41,7 @@ class _AnimeScreenState extends State<AnimeScreen> {
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<AnimeScreenData> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
-      return const TvProgressView(label: 'Загружаем аниме и серии…');
+      return const AnimeSkeleton();
     }
     if (snapshot.hasError) {
       return TvStateView(
@@ -121,8 +122,8 @@ class _AnimeScreenState extends State<AnimeScreen> {
   }
 
   void _load() {
-    _future = context
-        .read<AnimeRepository>()
+    _future = ref
+        .read(animeRepositoryProvider)
         .getAnime(id: widget.animeId, slug: widget.slug)
         .then((result) => result.fold(onLeft: (failure) => throw failure, onRight: (data) => data));
   }

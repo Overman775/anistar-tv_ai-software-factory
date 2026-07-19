@@ -49,6 +49,13 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
 
 Не передавайте `BuildContext` в domain/data-код и не выполняйте навигацию из BLoC.
 
+### DI
+
+- Riverpod — единственный DI-контейнер; не добавляйте `provider` и не смешивайте контейнеры.
+- `app/app_providers.dart` — composition root: здесь связываются transport-клиенты, repository interfaces и runtime services.
+- `runner.dart` передаёт runtime-объекты через `ProviderScope.overrides`.
+- Feature может читать dependency provider в presentation, но repository, BLoC и service получают зависимости только через конструктор.
+
 ## 4. Асинхронность и ошибки
 
 - После `await` проверяйте lifecycle, если дальше используется widget state или context.
@@ -82,8 +89,11 @@ TV-интерфейс отличается от touch-first приложения
 ### Theme и компоненты
 
 - Цвета, отступы, радиусы и motion берите из `ui_kit`.
+- Шрифты и размеры текста берите из TV-темы UIKit; базовый шрифт приложения — Inter.
+- Для удалённых изображений используйте `AppNetworkImage`: он даёт cache, skeleton и единый fallback.
+- Для загрузки используйте `TvSkeleton` и `TvSkeletonBox`; форму загрузочного layout определяет feature, а не UIKit.
 - Feature-виджет не должен создавать новую палитру или собственную скорость анимаций без причины.
-- Общий компонент переносится в UIKit после второго реального использования, не заранее.
+- Общий компонент переносится в UIKit после второго реального использования, не заранее. Grid, карточки, player controls и диалоги остаются в feature, пока не появились независимые потребители.
 
 ## 6. Перед завершением изменения
 

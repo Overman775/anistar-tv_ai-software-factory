@@ -17,10 +17,10 @@ fvm flutter pub get
 
 # 3. Запустить dev-сборку на Android Emulator
 fvm flutter run --flavor dev -t lib/main_dev.dart \
-  --dart-define=ANISTAR_API_URL=http://10.0.2.2:8001/
+  --dart-define-from-file=env/dev.json
 ```
 
-Для физического телевизора укажите LAN- или HTTPS-адрес parser. Production-сборка принимает только HTTPS endpoint.
+Для физического телевизора замените URL в `env/dev.json` на LAN-адрес parser. Для production скопируйте `env/prod.example.json` в `env/prod.json` и укажите HTTPS endpoint; этот файл не попадает в Git.
 
 ## ✨ Возможности
 
@@ -34,7 +34,7 @@ fvm flutter run --flavor dev -t lib/main_dev.dart \
 
 | Параметр | Назначение | Значение по умолчанию |
 | --- | --- | --- |
-| `ANISTAR_API_URL` | Базовый URL AniStar Parser | Dev: `http://10.0.2.2:8001/`; для prod обязателен явный HTTPS URL |
+| `ANISTAR_API_URL` | Базовый URL AniStar Parser | Передаётся через `env/*.json`; для prod обязателен явный HTTPS URL |
 | `--flavor dev` | Локальная разработка, HTTP разрешён | — |
 | `--flavor prod` | Production, cleartext HTTP запрещён | — |
 
@@ -53,5 +53,6 @@ fvm dart format --output=none --set-exit-if-changed lib test
 fvm flutter analyze
 dcm analyze lib test
 fvm flutter test
-fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart
+fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart \
+  --dart-define-from-file=env/dev.json
 ```

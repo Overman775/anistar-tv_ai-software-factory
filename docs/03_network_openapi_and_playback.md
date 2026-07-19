@@ -18,10 +18,12 @@
 
 ## 2. Конфигурация endpoint
 
-Базовый URL передаётся при запуске:
+Базовый URL передаётся файлом Dart define. `env/prod.json` локальный и не попадает в Git:
 
 ```bash
---dart-define=ANISTAR_API_URL=https://parser.example.com/
+cp env/prod.example.json env/prod.json
+fvm flutter run --flavor prod -t lib/main_prod.dart \
+  --dart-define-from-file=env/prod.json
 ```
 
 | Среда | Endpoint |

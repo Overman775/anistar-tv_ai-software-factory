@@ -1,3 +1,4 @@
+import 'package:anistar_tv/app/app_providers.dart';
 import 'package:anistar_tv/packages/core/domain/either.dart';
 import 'package:anistar_tv/packages/core/domain/failure.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
@@ -7,8 +8,8 @@ import 'package:anistar_tv/packages/features/anime/domain/repositories/anime_rep
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 void main() {
@@ -23,8 +24,8 @@ void main() {
     int? openedEpisode;
 
     await tester.pumpWidget(
-      Provider<AnimeRepository>.value(
-        value: const AnimeScreenTest(),
+      ProviderScope(
+        overrides: [animeRepositoryProvider.overrideWithValue(const AnimeScreenTest())],
         child: MaterialApp(
           theme: AppTheme.darkTheme,
           home: AnimeScreen(

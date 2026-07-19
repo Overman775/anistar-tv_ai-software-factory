@@ -7,5 +7,6 @@ ADR фиксируют решения, которые влияют на неск
 | [0001](0001-use-anistar-parser-openapi.md) | Заменено 0002 | AniStar Parser, generated OpenAPI client и native HLS |
 | [0002](0002-use-swagger-parser-retrofit-networking.md) | Принято, уточняет 0001 | Swagger Parser, Retrofit и core networking |
 | [0003](0003-public-core-and-tv-uikit.md) | Принято | Публичные границы core и TV UI kit |
+| [0004](0004-use-riverpod-for-app-di.md) | Принято | Riverpod как единственный DI-контейнер |
 
 Небольшие локальные рефакторинги отдельного ADR не требуют.

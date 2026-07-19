@@ -2,31 +2,32 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:logger/logger.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../app/app_config.dart';
+import '../../../../../app/app_providers.dart';
 import '../../../../../app/app_routes.dart';
 import '../../domain/models/anime_summary.dart';
-import '../../domain/repositories/catalog_repository.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/catalog_heading.dart';
+import '../widgets/catalog_skeleton.dart';
 import '../widgets/catalog_tail.dart';
 
-class CatalogScreen extends StatefulWidget {
+class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({required this.onAnimeTap, super.key});
 
   final ValueChanged<AnimeSummary> onAnimeTap;
 
   @override
-  State<CatalogScreen> createState() => _CatalogScreenState();
+  ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
 }
 
-class _CatalogScreenState extends State<CatalogScreen> {
+class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   late final CatalogBloc _bloc;
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 0;
@@ -34,14 +35,14 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   void initState() {
     super.initState();
-    _bloc = CatalogBloc(repository: context.read<CatalogRepository>(), logger: context.read<Logger>())
+    _bloc = CatalogBloc(repository: ref.read(catalogRepositoryProvider), logger: ref.read(loggerProvider))
       ..add(const CatalogStarted());
     _scrollController.addListener(_loadMoreNearEnd);
   }
 
   Widget _buildState(BuildContext context, CatalogState state) {
     if (state is CatalogInitial || state is CatalogLoading) {
-      return const TvProgressView(label: 'Загружаем каталог…');
+      return const CatalogSkeleton();
     }
     if (state is CatalogFailure && state.items.isEmpty) {
       return TvStateView(

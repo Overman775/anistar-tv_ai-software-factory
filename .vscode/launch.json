@@ -8,7 +8,9 @@
             "program": "lib/main_dev.dart",
             "args": [
                 "--flavor",
-                "dev"
+                "dev",
+                "--dart-define-from-file",
+                "${workspaceFolder}/env/dev.json"
             ]
         },
         {
@@ -19,7 +21,9 @@
             "args": [
                 "--flavor",
                 "prod",
-                "--release"
+                "--release",
+                "--dart-define-from-file",
+                "${workspaceFolder}/env/prod.json"
             ]
         },
         {
@@ -27,7 +31,13 @@
             "request": "launch",
             "type": "dart",
             "program": "lib/main_dev.dart",
-            "flutterMode": "profile"
+            "flutterMode": "profile",
+            "args": [
+                "--flavor",
+                "dev",
+                "--dart-define-from-file",
+                "${workspaceFolder}/env/dev.json"
+            ]
         }
     ]
 }

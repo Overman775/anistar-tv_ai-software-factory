@@ -16,13 +16,13 @@
         {
             "label": "Flutter: Build APK",
             "type": "shell",
-            "command": "flutter build apk --release",
+            "command": "fvm flutter build apk --release --flavor prod -t lib/main_prod.dart --dart-define-from-file=env/prod.json",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Build App Bundle",
             "type": "shell",
-            "command": "flutter build appbundle --release",
+            "command": "fvm flutter build appbundle --release --flavor prod -t lib/main_prod.dart --dart-define-from-file=env/prod.json",
             "problemMatcher": []
         },
         {
