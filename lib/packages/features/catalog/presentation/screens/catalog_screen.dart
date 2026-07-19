@@ -175,7 +175,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         ),
         actions: [
           IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
-          if (AppConfig.isDevFlavor)
+          if (AppConfig.isDebugToolsEnabled)
             IconButton(onPressed: _openLogs, tooltip: 'Открыть логи', icon: const Icon(Icons.article_outlined)),
           const SizedBox(width: AppSpacing.xl),
         ],

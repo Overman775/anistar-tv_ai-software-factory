@@ -32,6 +32,13 @@ packages:
       relative: true
     source: path
     version: "0.0.0"
+  app_logger:
+    dependency: "direct main"
+    description:
+      path: "lib/packages/app_logger"
+      relative: true
+    source: path
+    version: "0.0.1"
   archive:
     dependency: transitive
     description:
@@ -624,7 +631,7 @@ packages:
     source: hosted
     version: "6.1.0"
   logger:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: logger
       sha256: "25aee487596a6257655a1e091ec2ae66bc30e7af663592cc3a27e6591e05035c"

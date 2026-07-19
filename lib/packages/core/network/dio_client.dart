@@ -1,8 +1,8 @@
 import 'dart:math';
 
+import 'package:app_logger/app_logger.dart';
 import 'package:dio/dio.dart';
 import 'package:dio_smart_retry/dio_smart_retry.dart';
-import 'package:logger/logger.dart';
 
 import 'network_config.dart';
 
@@ -24,6 +24,7 @@ abstract final class DioClient {
     );
 
     dio.interceptors
+      ..add(DioLoggingInterceptor(logger))
       ..add(_RetryInterceptor(dio: dio, logger: logger))
       ..addAll(interceptors);
 

@@ -1,22 +1,4 @@
-import 'package:logger/logger.dart';
-
 import 'runner/runner.dart';
-import 'utils/logger/file_log_output.dart';
 
 /// Runs the development application with verbose file logging.
-Future<void> main() async {
-  final appLogger = Logger(
-    printer: PrettyPrinter(
-      methodCount: 1,
-      errorMethodCount: 5,
-      lineLength: 120,
-      colors: true,
-      printEmojis: true,
-      dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
-    ),
-    output: FileLogOutput(),
-  );
-  Logger.level = Level.all;
-
-  await runApplication(logger: appLogger, allowLocalApiFallback: true);
-}
+Future<void> main() => runApplication(allowLocalApiFallback: true);

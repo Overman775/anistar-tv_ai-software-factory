@@ -1,7 +1,7 @@
 import 'package:api/api.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:logger/logger.dart';
 
 import '../packages/core/core.dart';
 import '../packages/features/anime/data/repositories/anistar_anime_repository.dart';

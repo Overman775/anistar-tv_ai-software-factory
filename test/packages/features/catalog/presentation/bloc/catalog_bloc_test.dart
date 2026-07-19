@@ -3,8 +3,8 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_event.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_state.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logger/logger.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_repository.dart';
 

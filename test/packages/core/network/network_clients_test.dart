@@ -1,8 +1,8 @@
 import 'package:anistar_tv/packages/core/core.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:logger/logger.dart';
 
 void main() {
   final config = NetworkConfig(baseUri: Uri.parse('https://parser.test/base/'));
@@ -16,7 +16,8 @@ void main() {
     expect(dio.options.baseUrl, 'https://parser.test/base/');
     expect(dio.options.connectTimeout, const Duration(seconds: 8));
     expect(dio.options.receiveTimeout, const Duration(seconds: 20));
-    expect(dio.interceptors, hasLength(2));
+    expect(dio.interceptors, hasLength(3));
+    expect(dio.interceptors, contains(isA<DioLoggingInterceptor>()));
   });
 
   test('HttpClient resolves a relative path against the configured endpoint', () async {

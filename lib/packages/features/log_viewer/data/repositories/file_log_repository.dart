@@ -1,4 +1,4 @@
-import '../../../../../utils/logger/file_log_output.dart';
+import 'package:app_logger/app_logger.dart';
 import '../../domain/repositories/log_repository.dart';
 
 final class FileLogRepository implements LogRepository {

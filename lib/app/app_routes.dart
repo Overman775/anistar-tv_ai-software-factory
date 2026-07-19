@@ -2,9 +2,11 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
+import '../packages/features/common/presentation/widgets/error_screen.dart';
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
+import 'app_config.dart';
 
 part 'app_routes.g.dart';
 
@@ -28,7 +30,9 @@ class LogViewerRoute extends GoRouteData with $LogViewerRoute {
   const LogViewerRoute();
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => const LogViewerScreen();
+  Widget build(BuildContext context, GoRouterState state) => AppConfig.isDebugToolsEnabled
+      ? const LogViewerScreen()
+      : const ErrorScreen(text: 'Просмотр логов доступен только в debug-сборке.');
 }
 
 @TypedGoRoute<HomeRoute>(

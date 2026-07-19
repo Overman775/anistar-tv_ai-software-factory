@@ -1,5 +1,5 @@
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:logger/logger.dart';
 
 import '../../domain/repositories/catalog_repository.dart';
 import 'catalog_event.dart';

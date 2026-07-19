@@ -54,6 +54,8 @@ fvm flutter build apk --release --flavor prod -t lib/main_prod.dart \
 
 Release signing перед публикацией настраивается отдельно в Android-проекте.
 
+В debug/profile `app_logger` сохраняет диагностические записи и показывает кнопку просмотра логов в каталоге. Release пишет только ошибки в системный output: файлов, кнопки и работающего маршрута `/logs` в нём нет. В транспортных логах скрываются `Authorization`, cookie и API-токены, а query-параметры URL не выводятся.
+
 ## 5. Ежедневные проверки
 
 ```bash
@@ -85,6 +87,8 @@ fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart \
 | Device smoke | Реальный пульт и декодирование HLS | Полный сценарий просмотра |
 
 Цель 100% coverage для этого проекта не установлена. Тест нужен там, где есть ветвление, исправленный баг, mapping контракта или важный TV-сценарий.
+
+`test/flutter_test_config.dart` вызывает `AppLogger.initForTest()`, поэтому unit и widget-тесты не создают файловый output и не засоряют вывод. Тест, проверяющий логирование, должен передать явный capturing logger через constructor/provider.
 
 ### Структура тестов
 

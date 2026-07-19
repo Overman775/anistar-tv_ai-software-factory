@@ -1,7 +1,7 @@
 import 'package:anistar_tv/packages/core/core.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logger/logger.dart';
 
 void main() {
   final repository = BaseRepositoryTest();

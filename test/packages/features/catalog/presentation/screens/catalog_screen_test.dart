@@ -6,11 +6,11 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/catalog/domain/repositories/catalog_repository.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logger/logger.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 void main() {

@@ -1,5 +1,5 @@
+import 'package:app_logger/app_logger.dart';
 import 'package:dio/dio.dart';
-import 'package:logger/logger.dart';
 
 import '../domain/either.dart';
 import '../domain/failure.dart';

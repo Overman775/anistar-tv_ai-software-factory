@@ -8,5 +8,6 @@ ADR фиксируют решения, которые влияют на неск
 | [0002](0002-use-swagger-parser-retrofit-networking.md) | Принято, уточняет 0001 | Swagger Parser, Retrofit и core networking |
 | [0003](0003-public-core-and-tv-uikit.md) | Принято | Публичные границы core и TV UI kit |
 | [0004](0004-use-riverpod-for-app-di.md) | Принято | Riverpod как единственный DI-контейнер |
+| [0005](0005-centralize-runtime-logging.md) | Принято | Единое runtime-логирование |
 
 Небольшие локальные рефакторинги отдельного ADR не требуют.

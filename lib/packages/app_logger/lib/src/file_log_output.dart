@@ -63,7 +63,10 @@ class FileLogOutput implements LogOutput {
     _currentLogFileName = 'app_log_$timestamp.txt';
 
     _receivePortForTest = ReceivePort();
-    fileIsolate = await Isolate.spawn(_logIsolateEntryPoint, _receivePortForTest?.sendPort);
+    fileIsolate = await Isolate.spawn(
+      _logIsolateEntryPoint,
+      _receivePortForTest?.sendPort,
+    );
     _sendPort = await _receivePortForTest?.first as SendPort?;
 
     if (_sendPort != null) {
@@ -79,7 +82,12 @@ class FileLogOutput implements LogOutput {
 
   @override
   void output(OutputEvent event) {
-    final logEntry = _formatLog(event.origin.level, event.origin.message, event.origin.error, event.origin.stackTrace);
+    final logEntry = _formatLog(
+      event.origin.level,
+      event.origin.message,
+      event.origin.error,
+      event.origin.stackTrace,
+    );
     if (_sendPort == null) {
       _logBuffer.add(logEntry);
       if (_logBuffer.length > 1000) {
@@ -101,7 +109,9 @@ class FileLogOutput implements LogOutput {
       final files = await logDir.list().toList();
 
       return files
-          .where((fsEntity) => fsEntity is File && fsEntity.path.endsWith('.txt'))
+          .where(
+            (fsEntity) => fsEntity is File && fsEntity.path.endsWith('.txt'),
+          )
           .map((fsEntity) => fsEntity.path.split('/').last)
           .toList()
         ..sort((a, b) => b.compareTo(a));
@@ -120,7 +130,9 @@ class FileLogOutput implements LogOutput {
       final file = fileCreator('${_logDirectory?.path}/$fileName');
 
       // ignore: avoid_slow_async_io, reading logs must not block the UI isolate.
-      return await file.exists() ? await file.readAsString() : 'File not found: $fileName';
+      return await file.exists()
+          ? await file.readAsString()
+          : 'File not found: $fileName';
     } on FileSystemException catch (e) {
       debugPrint('Error reading log file $fileName (appLogger not ready): $e');
 
@@ -137,8 +149,15 @@ class FileLogOutput implements LogOutput {
     fileIsolate = null;
   }
 
-  String _formatLog(Level level, Object? message, [Object? error, StackTrace? stackTrace]) {
-    final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
+  String _formatLog(
+    Level level,
+    Object? message, [
+    Object? error,
+    StackTrace? stackTrace,
+  ]) {
+    final timestamp = DateFormat(
+      'yyyy-MM-dd HH:mm:ss.SSS',
+    ).format(DateTime.now());
     var logStr = '$timestamp [${level.name.toUpperCase()}] $message';
     if (error != null) {
       logStr += '\nError: $error';
@@ -170,7 +189,10 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
           Future.microtask(() async {
             final nonNullableLogFile = logFile;
             if (nonNullableLogFile != null) {
-              await nonNullableLogFile.writeAsString('${initialBuffer.join('\n')}\n', mode: FileMode.append);
+              await nonNullableLogFile.writeAsString(
+                '${initialBuffer.join('\n')}\n',
+                mode: FileMode.append,
+              );
             }
           }),
         );
@@ -178,7 +200,9 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
       debugPrint('Log isolate initialized. Logging to: ${logFile?.path}');
     } else if (data is String && logFile != null) {
       writeBuffer.add(data);
-      if (writeBuffer.length >= 50 || flushTimer == null || !(flushTimer?.isActive ?? false)) {
+      if (writeBuffer.length >= 50 ||
+          flushTimer == null ||
+          !(flushTimer?.isActive ?? false)) {
         final nonNullableLogFile = logFile;
         if (nonNullableLogFile != null) {
           unawaited(_flushLogs(nonNullableLogFile, writeBuffer));
@@ -199,7 +223,9 @@ void _logIsolateEntryPoint(SendPort? sendPort) {
       });
     } else if (logFile == null) {
       if (data is String) {
-        debugPrint('Log isolate: logFile not initialized, buffering message: $data');
+        debugPrint(
+          'Log isolate: logFile not initialized, buffering message: $data',
+        );
         writeBuffer.add(data);
       }
     }
