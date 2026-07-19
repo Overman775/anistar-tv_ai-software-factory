@@ -27,4 +27,6 @@ class AppRouter {
       navigatorKey: rootNavigatorKey,
     );
   }
+
+  void dispose() => router.dispose();
 }

@@ -27,14 +27,25 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     emit(CatalogReady(items: currentItems, hasMore: true, isLoadingMore: true));
 
     final result = await _repository.getPage(_page + 1);
-    if (isClosed || emit.isDone || generation != _loadGeneration) return;
+    if (isClosed || emit.isDone || generation != _loadGeneration) {
+      _logger.debugFor<CatalogBloc>('Ignored outdated page ${_page + 1} response');
+
+      return;
+    }
     result.fold(
-      onLeft: (failure) =>
-          emit(CatalogFailure(message: failure.message, items: currentItems, hasMore: current.hasMore)),
+      onLeft: (failure) {
+        _logger.errorFor<CatalogBloc>(
+          'Failed to load page ${_page + 1}',
+          error: failure.cause,
+          stackTrace: failure.stackTrace,
+        );
+        emit(CatalogFailure(message: failure.message, items: currentItems, hasMore: current.hasMore));
+      },
       onRight: (nextPage) {
         _page = nextPage.page;
         final knownIds = currentItems.map((item) => item.id).toSet();
-        final newItems = nextPage.items.where((item) => knownIds.add(item.id));
+        final newItems = nextPage.items.where((item) => knownIds.add(item.id)).toList(growable: false);
+        _logger.infoFor<CatalogBloc>('Loaded page ${nextPage.page}: ${newItems.length} new items');
         emit(CatalogReady(items: [...currentItems, ...newItems], hasMore: nextPage.hasNext));
       },
     );
@@ -49,11 +60,11 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     if (isClosed || emit.isDone || generation != _loadGeneration) return;
     result.fold(
       onLeft: (failure) {
-        _logger.e('Catalog load failed: ${failure.message}', error: failure.cause, stackTrace: failure.stackTrace);
         emit(CatalogFailure(message: failure.message));
       },
       onRight: (page) {
         _page = page.page;
+        _logger.infoFor<CatalogBloc>('Catalog loaded: ${page.items.length} items');
         emit(CatalogReady(items: page.items, hasMore: page.hasNext));
       },
     );

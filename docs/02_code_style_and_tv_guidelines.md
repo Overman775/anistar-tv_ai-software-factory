@@ -56,6 +56,10 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
 - `runner.dart` передаёт runtime-объекты через `ProviderScope.overrides`.
 - Feature может читать dependency provider в presentation, но repository, BLoC и service получают зависимости только через конструктор.
 
+### Логирование
+
+Используйте `Logger` из `app_logger` и typed-методы `debugFor<T>()`, `infoFor<T>()`, `warningFor<T>()`, `errorFor<T>()`: они добавляют владельца записи без отдельного Talker-типа. Логируйте границы: запуск, пользовательскую команду, результат async-операции, retry и ошибку. Не пишите значения secure storage, токены, query-параметры HLS URL и другие пользовательские данные.
+
 ## 4. Асинхронность и ошибки
 
 - После `await` проверяйте lifecycle, если дальше используется widget state или context.

@@ -16,14 +16,16 @@ Future<void> runApplication({required bool allowLocalApiFallback}) async {
     WidgetsFlutterBinding.ensureInitialized();
     final logger = AppLogger.init(isDevelopment: !const bool.fromEnvironment('dart.vm.product'));
     Bloc.observer = AppBlocObserver(logger);
+    logger.infoFor<Runner>('Starting application');
 
     await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
 
-    final sharedPreferencesStorage = SharedPreferencesStorage();
+    final sharedPreferencesStorage = SharedPreferencesStorage(logger: logger);
     await sharedPreferencesStorage.init();
 
-    final secureStorage = SecureStorage();
+    final secureStorage = SecureStorage(logger: logger);
     final apiBaseUri = AnistarApiConfig.baseUri(allowLocalFallback: allowLocalApiFallback);
+    logger.infoFor<Runner>('Runtime dependencies ready; API host: ${apiBaseUri.host}');
 
     runApp(
       ProviderScope(
@@ -36,5 +38,8 @@ Future<void> runApplication({required bool allowLocalApiFallback}) async {
         child: const App(),
       ),
     );
+    logger.infoFor<Runner>('Application mounted');
   }, AppLogger.reportUnhandled);
 }
+
+final class Runner {}

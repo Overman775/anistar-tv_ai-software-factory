@@ -6,6 +6,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/domain/repositories/anime_repository.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,7 +26,10 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [animeRepositoryProvider.overrideWithValue(const AnimeScreenTest())],
+        overrides: [
+          animeRepositoryProvider.overrideWithValue(const AnimeScreenTest()),
+          loggerProvider.overrideWithValue(Logger(level: Level.off)),
+        ],
         child: MaterialApp(
           theme: AppTheme.darkTheme,
           home: AnimeScreen(

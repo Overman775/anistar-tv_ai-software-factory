@@ -14,13 +14,12 @@ abstract base class BaseRepository {
       return Either.right(await request());
     } on DioException catch (error, stackTrace) {
       final failure = _mapDioException(error, stackTrace);
-      _logger.e('Network request failed: ${failure.message}', error: error, stackTrace: stackTrace);
 
       return Either.left(failure);
     } on Failure catch (failure) {
       return Either.left(failure);
     } on Object catch (error, stackTrace) {
-      _logger.e('Unexpected repository error', error: error, stackTrace: stackTrace);
+      _logger.errorFor<BaseRepository>('Unexpected repository error', error: error, stackTrace: stackTrace);
 
       return Either.left(UnknownFailure(cause: error, stackTrace: stackTrace));
     }

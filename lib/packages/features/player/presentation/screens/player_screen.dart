@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,9 +89,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<_PlayerData> _initialize(int initializationId) async {
+    final logger = ref.read(loggerProvider);
+    final stopwatch = Stopwatch()..start();
     final repository = ref.read(playbackRepositoryProvider);
     final sessionResult = await repository.createSession(animeId: widget.animeId, episodeNumber: widget.episodeNumber);
-    final session = sessionResult.fold(onLeft: (failure) => throw failure, onRight: (session) => session);
+    final session = sessionResult.fold(
+      onLeft: (failure) {
+        throw failure;
+      },
+      onRight: (session) => session,
+    );
     if (!_isCurrent(initializationId)) throw const _PlaybackInitializationCancelled();
     final controller = VideoPlayerController.networkUrl(
       session.manifestUri,
@@ -104,9 +112,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _controller = controller;
       await controller.play();
       _scheduleControlsHide();
+      logger.infoFor<PlayerScreen>(
+        'Playback started (${session.selectedQuality.name}, ${controller.value.duration.inSeconds}s, ${stopwatch.elapsedMilliseconds}ms)',
+      );
 
       return _PlayerData(controller: controller, session: session);
-    } on Object {
+    } on _PlaybackInitializationCancelled {
+      logger.debugFor<PlayerScreen>('Discarded outdated player initialization');
+      await controller.dispose();
+      _controller = null;
+      rethrow;
+    } on Object catch (error, stackTrace) {
+      logger.errorFor<PlayerScreen>('Video controller initialization failed', error: error, stackTrace: stackTrace);
       await controller.dispose();
       _controller = null;
       rethrow;
@@ -119,6 +136,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _retry() {
+    ref.read(loggerProvider).infoFor<PlayerScreen>('Retrying playback session');
     _controlsTimer?.cancel();
     final initializationId = ++_initializationId;
     final oldController = _controller;
@@ -137,7 +155,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _seek(Duration position) {
     final controller = _controller;
-    if (controller != null) unawaited(controller.seekTo(position));
+    if (controller != null) {
+      ref.read(loggerProvider).debugFor<PlayerScreen>('Seeking to ${position.inSeconds}s');
+      unawaited(controller.seekTo(position));
+    }
     _showControls();
   }
 
@@ -159,10 +180,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final controller = _controller;
     if (controller == null) return;
     if (controller.value.isPlaying) {
+      ref.read(loggerProvider).debugFor<PlayerScreen>('Pausing playback');
       unawaited(controller.pause());
       _controlsTimer?.cancel();
       if (!_controlsVisible) setState(() => _controlsVisible = true);
     } else {
+      ref.read(loggerProvider).debugFor<PlayerScreen>('Resuming playback');
       unawaited(controller.play());
       _scheduleControlsHide();
     }
@@ -172,6 +195,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    ref.read(loggerProvider).debugFor<PlayerScreen>('Disposing player');
     _disposed = true;
     _initializationId++;
     _controlsTimer?.cancel();

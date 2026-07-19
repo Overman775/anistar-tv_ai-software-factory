@@ -1,13 +1,21 @@
 import 'dart:async';
 
+import 'package:app_logger/app_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SharedPreferencesStorage {
   SharedPreferences? _preferences;
+  final Logger _logger;
+
+  SharedPreferencesStorage({Logger? logger}) : _logger = logger ?? Logger(level: Level.off);
 
   /// init storage
   Future<SharedPreferences> init() async {
-    final prefs = _preferences ??= await SharedPreferences.getInstance();
+    final existing = _preferences;
+    if (existing != null) return existing;
+    _logger.debugFor<SharedPreferencesStorage>('Initializing persistent preferences');
+    final prefs = _preferences = await SharedPreferences.getInstance();
+    _logger.infoFor<SharedPreferencesStorage>('Persistent preferences initialized');
 
     return prefs;
   }
@@ -16,6 +24,8 @@ class SharedPreferencesStorage {
   Future<T> get<T>(String key, T defaultValue) async {
     final instance = await init();
     final result = instance.get(key);
+
+    _logger.debugFor<SharedPreferencesStorage>('Read preference (value omitted)');
 
     return result is T ? result : defaultValue;
   }
@@ -37,23 +47,33 @@ class SharedPreferencesStorage {
     } else {
       throw UnsupportedError('Unsupported preference type: ${value.runtimeType}.');
     }
+    _logger.debugFor<SharedPreferencesStorage>('Saved preference (key and value omitted)');
   }
 
   Future<bool> remove(String key) async {
     final instance = await init();
 
-    return instance.remove(key);
+    final removed = await instance.remove(key);
+    _logger.debugFor<SharedPreferencesStorage>('Removed preference: $removed');
+
+    return removed;
   }
 
   Future<bool> containsKey(String key) async {
     final instance = await init();
 
-    return instance.containsKey(key);
+    final containsKey = instance.containsKey(key);
+    _logger.debugFor<SharedPreferencesStorage>('Checked preference presence: $containsKey');
+
+    return containsKey;
   }
 
   Future<bool> clear() async {
     final instance = await init();
 
-    return instance.clear();
+    final cleared = await instance.clear();
+    _logger.warningFor<SharedPreferencesStorage>('Cleared all preferences: $cleared');
+
+    return cleared;
   }
 }

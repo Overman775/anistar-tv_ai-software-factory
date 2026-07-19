@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:app_logger/app_logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -122,10 +123,22 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   void _load() {
+    final logger = ref.read(loggerProvider);
     _future = ref
         .read(animeRepositoryProvider)
         .getAnime(id: widget.animeId, slug: widget.slug)
-        .then((result) => result.fold(onLeft: (failure) => throw failure, onRight: (data) => data));
+        .then(
+          (result) => result.fold(
+            onLeft: (failure) {
+              throw failure;
+            },
+            onRight: (data) {
+              logger.infoFor<AnimeScreen>('Anime loaded: ${data.episodes.length} episodes');
+
+              return data;
+            },
+          ),
+        );
   }
 
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
@@ -144,6 +157,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   void _retry() {
+    ref.read(loggerProvider).infoFor<AnimeScreen>('Retrying anime ${widget.animeId} loading');
     setState(_load);
   }
 

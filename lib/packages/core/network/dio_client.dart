@@ -24,8 +24,8 @@ abstract final class DioClient {
     );
 
     dio.interceptors
-      ..add(DioLoggingInterceptor(logger))
       ..add(_RetryInterceptor(dio: dio, logger: logger))
+      ..add(DioLoggingInterceptor(logger))
       ..addAll(interceptors);
 
     return dio;
@@ -46,14 +46,14 @@ final class _RetryInterceptor extends RetryInterceptor {
   static bool _shouldRetry(DioException error, int attempt) {
     if (error.type == DioExceptionType.cancel || error.response?.statusCode == 401) return false;
 
-    final statusCode = error.response?.statusCode;
-    if (statusCode == 429 || statusCode == 503) return true;
-
     final isIdempotent = switch (error.requestOptions.method) {
       'GET' || 'HEAD' || 'OPTIONS' || 'PUT' => true,
       _ => false,
     };
     if (!isIdempotent) return false;
+
+    final statusCode = error.response?.statusCode;
+    if (statusCode == 429 || statusCode == 503) return true;
 
     return error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.sendTimeout ||

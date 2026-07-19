@@ -1,8 +1,10 @@
 import 'package:anistar_tv/packages/core/core.dart';
 import 'package:app_logger/app_logger.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:http_mock_adapter/http_mock_adapter.dart';
 
 void main() {
   final config = NetworkConfig(baseUri: Uri.parse('https://parser.test/base/'));
@@ -32,5 +34,27 @@ void main() {
     await client.get('health');
 
     expect(requestedUri, Uri.parse('https://parser.test/base/health'));
+  });
+
+  test('does not retry a non-idempotent playback request', () async {
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+    );
+    final adapter = DioAdapter(dio: dio);
+    var requests = 0;
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requests++;
+          handler.next(options);
+        },
+      ),
+    );
+    adapter.onPost('/playback', (server) => server.reply(503, const <String, Object?>{}));
+
+    await expectLater(dio.post<void>('/playback'), throwsA(isA<DioException>()));
+
+    expect(requests, 1);
   });
 }
