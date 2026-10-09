@@ -1,0 +1,14 @@
+name: anistar_native_probe
+description: Temporary Flutter runner for the direct access experiment.
+publish_to: none
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+dependencies:
+  anistar_direct_probe:
+    path: ..
+  flutter:
+    sdk: flutter
+  http: ^1.6.0
+  video_player: 2.13.0
+  video_player_android: 2.11.0
+  video_player_avfoundation: 2.11.0

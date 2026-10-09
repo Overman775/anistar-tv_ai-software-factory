@@ -1,0 +1,930 @@
+{
+  "checkedAtUtc": "2026-10-09T17:54:04.665280Z",
+  "animeId": 10938,
+  "catalog": [
+    {
+      "count": 9,
+      "firstId": 10938,
+      "adExcluded": true
+    },
+    {
+      "count": 10,
+      "firstId": 11048,
+      "adExcluded": true
+    }
+  ],
+  "detail": {
+    "id": 10938,
+    "title": "Пожалуйста, простите моих младших братьев / Uchi no Otouto-domo ga Sumimasen",
+    "metadata": "Год выпуска: 2026\n\nЖанр: Комедия, романтика, приключения\nОзвучка: Русская озвучка \nРежиссёр: Намба Хитоси\n Снято по манге: Простите за моих братьев \nАвтор оригинала: Одзаки Акира\n\nСерии: (24 эп.), 25 мин.",
+    "description": "Во время весенних каникул в конце первого года обучения в старшей школе Ито узнает, что ей приходится переезжать, потому что ее мать выходит замуж во второй раз. Чего она не ожидала, так это внезапного появления четырех младших сводных братьев под одной крышей.Преисполненная решимости поладить со своей новой семьей, Ито делает все возможное, чтобы приспособиться, но старший брат, Ген, держится отстраненно, и его трудно понять. Однако по мере того, как они проводят больше времени вместе, она начинает замечать проблески доброты за его холодной внешностью.",
+    "charset": "text/html; charset=windows-1251"
+  },
+  "episodes": {
+    "count": 14,
+    "numbers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "qualities": {
+      "files": [
+        "360",
+        "720"
+      ],
+      "files_mp4": [
+        "360",
+        "720"
+      ],
+      "files_as": [
+        "360",
+        "720"
+      ]
+    }
+  },
+  "hls": [
+    {
+      "episode": 1,
+      "quality": "360",
+      "status": 200,
+      "type": "application/vnd.apple.mpegurl",
+      "bytes": 15358,
+      "contentRange": null,
+      "allowOrigin": null,
+      "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+      "exposeHeaders": "Content-Length, Content-Range",
+      "hls": true,
+      "urlEndsInMp4": false,
+      "resourceCount": 146,
+      "hosts": [
+        "sf2.an-media.org"
+      ],
+      "segments": [
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/719288",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        },
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/1011064",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        },
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/186872",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        }
+      ],
+      "withoutReferer": {
+        "status": 403,
+        "type": "text/html",
+        "bytes": 146,
+        "contentRange": null,
+        "allowOrigin": null,
+        "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+        "exposeHeaders": "Content-Length, Content-Range"
+      },
+      "webReferer": {
+        "status": 403,
+        "type": "text/html",
+        "bytes": 146,
+        "contentRange": null,
+        "allowOrigin": "http://127.0.0.1:8765",
+        "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+        "exposeHeaders": "Content-Length, Content-Range"
+      },
+      "corsManifest": {
+        "status": 200,
+        "type": "application/vnd.apple.mpegurl",
+        "bytes": 15358,
+        "contentRange": null,
+        "allowOrigin": "http://127.0.0.1:8765",
+        "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+        "exposeHeaders": "Content-Length, Content-Range"
+      },
+      "corsResources": [
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/719288",
+          "allowOrigin": "http://127.0.0.1:8765",
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range"
+        }
+      ]
+    },
+    {
+      "episode": 1,
+      "quality": "720",
+      "status": 200,
+      "type": "application/vnd.apple.mpegurl",
+      "bytes": 53777,
+      "contentRange": null,
+      "allowOrigin": "*",
+      "allowHeaders": null,
+      "exposeHeaders": null,
+      "hls": true,
+      "urlEndsInMp4": true,
+      "resourceCount": 291,
+      "hosts": [
+        "sfv.an-media.org",
+        "ip381253095.ahcdn.com"
+      ],
+      "segments": [
+        {
+          "host": "sfv.an-media.org",
+          "status": 206,
+          "type": "video/mp2t",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/980984",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/532792",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/466616",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/620024",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        }
+      ],
+      "withoutReferer": {
+        "status": 206,
+        "type": "video/mp2t",
+        "bytes": 4096,
+        "contentRange": "bytes 0-4095/980984",
+        "allowOrigin": "*",
+        "allowHeaders": null,
+        "exposeHeaders": null
+      },
+      "webReferer": {
+        "status": 206,
+        "type": "video/mp2t",
+        "bytes": 4096,
+        "contentRange": "bytes 0-4095/980984",
+        "allowOrigin": "*",
+        "allowHeaders": null,
+        "exposeHeaders": null
+      },
+      "corsManifest": {
+        "status": 200,
+        "type": "application/vnd.apple.mpegurl",
+        "bytes": 53777,
+        "contentRange": null,
+        "allowOrigin": "*",
+        "allowHeaders": null,
+        "exposeHeaders": null
+      },
+      "corsResources": [
+        {
+          "host": "sfv.an-media.org",
+          "status": 206,
+          "type": "video/mp2t",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/980984",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/620024",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null
+        }
+      ]
+    },
+    {
+      "episode": 2,
+      "quality": "360",
+      "status": 200,
+      "type": "application/vnd.apple.mpegurl",
+      "bytes": 15358,
+      "contentRange": null,
+      "allowOrigin": null,
+      "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+      "exposeHeaders": "Content-Length, Content-Range",
+      "hls": true,
+      "urlEndsInMp4": false,
+      "resourceCount": 146,
+      "hosts": [
+        "sf2.an-media.org"
+      ],
+      "segments": [
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/538808",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        },
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/475640",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        },
+        {
+          "host": "sf2.an-media.org",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/36472",
+          "allowOrigin": null,
+          "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+          "exposeHeaders": "Content-Length, Content-Range",
+          "mpegTsSync": true
+        }
+      ]
+    },
+    {
+      "episode": 2,
+      "quality": "720",
+      "status": 200,
+      "type": "application/vnd.apple.mpegurl",
+      "bytes": 53592,
+      "contentRange": null,
+      "allowOrigin": "*",
+      "allowHeaders": null,
+      "exposeHeaders": null,
+      "hls": true,
+      "urlEndsInMp4": true,
+      "resourceCount": 290,
+      "hosts": [
+        "sfv.an-media.org",
+        "ip381253095.ahcdn.com"
+      ],
+      "segments": [
+        {
+          "host": "sfv.an-media.org",
+          "status": 206,
+          "type": "video/mp2t",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/920824",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/442552",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/346296",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        },
+        {
+          "host": "ip381253095.ahcdn.com",
+          "status": 206,
+          "type": "video/MP2T",
+          "bytes": 4096,
+          "contentRange": "bytes 0-4095/436536",
+          "allowOrigin": "*",
+          "allowHeaders": null,
+          "exposeHeaders": null,
+          "mpegTsSync": true
+        }
+      ]
+    }
+  ],
+  "mp4": [
+    {
+      "quality": "360",
+      "host": "sfhd.an-media.org",
+      "status": 206,
+      "type": "video/mp4",
+      "bytes": 4096,
+      "contentRange": "bytes 0-4095/81788173",
+      "allowOrigin": null,
+      "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+      "exposeHeaders": "Content-Length, Content-Range",
+      "ftyp": true
+    },
+    {
+      "quality": "720",
+      "host": "sfhd.an-media.org",
+      "status": 206,
+      "type": "video/mp4",
+      "bytes": 4096,
+      "contentRange": "bytes 0-4095/159718649",
+      "allowOrigin": null,
+      "allowHeaders": "Range, Accept, Origin, X-Requested-With, Content-Type, Authorization",
+      "exposeHeaders": "Content-Length, Content-Range",
+      "ftyp": true
+    }
+  ],
+  "invalidKeyRefresh": {
+    "refreshes": 1,
+    "status": 200,
+    "type": "application/vnd.apple.mpegurl",
+    "bytes": 53777,
+    "contentRange": null,
+    "allowOrigin": "*",
+    "allowHeaders": null,
+    "exposeHeaders": null,
+    "hls": true
+  },
+  "observedExpiryUtc": "2026-10-10T17:53:23.000Z",
+  "modifiedExpiryRefresh": {
+    "refreshes": 1,
+    "status": 200,
+    "type": "application/vnd.apple.mpegurl",
+    "bytes": 53777,
+    "contentRange": null,
+    "allowOrigin": "*",
+    "allowHeaders": null,
+    "exposeHeaders": null,
+    "hls": true,
+    "note": "Modified signed URL; not a naturally expired token"
+  },
+  "siteCors": {
+    "status": 200,
+    "type": "text/html; charset=windows-1251",
+    "bytes": 70672,
+    "contentRange": null,
+    "allowOrigin": null,
+    "allowHeaders": null,
+    "exposeHeaders": null
+  },
+  "environment": {
+    "flutter": "3.44.0",
+    "dart": "3.12.0",
+    "video_player": "2.13.0",
+    "video_player_android": "2.11.0",
+    "video_player_avfoundation": "2.11.0",
+    "android": "API 36 ARM64 emulator",
+    "ios": "iPhone 17 Pro iOS 26.5 simulator",
+    "productionAppModified": false
+  },
+  "nativePlayback": {
+    "android": [
+      {
+        "step": "metadata",
+        "cards": 9,
+        "title": "Новинки(онгоинги)",
+        "episodes": 14
+      },
+      {
+        "step": "hls",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 1454849,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3918,
+        "startOk": true,
+        "seekPositionMs": 124646,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 1,
+        "quality": "720",
+        "platform": "android",
+        "durationMs": 1454849,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 3907,
+        "startOk": true,
+        "seekPositionMs": 122947,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 2,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 1451649,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3909,
+        "startOk": true,
+        "seekPositionMs": 124633,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 2,
+        "quality": "720",
+        "platform": "android",
+        "durationMs": 1451649,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 3926,
+        "startOk": true,
+        "seekPositionMs": 123216,
+        "seekOk": true
+      },
+      {
+        "step": "withoutReferer",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "error": "PlatformException(VideoError, Video player had error androidx.media3.exoplayer.ExoPlaybackException: Source error, null, null)"
+      },
+      {
+        "step": "mp4",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 1454826,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3965,
+        "startOk": true,
+        "seekPositionMs": 123440,
+        "seekOk": true
+      },
+      {
+        "step": "mp4",
+        "episode": 1,
+        "quality": "720",
+        "platform": "android",
+        "durationMs": 1454826,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 3997,
+        "startOk": true,
+        "seekPositionMs": 123009,
+        "seekOk": true
+      },
+      {
+        "step": "done",
+        "platform": "android"
+      }
+    ],
+    "ios": [
+      {
+        "step": "metadata",
+        "cards": 9,
+        "title": "Пожалуйста, простите моих младших братьев / Uchi no Otouto-domo ga Sumimasen",
+        "episodes": 14
+      },
+      {
+        "step": "hls",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "durationMs": 1454849,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3907,
+        "startOk": true,
+        "seekPositionMs": 124888,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 1,
+        "quality": "720",
+        "platform": "ios",
+        "durationMs": 1454849,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 3800,
+        "startOk": true,
+        "seekPositionMs": 124885,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 2,
+        "quality": "360",
+        "platform": "ios",
+        "durationMs": 1451649,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3811,
+        "startOk": true,
+        "seekPositionMs": 124852,
+        "seekOk": true
+      },
+      {
+        "step": "hls",
+        "episode": 2,
+        "quality": "720",
+        "platform": "ios",
+        "durationMs": 1451649,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 3807,
+        "startOk": true,
+        "seekPositionMs": 124890,
+        "seekOk": true
+      },
+      {
+        "step": "withoutReferer",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "error": "PlatformException(VideoError, Failed to load video: You do not have permission to access the requested resource.: The operation couldn’t be completed. (CoreMediaErrorDomain error -12660 - The operation couldn’t be completed. (CoreMediaErrorDomain error -12660 - HTTP 403: Forbidden)), null, null)"
+      },
+      {
+        "step": "mp4",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "durationMs": 1454801,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3108,
+        "startOk": true,
+        "seekPositionMs": 124859,
+        "seekOk": true
+      },
+      {
+        "step": "mp4",
+        "episode": 1,
+        "quality": "720",
+        "platform": "ios",
+        "durationMs": 1454801,
+        "width": 1280.0,
+        "height": 720.0,
+        "startPositionMs": 2882,
+        "startOk": true,
+        "seekPositionMs": 124895,
+        "seekOk": true
+      },
+      {
+        "step": "done",
+        "platform": "ios"
+      }
+    ]
+  },
+  "fullHlsDownload": {
+    "segments": 146,
+    "bytes": 88520176,
+    "localUrisOnly": true,
+    "completeEpisode": true
+  },
+  "fullHlsFileProbe": {
+    "programs": [
+      {
+        "streams": [
+          {
+            "codec_name": "h264",
+            "width": 640,
+            "height": 360
+          },
+          {
+            "codec_name": "aac"
+          },
+          {
+            "codec_name": "timed_id3"
+          }
+        ]
+      }
+    ],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 640,
+        "height": 360
+      },
+      {
+        "codec_name": "aac"
+      },
+      {
+        "codec_name": "timed_id3"
+      }
+    ],
+    "format": {
+      "duration": "1454.849000"
+    }
+  },
+  "browserNetwork": [
+    {
+      "name": "catalog",
+      "error": "TypeError: Failed to fetch"
+    },
+    {
+      "name": "player",
+      "error": "TypeError: Failed to fetch"
+    },
+    {
+      "name": "catalog_no_cors",
+      "type": "opaque",
+      "status": 0,
+      "body": 0
+    },
+    {
+      "name": "360_manifest",
+      "status": 403,
+      "bytes": 548
+    },
+    {
+      "name": "360_segment_sf2",
+      "status": 403,
+      "bytes": 548
+    },
+    {
+      "name": "720_manifest_sfv",
+      "status": 200,
+      "type": "application/vnd.apple.mpegurl",
+      "bytes": 53777
+    },
+    {
+      "name": "720_segment_sfv",
+      "status": 206,
+      "type": "video/mp2t",
+      "bytes": 4096,
+      "firstByte": 71,
+      "contentRange": null
+    },
+    {
+      "name": "720_segment_ahcdn",
+      "status": 206,
+      "type": "video/MP2T",
+      "bytes": 4096,
+      "firstByte": 71,
+      "contentRange": null
+    },
+    {
+      "name": "mp4_360",
+      "status": 403,
+      "bytes": 548
+    },
+    {
+      "name": "mp4_720",
+      "status": 403,
+      "bytes": 548
+    },
+    {
+      "name": "foreign_referrer_option",
+      "status": 403
+    }
+  ],
+  "browserPlayback": [
+    {
+      "episode": 1,
+      "quality": "720",
+      "library": "hls.js 1.7.3",
+      "width": 1280,
+      "height": 720,
+      "startPosition": 2.058147,
+      "seekPosition": 122.068216,
+      "duration": 1454.849,
+      "ok": true
+    },
+    {
+      "episode": 2,
+      "quality": "720",
+      "library": "hls.js 1.7.3",
+      "width": 1280,
+      "height": 720,
+      "startPosition": 2.058399,
+      "seekPosition": 122.064488,
+      "duration": 1451.649,
+      "ok": true
+    }
+  ],
+  "nativeOffline": {
+    "android": [
+      {
+        "step": "metadata",
+        "cards": 9,
+        "title": "Пожалуйста, простите моих младших братьев / Uchi no Otouto-domo ga Sumimasen",
+        "episodes": 14
+      },
+      {
+        "step": "download_mp4",
+        "bytes": 81788173,
+        "expectedBytes": 81788173
+      },
+      {
+        "step": "offline_mp4",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 1454826,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3953,
+        "startOk": true,
+        "seekPositionMs": 124827,
+        "seekOk": true
+      },
+      {
+        "step": "download_hls_excerpt",
+        "segments": 3,
+        "bytes": 1721704,
+        "durationSeconds": 30
+      },
+      {
+        "step": "offline_hls_file",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 30000,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3968,
+        "startOk": true,
+        "seekPositionMs": 19888,
+        "seekOk": true
+      },
+      {
+        "step": "offline_hls_device_server",
+        "episode": 1,
+        "quality": "360",
+        "platform": "android",
+        "durationMs": 30000,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3907,
+        "startOk": true,
+        "seekPositionMs": 19876,
+        "seekOk": true
+      },
+      {
+        "step": "local_server",
+        "requests": 4,
+        "upstreamRequestsDuringPlayback": 0
+      },
+      {
+        "step": "done",
+        "platform": "android"
+      }
+    ],
+    "ios": [
+      {
+        "step": "metadata",
+        "cards": 9,
+        "title": "Пожалуйста, простите моих младших братьев / Uchi no Otouto-domo ga Sumimasen",
+        "episodes": 14
+      },
+      {
+        "step": "download_mp4",
+        "bytes": 81788173,
+        "expectedBytes": 81788173
+      },
+      {
+        "step": "offline_mp4",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "durationMs": 1454801,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3774,
+        "startOk": true,
+        "seekPositionMs": 124861,
+        "seekOk": true
+      },
+      {
+        "step": "download_hls_excerpt",
+        "segments": 3,
+        "bytes": 1721704,
+        "durationSeconds": 30
+      },
+      {
+        "step": "offline_hls_file",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "error": "TimeoutException after 0:00:40.000000: Future not completed"
+      },
+      {
+        "step": "offline_hls_device_server",
+        "episode": 1,
+        "quality": "360",
+        "platform": "ios",
+        "durationMs": 30000,
+        "width": 640.0,
+        "height": 360.0,
+        "startPositionMs": 3720,
+        "startOk": true,
+        "seekPositionMs": 19875,
+        "seekOk": true
+      },
+      {
+        "step": "local_server",
+        "requests": 4,
+        "upstreamRequestsDuringPlayback": 0
+      },
+      {
+        "step": "done",
+        "platform": "ios"
+      }
+    ]
+  },
+  "fullHlsDecode": {
+    "exitCode": 0,
+    "networkProtocolsAllowed": false,
+    "decoderErrors": 0
+  },
+  "androidFormatControl": [
+    {
+      "step": "metadata",
+      "cards": 9,
+      "title": "Пожалуйста, простите моих младших братьев / Uchi no Otouto-domo ga Sumimasen",
+      "episodes": 14
+    },
+    {
+      "step": "720_without_format_hint",
+      "episode": 1,
+      "quality": "720",
+      "platform": "android",
+      "error": "PlatformException(VideoError, Video player had error androidx.media3.exoplayer.ExoPlaybackException: Source error, null, null)"
+    },
+    {
+      "step": "done",
+      "platform": "android"
+    }
+  ],
+  "validation": {
+    "dartTestsPassed": 6,
+    "dartAnalyze": "passed",
+    "flutterRunnerAnalyze": "passed"
+  }
+}

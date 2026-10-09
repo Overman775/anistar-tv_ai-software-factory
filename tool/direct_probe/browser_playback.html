@@ -1,0 +1,53 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>AniStar 720p playback experiment</title>
+<h1>AniStar 720p playback experiment</h1>
+<video muted controls width="640"></video>
+<pre>Running…</pre>
+<script src="node_modules/hls.js/dist/hls.min.js"></script>
+<script>
+async function run() {
+  const urls = await (await fetch('private_urls.json')).json();
+  const video = document.querySelector('video');
+  const results = [];
+  const waitFor = predicate => new Promise((resolve, reject) => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if (predicate()) { clearInterval(timer); resolve(); }
+      else if (Date.now() - start > 25000) { clearInterval(timer); reject(new Error('Timed out')); }
+    }, 100);
+  });
+  for (const episode of [1, 2]) {
+    const result = {episode, quality: '720', library: Hls.version};
+    const hls = new Hls({maxBufferLength: 10});
+    let fatal = null;
+    hls.on(Hls.Events.ERROR, (event, data) => { if (data.fatal) fatal = data.details; });
+    try {
+      hls.attachMedia(video);
+      hls.loadSource(urls[`episode${episode}_720`]);
+      await waitFor(() => video.readyState >= 2 || fatal);
+      if (fatal) throw new Error(fatal);
+      await video.play();
+      await waitFor(() => video.currentTime > 2 || fatal);
+      if (fatal) throw new Error(fatal);
+      result.startPosition = video.currentTime;
+      result.width = video.videoWidth;
+      result.height = video.videoHeight;
+      result.duration = video.duration;
+      video.currentTime = 120;
+      await waitFor(() => video.currentTime > 122 || fatal);
+      if (fatal) throw new Error(fatal);
+      result.seekPosition = video.currentTime;
+      result.ok = true;
+    } catch (error) {
+      result.error = String(error);
+    } finally {
+      hls.destroy();
+    }
+    results.push(result);
+    document.querySelector('pre').textContent = JSON.stringify(results, null, 2);
+  }
+  document.title = 'AniStar playback complete';
+}
+run().catch(error => document.querySelector('pre').textContent += '\n' + error);
+</script>
