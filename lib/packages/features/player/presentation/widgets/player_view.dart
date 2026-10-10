@@ -19,10 +19,20 @@ class PlayerView extends StatelessWidget {
     required this.onShowControls,
     required this.session,
     required this.title,
+    this.onBack,
+    this.onReturnToVideo,
+    this.controlsFocusNode,
+    this.backFocusNode,
+    this.playFocusNode,
     super.key,
   });
 
   final VideoPlayerController controller;
+  final VoidCallback? onBack;
+  final VoidCallback? onReturnToVideo;
+  final FocusNode? controlsFocusNode;
+  final FocusNode? backFocusNode;
+  final FocusNode? playFocusNode;
   final bool controlsVisible;
   final int episodeNumber;
   final VoidCallback onPlayPause;
@@ -63,15 +73,24 @@ class PlayerView extends StatelessWidget {
               child: IgnorePointer(
                 ignoring: !controlsVisible,
                 child: ExcludeFocus(
-                  child: PlayerOverlay(
-                    title: title,
-                    episodeNumber: episodeNumber,
-                    session: session,
-                    value: value,
-                    onPlayPause: onPlayPause,
-                    onSelectQuality: onSelectQuality,
-                    onSelectEpisode: onSelectEpisode,
-                    onSeek: onSeek,
+                  excluding: !controlsVisible,
+                  child: Focus(
+                    focusNode: controlsFocusNode,
+                    skipTraversal: true,
+                    child: PlayerOverlay(
+                      onBack: onBack,
+                      onReturnToVideo: onReturnToVideo,
+                      backFocusNode: backFocusNode,
+                      playFocusNode: playFocusNode,
+                      title: title,
+                      episodeNumber: episodeNumber,
+                      session: session,
+                      value: value,
+                      onPlayPause: onPlayPause,
+                      onSelectQuality: onSelectQuality,
+                      onSelectEpisode: onSelectEpisode,
+                      onSeek: onSeek,
+                    ),
                   ),
                 ),
               ),

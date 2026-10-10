@@ -48,6 +48,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   final ScrollController _scrollController = ScrollController();
   final _homeTabFocus = FocusNode(debugLabel: 'Главная');
   final _favoritesTabFocus = FocusNode(debugLabel: 'Избранное');
+  final _signOutFocus = FocusNode(debugLabel: 'Выйти из аккаунта');
+  final _refreshFocus = FocusNode(debugLabel: 'Обновить каталог');
+  final _logsFocus = FocusNode(debugLabel: 'Открыть логи');
+  FocusNode? _lastCardFocus;
   int _selectedIndex = 0;
 
   @override
@@ -58,6 +62,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       logger: ref.read(loggerProvider),
     )..add(const CatalogStarted());
     _scrollController.addListener(_loadMoreNearEnd);
+  }
+
+  KeyEventResult _handleHeaderKey(FocusNode node, KeyEvent event) {
+    final nodes = [
+      if (widget.onTabSelected != null) ...[_homeTabFocus, _favoritesTabFocus],
+      if (widget.onSignOut != null) _signOutFocus,
+      _refreshFocus,
+      if (widget.onOpenLogs != null) _logsFocus,
+    ];
+    final index = nodes.indexOf(FocusManager.instance.primaryFocus ?? node);
+    if (index < 0) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    FocusNode? target;
+    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
+      final next = index + (key == LogicalKeyboardKey.arrowRight ? 1 : -1);
+      target = nodes[next.clamp(0, nodes.length - 1)];
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      target = _lastCardFocus;
+      if (target?.context == null || target?.canRequestFocus != true) {
+        return KeyEventResult.ignored;
+      }
+    } else if (key != LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      target?.requestFocus();
+    }
+
+    return KeyEventResult.handled;
   }
 
   Widget _buildState(BuildContext context, CatalogState state) {
@@ -177,6 +212,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       return;
     }
     _selectedIndex = index;
+    _lastCardFocus = FocusManager.instance.primaryFocus;
     if (index == 0 && _scrollController.hasClients) {
       unawaited(
         _scrollController.animateTo(
@@ -218,6 +254,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   void dispose() {
     _homeTabFocus.dispose();
     _favoritesTabFocus.dispose();
+    _signOutFocus.dispose();
+    _refreshFocus.dispose();
+    _logsFocus.dispose();
     _scrollController
       ..removeListener(_loadMoreNearEnd)
       ..dispose();
@@ -240,53 +279,68 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
     return BlocProvider.value(
       value: _bloc,
-      child: TvBackdrop(
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
+      child: Focus(
+        canRequestFocus: false,
+        onKeyEvent: _handleHeaderKey,
+        child: TvBackdrop(
+          child: Scaffold(
             backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            flexibleSpace: const TvHeaderSurface(),
-            bottom: switch (widget.onTabSelected) {
-              final onSelected? => CatalogTabs(
-                favoritesOnly: widget.favoritesOnly,
-                autofocus: widget.autofocusTab,
-                homeFocusNode: _homeTabFocus,
-                favoritesFocusNode: _favoritesTabFocus,
-                onSelected: onSelected,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              flexibleSpace: const TvHeaderSurface(),
+              bottom: switch (widget.onTabSelected) {
+                final onSelected? => CatalogTabs(
+                  favoritesOnly: widget.favoritesOnly,
+                  autofocus: widget.autofocusTab,
+                  homeFocusNode: _homeTabFocus,
+                  favoritesFocusNode: _favoritesTabFocus,
+                  onSelected: onSelected,
+                ),
+                null => null,
+              },
+              toolbarHeight: 88,
+              titleSpacing: AppSpacing.xxl,
+              title: Row(
+                children: [
+                  Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Expanded(child: Text('AniStar TV', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                ],
               ),
-              null => null,
-            },
-            toolbarHeight: 88,
-            titleSpacing: AppSpacing.xxl,
-            title: Row(
-              children: [
-                Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
-                const SizedBox(width: AppSpacing.sm),
-                const Expanded(child: Text('AniStar TV', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              actions: [
+                if (widget.onSignOut != null)
+                  IconButton(
+                    focusNode: _signOutFocus,
+                    onPressed: widget.onSignOut,
+                    tooltip: 'Выйти из аккаунта',
+                    icon: const Icon(Icons.logout),
+                  ),
+                IconButton(
+                  focusNode: _refreshFocus,
+                  onPressed: _reload,
+                  tooltip: 'Обновить каталог',
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+                if (widget.onOpenLogs != null)
+                  IconButton(
+                    focusNode: _logsFocus,
+                    onPressed: widget.onOpenLogs,
+                    tooltip: 'Открыть логи',
+                    icon: const Icon(Icons.article_outlined),
+                  ),
+                const SizedBox(width: AppSpacing.xl),
               ],
             ),
-            actions: [
-              if (widget.onSignOut != null)
-                IconButton(onPressed: widget.onSignOut, tooltip: 'Выйти из аккаунта', icon: const Icon(Icons.logout)),
-              IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
-              if (widget.onOpenLogs != null)
-                IconButton(
-                  onPressed: widget.onOpenLogs,
-                  tooltip: 'Открыть логи',
-                  icon: const Icon(Icons.article_outlined),
-                ),
-              const SizedBox(width: AppSpacing.xl),
-            ],
-          ),
-          body: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-            child: BlocBuilder<CatalogBloc, CatalogState>(
-              buildWhen: (previous, current) => previous != current,
-              builder: _buildState,
+            body: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+              child: BlocBuilder<CatalogBloc, CatalogState>(
+                buildWhen: (previous, current) => previous != current,
+                builder: _buildState,
+              ),
             ),
           ),
         ),

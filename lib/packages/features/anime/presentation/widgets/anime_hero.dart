@@ -13,9 +13,11 @@ class AnimeHero extends StatelessWidget {
     this.onPlayFirstEpisode,
     this.favoriteAction,
     this.fallbackPosterUri,
+    this.playFocusNode,
   });
 
   final AnimeScreenData data;
+  final FocusNode? playFocusNode;
   final Widget? favoriteAction;
   final Uri? fallbackPosterUri;
   final VoidCallback? onPlayFirstEpisode;
@@ -121,6 +123,7 @@ class AnimeHero extends StatelessWidget {
                           children: [
                             if (onPlayFirstEpisode case final playAction?)
                               FilledButton.icon(
+                                focusNode: playFocusNode,
                                 autofocus: true,
                                 onPressed: playAction,
                                 icon: const Icon(Icons.play_arrow_rounded, size: 30),

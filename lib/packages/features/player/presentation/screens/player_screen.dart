@@ -32,7 +32,10 @@ class PlayerScreen extends ConsumerStatefulWidget {
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late Future<_PlayerData> _future;
   late final Logger _logger;
-  final FocusNode _focusNode = FocusNode();
+  final FocusNode _focusNode = FocusNode(debugLabel: 'Видео', skipTraversal: true);
+  final _controlsFocus = FocusNode(debugLabel: 'Меню видео', skipTraversal: true);
+  final _backFocus = FocusNode(debugLabel: 'К сериям');
+  final _playFocus = FocusNode(debugLabel: 'Пауза / воспроизведение');
   Timer? _controlsTimer;
   VideoPlayerController? _controller;
   bool _controlsVisible = true;
@@ -72,6 +75,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final data = snapshot.requireData;
 
     return PlayerView(
+      onBack: _backToEpisodes,
+      onReturnToVideo: _returnToVideo,
+      controlsFocusNode: _controlsFocus,
+      backFocusNode: _backFocus,
+      playFocusNode: _playFocus,
       controller: data.controller,
       controlsVisible: _controlsVisible,
       episodeNumber: _episodeNumber,
@@ -87,7 +95,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || _controller == null || !_focusNode.hasPrimaryFocus) {
+    if (event is! KeyDownEvent || _controller == null) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.mediaPlay ||
+        event.logicalKey == LogicalKeyboardKey.mediaPause ||
+        event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+      _showControls();
+      if (event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+        _togglePlayback();
+      } else {
+        _setPlaying(event.logicalKey == LogicalKeyboardKey.mediaPlay);
+      }
+
+      return KeyEventResult.handled;
+    }
+    if (!_focusNode.hasPrimaryFocus) {
       return KeyEventResult.ignored;
     }
     _showControls();
@@ -102,18 +125,33 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
       _seekRelative(const Duration(seconds: 10));
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _selectQuality();
+      _focusMenu(_backFocus);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _selectEpisode();
-    } else if (event.logicalKey == LogicalKeyboardKey.mediaPlay) {
-      _setPlaying(true);
-    } else if (event.logicalKey == LogicalKeyboardKey.mediaPause) {
-      _setPlaying(false);
+      _focusMenu(_playFocus);
     } else {
       return KeyEventResult.ignored;
     }
 
     return KeyEventResult.handled;
+  }
+
+  void _backToEpisodes() => unawaited(Navigator.of(context).maybePop());
+
+  void _focusMenu(FocusNode target) {
+    // Hidden controls are excluded from focus until the next frame.
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (mounted && !_disposed && target.context != null) {
+          target.requestFocus();
+        }
+      })
+      // Paused video and already visible controls may not schedule a frame.
+      ..scheduleFrame();
+  }
+
+  void _returnToVideo() {
+    _focusNode.requestFocus();
+    _showControls();
   }
 
   Future<_PlayerData> _initialize(int initializationId) async {
@@ -247,7 +285,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _onControlsTimer() {
-    if (!mounted || !(_controller?.value.isPlaying ?? false)) {
+    if (!mounted || _controlsFocus.hasFocus || !(_controller?.value.isPlaying ?? false)) {
       return;
     }
     setState(() => _controlsVisible = false);
@@ -302,6 +340,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         label: (quality) => '${quality.apiValue}p',
       ),
     );
+    if (_isCurrent(initializationId)) {
+      _returnToVideo();
+    }
     if (!_isCurrent(initializationId) || choice == null || choice == session.selectedQuality) {
       return;
     }
@@ -330,6 +371,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             : 'Серия $number',
       ),
     );
+    if (_isCurrent(initializationId)) {
+      _returnToVideo();
+    }
     if (!_isCurrent(initializationId) || choice == null || choice == _episodeNumber) {
       return;
     }
@@ -437,6 +481,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       unawaited(controller.dispose());
     }
     _focusNode.dispose();
+    _controlsFocus.dispose();
+    _backFocus.dispose();
+    _playFocus.dispose();
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
     super.dispose();
   }

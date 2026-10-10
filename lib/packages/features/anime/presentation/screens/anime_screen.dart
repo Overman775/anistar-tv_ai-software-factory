@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -39,6 +40,12 @@ class AnimeScreen extends ConsumerStatefulWidget {
 
 class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final ScrollController _scrollController = ScrollController();
+  final _backFocus = FocusNode(debugLabel: 'Назад к каталогу');
+  final _playFocus = FocusNode(debugLabel: 'Смотреть первую серию');
+  final _favoriteFocus = FocusNode(debugLabel: 'Избранное сериала');
+  final Map<int, FocusNode> _episodeFocus = {};
+  List<int> _episodeNumbers = [];
+  int _episodeColumns = 2;
   late Future<AnimeScreenData> _future;
   Animation<double>? _routeAnimation;
   bool _entered = false;
@@ -64,15 +71,19 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     }
     final data = snapshot.requireData;
     final episodes = data.episodes.toList()..sort((a, b) => b.number.compareTo(a.number));
+    _episodeNumbers = episodes.map((episode) => episode.number).toList(growable: false);
 
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
         SliverToBoxAdapter(
           child: AnimeHero(
+            playFocusNode: _playFocus,
             data: data,
             fallbackPosterUri: widget.fallbackPosterUri,
             favoriteAction: FavoriteButton(
+              focusNode: _favoriteFocus,
+              autofocus: episodes.isEmpty,
               animeId: data.details.id,
               slug: data.details.slug,
               title: data.details.title,
@@ -106,28 +117,36 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
             sliver: SliverLayoutBuilder(
-              builder: (context, constraints) => SliverGrid.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: AnimeLayout.episodeColumns(constraints.crossAxisExtent),
-                  mainAxisSpacing: AppSpacing.xl,
-                  crossAxisSpacing: AppSpacing.lg,
-                  childAspectRatio: 16 / 9,
-                ),
-                itemCount: episodes.length,
-                itemBuilder: (context, index) {
-                  final episode = episodes[index];
+              builder: (context, constraints) {
+                _episodeColumns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
 
-                  return Builder(
-                    builder: (episodeContext) => EpisodeCard(
-                      episode: episode,
-                      isWatched:
-                          ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
-                      onFocusChanged: (focused) => _onEpisodeFocusChanged(episodeContext, focused),
-                      onTap: () => _openEpisode(episode),
-                    ),
-                  );
-                },
-              ),
+                return SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: AnimeLayout.episodeColumns(constraints.crossAxisExtent),
+                    mainAxisSpacing: AppSpacing.xl,
+                    crossAxisSpacing: AppSpacing.lg,
+                    childAspectRatio: 16 / 9,
+                  ),
+                  itemCount: episodes.length,
+                  itemBuilder: (context, index) {
+                    final episode = episodes[index];
+
+                    return Builder(
+                      builder: (episodeContext) => EpisodeCard(
+                        focusNode: _episodeFocus.putIfAbsent(
+                          episode.number,
+                          () => FocusNode(debugLabel: episode.title),
+                        ),
+                        episode: episode,
+                        isWatched:
+                            ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
+                        onFocusChanged: (focused) => _onEpisodeFocusChanged(episodeContext, focused),
+                        onTap: () => _openEpisode(episode),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ),
       ],
@@ -158,6 +177,46 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
+
+  KeyEventResult _handleNavigation(FocusNode node, KeyEvent event) {
+    final current = FocusManager.instance.primaryFocus;
+    final key = event.logicalKey;
+    FocusNode? target;
+    final firstAction = _episodeNumbers.isEmpty ? _favoriteFocus : _playFocus;
+    final index = _episodeNumbers.indexWhere((number) => identical(_episodeFocus[number], current));
+    if (key == LogicalKeyboardKey.arrowUp && (current == _playFocus || current == _favoriteFocus)) {
+      target = _backFocus.context == null ? null : _backFocus;
+    } else if (key == LogicalKeyboardKey.arrowDown && current == _backFocus) {
+      target = firstAction;
+    } else if (key == LogicalKeyboardKey.arrowDown &&
+        (current == _playFocus || current == _favoriteFocus) &&
+        _episodeNumbers.isNotEmpty) {
+      target = _episodeFocus[_episodeNumbers.first];
+    } else if (key == LogicalKeyboardKey.arrowUp && index >= 0 && index < _episodeColumns) {
+      target = firstAction;
+    } else if (key == LogicalKeyboardKey.arrowRight && current == _playFocus) {
+      target = _favoriteFocus;
+    } else if (key == LogicalKeyboardKey.arrowLeft && current == _favoriteFocus) {
+      target = firstAction;
+    }
+    if (target?.canRequestFocus != true || target?.context == null) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      target?.requestFocus();
+      if (target == _playFocus || target == _favoriteFocus) {
+        unawaited(
+          _scrollController.animateTo(
+            0,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
+            curve: AppMotion.enterCurve,
+          ),
+        );
+      }
+    }
+
+    return KeyEventResult.handled;
+  }
 
   void _onEpisodeFocusChanged(BuildContext episodeContext, bool focused) {
     if (!focused) {
@@ -218,27 +277,45 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   void dispose() {
     _routeAnimation?.removeStatusListener(_onRouteStatus);
     _scrollController.dispose();
+    _backFocus.dispose();
+    _playFocus.dispose();
+    _favoriteFocus.dispose();
+    for (final focus in _episodeFocus.values) {
+      focus.dispose();
+    }
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => TvBackdrop(
-    child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    onKeyEvent: _handleNavigation,
+    child: TvBackdrop(
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        flexibleSpace: const TvHeaderSurface(),
-        toolbarHeight: 80,
-        titleSpacing: AppSpacing.lg,
-        title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-      ),
-      body: SafeArea(
-        top: false,
-        minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-        child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),
+        appBar: AppBar(
+          leading: ModalRoute.of(context)?.canPop == true
+              ? IconButton(
+                  focusNode: _backFocus,
+                  tooltip: 'Назад к каталогу',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back),
+                )
+              : null,
+          backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          flexibleSpace: const TvHeaderSurface(),
+          toolbarHeight: 80,
+          titleSpacing: AppSpacing.lg,
+          title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        body: SafeArea(
+          top: false,
+          minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+          child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),
+        ),
       ),
     ),
   );

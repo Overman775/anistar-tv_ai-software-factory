@@ -12,10 +12,14 @@ class FavoriteButton extends ConsumerWidget {
     required this.slug,
     required this.title,
     this.initialFavorite,
+    this.focusNode,
+    this.autofocus = false,
     super.key,
   });
 
   final int animeId;
+  final FocusNode? focusNode;
+  final bool autofocus;
   final bool? initialFavorite;
   final String slug;
   final String title;
@@ -53,6 +57,8 @@ class FavoriteButton extends ConsumerWidget {
 
     return FilledButton.tonalIcon(
       key: ValueKey('favorite-button-$animeId'),
+      focusNode: focusNode,
+      autofocus: autofocus,
       onPressed: state.updatingAnimeId != null ? null : () => unawaited(_change(context, ref, favorite)),
       icon: Icon(favorite == true ? Icons.star_rounded : Icons.star_border_rounded),
       label: Text(_label(favorite, state.updatingAnimeId == animeId)),

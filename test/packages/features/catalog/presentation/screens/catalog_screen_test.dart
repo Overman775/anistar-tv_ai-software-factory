@@ -16,7 +16,77 @@ import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dar
 import '../../../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../../../support/test_app.dart';
 
+// Focus is mutable: each assertion reads the result of the preceding key event.
+// ignore_for_file: prefer-moving-to-variable
+
 void main() {
+  testWidgets('header traverses tabs and every toolbar action and returns to the same card', (tester) async {
+    final key = tester.sendKeyEvent;
+    final settle = tester.pumpAndSettle;
+    String? focusedLabel() => FocusManager.instance.primaryFocus?.debugLabel;
+    await pumpTvApp(
+      tester,
+      CatalogScreen(
+        onAnimeTap: (_) => fail('Unexpected activation'),
+        onTabSelected: (_) => fail('Only focus should change'),
+        onSignOut: () => fail('Unexpected logout'),
+        onOpenLogs: () => fail('Unexpected logs'),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+    );
+    await settle();
+    await key(LogicalKeyboardKey.arrowRight);
+    await settle();
+    final card = FocusManager.instance.primaryFocus;
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    final labels = <String?>[focusedLabel()];
+    for (var step = 0; step < 4; step++) {
+      await key(LogicalKeyboardKey.arrowRight);
+      await settle();
+      labels.add(focusedLabel());
+    }
+    expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Обновить каталог', 'Открыть логи']);
+    await key(LogicalKeyboardKey.arrowRight);
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    expect(focusedLabel(), 'Открыть логи');
+    await key(LogicalKeyboardKey.arrowDown);
+    await settle();
+    expect(FocusManager.instance.primaryFocus, same(card));
+  });
+
+  testWidgets('release header skips unavailable log action in both directions', (tester) async {
+    final key = tester.sendKeyEvent;
+    final settle = tester.pumpAndSettle;
+    String? focusedLabel() => FocusManager.instance.primaryFocus?.debugLabel;
+    await pumpTvApp(
+      tester,
+      CatalogScreen(
+        onAnimeTap: (_) => fail('Unexpected activation'),
+        onTabSelected: (_) => fail('Unexpected tab selection'),
+        onSignOut: () => fail('Unexpected logout'),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+    );
+    await settle();
+    await key(LogicalKeyboardKey.arrowUp);
+    for (var step = 0; step < 4; step++) {
+      await key(LogicalKeyboardKey.arrowRight);
+      await settle();
+    }
+    expect(focusedLabel(), 'Обновить каталог');
+    final labels = <String?>[];
+    for (var step = 0; step < 3; step++) {
+      await key(LogicalKeyboardKey.arrowLeft);
+      await settle();
+      labels.add(focusedLabel());
+    }
+    expect(labels, ['Выйти из аккаунта', 'Избранное', 'Главная']);
+  });
+
   testWidgets('empty favorites offer a direct return to the main catalog', (tester) async {
     final settle = tester.pumpAndSettle;
     final key = tester.sendKeyEvent;
@@ -185,14 +255,12 @@ void main() {
     Key? focusedTab() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key;
     expect(find.text('Избранное пусто'), findsOneWidget);
     // Re-read focus after the tab's widget tree has been replaced.
-    // ignore: prefer-moving-to-variable
     expect(focusedTab(), const ValueKey('catalog-tab-true'));
     await key(LogicalKeyboardKey.arrowLeft);
     await key(LogicalKeyboardKey.select);
     await settle();
     expect(find.text('Каталог'), findsOneWidget);
     // Re-read focus after the tab's widget tree has been replaced.
-    // ignore: prefer-moving-to-variable
     expect(focusedTab(), const ValueKey('catalog-tab-false'));
     await key(LogicalKeyboardKey.arrowDown);
     await settle();
