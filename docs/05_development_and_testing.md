@@ -163,6 +163,25 @@ Native Android доверяет этому certificate через debug resource
 
 Для воспроизводимого прогона используйте API 36 emulator с TV hardware profile; на Apple Silicon — ARM64. Live smoke запускается явно и зависит от сети. Физический пульт и аппаратный декодер TV проверяются отдельно.
 
+### Directional Pad эмулятора
+
+Для `Extended Controls → Directional Pad` в профиле AVD нужны оба параметра:
+
+```ini
+hw.dPad=yes
+hw.keyboard=yes
+```
+
+В Emulator 36.4.10 / API 36 при `hw.keyboard=no` отсутствовал kernel keyboard device: крестовина не передавала стрелки, хотя `adb shell input keyevent` и Flutter `sendKeyEvent` работали. После изменения `~/.android/avd/<name>.avd/config.ini` выполните **Cold Boot** через Device Manager или запустите `emulator -avd <name> -no-snapshot-load`. Данные приложения сохраняются; Wipe Data не нужен.
+
+`scripts/e2e.sh` до запуска Flutter проверяет наличие четырёх стрелок на одном hardware input device через `getevent -pl`. Отдельный запуск проверки:
+
+```bash
+python3 tool/e2e/emulator_input.py --adb "$ANDROID_HOME/platform-tools/adb" --device emulator-5554
+```
+
+Проверка устройства не заменяет ручное нажатие стрелок и OK в самой панели. Синтетические Flutter-события проверяют focus приложения, но обходят эту часть эмулятора. [Документация Extended Controls](https://developer.android.com/studio/run/emulator-extended-controls).
+
 ### Ручной smoke
 
 1. Приложение видно в TV launcher; focus понятен и перемещается стрелками.

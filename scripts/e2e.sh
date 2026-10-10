@@ -14,6 +14,7 @@ dart_cmd=("$sdk_dir/bin/dart")
 android_sdk=${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}
 adb_cmd=("$android_sdk/platform-tools/adb" -s "$device")
 [[ $("${adb_cmd[@]}" get-state) == device ]] || { echo 'Android emulator is not ready.' >&2; exit 1; }
+python3 tool/e2e/emulator_input.py --adb "${adb_cmd[0]}" --device "$device"
 "${flutter_cmd[@]}" --version --machine | "${dart_cmd[@]}" tool/quality/verify_sdk.dart
 "${flutter_cmd[@]}" pub get --enforce-lockfile
 mkdir -p build/e2e
