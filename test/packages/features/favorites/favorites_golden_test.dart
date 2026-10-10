@@ -72,7 +72,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pumpAndSettle();
       await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-      await tester.pump(const Duration(milliseconds: 650));
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(find.byType(FavoriteActionsSheet), findsOneWidget);

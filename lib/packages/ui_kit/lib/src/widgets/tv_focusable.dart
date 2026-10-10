@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -34,9 +32,8 @@ class _TvFocusableState extends State<TvFocusable> {
   final FocusNode _ownedFocusNode = FocusNode();
   FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode;
   bool _focused = false;
-  Timer? _holdTimer;
   LogicalKeyboardKey? _heldKey;
-  bool _longPress = false;
+  LogicalKeyboardKey? _consumedKey;
 
   @override
   void initState() {
@@ -66,23 +63,27 @@ class _TvFocusableState extends State<TvFocusable> {
       return KeyEventResult.ignored;
     }
     if (event is KeyRepeatEvent) {
+      if (key == _heldKey && widget.onLongPressed != null) {
+        _heldKey = null;
+        _consumedKey = key;
+        FocusManager.instance.addEarlyKeyEventHandler(_consumeHold);
+        widget.onLongPressed?.call();
+      }
+
       return KeyEventResult.handled;
     }
     if (event is KeyDownEvent) {
       if (widget.onLongPressed == null) {
         widget.onPressed();
-      } else if (_heldKey == null) {
-        _heldKey = key;
-        _holdTimer = Timer(const Duration(milliseconds: 600), () => _longPress = true);
+      } else {
+        _heldKey ??= key;
       }
 
       return KeyEventResult.handled;
     }
     if (event is KeyUpEvent && key == _heldKey) {
-      final action = _longPress ? widget.onLongPressed : widget.onPressed;
       _cancelHold();
-      // Open the menu after release, so key repeats cannot activate its first action.
-      action?.call();
+      widget.onPressed();
 
       return KeyEventResult.handled;
     }
@@ -90,11 +91,22 @@ class _TvFocusableState extends State<TvFocusable> {
     return KeyEventResult.ignored;
   }
 
+  // The panel takes focus while OK is still held. Consume the rest of this
+  // key sequence before it reaches the newly focused action.
+  KeyEventResult _consumeHold(KeyEvent event) {
+    if (event.logicalKey != _consumedKey) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyUpEvent) {
+      _consumedKey = null;
+      FocusManager.instance.removeEarlyKeyEventHandler(_consumeHold);
+    }
+
+    return KeyEventResult.handled;
+  }
+
   void _cancelHold() {
-    _holdTimer?.cancel();
-    _holdTimer = null;
     _heldKey = null;
-    _longPress = false;
   }
 
   void _onLongPress() {
@@ -112,6 +124,7 @@ class _TvFocusableState extends State<TvFocusable> {
   @override
   void dispose() {
     _cancelHold();
+    FocusManager.instance.removeEarlyKeyEventHandler(_consumeHold);
     _ownedFocusNode.dispose();
     super.dispose();
   }
