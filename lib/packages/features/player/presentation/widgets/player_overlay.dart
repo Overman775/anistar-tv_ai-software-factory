@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
@@ -12,6 +12,8 @@ class PlayerOverlay extends StatelessWidget {
     required this.value,
     required this.onPlayPause,
     required this.onSeek,
+    this.onSelectQuality,
+    this.onSelectEpisode,
     super.key,
   });
 
@@ -25,6 +27,8 @@ class PlayerOverlay extends StatelessWidget {
 
   final int episodeNumber;
   final VoidCallback onPlayPause;
+  final VoidCallback? onSelectQuality;
+  final VoidCallback? onSelectEpisode;
   final ValueChanged<Duration> onSeek;
   final PlaybackSession session;
   final String title;
@@ -45,6 +49,8 @@ class PlayerOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final durationMs = value.duration.inMilliseconds;
+    const spacing = SizedBox(width: AppSpacing.lg);
+    final quality = session.selectedQuality.apiValue;
     final positionMs = value.position.inMilliseconds.clamp(0, durationMs == 0 ? 1 : durationMs);
 
     return DecoratedBox(
@@ -68,11 +74,24 @@ class PlayerOverlay extends StatelessWidget {
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.white),
             ),
             const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Серия $episodeNumber • ${session.selectedQuality.apiValue}p',
-              style: const TextStyle(color: AppPalette.textSecondary),
-            ),
+            Text('Серия $episodeNumber • ${quality}p', style: const TextStyle(color: AppPalette.textSecondary)),
             const Spacer(),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: onSelectQuality,
+                  icon: const Icon(Icons.settings),
+                  label: Text('Качество: ${quality}p'),
+                ),
+                spacing,
+                TextButton.icon(
+                  onPressed: onSelectEpisode,
+                  icon: const Icon(Icons.video_library_outlined),
+                  label: const Text('Серии'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
             DecoratedBox(
               decoration: BoxDecoration(
                 color: const Color(0xB8141B2D),
@@ -105,7 +124,7 @@ class PlayerOverlay extends StatelessWidget {
                           tooltip: 'Вперёд на 10 секунд',
                           icon: const Icon(Icons.forward_10_rounded),
                         ),
-                        const SizedBox(width: AppSpacing.lg),
+                        spacing,
                         Text(_format(value.position), style: const TextStyle(color: Colors.white)),
                         Expanded(
                           child: Slider(
@@ -124,7 +143,7 @@ class PlayerOverlay extends StatelessWidget {
                         SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
-                            '←/→  перемотка 10 секунд     OK  пауза или воспроизведение',
+                            '←/→  перемотка    OK  пауза    ↑  качество    ↓  серии',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: AppPalette.textSecondary),

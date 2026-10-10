@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../data/repositories/file_log_repository.dart';
 import '../bloc/log_viewer_bloc.dart';

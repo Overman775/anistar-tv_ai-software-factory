@@ -1,0 +1,21 @@
+name: anistar
+description: Direct AniStar HTML and JSON5 adapter for the Android client.
+version: 0.0.1
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  cookie_jar: ^4.0.9
+  core:
+    path: ../core
+  dio: ^5.11.1
+  flutter_riverpod: ^3.4.3
+  html: ^0.15.7
+  json5: ^0.8.2
+  networking:
+    path: ../networking
+  storage:
+    path: ../storage

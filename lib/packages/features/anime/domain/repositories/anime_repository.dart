@@ -1,6 +1,9 @@
-import '../../../../core/core.dart';
+import 'package:core/data.dart';
+
 import '../models/anime_screen_data.dart';
 
+// Repository identity is required for DI and interchangeable implementations.
+// ignore: one_member_abstracts
 abstract interface class AnimeRepository {
-  Future<Either<Failure, AnimeScreenData>> getAnime({required int id, required String slug});
+  Future<Result<AnimeScreenData, Failure>> getAnime({required int id, required String slug});
 }

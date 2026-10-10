@@ -1,0 +1,8 @@
+name: core
+description: Neutral Dart repository results and failure contracts.
+version: 0.0.1
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.13.0

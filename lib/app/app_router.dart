@@ -1,13 +1,13 @@
-import 'package:app_logger/app_logger.dart';
-import 'package:flutter/material.dart';
+import 'package:app_logging/app_logging.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../packages/features/common/presentation/widgets/error_screen.dart';
 import 'app_routes.dart';
 
 /// Router configuration for the application
 class AppRouter {
-  static final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
   /// Router instance
   late final GoRouter router;

@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="anistar_tv"
+        android:allowBackup="false"
+        android:label="AniStar TV"
         android:name="${applicationName}"
         android:usesCleartextTraffic="${usesCleartextTraffic}"
         android:icon="@mipmap/launcher_icon"

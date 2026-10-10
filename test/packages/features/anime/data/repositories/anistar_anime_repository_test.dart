@@ -1,47 +1,28 @@
+import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/packages/features/anime/data/repositories/anistar_anime_repository.dart';
-import 'package:api/api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http_mock_adapter/http_mock_adapter.dart';
+import 'package:networking/networking.dart';
+
+import '../../../../../mocks/anistar/anistar_fixtures.dart';
+import '../../../../../mocks/networking/html_fixture_adapter.dart';
 
 void main() {
-  test('loads detail and episodes into one screen model', () async {
-    final dio = Dio(BaseOptions(baseUrl: 'http://parser.test'));
-    final adapter = DioAdapter(dio: dio);
-    adapter.onGet('/api/anime/10921-test-anime', (server) {
-      server.reply(200, {
-        'id': 10921,
-        'slug': '10921-test-anime',
-        'title': 'Тестовое аниме',
-        'year': '2026',
-        'genres': ['Приключения'],
-        'voiceover': 'AniStar',
-        'series_info': '12 эп.',
-        'description': 'Описание',
-        'is_ongoing': true,
-        'poster_url': 'https://images.test/poster.jpg',
+  test('detail and sorted episodes are fetched directly from HTML', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'))
+      ..httpClientAdapter = HtmlFixtureAdapter({
+        '/10938-test.html': detailHtml,
+        '/test/player2/videoas_p2p_new.php': playerHtml,
       });
-    });
-    adapter.onGet('/api/anime/10921/episodes', (server) {
-      server.reply(200, [
-        {
-          'episode_number': 1,
-          'title': 'Серия 1',
-          'preview_url': 'https://images.test/episode.jpg',
-          'playback_path': '/api/video/10921/episodes/1/playback',
-        },
-      ]);
-    });
-    final repository = AnistarAnimeRepository(AnimeClient(dio));
-
+    addTearDown(() => dio.close(force: true));
+    final repository = AnistarAnimeRepository(AnistarSource(dio));
     final data = (await repository.getAnime(
-      id: 10921,
-      slug: '10921-test-anime',
-    )).fold(onLeft: (failure) => fail(failure.message), onRight: (value) => value);
-
-    expect(data.details.title, 'Тестовое аниме');
-    expect(data.details.isOngoing, isTrue);
-    expect(data.details.genres, ['Приключения']);
-    expect(data.episodes.single.number, 1);
+      id: 10938,
+      slug: '10938-test',
+    )).when(failure: (failure) => fail(failure.message), success: (value) => value);
+    expect(data.details.genres, ['Приключения', 'Комедия']);
+    expect(data.episodes.map((episode) => episode.number), [1, 2]);
+    final missing = await repository.getAnime(id: 10938, slug: '10938-missing');
+    expect(missing.when(failure: (failure) => failure, success: (_) => null), isA<RequestFailure>());
   });
 }

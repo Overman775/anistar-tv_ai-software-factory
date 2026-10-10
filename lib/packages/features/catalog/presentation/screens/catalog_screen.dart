@@ -1,14 +1,14 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:app_logging/providers.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-import '../../../../../app/app_config.dart';
-import '../../../../../app/app_providers.dart';
-import '../../../../../app/app_routes.dart';
+import '../../../favorites/favorites_providers.dart';
+import '../../../favorites/presentation/favorite_actions_dialog.dart';
+import '../../catalog_providers.dart';
 import '../../domain/models/anime_summary.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
@@ -16,12 +16,24 @@ import '../bloc/catalog_state.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/catalog_heading.dart';
 import '../widgets/catalog_skeleton.dart';
+import '../widgets/catalog_tabs.dart';
 import '../widgets/catalog_tail.dart';
 
 class CatalogScreen extends ConsumerStatefulWidget {
-  const CatalogScreen({required this.onAnimeTap, super.key});
+  const CatalogScreen({
+    required this.onAnimeTap,
+    this.onOpenLogs,
+    this.onSignOut,
+    this.onTabSelected,
+    this.favoritesOnly = false,
+    super.key,
+  });
 
+  final bool favoritesOnly;
   final ValueChanged<AnimeSummary> onAnimeTap;
+  final VoidCallback? onOpenLogs;
+  final VoidCallback? onSignOut;
+  final ValueChanged<bool>? onTabSelected;
 
   @override
   ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
@@ -35,8 +47,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   void initState() {
     super.initState();
-    _bloc = CatalogBloc(repository: ref.read(catalogRepositoryProvider), logger: ref.read(loggerProvider))
-      ..add(const CatalogStarted());
+    _bloc = CatalogBloc(
+      repository: widget.favoritesOnly ? ref.read(favoritesRepositoryProvider) : ref.read(catalogRepositoryProvider),
+      logger: ref.read(loggerProvider),
+    )..add(const CatalogStarted());
     _scrollController.addListener(_loadMoreNearEnd);
   }
 
@@ -47,17 +61,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     if (state is CatalogFailure && state.items.isEmpty) {
       return TvStateView(
         icon: Icons.cloud_off_rounded,
-        title: 'Каталог недоступен',
+        title: widget.favoritesOnly ? 'Избранное недоступно' : 'Каталог недоступен',
         message: state.message,
         actionLabel: 'Попробовать снова',
         onAction: _reload,
       );
     }
     if (state.items.isEmpty) {
-      return const TvStateView(
-        icon: Icons.video_library_outlined,
-        title: 'Каталог пуст',
-        message: 'Parser не вернул ни одной карточки.',
+      return TvStateView(
+        icon: widget.favoritesOnly ? Icons.star_border_rounded : Icons.video_library_outlined,
+        title: widget.favoritesOnly ? 'Избранное пусто' : 'Каталог пуст',
+        message: widget.favoritesOnly
+            ? 'Добавьте сериал с главной страницы или из его карточки.'
+            : 'На сайте AniStar не найдено аниме.',
       );
     }
 
@@ -70,7 +86,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.md),
-            sliver: SliverToBoxAdapter(child: CatalogHeading(itemCount: state.items.length)),
+            sliver: SliverToBoxAdapter(
+              child: CatalogHeading(
+                itemCount: state.items.length,
+                favoritesOnly: widget.favoritesOnly,
+                showFavoriteHint: widget.onTabSelected != null,
+              ),
+            ),
           ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
@@ -89,9 +111,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 final anime = state.items[index];
 
                 return AnimeCard(
+                  key: ValueKey(anime.id),
                   anime: anime,
+                  isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                  onLongPressed: () => unawaited(_favoriteActions(anime)),
                   autofocus: index == _selectedIndex,
-                  onFocusChanged: (focused) => _onCardFocusChanged(context, index, focused),
+                  onFocusChanged: (focused) =>
+                      _onCardFocusChanged(context, index, focused, _columnCount(constraints.maxWidth)),
                   onTap: () => _selectAndOpen(anime, index),
                 );
               },
@@ -102,24 +128,36 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     );
   }
 
+  Future<void> _favoriteActions(AnimeSummary anime) async {
+    await showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title);
+  }
+
   int _columnCount(double width) {
-    if (width >= 1700) return 6;
-    if (width >= 1180) return 5;
-    if (width >= 820) return 4;
+    if (width >= 1700) {
+      return 6;
+    }
+    if (width >= 1180) {
+      return 5;
+    }
+    if (width >= 820) {
+      return 4;
+    }
 
     return 3;
   }
 
   void _loadMoreNearEnd() {
-    if (_scrollController.hasClients && _scrollController.position.extentAfter < 500 && _bloc.state.hasMore) {
+    if (_scrollController.hasClients && _scrollController.position.extentAfter < 500 && _canPreload) {
       _bloc.add(const CatalogMoreRequested());
     }
   }
 
-  void _openLogs() => context.push(AppRoutes.logViewer);
+  bool get _canPreload => _bloc.state is CatalogReady && _bloc.state.hasMore;
 
-  void _onCardFocusChanged(BuildContext cardContext, int index, bool focused) {
-    if (!focused) return;
+  void _onCardFocusChanged(BuildContext cardContext, int index, bool focused, int columns) {
+    if (!focused) {
+      return;
+    }
     _selectedIndex = index;
     if (index > 0) {
       unawaited(
@@ -132,18 +170,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         ),
       );
     }
-    final preloadDistance = _columnCount(MediaQuery.sizeOf(context).width) * 2;
-    if (index >= _bloc.state.items.length - preloadDistance && _bloc.state.hasMore) {
+    final preloadDistance = columns * 2;
+    if (index >= _bloc.state.items.length - preloadDistance && _canPreload) {
       _bloc.add(const CatalogMoreRequested());
     }
   }
 
   void _reload() {
+    ref.read(favoritesControllerProvider.notifier).invalidate();
     setState(() => _selectedIndex = 0);
     _bloc.add(const CatalogStarted());
   }
 
-  void _requestMore() => _bloc.add(const CatalogMoreRequested());
+  void _requestMore() => _bloc.add(const CatalogMoreRequested(retry: true));
 
   void _selectAndOpen(AnimeSummary anime, int index) {
     setState(() => _selectedIndex = index);
@@ -160,36 +199,59 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => BlocProvider.value(
-    value: _bloc,
-    child: Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 88,
-        titleSpacing: AppSpacing.xxl,
-        title: Row(
-          children: [
-            Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: AppSpacing.sm),
-            const Text('AniStar TV'),
+  Widget build(BuildContext context) {
+    ref
+      ..watch(favoritesControllerProvider)
+      ..listen(favoritesControllerProvider, (previous, next) {
+        if (widget.favoritesOnly &&
+            previous?.updatingAnimeId != null &&
+            next.updatingAnimeId == null &&
+            next.revision != previous?.revision) {
+          _bloc.add(const CatalogStarted());
+        }
+      });
+
+    return BlocProvider.value(
+      value: _bloc,
+      child: Scaffold(
+        appBar: AppBar(
+          bottom: switch (widget.onTabSelected) {
+            final onSelected? => CatalogTabs(favoritesOnly: widget.favoritesOnly, onSelected: onSelected),
+            null => null,
+          },
+          toolbarHeight: 88,
+          titleSpacing: AppSpacing.xxl,
+          title: Row(
+            children: [
+              Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: AppSpacing.sm),
+              const Text('AniStar TV'),
+            ],
+          ),
+          actions: [
+            if (widget.onSignOut != null)
+              IconButton(onPressed: widget.onSignOut, tooltip: 'Выйти из аккаунта', icon: const Icon(Icons.logout)),
+            IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
+            if (widget.onOpenLogs != null)
+              IconButton(
+                onPressed: widget.onOpenLogs,
+                tooltip: 'Открыть логи',
+                icon: const Icon(Icons.article_outlined),
+              ),
+            const SizedBox(width: AppSpacing.xl),
           ],
         ),
-        actions: [
-          IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
-          if (AppConfig.isDebugToolsEnabled)
-            IconButton(onPressed: _openLogs, tooltip: 'Открыть логи', icon: const Icon(Icons.article_outlined)),
-          const SizedBox(width: AppSpacing.xl),
-        ],
-      ),
-      body: TvBackdrop(
-        child: SafeArea(
-          top: false,
-          minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-          child: BlocBuilder<CatalogBloc, CatalogState>(
-            buildWhen: (previous, current) => previous != current,
-            builder: _buildState,
+        body: TvBackdrop(
+          child: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+            child: BlocBuilder<CatalogBloc, CatalogState>(
+              buildWhen: (previous, current) => previous != current,
+              builder: _buildState,
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

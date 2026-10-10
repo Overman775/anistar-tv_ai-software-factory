@@ -9,7 +9,6 @@
 .buildlog/
 .history
 .svn/
-.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -25,7 +24,6 @@ migrate_working_dir/
 
 # Flutter/Dart/Pub related
 **/doc/api/
-**/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
@@ -56,3 +54,10 @@ app.*.map.json
 
 # Machine-specific production endpoint for --dart-define-from-file.
 /env/prod.json
+
+# Deterministic test artifacts; golden baselines remain tracked.
+/coverage/
+/test/**/failures/
+
+# Python tooling bytecode.
+**/__pycache__/

@@ -1,5 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
 import 'tv_skeleton_box.dart';
@@ -28,7 +28,7 @@ class AppNetworkImage extends StatelessWidget {
   bool _hasValidUrl(String? value) {
     final uri = Uri.tryParse(value ?? '');
 
-    return uri != null && uri.hasScheme && uri.hasAuthority;
+    return uri != null && (uri.scheme == 'https' || uri.scheme == 'http') && uri.host.isNotEmpty;
   }
 
   @override

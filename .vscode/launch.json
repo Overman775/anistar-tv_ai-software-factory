@@ -23,7 +23,7 @@
                 "prod",
                 "--release",
                 "--dart-define-from-file",
-                "${workspaceFolder}/env/prod.json"
+                "${workspaceFolder}/env/prod.example.json"
             ]
         },
         {

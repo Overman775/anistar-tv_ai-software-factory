@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Typography scale optimised for legibility at TV viewing distance.
 abstract final class TvTypography {

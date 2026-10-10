@@ -1,15 +1,25 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
 
 class AnimeCard extends StatelessWidget {
-  const AnimeCard({required this.anime, required this.onTap, super.key, this.autofocus = false, this.onFocusChanged});
+  const AnimeCard({
+    required this.anime,
+    required this.onTap,
+    super.key,
+    this.autofocus = false,
+    this.onFocusChanged,
+    this.onLongPressed,
+    this.isFavorite,
+  });
 
   final AnimeSummary anime;
   final bool autofocus;
+  final bool? isFavorite;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback onTap;
+  final VoidCallback? onLongPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +30,7 @@ class AnimeCard extends StatelessWidget {
       autofocus: autofocus,
       onFocusChanged: onFocusChanged,
       onPressed: onTap,
+      onLongPressed: onLongPressed,
       semanticLabel: anime.title,
       builder: (context, focused) {
         final theme = Theme.of(context);
@@ -103,6 +114,26 @@ class AnimeCard extends StatelessWidget {
                         child: const Padding(
                           padding: EdgeInsets.all(AppSpacing.xs),
                           child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
+                        ),
+                      ),
+                    ),
+                  if (isFavorite ?? anime.isFavorite ?? false)
+                    Positioned(
+                      top: AppSpacing.sm,
+                      left: AppSpacing.sm,
+                      child: Tooltip(
+                        message: 'В избранном',
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(color: Color(0xDD080B14), shape: BoxShape.circle),
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.xs),
+                            child: Icon(
+                              Icons.star_rounded,
+                              key: ValueKey('favorite-${anime.id}'),
+                              color: AppPalette.secondary,
+                              size: 28,
+                            ),
+                          ),
                         ),
                       ),
                     ),

@@ -1,24 +1,22 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
+
+import '../../../support/test_app.dart';
 
 void main() {
   testWidgets('renders a polished state and invokes its action', (tester) async {
     var actionCalls = 0;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.darkTheme,
-        home: Scaffold(
-          body: TvBackdrop(
-            child: TvStateView(
-              icon: Icons.cloud_off_rounded,
-              title: 'Каталог недоступен',
-              message: 'Проверьте подключение',
-              actionLabel: 'Попробовать снова',
-              onAction: () => actionCalls++,
-            ),
-          ),
+    await pumpTvApp(
+      tester,
+      TvBackdrop(
+        child: TvStateView(
+          icon: Icons.cloud_off_rounded,
+          title: 'Каталог недоступен',
+          message: 'Проверьте подключение',
+          actionLabel: 'Попробовать снова',
+          onAction: () => actionCalls++,
         ),
       ),
     );

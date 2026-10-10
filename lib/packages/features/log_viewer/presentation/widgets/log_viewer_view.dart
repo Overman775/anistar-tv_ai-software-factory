@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -32,7 +32,9 @@ class _LogViewerViewState extends State<LogViewerView> {
   };
 
   Widget _buildFloatingActions(BuildContext context, LogViewerState state) {
-    if (state is! LogViewerLoadedState || state.logContent == null) return const SizedBox.shrink();
+    if (state is! LogViewerLoadedState || state.logContent == null) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
@@ -160,7 +162,9 @@ class _LogViewerViewState extends State<LogViewerView> {
   }
 
   void _scrollToBottom() {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients) {
+      return;
+    }
 
     unawaited(
       _scrollController.animateTo(
@@ -172,19 +176,25 @@ class _LogViewerViewState extends State<LogViewerView> {
   }
 
   void _scrollToTop() {
-    if (!_scrollController.hasClients) return;
+    if (!_scrollController.hasClients) {
+      return;
+    }
 
     unawaited(_scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
   }
 
   void _selectLog(BuildContext context, String? fileName) {
-    if (fileName != null) context.read<LogViewerBloc>().add(LogFileSelectedEvent(fileName));
+    if (fileName != null) {
+      context.read<LogViewerBloc>().add(LogFileSelectedEvent(fileName));
+    }
   }
 
   void _shareLog(BuildContext context, LogViewerLoadedState state) {
     final content = state.logContent;
     final fileName = state.selectedLogFile;
-    if (content == null || fileName == null) return;
+    if (content == null || fileName == null) {
+      return;
+    }
 
     final renderObject = context.findRenderObject();
     final origin = renderObject is RenderBox ? renderObject.localToGlobal(Offset.zero) & renderObject.size : null;

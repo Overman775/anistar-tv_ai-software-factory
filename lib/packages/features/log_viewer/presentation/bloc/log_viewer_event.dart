@@ -3,7 +3,7 @@ part of 'log_viewer_bloc.dart';
 @immutable
 sealed class LogViewerEvent extends Equatable {
   @override
-  List<Object?> get props => const [];
+  List<Object?> get props => [runtimeType];
 
   const LogViewerEvent();
 }
@@ -18,7 +18,7 @@ final class LogFileSelectedEvent extends LogViewerEvent {
   final String fileName;
 
   @override
-  List<Object?> get props => [fileName];
+  List<Object?> get props => [runtimeType, fileName];
 
   const LogFileSelectedEvent(this.fileName);
 }

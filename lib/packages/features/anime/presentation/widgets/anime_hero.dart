@@ -1,14 +1,23 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_screen_data.dart';
 import 'anime_metadata_chip.dart';
 
 class AnimeHero extends StatelessWidget {
-  const AnimeHero({required this.data, super.key, this.onPlayFirstEpisode});
+  const AnimeHero({required this.data, super.key, this.onPlayFirstEpisode, this.favoriteAction});
 
   final AnimeScreenData data;
+  final Widget? favoriteAction;
   final VoidCallback? onPlayFirstEpisode;
+
+  double _height(double width) {
+    if (width >= 1200) {
+      return 410;
+    }
+
+    return width >= 900 ? 380 : 470;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +29,7 @@ class AnimeHero extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) => SizedBox(
-        height: constraints.maxWidth >= 1200 ? 410 : 350,
+        height: _height(constraints.maxWidth),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -109,15 +118,21 @@ class AnimeHero extends StatelessWidget {
                             style: textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
                           ),
                         ),
-                        if (onPlayFirstEpisode case final playAction?) ...[
-                          const SizedBox(height: AppSpacing.md),
-                          FilledButton.icon(
-                            autofocus: true,
-                            onPressed: playAction,
-                            icon: const Icon(Icons.play_arrow_rounded, size: 30),
-                            label: Text('Смотреть серию ${data.episodes.first.number}'),
-                          ),
-                        ],
+                        const SizedBox(height: AppSpacing.md),
+                        Wrap(
+                          spacing: AppSpacing.md,
+                          runSpacing: AppSpacing.sm,
+                          children: [
+                            if (onPlayFirstEpisode case final playAction?)
+                              FilledButton.icon(
+                                autofocus: true,
+                                onPressed: playAction,
+                                icon: const Icon(Icons.play_arrow_rounded, size: 30),
+                                label: Text('Смотреть серию ${data.episodes.first.number}'),
+                              ),
+                            ?favoriteAction,
+                          ],
+                        ),
                       ],
                     ),
                   ),

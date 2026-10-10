@@ -1,13 +1,16 @@
-import 'package:flutter/widgets.dart';
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
+import '../packages/features/auth/auth_providers.dart';
 import '../packages/features/common/presentation/widgets/error_screen.dart';
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
 import 'app_config.dart';
-
 part 'app_routes.g.dart';
 
 /// Routes for the application
@@ -48,10 +51,14 @@ class HomeRoute extends GoRouteData with $HomeRoute {
   const HomeRoute();
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => HomeScreen(
-    onAnimeTap: (anime) {
-      AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title).go(context);
-    },
+  Widget build(BuildContext context, GoRouterState state) => Consumer(
+    builder: (context, ref, _) => HomeScreen(
+      onSignOut: () => unawaited(_signOut(context, ref)),
+      onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
+      onAnimeTap: (anime) {
+        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title).go(context);
+      },
+    ),
   );
 }
 
@@ -84,4 +91,11 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) =>
       PlayerScreen(animeId: animeId, episodeNumber: episodeNumber, title: title);
+}
+
+Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+  final failure = await ref.read(authControllerProvider.notifier).signOut();
+  if (failure != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
+  }
 }

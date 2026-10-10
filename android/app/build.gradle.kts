@@ -55,3 +55,12 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Flutter 3.44 / AGP 9 can reuse the previous JNI merge after compiling new
+// Dart AOT libraries. Re-run this small copy stage so the APK contains the
+// current libapp.so. Keep until an SDK upgrade passes verify_android_apk.py.
+tasks.configureEach {
+    if (name.startsWith("merge") && name.endsWith("JniLibFolders")) {
+        outputs.upToDateWhen { false }
+    }
+}

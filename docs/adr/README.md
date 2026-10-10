@@ -1,13 +1,21 @@
-# 🧭 Архитектурные решения | AniStar TV
+# Architecture Decision Records
 
-ADR фиксируют решения, которые влияют на несколько модулей или задают внешнюю границу системы.
+ADR фиксируют принятые системные решения, их контекст и последствия. Локальный рефакторинг без изменения границ отдельного ADR не требует.
 
-| ADR | Статус | Решение |
+## Реестр
+
+| Дата | ADR | Статус |
 | --- | --- | --- |
-| [0001](0001-use-anistar-parser-openapi.md) | Заменено 0002 | AniStar Parser, generated OpenAPI client и native HLS |
-| [0002](0002-use-swagger-parser-retrofit-networking.md) | Принято, уточняет 0001 | Swagger Parser, Retrofit и core networking |
-| [0003](0003-public-core-and-tv-uikit.md) | Принято | Публичные границы core и TV UI kit |
-| [0004](0004-use-riverpod-for-app-di.md) | Принято | Riverpod как единственный DI-контейнер |
-| [0005](0005-centralize-runtime-logging.md) | Принято | Единое runtime-логирование |
+| 2026-07-19 | [0004: Riverpod для DI](0004-use-riverpod-for-app-di.md) | Accepted |
+| 2026-07-19 | [0005: Единое runtime-логирование](0005-centralize-runtime-logging.md) | Accepted |
+| 2026-10-10 | [0006: Прямой AniStar на Android](0006-android-direct-anistar.md) | Accepted |
+| 2026-10-10 | [0007: Нейтральный Core и инфраструктура](0007-neutral-core-and-infrastructure.md) | Accepted |
 
-Небольшие локальные рефакторинги отдельного ADR не требуют.
+Заменённые решения о parser-сервере и старом Core удалены при очистке проекта. Номера оставшихся ADR сохранены.
+
+## Формат нового ADR
+
+1. Статус, дата и связанные решения.
+2. Контекст и конкретная проблема.
+3. Принятое решение и границы применимости.
+4. Последствия и ограничения.

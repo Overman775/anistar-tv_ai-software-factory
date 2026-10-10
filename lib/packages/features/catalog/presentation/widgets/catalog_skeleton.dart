@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// Catalog-owned placeholder layout. Grid decisions remain inside the feature.
@@ -6,9 +6,15 @@ class CatalogSkeleton extends StatelessWidget {
   const CatalogSkeleton({super.key});
 
   int _columnCount(double width) {
-    if (width >= 1700) return 6;
-    if (width >= 1180) return 5;
-    if (width >= 820) return 4;
+    if (width >= 1700) {
+      return 6;
+    }
+    if (width >= 1180) {
+      return 5;
+    }
+    if (width >= 820) {
+      return 4;
+    }
 
     return 3;
   }

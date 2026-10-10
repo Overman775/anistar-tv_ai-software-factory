@@ -1,55 +1,66 @@
-import 'package:anistar_tv/app/app_providers.dart';
-import 'package:anistar_tv/packages/core/domain/either.dart';
-import 'package:anistar_tv/packages/core/domain/failure.dart';
-import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
-import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
-import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
-import 'package:anistar_tv/packages/features/anime/domain/repositories/anime_repository.dart';
+import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
-import 'package:app_logger/app_logger.dart';
-import 'package:flutter/material.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../../../mocks/features/anime/fake_anime_screen_repository.dart';
+import '../../../../../support/test_app.dart';
+
 void main() {
+  testWidgets('changing route parameters loads the new anime in the existing State', (tester) async {
+    final requests = <int>[];
+    final repository = FakeAnimeScreenRepository(
+      load: (id, slug) {
+        requests.add(id);
+
+        return const FakeAnimeScreenRepository().getAnime(id: id, slug: slug);
+      },
+    );
+    AnimeScreen screen(int id) => AnimeScreen(
+      animeId: id,
+      slug: '$id-anime',
+      fallbackTitle: 'Аниме $id',
+      onEpisodeTap: (episode) => expect(episode.number, isPositive),
+    );
+    final pumpAndSettle = tester.pumpAndSettle;
+    final screenFinder = find.byType(AnimeScreen);
+    final stateOf = tester.state;
+    final overrides = [animeRepositoryProvider.overrideWithValue(repository)];
+    await pumpTvApp(tester, screen(1), wrapInScaffold: false, overrides: overrides);
+    await pumpAndSettle();
+    final state = stateOf(screenFinder);
+    await pumpTvApp(tester, screen(2), wrapInScaffold: false, overrides: overrides);
+    await pumpAndSettle();
+    expect(stateOf(screenFinder), same(state));
+    expect(requests, [1, 2]);
+    expect(find.byType(AnimeHero), findsOneWidget);
+  });
+
   testWidgets('keeps the hero action visible and moves focus to episodes on a compact TV', (tester) async {
-    final view = tester.view;
+    int? openedEpisode;
+    await pumpTvApp(
+      tester,
+      AnimeScreen(
+        animeId: 1,
+        slug: 'test-anime',
+        fallbackTitle: 'Тестовое аниме',
+        onEpisodeTap: (episode) => openedEpisode = episode.number,
+      ),
+      wrapInScaffold: false,
+      overrides: [animeRepositoryProvider.overrideWithValue(const FakeAnimeScreenRepository())],
+    );
     final pumpAndSettle = tester.pumpAndSettle;
     final sendKeyEvent = tester.sendKeyEvent;
-    view
-      ..physicalSize = const Size(960, 540)
-      ..devicePixelRatio = 1;
-    addTearDown(view.reset);
-    int? openedEpisode;
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          animeRepositoryProvider.overrideWithValue(const AnimeScreenTest()),
-          loggerProvider.overrideWithValue(Logger(level: Level.off)),
-        ],
-        child: MaterialApp(
-          theme: AppTheme.darkTheme,
-          home: AnimeScreen(
-            animeId: 1,
-            slug: 'test-anime',
-            fallbackTitle: 'Тестовое аниме',
-            onEpisodeTap: (episode) => openedEpisode = episode.number,
-          ),
-        ),
-      ),
-    );
     await pumpAndSettle();
-
     final playButton = find.widgetWithText(FilledButton, 'Смотреть серию 1');
     expect(playButton, findsOneWidget);
     expect(tester.getBottomRight(playButton).dy, lessThanOrEqualTo(540));
     expect(tester.takeException(), isNull);
     await sendKeyEvent(LogicalKeyboardKey.select);
     expect(openedEpisode, 1);
-
     await sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await pumpAndSettle();
     await sendKeyEvent(LogicalKeyboardKey.arrowRight);
@@ -57,29 +68,4 @@ void main() {
     await sendKeyEvent(LogicalKeyboardKey.select);
     expect(openedEpisode, 2);
   });
-}
-
-final class AnimeScreenTest implements AnimeRepository {
-  const AnimeScreenTest();
-
-  @override
-  Future<Either<Failure, AnimeScreenData>> getAnime({required int id, required String slug}) async => Either.right(
-    AnimeScreenData(
-      details: const AnimeDetails(
-        id: 1,
-        slug: 'test-anime',
-        title: 'Тестовое аниме',
-        genres: ['Приключения'],
-        isOngoing: true,
-        description: 'Короткое описание, которое должно оставаться видимым при открытии экрана.',
-        seriesInfo: '3 серии',
-        year: '2026',
-      ),
-      episodes: List.generate(
-        3,
-        (index) => AnimeEpisode(number: index + 1, title: 'Серия ${index + 1}'),
-        growable: false,
-      ),
-    ),
-  );
 }
