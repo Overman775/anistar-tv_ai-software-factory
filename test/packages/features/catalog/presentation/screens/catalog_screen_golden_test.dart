@@ -11,7 +11,7 @@ import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dar
 import '../../../../../support/test_app.dart';
 
 void main() {
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
+  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize), ('portrait', const Size(412, 915))]) {
     testWidgets('catalog loading at $name viewport', (tester) async {
       final pending = Completer<Result<AnimePage, Failure>>();
       await pumpTvApp(

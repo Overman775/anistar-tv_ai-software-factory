@@ -17,14 +17,14 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после исправления авторизованного избранного и истории; 211 Dart-файлов |
-| Unit/widget/architecture | 145 passed после исправления авторизованного избранного и истории; seed 20261010 |
-| Golden comparison | 16 passed после исправления авторизованного избранного и истории; точное сравнение, 960×540 и 1280×720 |
+| Формат, analyzer, DCM | Passed после доработок управления плеером и каталога; 212 Dart-файлов |
+| Unit/widget/architecture | 150 passed после доработок управления плеером и каталога; seed 20261010 |
+| Golden comparison | 18 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
 | HTTPS fixture | 7 Python-тестов passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
 
-Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после TV UX-правок при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
+Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после доработок управления плеером и каталога при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
 | Сценарий | Проверено |
 | --- | --- |
@@ -103,7 +103,7 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 [app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 732 628 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `e101318b27b21dd28a68dc7a18fa66d9fd561aaec77934eb310d13ca6e17c598`.
+SHA-256: `2acb47f2e81e3d6af8e48ea3f229676817139baa18945a8f5d4bf6040fba0666`.
 
 APK собран после исправления авторизованного избранного и серверной истории, включая новую шапку и убывающий порядок серий. Freshness checker подтвердил соответствие AOT/JNI/merge/stripped libraries для трёх ABI. Тестовые credentials в распакованных entries APK отсутствуют. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
@@ -208,3 +208,16 @@ Live harness теперь ждёт доступную кнопку после ro
 После последней правки live-диагностики повторно прошли analyzer и DCM. Release APK собран без локального JSON, проверен freshness checker для трёх ABI; 8 тестов checker прошли. Размер и SHA-256 актуальной сборки приведены в разделе 6.
 
 Обычный prod APK установлен на эмулятор поверх предыдущего, LEANBACK activity успешно запущена; проверены экран входа и отсутствие автоподстановки тестовых credentials. Авторизованный функциональный прогон выше выполнен отдельным dev integration entry с реальной сетью.
+
+
+## 14. Управление плеером и узкий каталог
+
+10 октября 2026 года добавлены отдельные команды mediaPlay/mediaPause: повторный Play не ставит видео на паузу, повторный Pause не запускает его. Native pause и завершение серии возвращают controls; возобновление снова включает timer скрытия. Видимость проверена через fake native events, завершение не создаёт новый источник.
+
+Пустое избранное получило кнопку перехода на главную. Widget-тест проходит к ней через Down и OK; прежняя проверка возврата через вкладки сохранена. Сетка каталога, skeleton и расчёт навигации используют CatalogLayout. При ширине меньше 600 logical pixels показываются две колонки; заголовок на узком экране использует вертикальную композицию и touch-подсказку. Заголовок AppBar больше не переполняет доступную ширину.
+
+Прошли format, analyzer, DCM, 150 unit/widget/architecture-тестов и 18 goldens с seed 20261010. Два новых эталона каталога 412×915 просмотрены; прежние 16 совпали. В Android fixture E2E прошли 9 сценариев на API 36 ARM64 и 7 Python-тестов fixture. Проверка пульта подтверждает native mediaPlay/mediaPause после закрытия chooser, отсутствие переключения при повторной команде и работу последующего seek на том же controller.
+
+Live-сайт в этой доработке повторно не изменялся: проверенный контракт авторизации, избранного и истории остался прежним. Результат последнего авторизованного live-прогона приведён в разделе 13. Физический пульт и TV по-прежнему требуют ручного smoke.
+
+После финальной правки timer повторно прошли analyzer, DCM и 16 lifecycle-тестов player. Собран обычный prod release APK без Dart define credentials; freshness checker подтвердил текущий AOT для всех трёх ABI. Во всех ZIP entries APK и изменённых файлах проверено отсутствие значений локальных тестовых credentials. Размер и SHA-256 актуальной сборки приведены в разделе 6.
