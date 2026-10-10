@@ -63,4 +63,4 @@ app.*.map.json
 **/__pycache__/
 
 # Local live-test credentials, never committed.
-/env/live-test.local.json
+/env/*.local.json

@@ -31,6 +31,8 @@
 
 ### Проверки
 
+- Для live Android E2E добавлены шаблон локального JSON и задача VS Code. Credentials автоматически передаются через Dart define; `env/*.local.json` исключены из Git.
+
 - Детерминированные команды format, analyzer, DCM, unit/widget/architecture и goldens с закреплённым SDK и seed.
 - 135 unit/widget/architecture-тестов и 16 golden-тестов прошли. Android E2E: 8 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
 - Release APK собран; соответствие текущему AOT и промежуточным библиотекам проверено для трёх ABI.
