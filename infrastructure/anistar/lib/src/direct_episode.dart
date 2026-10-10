@@ -1,5 +1,6 @@
 final class DirectEpisode {
   final int number;
+  final String? mediaId;
   final bool isWatched;
   final Uri? previewUri;
   final Map<String, Uri> sources;
@@ -11,5 +12,6 @@ final class DirectEpisode {
     required this.sources,
     this.previewUri,
     this.isWatched = false,
+    this.mediaId,
   });
 }

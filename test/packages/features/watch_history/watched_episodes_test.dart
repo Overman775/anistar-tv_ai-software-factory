@@ -3,34 +3,36 @@
 
 import 'dart:async';
 
+import 'package:anistar/anistar.dart';
+
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
+import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:storage/providers.dart';
 
-import '../../../mocks/storage/memory_preferences_storage.dart';
+import '../../../mocks/features/fake_watched_episodes_repository.dart';
 
 void main() {
-  late MemoryPreferencesStorage storage;
+  late FakeWatchedEpisodesRepository repository;
   late ProviderContainer container;
   String? account;
   final provider = watchedEpisodesProvider(10938);
 
   ProviderContainer createContainer() => ProviderContainer(
     overrides: [
-      sharedPreferencesStorageProvider.overrideWithValue(storage),
+      watchedEpisodesRepositoryProvider.overrideWithValue(repository),
       watchHistoryAccountProvider.overrideWith((ref) => account),
     ],
   );
 
   setUp(() {
     account = 'Алиса';
-    storage = MemoryPreferencesStorage();
+    repository = FakeWatchedEpisodesRepository();
     container = createContainer();
   });
   tearDown(() => container.dispose());
 
-  test('concurrent marks persist together; restarting restores by episode number', () async {
+  test('concurrent marks are confirmed by site; a new client reads the site history', () async {
     await container.read(provider.future);
     final history = container.read(provider.notifier);
     expect(await Future.wait([history.markStarted(2), history.markStarted(1), history.markStarted(2)]), [
@@ -38,7 +40,7 @@ void main() {
       true,
       true,
     ]);
-    expect(storage.writes, 2);
+    expect(repository.writes, 2);
     expect(container.read(provider).requireValue, {1, 2});
     container.dispose();
     container = createContainer();
@@ -46,18 +48,29 @@ void main() {
     expect(await container.read(watchedEpisodesProvider(10939).future), isEmpty);
   });
 
-  test('account switch during a write cannot publish the previous account history', () async {
+  test('account switch during a site write cannot publish the previous account history', () async {
     await container.read(provider.future);
-    final gate = storage.writeGate = Completer<void>();
+    final gate = repository.writeGate = Completer<void>();
     final pending = container.read(provider.notifier).markStarted(1);
     await Future<void>.delayed(Duration.zero);
+    final oldRepository = repository;
+    repository = FakeWatchedEpisodesRepository();
+    container.updateOverrides([
+      watchedEpisodesRepositoryProvider.overrideWithValue(repository),
+      watchHistoryAccountProvider.overrideWith((ref) => account),
+    ]);
     account = 'Боб';
     container.invalidate(watchHistoryAccountProvider);
     expect(await container.read(provider.future), isEmpty);
     gate.complete();
     await pending;
     expect(container.read(provider).requireValue, isEmpty);
-    storage.writeGate = null;
+    repository.writeGate = null;
+    repository = oldRepository;
+    container.updateOverrides([
+      watchedEpisodesRepositoryProvider.overrideWithValue(repository),
+      watchHistoryAccountProvider.overrideWith((ref) => account),
+    ]);
     account = 'Алиса';
     container.invalidate(watchHistoryAccountProvider);
     expect(await container.read(provider.future), {1});
@@ -65,26 +78,32 @@ void main() {
 
   test('write failure does not publish a mark; subsequent explicit start can retry', () async {
     await container.read(provider.future);
-    storage.failWrite = true;
+    repository.failWrite = true;
     final history = container.read(provider.notifier);
     expect(await history.markStarted(1), isFalse);
     expect(container.read(provider).requireValue, isEmpty);
-    storage.failWrite = false;
+    repository.failWrite = false;
     expect(await history.markStarted(1), isTrue);
   });
 
   test('failed restore never overwrites existing data and anonymous starts are ignored', () async {
-    storage.failRead = true;
-    await expectLater(container.read(provider.future), throwsStateError);
+    repository
+      ..failRead = true
+      ..failWrite = true;
+    await expectLater(container.read(provider.future), throwsA(isA<AnistarFailure>()));
     expect(await container.read(provider.notifier).markStarted(1), isFalse);
-    expect(storage.writes, 0);
+    expect(repository.writes, 1);
+    repository
+      ..failRead = false
+      ..failWrite = false;
+    expect(await container.read(provider.notifier).markStarted(1), isTrue);
+    final writes = repository.writes;
     account = null;
     container.invalidate(watchHistoryAccountProvider);
     expect(await container.read(provider.future), isEmpty);
     // Repeat after changing the scope to anonymous; this is a separate guard.
     // ignore: avoid-duplicate-test-assertions
     expect(await container.read(provider.notifier).markStarted(1), isFalse);
-    // ignore: avoid-duplicate-test-assertions
-    expect(storage.writes, 0);
+    expect(repository.writes, writes);
   });
 }

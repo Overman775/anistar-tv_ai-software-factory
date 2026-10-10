@@ -5,17 +5,17 @@ import 'package:anistar_tv/packages/features/player/domain/models/playback_sessi
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
+import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:storage/providers.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart' as platform;
 
+import '../../../../../mocks/features/fake_watched_episodes_repository.dart';
 import '../../../../../mocks/features/player/fake_playback_repository.dart';
 import '../../../../../mocks/features/player/fake_video_platform.dart';
-import '../../../../../mocks/storage/memory_preferences_storage.dart';
 import '../../../../../support/test_app.dart';
 
 // Each await advances the player lifecycle. Repeating pumps and reading mutable
@@ -59,11 +59,11 @@ void main() {
   testWidgets('marks after native play, not during initialization; quality changes do not duplicate writes', (
     tester,
   ) async {
-    final storage = MemoryPreferencesStorage();
+    final storage = FakeWatchedEpisodesRepository();
     final native = video..delayInitialization = true;
     final overrides = [
       playbackRepositoryProvider.overrideWithValue(repository),
-      sharedPreferencesStorageProvider.overrideWithValue(storage),
+      watchedEpisodesRepositoryProvider.overrideWithValue(storage),
       watchHistoryAccountProvider.overrideWithValue('tester'),
     ];
     await pumpTvApp(
@@ -84,7 +84,7 @@ void main() {
       ),
     );
     await settle(tester);
-    expect(storage.values.values.single, ['1']);
+    expect(storage.watched[10938], {1});
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     await tester.tap(find.text('360p'));
@@ -95,20 +95,20 @@ void main() {
     expect(find.text('Серия 1 — просмотрена ✓'), findsOneWidget);
     await tester.tap(find.text('Серия 2'));
     await settle(tester);
-    expect(storage.values.values.single, ['1', '2']);
+    expect(storage.watched[10938], {1, 2});
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
   });
 
   testWidgets('failed native initialization never persists a watched mark', (tester) async {
-    final storage = MemoryPreferencesStorage();
+    final storage = FakeWatchedEpisodesRepository();
     video.failInitialization = true;
     await pumpTvApp(
       tester,
       const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме'),
       overrides: [
         playbackRepositoryProvider.overrideWithValue(repository),
-        sharedPreferencesStorageProvider.overrideWithValue(storage),
+        watchedEpisodesRepositoryProvider.overrideWithValue(storage),
         watchHistoryAccountProvider.overrideWithValue('tester'),
       ],
       wrapInScaffold: false,
@@ -121,13 +121,13 @@ void main() {
   });
 
   testWidgets('history write failure shows a message while playback continues without repeated writes', (tester) async {
-    final storage = MemoryPreferencesStorage()..failWrite = true;
+    final storage = FakeWatchedEpisodesRepository()..failWrite = true;
     await pumpTvApp(
       tester,
       const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме'),
       overrides: [
         playbackRepositoryProvider.overrideWithValue(repository),
-        sharedPreferencesStorageProvider.overrideWithValue(storage),
+        watchedEpisodesRepositoryProvider.overrideWithValue(storage),
         watchHistoryAccountProvider.overrideWithValue('tester'),
       ],
       wrapInScaffold: false,

@@ -1,9 +1,13 @@
 import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_state.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tabs.dart';
 import 'package:anistar_tv/runner/runner.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -85,6 +89,16 @@ final class LiveHarness {
       if (error is Failure) {
         fail('Timed out waiting for $step: ${error.message}');
       }
+    }
+    final tabs = find.byType(CatalogTabs);
+    if (tabs.evaluate().isNotEmpty) {
+      final state = tester.element(tabs).read<CatalogBloc>().state;
+      final favorites = tester.widget<CatalogTabs>(tabs).favoritesOnly;
+      fail(
+        'Timed out waiting for $step: favorites=$favorites, state=${state.runtimeType}, '
+        'IDs=${state.items.map((item) => item.id).join(',')}, '
+        'error=${state is CatalogFailure ? state.message : 'none'}',
+      );
     }
     fail('Timed out waiting for $step');
   }

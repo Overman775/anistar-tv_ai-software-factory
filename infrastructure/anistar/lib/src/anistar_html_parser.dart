@@ -18,13 +18,14 @@ final class AnistarHtmlParser {
     final document = _document(source);
     final items = <DirectAnime>[];
     final ids = <int>{};
-    for (final card in document.querySelectorAll('.news, .plash')) {
+    final content = favorites ? document.querySelector('#dle-content') ?? document : document;
+    for (final card in content.querySelectorAll('.news, .plash')) {
       final item = _card(card);
       if (item != null && item.id != 9493 && ids.add(item.id)) {
         items.add(item);
       }
     }
-    if (items.isEmpty && (!favorites || !AnistarFavoritesHtml.isEmpty(document))) {
+    if (items.isEmpty && (!favorites || !AnistarFavoritesHtml.isEmpty(document, baseUri))) {
       throw const AnistarFailure(message: 'Не удалось разобрать каталог AniStar. Возможно, сайт изменился.');
     }
     final hasNext = document.querySelectorAll('a[href]').any((link) {
@@ -167,11 +168,13 @@ final class AnistarHtmlParser {
       }
     }
     final image = item['image'];
+    final mediaId = item['media_id'];
 
     return DirectEpisode(
       number: number,
       title: title.trim(),
       isWatched: item['viewing'] == true,
+      mediaId: mediaId is String && mediaId.isNotEmpty ? mediaId : null,
       sources: Map.unmodifiable(sources),
       previewUri: image is String ? _uri(image) : null,
     );

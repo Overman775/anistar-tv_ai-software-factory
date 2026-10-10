@@ -18,7 +18,9 @@ import '../packages/features/favorites/data/anistar_favorites_repository.dart';
 import '../packages/features/favorites/favorites_providers.dart';
 import '../packages/features/player/data/repositories/anistar_playback_repository.dart';
 import '../packages/features/player/player_providers.dart';
+import '../packages/features/watch_history/anistar_watched_episodes_repository.dart';
 import '../packages/features/watch_history/watched_episodes.dart';
+import '../packages/features/watch_history/watched_episodes_repository.dart';
 
 /// The application owns concrete bindings; features declare their interfaces.
 List<Override> createAppOverrides({
@@ -37,6 +39,9 @@ List<Override> createAppOverrides({
   sharedPreferencesStorageProvider.overrideWithValue(preferences),
   secureStorageProvider.overrideWithValue(secureStorage),
   watchHistoryAccountProvider.overrideWith((ref) => ref.watch(authControllerProvider).value),
+  watchedEpisodesRepositoryProvider.overrideWith(
+    (ref) => AnistarWatchedEpisodesRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+  ),
   authRepositoryProvider.overrideWith((ref) => AnistarAuthRepository(ref.watch(anistarAuthServiceProvider))),
   favoritesRepositoryProvider.overrideWith(
     (ref) => AnistarFavoritesRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
