@@ -171,6 +171,19 @@ void main() {
     expect(AnistarAuthHtml.isAuthenticated(guestAuthHtml, origin), isFalse);
   });
 
+  test('logout detection ignores non-HTTP, foreign, credential-bearing and malformed links', () {
+    const unrelated =
+        '<a href="javascript:void(0)">Menu</a><a href="mailto:test@example.org">Mail</a> '
+        '<a href="data:text/html,logout">Data</a><a href="https://[invalid">Broken</a> '
+        '<a href="https://v31.astar.bz/?action=logout">Foreign</a><a href="https://user@v30.astar.bz/?action=logout">User info</a> '
+        '<a href="http://v30.astar.bz/?action=logout">HTTP</a><a href="/?action=%ZZ">Bad query</a>';
+    expect(AnistarAuthHtml.isAuthenticated(unrelated, origin), isFalse);
+    expect(
+      AnistarAuthHtml.logoutUri('$unrelated<a href="/index.php?action=logout&amp;other=1">Exit</a>', origin),
+      origin.resolve('index.php?action=logout&other=1'),
+    );
+  });
+
   test('guest HTML invalidates a running session and emits an expiry event', () async {
     await service.signIn('test', 'secret');
     final expired = session.expired.first;

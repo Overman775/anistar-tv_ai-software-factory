@@ -55,4 +55,4 @@ FavoritesController допускает одно изменение одновр�
 - [Source](../../infrastructure/anistar/lib/src/anistar_source.dart), [HTML controls](../../infrastructure/anistar/lib/src/anistar_favorites_html.dart), [controller](../../lib/packages/features/favorites/favorites_controller.dart).
 - [Протокол](../../test/infrastructure/anistar/anistar_favorites_test.dart), [UI и concurrency](../../test/packages/features/favorites/favorites_test.dart), [goldens](../../test/packages/features/favorites/favorites_golden_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart).
 
-Настоящая запись избранного требует успешного входа в реальный аккаунт; она не подтверждена fixture-тестами как live-операция. Protocol может измениться на сайте — новый формат требует новой fixture и явной проверки.
+Настоящая запись избранного подтверждена отдельным Android live E2E с тестовым аккаунтом на 10 октября 2026 года; исходный статус восстановлен. Fixture-тесты отдельно проверяют отказы и гонки. Protocol может измениться на сайте — новый формат требует новой fixture и явной проверки.

@@ -55,4 +55,6 @@ Restore и изменения session сериализованы. Поврежд
 - [Auth service](../../infrastructure/anistar/lib/src/anistar_auth_service.dart), [session](../../infrastructure/anistar/lib/src/anistar_session.dart), [interceptor](../../infrastructure/anistar/lib/src/anistar_session_interceptor.dart).
 - [Протокол и storage-регрессии](../../test/infrastructure/anistar/anistar_auth_test.dart), [UI gate](../../test/packages/features/auth/auth_test.dart), [смена origin](../../test/app/mirror_switch_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart).
 
-Live-вход в настоящий аккаунт и миграция данных установленной Secure Storage v10-сборки отдельно не подтверждены. Не трактовать fixture restore как проверку этой миграции.
+Live-вход и restore с тестовым аккаунтом подтверждены Android E2E на 10 октября 2026 года. Миграция данных установленной Secure Storage v10-сборки отдельно не подтверждена; не трактовать успешный вход или fixture restore как проверку этой миграции.
+
+При поиске logout ссылки игнорировать javascript:, mailto:, data:, malformed URI/query, чужой host/port, cleartext HTTP и URI с userInfo. Нельзя читать `Uri.origin` у произвольного href: Dart бросает StateError для схем без HTTP-origin. Регрессия обязана включать такие ссылки перед реальной logout ссылкой в member HTML. Живой аккаунт и запуск: [разработка и тестирование](../05_development_and_testing.md#9-проверка-с-живым-аккаунтом).

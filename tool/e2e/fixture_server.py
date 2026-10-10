@@ -13,7 +13,7 @@ CERT = ROOT / 'android/app/src/debug/res/raw/e2e_localhost.pem'
 MEDIA = ROOT / 'tool/e2e/media'
 GUEST = '<form method="post" action=""><input name="login_name"><input name="login_password" type="password"><input type="hidden" name="formtoken" value="fixture"></form>'
 SETTINGS = '<script>var dle_skin="new36";</script>'
-MEMBER = '<a href="/index.php?action=logout">Выход</a>'
+MEMBER = '<a href="javascript:void(0)">Профиль</a><a href="/index.php?action=logout">Выход</a>'
 
 
 class FixtureServer(ThreadingHTTPServer):
