@@ -1,59 +1,67 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:storage/providers.dart';
+
+import 'watched_episodes_repository.dart';
 
 /// The application supplies the signed-in account, independent of mirror origin.
 final watchHistoryAccountProvider = Provider<String?>((ref) => null);
 
-final watchedEpisodesProvider = AsyncNotifierProvider.family<WatchedEpisodes, Set<int>, int>(WatchedEpisodes.new);
+final watchedEpisodesProvider = AsyncNotifierProvider.family<WatchedEpisodes, Set<int>, int>(
+  WatchedEpisodes.new,
+  retry: (_, _) => null,
+);
 
 final class WatchedEpisodes extends AsyncNotifier<Set<int>> {
   final int animeId;
-  String? _key;
+  String? _account;
+  int _generation = 0;
   Future<void> _pending = Future<void>.value();
 
   WatchedEpisodes(this.animeId);
 
   @override
   Future<Set<int>> build() async {
-    final account = ref.watch(watchHistoryAccountProvider);
-    _key = account == null ? null : 'anistar.watched.v1.${Uri.encodeComponent(account)}.$animeId';
-    final key = _key;
-    if (key == null) {
+    _account = ref.watch(watchHistoryAccountProvider);
+    _generation++;
+    if (_account == null) {
       return const {};
     }
-    final values = await ref.read(sharedPreferencesStorageProvider).get<List<String>>(key, const []);
+    final result = await ref.read(watchedEpisodesRepositoryProvider).getWatched(animeId);
 
-    return Set.unmodifiable(values.map(int.tryParse).whereType<int>().where((number) => number > 0));
+    return result.when(success: Set<int>.unmodifiable, failure: (failure) => throw failure);
   }
 
-  /// Serializes writes so simultaneous starts cannot replace each other's marks.
-  /// A failed read/write leaves the previous persisted history intact.
+  /// Site-confirmed writes are serialized; no device-only marks are published.
   Future<bool> markStarted(int episodeNumber) {
-    final key = _key;
-    final result = _pending.then((_) => _mark(episodeNumber, key));
+    final generation = _generation;
+    final result = _pending.then((_) => _mark(episodeNumber, generation));
     _pending = result.then<void>((_) => Future<void>.value());
 
     return result;
   }
 
-  Future<bool> _mark(int episodeNumber, String? key) async {
+  Future<bool> _mark(int episodeNumber, int generation) async {
     try {
-      await future;
-      if (!ref.mounted || episodeNumber <= 0 || key == null || key != _key) {
+      if (state.isLoading && !state.hasError) {
+        await future.onError((_, _) => const <int>{});
+      }
+      if (!ref.mounted || episodeNumber <= 0 || _account == null || generation != _generation) {
         return false;
       }
-      final current = state.requireValue;
-      if (current.contains(episodeNumber)) {
-        return true;
-      }
-      final next = {...current, episodeNumber};
-      final values = next.toList()..sort();
-      await ref.read(sharedPreferencesStorageProvider).set(key, values.map((number) => '$number').toList());
-      if (ref.mounted && key == _key) {
-        state = AsyncData(Set.unmodifiable(next));
+      final result = await ref
+          .read(watchedEpisodesRepositoryProvider)
+          .markStarted(animeId: animeId, episodeNumber: episodeNumber);
+      if (!ref.mounted || generation != _generation) {
+        return false;
       }
 
-      return true;
+      return await result.when(
+        success: (confirmed) {
+          state = AsyncData(Set.unmodifiable(confirmed));
+
+          return confirmed.contains(episodeNumber);
+        },
+        failure: (_) => false,
+      );
     } on Object {
       return false;
     }

@@ -62,6 +62,24 @@ void main() {
     expect(() => parser.catalog('<h1>Ошибка</h1>', 1, favorites: true), failure);
   });
 
+  test('authenticated empty favorites accepts the complete site shell and excludes sidebar cards', () {
+    final parser = AnistarHtmlParser(origin);
+    const shell =
+        '<title>Мои закладки &raquo; AniStar</title> '
+        '<link rel="canonical" href="https://v30.astar.bz/index.php?do=favorites&amp;cstart=1"> '
+        '<a href="/index.php?action=logout">Выход</a><div id="dle-content"></div>';
+    expect(parser.catalog('$shell$catalogHtml', 1, favorites: true).items, isEmpty);
+    final failure = throwsA(isA<AnistarFailure>());
+    expect(() => parser.catalog(shell.replaceFirst('action=logout', 'action=login'), 1, favorites: true), failure);
+    expect(() => parser.catalog(shell.replaceFirst('do=favorites', 'do=other'), 1, favorites: true), failure);
+    expect(() => parser.catalog(shell.replaceFirst('Мои закладки', 'Ошибка'), 1, favorites: true), failure);
+    expect(() => parser.catalog(shell.replaceFirst('v30.astar.bz', 'other.test'), 1, favorites: true), failure);
+    expect(
+      () => parser.catalog(shell.replaceFirst('</div>', '<p>Ошибка сервера</p></div>'), 1, favorites: true),
+      failure,
+    );
+  });
+
   late FavoritesFixtureAdapter adapter;
   late AnistarSource source;
   setUp(() {

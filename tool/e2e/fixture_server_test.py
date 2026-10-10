@@ -52,7 +52,7 @@ class FixtureServerTest(unittest.TestCase):
             self.assertIn("'minus'", response.read().decode('cp1251'))
         self.get(root + 'minus', headers).close()
         with self.get('/index.php?do=favorites&cstart=1', headers) as response:
-            self.assertIn('Вы еще ничего', response.read().decode('cp1251'))
+            self.assertIn('<div id="dle-content"></div>', response.read().decode('cp1251'))
         self.assertEqual(self.server.favorites, set())
 
     def test_hls_chain_requires_referer_and_supports_range(self):
@@ -84,13 +84,25 @@ class FixtureServerTest(unittest.TestCase):
         for _ in range(3):
             with self.get('/test/player2/videoas_p2p_new.php?id=10938') as response:
                 bodies.append(response.read().decode())
-        self.assertIn('/fresh/', bodies[0])
-        self.assertIn('/expired/', bodies[1])
-        self.assertIn('/fresh/', bodies[2])
+        self.assertTrue(all('/expired/' in body for body in bodies))
         with self.assertRaises(HTTPError) as error:
             self.get('/hls/expired/1/720.mp4', self.headers())
         self.assertEqual(error.exception.code, 403)
         error.exception.close()
+        with self.get('/test/player2/videoas_p2p_new.php?id=10938') as response:
+            self.assertIn('/fresh/', response.read().decode())
+
+    def test_watched_marks_require_login_and_return_in_new_player_html(self):
+        path = '/test/player2/videoas_p2p_new.php?id=10938'
+        self.get('/engine/ajax/ns.php?vid=fixture-1').close()
+        self.assertEqual(self.server.watched, set())
+        self.server.session_active = True
+        headers = {'Cookie': 'dle_password=fixture-session'}
+        self.get('/engine/ajax/ns.php?vid=fixture-2', headers).close()
+        with self.get(path, headers) as response:
+            self.assertIn("media_id:'fixture-2',viewing:true", response.read().decode())
+        with self.get(path) as response:
+            self.assertNotIn('viewing:true', response.read().decode())
 
     def test_recovery_does_not_reset_attempt_history(self):
         self.get('/__test/reset?video_mode=always_expired').close()

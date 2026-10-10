@@ -108,6 +108,45 @@ final class AnistarSource {
 
   Uri playerUri(int animeId) => baseUri.resolve('test/player2/videoas_p2p_new.php?id=$animeId');
 
+  Future<Set<int>> watchedEpisodes(int animeId) async =>
+      (await episodes(animeId)).where((episode) => episode.isWatched).map((episode) => episode.number).toSet();
+
+  Future<Set<int>> markWatched({required int animeId, required int episodeNumber}) async {
+    final playlist = await episodes(animeId);
+    final matches = playlist.where((episode) => episode.number == episodeNumber);
+    if (matches.isEmpty) {
+      throw const AnistarFailure(message: 'Не удалось найти серию для отметки просмотра.');
+    }
+    final episode = matches.first;
+    if (episode.isWatched) {
+      return playlist.where((item) => item.isWatched).map((item) => item.number).toSet();
+    }
+    final mediaId = episode.mediaId;
+    if (mediaId == null) {
+      throw const AnistarFailure(message: 'AniStar не выдал идентификатор просмотра серии.');
+    }
+    await _dio.get<List<int>>(
+      'engine/ajax/ns.php',
+      queryParameters: {'vid': mediaId},
+      options: DioClient.withoutRetry(
+        Options(
+          responseType: ResponseType.bytes,
+          headers: {
+            'Referer': playerUri(animeId).toString(),
+            'Cache-Control': 'no-cache',
+            'User-Agent': 'AniStarTV/1.0',
+          },
+        ),
+      ),
+    );
+    final confirmed = await watchedEpisodes(animeId);
+    if (!confirmed.contains(episodeNumber)) {
+      throw const AnistarFailure(message: 'AniStar не подтвердил отметку просмотра.');
+    }
+
+    return confirmed;
+  }
+
   Future<String> _html(String path) async {
     final Response<List<int>> response;
     try {

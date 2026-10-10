@@ -32,6 +32,7 @@ class FixtureServer(ThreadingHTTPServer):
         self.favorites = set()
         self.favorite_writes = 0
         self.favorite_error = False
+        self.watched = set()
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(CERT, ROOT / 'tool/e2e/tls/localhost.key')
         self.socket = context.wrap_socket(self.socket, server_side=True)
@@ -74,6 +75,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.server.player_pages = 0
                 self.server.session_active = False
                 self.server.favorites.clear()
+                self.server.watched.clear()
                 self.server.favorite_writes = 0
                 self.server.favorite_error = query.get('favorite_error') == ['true']
             self.reply(200, b'{}', 'application/json', record=False)
@@ -90,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, b'{}', 'application/json', record=False)
         elif path == '/__test/state':
             with self.server.lock:
-                state = {'events': list(self.server.events), 'player_pages': self.server.player_pages, 'favorites': sorted(self.server.favorites), 'favorite_writes': self.server.favorite_writes}
+                state = {'events': list(self.server.events), 'player_pages': self.server.player_pages, 'favorites': sorted(self.server.favorites), 'favorite_writes': self.server.favorite_writes, 'watched': sorted(self.server.watched)}
             self.reply(200, json.dumps(state).encode(), 'application/json', record=False)
         elif path == '/engine/ajax/favorites.php':
             with self.server.lock:
@@ -106,12 +108,19 @@ class Handler(BaseHTTPRequestHandler):
                         self.server.favorites.discard(anime_id)
                     body = self.favorite_control(anime_id)
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
+        elif path == '/engine/ajax/ns.php':
+            valid = self.authenticated() and query.get('vid', [''])[0] in ('fixture-1', 'fixture-2')
+            if valid:
+                self.server.watched.add(int(query['vid'][0].split('-')[1]))
+            self.reply(200, b'OK' if valid else b'NO', 'text/html; charset=windows-1251')
         elif path == '/index.php' and query.get('do') == ['favorites']:
             body = (MEMBER if self.authenticated() else GUEST) + SETTINGS
+            body += f'<title>Мои закладки &raquo; AniStar</title><link rel="canonical" href="{self.server.origin}/index.php?do=favorites&amp;cstart=1"><div id="dle-content">'
             if self.authenticated() and self.server.favorites:
                 body += ''.join(self.card(anime_id) for anime_id in sorted(self.server.favorites))
             else:
-                body += '<div id="dle-content">Вы еще ничего не добавляли в свои закладки.</div>'
+                body += ''
+            body += '</div>'
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
         elif path in ('/anime/', '/anime/page/2/'):
             if self.server.catalog_error and self.authenticated():
@@ -132,12 +141,13 @@ class Handler(BaseHTTPRequestHandler):
             with self.server.lock:
                 self.server.player_pages += 1
                 # Details fetch page 1; first playback fetch is page 2.
-                stale = self.server.video_mode == 'refresh_once' and self.server.player_pages == 2
+                stale = self.server.video_mode == 'refresh_once'
                 epoch = 'expired' if stale or self.server.video_mode == 'always_expired' else 'fresh'
             episodes = []
             for episode in (2, 1):
                 files = ','.join(f"{{title:'{quality}',file:'{self.server.origin}/hls/{epoch}/{episode}/{quality}.mp4'}}" for quality in (720, 360))
-                episodes.append(f"{{title:'Серия {episode}',files:[{files}],files_mp4:[],}}")
+                watched = self.authenticated() and episode in self.server.watched
+                episodes.append(f"{{title:'Серия {episode}',media_id:'fixture-{episode}',viewing:{str(watched).lower()},files:[{files}],files_mp4:[],}}")
             body = 'var playlst = [' + ','.join(episodes) + '];'
             self.reply(200, body.encode(), 'text/html; charset=utf-8')
         elif path.startswith('/hls/'):
@@ -149,6 +159,8 @@ class Handler(BaseHTTPRequestHandler):
         referer = self.headers.get('Referer')
         expected = f'{self.server.origin}/test/player2/videoas_p2p_new.php?id=10938'
         if referer != expected or '/expired/' in path:
+            if '/expired/' in path and self.server.video_mode == 'refresh_once':
+                self.server.video_mode = 'normal'
             self.reply(403, b'Forbidden', 'text/plain')
             return
         match = re.fullmatch(r'/hls/fresh/([12])/(360|720)\.mp4(?:/(variant\.m3u8|segment-\d+\.ts))?', path)

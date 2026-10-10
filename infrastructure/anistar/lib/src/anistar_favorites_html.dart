@@ -2,6 +2,7 @@ import 'package:html/dom.dart';
 import 'package:html/parser.dart' as html;
 import 'package:json5/json5.dart';
 
+import 'anistar_auth_html.dart';
 import 'anistar_failure.dart';
 
 /// Reads DLE favorite controls as data; never executes the site's scripts.
@@ -23,8 +24,22 @@ abstract final class AnistarFavoritesHtml {
     return skin;
   }
 
-  static bool isEmpty(Document document) {
-    final text = document.querySelector('#dle-content')?.text.toLowerCase() ?? '';
+  static bool isEmpty(Document document, Uri origin) {
+    final content = document.querySelector('#dle-content');
+    final text = content?.text.toLowerCase() ?? '';
+    final canonical = Uri.tryParse(document.querySelector('link[rel="canonical"]')?.attributes['href'] ?? '');
+    final title = document.querySelector('title')?.text.toLowerCase() ?? '';
+    if (content != null &&
+        content.children.isEmpty &&
+        text.trim().isEmpty &&
+        title.contains('мои закладки') &&
+        canonical?.hasAuthority == true &&
+        canonical?.scheme == origin.scheme &&
+        canonical?.origin == origin.origin &&
+        canonical?.queryParameters['do'] == 'favorites' &&
+        AnistarAuthHtml.isAuthenticated(document.outerHtml, origin)) {
+      return true;
+    }
 
     return RegExp(
       '(?:ещ[её].*(?:не|ничего)|(?:нет|пуст|не добав)).*(?:избран|заклад)|(?:избран|заклад).*(?:пуст|нет|не добав)',

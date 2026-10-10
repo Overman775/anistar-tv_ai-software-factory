@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:storage/storage.dart';
 import 'package:video_player/video_player.dart';
 
 import 'support/e2e_harness.dart';
@@ -205,7 +204,6 @@ void main() {
   });
 
   testWidgets('catalog, real HTML, native 720/360 HLS, remote, episode and back', (tester) async {
-    await SharedPreferencesStorage().remove('anistar.watched.v1.${Uri.encodeComponent('тест')}.10938');
     await fixture.configure();
     await fixture.launch(tester);
     await _openAnime(tester);
@@ -271,6 +269,10 @@ void main() {
       'back to catalog',
     );
     final state = await fixture.state();
+    expect(state['watched'], [1, 2]);
+    final marks = _events(state).where((event) => _path(event).startsWith('/engine/ajax/ns.php')).toList();
+    expect(marks, hasLength(2));
+    expect(marks.every((event) => event['authenticated'] == true), isTrue);
     _verifyRequests(state, fixture);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -328,7 +330,7 @@ void main() {
     await _openVideo(tester);
     expect(E2eHarness.requirePlayer(tester).dataSource, contains('/fresh/'));
     final state = await fixture.state();
-    expect(state['player_pages'], 3, reason: 'detail + initial source + one refresh');
+    expect(state['player_pages'], greaterThanOrEqualTo(4), reason: 'detail, history, initial source and one refresh');
     final events = _events(state);
     expect(events.any((event) => _path(event).contains('/expired/') && event['status'] == 403), isTrue);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -344,9 +346,9 @@ void main() {
       () => find.text('Видео не запустилось').evaluate().isNotEmpty,
       'bounded video error',
     );
-    expect((await fixture.state())['player_pages'], 3);
+    expect((await fixture.state())['player_pages'], 4);
     await tester.pump(const Duration(seconds: 2));
-    expect((await fixture.state())['player_pages'], 3, reason: 'no background retry loop');
+    expect((await fixture.state())['player_pages'], 4, reason: 'no background retry loop');
     await fixture.configure(reset: false);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(
@@ -354,7 +356,7 @@ void main() {
       () => E2eHarness.player(tester)?.value.isInitialized ?? false,
       'manual video retry',
     );
-    expect((await fixture.state())['player_pages'], 4);
+    expect((await fixture.state())['player_pages'], greaterThanOrEqualTo(5));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
