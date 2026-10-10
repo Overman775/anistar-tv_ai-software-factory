@@ -14,9 +14,22 @@ abstract final class AnistarAuthHtml {
 
   static Uri? logoutUri(String source, Uri baseUri) {
     for (final link in html.parse(source).querySelectorAll('a[href]')) {
-      final uri = baseUri.resolve(link.attributes['href'] ?? '');
-      if (uri.origin == baseUri.origin && uri.queryParameters['action'] == 'logout') {
-        return uri;
+      final reference = Uri.tryParse(link.attributes['href'] ?? '');
+      if (reference == null) {
+        continue;
+      }
+      final uri = baseUri.resolveUri(reference);
+      // Menu links may be javascript:, mailto: or malformed HTML URLs. An
+      // origin lookup on a non-HTTP URI throws instead of rejecting the link.
+      if (uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.host != baseUri.host || uri.port != baseUri.port) {
+        continue;
+      }
+      try {
+        if (uri.queryParameters['action'] == 'logout') {
+          return uri;
+        }
+      } on FormatException {
+        continue;
       }
     }
 

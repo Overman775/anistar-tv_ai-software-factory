@@ -36,7 +36,18 @@ cleanup() {
 }
 trap cleanup EXIT
 if [[ $mode == live ]]; then
+  credentials_file=${ANISTAR_LIVE_CREDENTIALS_FILE:-$project_root/env/live-test.local.json}
+  python3 - "$credentials_file" <<'PYCONFIG'
+import json, sys
+from pathlib import Path
+try:
+    config = json.loads(Path(sys.argv[1]).read_text())
+    assert all(isinstance(config.get(key), str) and config[key] for key in ('ANISTAR_TEST_USERNAME', 'ANISTAR_TEST_PASSWORD'))
+except (OSError, ValueError, AssertionError, AttributeError):
+    raise SystemExit('Missing/invalid local live credentials. See docs/05_development_and_testing.md section 9.')
+PYCONFIG
   "${flutter_cmd[@]}" test integration_test/direct_android_test.dart -d "$device" --flavor dev \
+    --dart-define-from-file="$credentials_file" \
     --timeout=10m --reporter=expanded --test-randomize-ordering-seed="$seed" 2>&1 | tee "$run_dir/flutter.log"
 else
   python3 -m unittest discover -s tool/e2e -p '*_test.py'

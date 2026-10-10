@@ -5,7 +5,8 @@ import 'package:dio/dio.dart';
 
 const guestAuthHtml =
     '<form method="post" action=""><input type="hidden" name="login" value="submit"><input type="hidden" name="token" value="fixture"><input name="login_name"><input name="login_password" type="password"></form>';
-const memberAuthHtml = '<a href="/index.php?action=logout">Выход</a>';
+const memberAuthHtml =
+    '<a href="javascript:ShowOrHide(\'profile\')">Профиль</a><a href="/index.php?action=logout">Выход</a>';
 
 final class AuthFixtureAdapter implements HttpClientAdapter {
   final List<RequestOptions> requests = [];

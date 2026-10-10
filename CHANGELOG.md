@@ -14,6 +14,11 @@
 - Поиск следующего доступного зеркала `vN.astar.bz`: проверка каталога, до четырёх следующих версий, сохранение найденного номера и cooldown после отказа. Не повторяет мутации на новом origin.
 - Новые иконка приложения, adaptive icon и Android TV баннер.
 
+### Исправлено
+
+- Вход ошибочно отклонялся после успешного ответа AniStar: обработчик logout перебирал ссылки `javascript:` и вызывал `Uri.origin`, что приводило к StateError. Посторонние схемы, malformed URI/query, чужой host/port и userInfo теперь игнорируются; регрессия включена в member fixtures и unit-тесты.
+- Live Android E2E обновлён для настоящего входа, encrypted restore без нового POST, избранного с восстановлением исходного статуса, HLS, watched history и logout. Локальные credentials передаются отдельным файлом вне Git.
+
 ### Код и окружение
 
 - Нейтральный Core и отдельные пакеты networking, storage, app_logging, anistar и UI Kit в pub workspace; единая композиция зависимостей через Riverpod.
@@ -25,8 +30,8 @@
 ### Проверки
 
 - Детерминированные команды format, analyzer, DCM, unit/widget/architecture и goldens с закреплённым SDK и seed.
-- 133 unit/widget/architecture-теста и 8 golden-тестов прошли. Android E2E: 8 сценариев на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
+- 134 unit/widget/architecture-теста и 8 golden-тестов прошли. Android E2E: 8 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
 - Release APK собран; соответствие текущему AOT и промежуточным библиотекам проверено для трёх ABI.
-- Live HTTP и HLS проверялись напрямую. Успешный вход и изменение настоящего пользовательского аккаунта без credentials не проверялись; доступность сайта зависит от IP и зеркала.
+- Live HTTP и HLS проверялись напрямую. С тестовым аккаунтом проверены вход, restore и изменение избранного в живом Android E2E; доступность сайта зависит от IP и зеркала.
 
 Подробные результаты: [состояние проверок](docs/06_verification.md). Контракты: [спецификации](docs/specs/README.md).

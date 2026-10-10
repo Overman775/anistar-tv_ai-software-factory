@@ -202,3 +202,21 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 Исходники: `resources/anistar_launcher.png` (1024×1024) и `resources/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `bash scripts/generate_branding.sh`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
 Изображения созданы встроенным imagegen. Промпт иконки: фиолетовая падающая звезда с голубым знаком play на тёмном фоне, без текста. Промпт баннера: та же эмблема слева, белая надпись `AniStar TV` справа, формат 16:9, цвета интерфейса, без персонажей и посторонних надписей. Старые splash-ресурсы не участвуют в экспорте launcher.
+
+## 9. Проверка с живым аккаунтом
+
+Тестовый аккаунт: `overmantest`. Credentials этого рабочего места находятся в `env/live-test.local.json` (права `0600`, файл исключён из Git). Поля — `ANISTAR_TEST_USERNAME` и `ANISTAR_TEST_PASSWORD`. Пароль не копировать в исходники, fixtures, вывод тестов или CHANGELOG. На другом компьютере получите пароль у владельца и создайте локальный файл с этими двумя строковыми полями.
+
+```bash
+bash scripts/e2e.sh emulator-5554 live
+# Или credentials в отдельном локальном файле:
+ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json bash scripts/e2e.sh emulator-5554 live
+```
+
+Перед прогоном очищаются локальная сессия выбранного зеркала и локальные отметки аниме `10938` для тестового аккаунта; в конце выполняется logout. Используйте dev flavor и отдельный тестовый аккаунт.
+
+Live-прогон отделён от детерминированных fixtures: он зависит от сайта/CDN и требует сеть. Он проверяет реальный вход, восстановление encrypted session без повторного POST, карточку и серии, избранное, native HLS и локальные галочки. Избранное тестового аниме возвращается в исходное состояние после проверки. Не запускать параллельно другим клиентам, меняющим избранное этого аккаунта.
+
+Credentials передаются только в integration test через `--dart-define-from-file`; не использовать этот файл при обычной/release-сборке. Integration APK содержит тестовый entry point и не предназначен для распространения. После теста соберите обычный APK командой выше.
+
+При отказе сохранить тип сбоя и шаг, HTTP status, наличие challenge и результат восстановления; не сохранять пароль, Cookie/Set-Cookie, POST body или подписанные media URL в отчёт. Успешный Python-запрос не заменяет проверку Dart/Android. При интерактивной CAPTCHA сообщить владельцу: автоматический browser fallback не является частью клиента.
