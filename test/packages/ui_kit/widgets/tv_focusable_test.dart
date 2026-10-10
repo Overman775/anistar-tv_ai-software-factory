@@ -1,3 +1,6 @@
+// Separate key events and assertions verify each phase of the same hold.
+// ignore_for_file: prefer-moving-to-variable, avoid-duplicate-test-assertions
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -26,7 +29,7 @@ void main() {
     expect(find.text('В фокусе'), findsOneWidget);
   });
 
-  testWidgets('held OK and repeats open only the long action after release', (tester) async {
+  testWidgets('held OK opens the long action before release, only once', (tester) async {
     var opened = 0;
     var menus = 0;
     await pumpTvApp(
@@ -42,7 +45,9 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.pump(const Duration(milliseconds: 700));
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
-    expect(menus, 0);
+    expect(menus, 1);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    expect(menus, 1);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     expect(menus, 1);
     expect(opened, 0);
@@ -50,7 +55,7 @@ void main() {
     expect(opened, 1);
   });
 
-  testWidgets('touch hold has one action and disposal cancels the remote timer', (tester) async {
+  testWidgets('touch hold opens before release and disposal cancels pending OK', (tester) async {
     var opened = 0;
     var menus = 0;
     await pumpTvApp(
@@ -63,9 +68,11 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.longPress(find.text('Карточка'));
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Карточка')));
+    await tester.pump(const Duration(seconds: 1));
     expect(menus, 1);
     expect(opened, 0);
+    await gesture.up();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 700));

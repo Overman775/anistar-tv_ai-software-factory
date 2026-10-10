@@ -79,9 +79,9 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
     await tester.pump(const Duration(milliseconds: 700));
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
-    expect(find.text('Добавить в избранное'), findsNothing);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.text('Добавить в избранное').evaluate().isNotEmpty, 'held OK menu');
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     expect(find.byType(AnimeScreen), findsNothing);
     expect((await fixture.state())['favorite_writes'], 0);
     await _tapSheetAction(tester, 'Добавить в избранное');

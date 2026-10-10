@@ -125,9 +125,8 @@ void main() {
     await tester.pumpAndSettle();
     final card = FocusManager.instance.primaryFocus;
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-    await tester.pump(const Duration(milliseconds: 650));
-    expect(find.byType(FavoriteActionsSheet), findsNothing);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
     final sheet = find.byType(TvSideSheet);
@@ -136,6 +135,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getRect(surface).right, 960);
     expect(tester.getRect(surface).left, 520);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(favorites.writes, isEmpty);
     for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowDown]) {
       await tester.sendKeyEvent(key);
       await tester.pumpAndSettle();
@@ -165,7 +169,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-    await tester.pump(const Duration(milliseconds: 650));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
