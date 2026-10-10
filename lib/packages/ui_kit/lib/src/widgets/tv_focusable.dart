@@ -12,12 +12,14 @@ class TvFocusable extends StatefulWidget {
     required this.onPressed,
     super.key,
     this.autofocus = false,
+    this.focusNode,
     this.onFocusChanged,
     this.onLongPressed,
     this.semanticLabel,
   });
 
   final bool autofocus;
+  final FocusNode? focusNode;
   final TvFocusBuilder builder;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback? onLongPressed;
@@ -29,7 +31,8 @@ class TvFocusable extends StatefulWidget {
 }
 
 class _TvFocusableState extends State<TvFocusable> {
-  late final FocusNode _focusNode;
+  final FocusNode _ownedFocusNode = FocusNode();
+  FocusNode get _focusNode => widget.focusNode ?? _ownedFocusNode;
   bool _focused = false;
   Timer? _holdTimer;
   LogicalKeyboardKey? _heldKey;
@@ -38,7 +41,7 @@ class _TvFocusableState extends State<TvFocusable> {
   @override
   void initState() {
     super.initState();
-    _focusNode = FocusNode(debugLabel: widget.semanticLabel);
+    _ownedFocusNode.debugLabel = widget.semanticLabel;
   }
 
   void _onFocusChange(bool focused) {
@@ -109,7 +112,7 @@ class _TvFocusableState extends State<TvFocusable> {
   @override
   void dispose() {
     _cancelHold();
-    _focusNode.dispose();
+    _ownedFocusNode.dispose();
     super.dispose();
   }
 

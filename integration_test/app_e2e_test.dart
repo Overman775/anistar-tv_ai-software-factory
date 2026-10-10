@@ -13,6 +13,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:video_player/video_player.dart';
 
 import 'support/e2e_harness.dart';
+import 'support/remote_controls.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -189,7 +190,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'reopen same card');
     await _openVideo(tester);
     final player = E2eHarness.requirePlayer(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await RemoteControls.openQuality(tester);
     await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'remote chooser');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isEmpty, 'cancel chooser');
@@ -208,8 +209,8 @@ void main() {
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'dedicated media pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await E2eHarness.waitFor(tester, () => player.value.position.inSeconds >= 10, 'remote seek after cancellation');
-    await tester.binding.handlePopRoute();
-    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'remote player back');
+    await RemoteControls.backToEpisodes(tester);
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'visible remote back button');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -230,7 +231,7 @@ void main() {
     final pausedPosition = player.value.position;
     await tester.pump(const Duration(milliseconds: 700));
     expect((player.value.position - pausedPosition).abs(), lessThan(const Duration(milliseconds: 600)));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await RemoteControls.openQuality(tester);
     await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'quality dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -246,7 +247,7 @@ void main() {
     expect((player.value.position - pausedPosition).abs(), lessThan(const Duration(seconds: 2)));
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => player.value.isPlaying, 'resume');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await RemoteControls.openEpisodes(tester);
     await E2eHarness.waitFor(tester, () => find.text('Серия 2').evaluate().isNotEmpty, 'episode dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);

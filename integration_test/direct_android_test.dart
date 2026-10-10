@@ -21,6 +21,7 @@ import 'package:storage/storage.dart';
 import 'package:video_player/video_player.dart';
 
 import 'support/live_harness.dart';
+import 'support/remote_controls.dart';
 
 /// Live network smoke, deliberately separate from deterministic unit tests.
 void main() {
@@ -77,7 +78,7 @@ void main() {
     expect(player.value.isPlaying, isFalse);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await _wait(tester, () => player.value.isPlaying, 'remote resume');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await RemoteControls.openQuality(tester);
     await _wait(tester, () => find.text('360p').evaluate().isNotEmpty, 'quality dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -86,7 +87,7 @@ void main() {
     player = _requirePlayer(tester);
     await _wait(tester, () => player.value.position.inSeconds >= 121, '360p preserves seek position');
     expect(player.value.size.height, 360);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await RemoteControls.openEpisodes(tester);
     await _wait(tester, () => find.text('Выбор серии').evaluate().isNotEmpty, 'episode dialog');
     final nextSeries = find.textContaining(RegExp('^Серия $secondEpisode(?: —|\$)'));
     await tester.scrollUntilVisible(

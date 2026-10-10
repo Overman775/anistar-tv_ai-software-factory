@@ -57,6 +57,20 @@ void main() {
     await settle(tester);
   }
 
+  Future<void> openMenu(WidgetTester tester, {bool episodes = false}) async {
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    if (episodes) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+    }
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(find.text(episodes ? 'Выбор серии' : 'Качество видео'), findsOneWidget);
+  }
+
   testWidgets('dedicated media Play and Pause keys do not toggle their requested state', (tester) async {
     await mount(tester);
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
@@ -75,6 +89,61 @@ void main() {
     expect(video.sources, hasLength(1));
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
+  });
+
+  testWidgets('hidden controls reveal focus, remain visible and never seek while navigating buttons', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await tester.pump(const Duration(seconds: 5));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'К сериям');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Качество');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пауза / воспроизведение');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(controller.value.isPlaying, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await settle(tester);
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isTrue);
+    expect(controller.value.position, Duration.zero);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('Up and OK leave the player through the visible back button and dispose native video', (tester) async {
+    await pumpTvApp(
+      tester,
+      const Text('Список серий'),
+      overrides: [playbackRepositoryProvider.overrideWithValue(repository)],
+    );
+    unawaited(
+      Navigator.of(tester.element(find.text('Список серий'))).push(
+        MaterialPageRoute<void>(builder: (_) => const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме')),
+      ),
+    );
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('К сериям'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(find.byType(PlayerScreen), findsNothing);
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump();
+    expect(video.disposed, [1]);
   });
 
   testWidgets('native pause reveals hidden controls; native resume restores their hide timer', (tester) async {
@@ -138,13 +207,11 @@ void main() {
     );
     await settle(tester);
     expect(storage.watched[10938], {1});
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.pumpAndSettle();
+    await openMenu(tester);
     await tester.tap(find.text('360p'));
     await settle(tester);
     expect(storage.writes, 1);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pumpAndSettle();
+    await openMenu(tester, episodes: true);
     expect(find.text('Серия 1 — просмотрена ✓'), findsOneWidget);
     await tester.tap(find.text('Серия 2'));
     await settle(tester);
@@ -237,8 +304,7 @@ void main() {
     final native = video;
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     await controller.pause();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await settle(tester);
+    await openMenu(tester);
     await tester.binding.handlePopRoute();
     await settle(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -364,15 +430,13 @@ void main() {
     await mount(tester);
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     await controller.seekTo(const Duration(seconds: 120));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await settle(tester);
+    await openMenu(tester);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
     expect(repo.quality, PlaybackQuality.low);
     expect(native.seeks.last, const Duration(seconds: 120));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await settle(tester);
+    await openMenu(tester, episodes: true);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);

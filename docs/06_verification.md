@@ -1,6 +1,6 @@
 # ✅ Состояние проверок | AniStar TV
 
-Дата: 10 октября 2026 года. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
+Дата: 11 октября 2026 года. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
 
 ## 1. Критерии готовности
 
@@ -17,15 +17,15 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после добавления анимаций; 215 Dart-файлов |
-| Unit/widget/architecture | 155 passed после добавления анимаций; seed 20261010 |
+| Формат, analyzer, DCM | Passed после доработки D-pad focus; 216 Dart-файлов |
+| Unit/widget/architecture | 160 passed после доработки D-pad focus; seed 20261010 |
 | Golden comparison | 18 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
 | HTTPS fixture | 7 Python-тестов passed |
 | Emulator hardware input | 4 Python-теста passed; проверка текущего AVD passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
 
-Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после добавления анимаций при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
+Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после доработки D-pad focus при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
 | Сценарий | Проверено |
 | --- | --- |
@@ -35,7 +35,7 @@ Android E2E выполнен после обновления SDK: API 36 ARM64, 
 | Восстановление | Один автоматический refresh, остановка повторов, ручной retry |
 | Избранное | Held OK / касание, plus/minus с cookie и Referer, звезда, вкладка, новый runner, изменение другим клиентом |
 | Отказ избранного | HTTP 200 с error не меняет UI; свежий статус и ручной retry |
-| TV focus | Up на текущую вкладку, пустое избранное, возврат к той же карточке, отмена chooser и последующие pause/seek |
+| TV focus | Порядок шапки, пустое избранное, возврат к той же карточке, отмена chooser, pause/seek и выход через «К сериям» |
 
 ## 3. Живой AniStar
 
@@ -110,9 +110,9 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 ## 6. Текущая сборка
 
-[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 830 932 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
+[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 912 908 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `026eae1f77b917e5ac2c0e2da2b0113cbb123f04b3c2f9443bc3614cdc5c647c`.
+SHA-256: `94c341907fdac4bd7bb3f64ced404375e271e2dc252d699c9759703d6237cf46`.
 
 APK собран после исправления авторизованного избранного и серверной истории, включая новую шапку и убывающий порядок серий. Freshness checker подтвердил соответствие AOT/JNI/merge/stripped libraries для трёх ABI. Тестовые credentials в распакованных entries APK отсутствуют. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
@@ -244,3 +244,16 @@ Detail использует fade и вертикальный сдвиг 2%, play
 После обновления ожидания кнопки Play повторно прошли 9 Android fixture E2E на API 36 ARM64 и 7 Python-тестов fixture. Проверены focus вкладок, избранное, возврат к той же карточке, detail/player, 720p/360p, серия, seek и bounded recovery. E2E ждёт доступного действия после transition, а не только появления AnimeScreen. Финальный analyzer/DCM чистые. Live-протокол сайта в этой доработке не менялся; физический TV и оценка плавности на его GPU отдельно не проверены.
 
 Собран prod release APK с текущими анимациями; freshness checker подтвердил AOT для трёх ABI. Значения локальных credentials отсутствуют во всех ZIP entries APK и изменённых файлах. Актуальные размер и SHA-256 — в разделе 6.
+
+
+## 16. Фокусы D-pad и возврат из видео
+
+Шапка получила явный порядок: Главная → Избранное → Выйти → Обновить → Логи; отсутствующие действия пропускаются. Стрелки у края сохраняют focus, Down возвращает к исходной карточке. В detail Up ведёт от действий к кнопке Back, Down — к последней серии; Up из первой строки возвращает к «Смотреть» и прокручивает начало страницы. Серии используют постоянные FocusNode в пределах экрана.
+
+Плеер больше не исключает видимые controls из focus. Up открывает меню на «К сериям», Down — на паузе; Left/Right перемещают focus внутри двух строк. Выход за верхнюю/нижнюю границу возвращает управление видео. Кнопки не скрываются, пока выбраны; отмена или завершение chooser возвращает focus видео. Для paused video явно запрашивается frame перед focus скрытых controls. Back и Up → OK возвращают к сериям с освобождением native controller. Контракт: [TV interaction](specs/06_tv_interaction.md).
+
+Прошли format, analyzer, DCM, 160 unit/widget/architecture-тестов и 18 неизменённых goldens; 9 Android fixture E2E, 7 Python-тестов HTTPS fixture и 4 проверки hardware input, seed 20261010. Новые регрессии проверяют порядок и края шапки, пропуск отсутствующих actions, длинную сетку серий, меню paused player, запрет скрытия выбранных controls и возврат через видимую кнопку.
+
+11 октября 2026 года обычный dev APK установлен на работающий emulator без очистки данных. Вход под тестовым аккаунтом и live-каталог успешны. Аппаратные стрелки/Enter через emulator controller подтвердили всю шапку и возврат на карточку, переход с избранного действия к последней серии, переход к Back в detail, запуск native 720p, меню качества, отмену Android Back, паузу/воспроизведение и выход через «К сериям». Проверка выполнялась без касаний и браузера. Физический TV и пульт отдельно не проверены.
+
+Prod release APK собран без credentials и integration entry point. Freshness checker подтвердил AOT для трёх ABI; значения локальных credentials отсутствуют в изменённых файлах и всех ZIP entries APK. Размер/SHA-256 обновлены в разделе 6.
