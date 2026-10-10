@@ -16,6 +16,8 @@
 
 ### Исправлено
 
+- UI Android TV: скелетоны повторяют структуру каталога и карточки сериала, поддерживают отключение анимации. Исправлена прокрутка к сфокусированным карточкам и перекрытие верхней панели; уточнены отступы, типографика и focus вкладок. Экран входа оформлен в общей теме, добавлено переключение видимости пароля.
+
 - Вход ошибочно отклонялся после успешного ответа AniStar: обработчик logout перебирал ссылки `javascript:` и вызывал `Uri.origin`, что приводило к StateError. Посторонние схемы, malformed URI/query, чужой host/port и userInfo теперь игнорируются; регрессия включена в member fixtures и unit-тесты.
 - Live Android E2E обновлён для настоящего входа, encrypted restore без нового POST, избранного с восстановлением исходного статуса, HLS, watched history и logout. Локальные credentials передаются отдельным файлом вне Git.
 
@@ -30,7 +32,7 @@
 ### Проверки
 
 - Детерминированные команды format, analyzer, DCM, unit/widget/architecture и goldens с закреплённым SDK и seed.
-- 134 unit/widget/architecture-теста и 8 golden-тестов прошли. Android E2E: 8 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
+- 135 unit/widget/architecture-тестов и 16 golden-тестов прошли. Android E2E: 8 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
 - Release APK собран; соответствие текущему AOT и промежуточным библиотекам проверено для трёх ABI.
 - Live HTTP и HLS проверялись напрямую. С тестовым аккаунтом проверены вход, restore и изменение избранного в живом Android E2E; доступность сайта зависит от IP и зеркала.
 

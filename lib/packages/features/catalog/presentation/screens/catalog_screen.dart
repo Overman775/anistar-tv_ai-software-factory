@@ -82,10 +82,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     return LayoutBuilder(
       builder: (context, constraints) => CustomScrollView(
         controller: _scrollController,
-        clipBehavior: Clip.none,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.md),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
             sliver: SliverToBoxAdapter(
               child: CatalogHeading(
                 itemCount: state.items.length,
@@ -110,15 +109,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 }
                 final anime = state.items[index];
 
-                return AnimeCard(
+                return Builder(
                   key: ValueKey(anime.id),
-                  anime: anime,
-                  isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
-                  onLongPressed: () => unawaited(_favoriteActions(anime)),
-                  autofocus: index == _selectedIndex,
-                  onFocusChanged: (focused) =>
-                      _onCardFocusChanged(context, index, focused, _columnCount(constraints.maxWidth)),
-                  onTap: () => _selectAndOpen(anime, index),
+                  builder: (cardContext) => AnimeCard(
+                    anime: anime,
+                    isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                    onLongPressed: () => unawaited(_favoriteActions(anime)),
+                    autofocus: index == _selectedIndex,
+                    onFocusChanged: (focused) =>
+                        _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
+                    onTap: () => _selectAndOpen(anime, index),
+                  ),
                 );
               },
             ),
@@ -159,15 +160,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       return;
     }
     _selectedIndex = index;
-    if (index > 0) {
+    if (index == 0 && _scrollController.hasClients) {
+      unawaited(_scrollController.animateTo(0, duration: AppMotion.standard, curve: Curves.easeOutCubic));
+    } else {
       unawaited(
-        Scrollable.ensureVisible(
-          cardContext,
-          alignment: 0.5,
-          alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-          duration: AppMotion.standard,
-          curve: Curves.easeOutCubic,
-        ),
+        Scrollable.ensureVisible(cardContext, alignment: 0.5, duration: AppMotion.standard, curve: Curves.easeOutCubic),
       );
     }
     final preloadDistance = columns * 2;

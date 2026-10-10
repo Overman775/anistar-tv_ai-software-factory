@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:core/data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../auth_providers.dart';
 
@@ -17,6 +18,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _username = TextEditingController();
   final _password = TextEditingController();
+  bool _obscurePassword = true;
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
@@ -40,65 +42,118 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final error = auth.error;
+    final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: SizedBox(
-              width: 440,
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Вход в AniStar', style: Theme.of(context).textTheme.headlineMedium),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      key: const ValueKey('login_username'),
-                      controller: _username,
-                      autofocus: true,
-                      enabled: !auth.isLoading,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(labelText: 'Логин'),
-                      validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      key: const ValueKey('login_password'),
-                      controller: _password,
-                      enabled: !auth.isLoading,
-                      obscureText: true,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      textInputAction: TextInputAction.done,
-                      decoration: const InputDecoration(labelText: 'Пароль'),
-                      validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
-                      onFieldSubmitted: (_) => unawaited(_submit()),
-                    ),
-                    if (error != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        error is Failure ? error.message : 'Не удалось проверить сессию. Повторите попытку.',
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      body: TvBackdrop(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: SizedBox(
+                width: 520,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: AppPalette.surface,
+                    borderRadius: AppRadii.large,
+                    border: Border.fromBorderSide(BorderSide(color: AppPalette.outline)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.live_tv_rounded, color: AppPalette.primary, size: 32),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text('AniStar TV', style: textTheme.headlineMedium),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Войдите в аккаунт AniStar',
+                            style: textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          TextFormField(
+                            key: const ValueKey('login_username'),
+                            controller: _username,
+                            autofocus: true,
+                            enabled: !auth.isLoading,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'Логин',
+                              prefixIcon: Icon(Icons.person_outline_rounded),
+                            ),
+                            validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            key: const ValueKey('login_password'),
+                            controller: _password,
+                            enabled: !auth.isLoading,
+                            obscureText: _obscurePassword,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            textInputAction: TextInputAction.done,
+                            decoration: InputDecoration(
+                              labelText: 'Пароль',
+                              prefixIcon: const Icon(Icons.lock_outline_rounded),
+                              suffixIcon: IconButton(
+                                tooltip: _obscurePassword ? 'Показать пароль' : 'Скрыть пароль',
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : () => setState(() => _obscurePassword = !_obscurePassword),
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                ),
+                              ),
+                            ),
+                            validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
+                            onFieldSubmitted: (_) => unawaited(_submit()),
+                          ),
+                          if (error != null) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              error is Failure ? error.message : 'Не удалось проверить сессию. Повторите попытку.',
+                              style: TextStyle(color: Theme.of(context).colorScheme.error),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          FilledButton(
+                            key: const ValueKey('login_submit'),
+                            onPressed: auth.isLoading ? null : () => unawaited(_submit()),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (auth.isLoading) ...[
+                                  const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  const SizedBox(width: AppSpacing.sm),
+                                ],
+                                Text(auth.isLoading ? 'Проверяем вход…' : 'Войти'),
+                              ],
+                            ),
+                          ),
+                          if (error != null)
+                            TextButton(
+                              onPressed: ref.read(authControllerProvider.notifier).retryRestore,
+                              child: const Text('Повторить проверку сессии'),
+                            ),
+                        ],
                       ),
-                    ],
-                    const SizedBox(height: 24),
-                    FilledButton(
-                      key: const ValueKey('login_submit'),
-                      onPressed: auth.isLoading ? null : () => unawaited(_submit()),
-                      child: Text(auth.isLoading ? 'Проверяем вход…' : 'Войти'),
                     ),
-                    if (error != null)
-                      TextButton(
-                        onPressed: ref.read(authControllerProvider.notifier).retryRestore,
-                        child: const Text('Повторить проверку сессии'),
-                      ),
-                  ],
+                  ),
                 ),
               ),
             ),

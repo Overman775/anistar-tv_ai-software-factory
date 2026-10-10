@@ -2,6 +2,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_screen_data.dart';
+import 'anime_description.dart';
+import 'anime_layout.dart';
 import 'anime_metadata_chip.dart';
 
 class AnimeHero extends StatelessWidget {
@@ -10,14 +12,6 @@ class AnimeHero extends StatelessWidget {
   final AnimeScreenData data;
   final Widget? favoriteAction;
   final VoidCallback? onPlayFirstEpisode;
-
-  double _height(double width) {
-    if (width >= 1200) {
-      return 410;
-    }
-
-    return width >= 900 ? 380 : 470;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +23,7 @@ class AnimeHero extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) => SizedBox(
-        height: _height(constraints.maxWidth),
+        height: AnimeLayout.heroHeight(constraints.maxWidth),
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -41,7 +35,7 @@ class AnimeHero extends StatelessWidget {
                   heightFactor: 1,
                   child: Opacity(
                     opacity: 0.24,
-                    child: AppNetworkImage(imageUrl: posterUrl, semanticLabel: details.title),
+                    child: AppNetworkImage(imageUrl: posterUrl, errorWidget: const SizedBox.shrink()),
                   ),
                 ),
               ),
@@ -81,7 +75,7 @@ class AnimeHero extends StatelessWidget {
                         ),
                       ),
                     ),
-                  const SizedBox(width: AppSpacing.xl),
+                  if (posterUrl != null) const SizedBox(width: AppSpacing.xl),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,23 +94,21 @@ class AnimeHero extends StatelessWidget {
                           details.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: textTheme.headlineLarge?.copyWith(color: AppPalette.textPrimary),
+                          style: (constraints.maxWidth >= 1200 ? textTheme.headlineLarge : textTheme.headlineMedium)
+                              ?.copyWith(color: AppPalette.textPrimary),
                         ),
                         if (metadata.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.sm),
                           Text(
                             metadata,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: AppPalette.secondary, fontWeight: FontWeight.w700),
                           ),
                         ],
                         const SizedBox(height: AppSpacing.md),
                         Expanded(
-                          child: Text(
-                            details.description ?? 'Описание пока недоступно.',
-                            maxLines: constraints.maxWidth >= 1200 ? 7 : 5,
-                            overflow: TextOverflow.ellipsis,
-                            style: textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
-                          ),
+                          child: AnimeDescription(description: details.description ?? 'Описание пока недоступно.'),
                         ),
                         const SizedBox(height: AppSpacing.md),
                         Wrap(
