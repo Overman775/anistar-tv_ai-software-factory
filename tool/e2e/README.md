@@ -37,4 +37,8 @@ bash scripts/regenerate_e2e_media.sh
 python3 -m unittest discover -s tool/e2e -p '*_test.py'
 ```
 
-Все команды, сценарии и CI: [Разработка и тестирование](../../docs/05_development_and_testing.md).
+## Живой сайт
+
+`bash scripts/e2e.sh emulator-5554 live` использует `env/live-test.local.json` автоматически; в VS Code есть задача **Flutter: Live Android E2E**. Локальный файл исключён из Git, шаблон без credentials — `env/live-test.example.json`. Форму входа заполняет live harness через Dart define. Настройка и ограничения: [Проверка с живым аккаунтом](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+
+Все команды и сценарии: [Разработка и тестирование](../../docs/05_development_and_testing.md).

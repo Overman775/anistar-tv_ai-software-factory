@@ -60,6 +60,20 @@
             "type": "shell",
             "command": "bash scripts/e2e.sh ${input:androidEmulator}",
             "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Live Android E2E",
+            "type": "process",
+            "command": "bash",
+            "args": [
+                "scripts/e2e.sh",
+                "${input:androidEmulator}",
+                "live"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
         }
     ],
     "inputs": [
