@@ -21,6 +21,7 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 | Unit/widget/architecture | 155 passed после добавления анимаций; seed 20261010 |
 | Golden comparison | 18 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
 | HTTPS fixture | 7 Python-тестов passed |
+| Emulator hardware input | 4 Python-теста passed; проверка текущего AVD passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
 
@@ -45,6 +46,14 @@ Android E2E выполнен после обновления SDK: API 36 ARM64, 
 **Успешный live-вход и запись избранного подтверждены 10 октября 2026 года** после получения тестового аккаунта; подробности исправления и повторного прогона — в разделе 9. Ранние проверки до предоставления credentials подтверждали только локальный HTTPS fixture.
 
 Физический TV, аппаратный декодер и физический пульт отдельно не проверены. CI/CD не используется; все указанные проверки локальные. Интерактивная CAPTCHA не обходится; доступность зеркала зависит от IP/сети. Естественное суточное истечение ссылки не ожидалось: отказ и refresh воспроизводятся fixture.
+
+### Directional Pad в Extended Controls
+
+В AVD `anistar_e2e` (Emulator 36.4.10 / API 36 ARM64) стояли `hw.dPad=yes`, `hw.keyboard=no`. `getevent -pl` показывал только power/touch devices, без стрелок. Прямые Android keyevent работали в каталоге и плеере, но это обходило kernel input крестовины.
+
+Включено `hw.keyboard=yes`, выполнен Cold Boot без очистки данных. Появилось устройство `qwerty2` с `KEYBOARD | ALPHAKEY | DPAD`; аппаратный Right через emulator controller переместил focus на соседнюю карточку. Владелец подтвердил работу кнопок непосредственно в `Extended Controls → Directional Pad` после перезапуска.
+
+Добавлен preflight hardware input перед E2E: отсутствие стрелок останавливает команду до сборки и установки приложения. Прошли 4 регрессии проверки input, 7 тестов HTTPS fixture и 8 тестов APK checker; `bash -n` и `git diff --check` чистые. Код и APK приложения не менялись; Flutter/E2E результаты выше относятся к предыдущему прогону.
 
 ## 4. Очистка проекта
 
