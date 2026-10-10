@@ -179,6 +179,40 @@ void main() {
     await settle(tester);
   });
 
+  testWidgets('Back cancels a chooser and returns remote play and seek to the same native stream', (tester) async {
+    await mount(tester);
+    final native = video;
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await controller.pause();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await settle(tester);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(controller.value.isPlaying, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await settle(tester);
+    expect(controller.value.position, const Duration(seconds: 10));
+    expect(native.sources, hasLength(1));
+    expect(native.disposed, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('OK retries a failed stream without searching for the retry button', (tester) async {
+    video.failInitialization = true;
+    await mount(tester);
+    expect(find.text('Видео не запустилось'), findsOneWidget);
+    video.failInitialization = false;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(find.byType(VideoPlayer), findsOneWidget);
+    expect(tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller.value.isPlaying, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
   testWidgets('leaving during native initialization disposes the unfinished controller', (tester) async {
     final native = video..delayInitialization = true;
     await pumpTvApp(
@@ -217,13 +251,25 @@ void main() {
     expect(native.sources.last.uri, isNot(native.sources.first.uri));
     expect(native.seeks.last, const Duration(seconds: 120));
     expect(native.disposed, [1]);
+    final replacement = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(replacement.value.isPlaying, isFalse);
     native.events[2]?.addError(PlatformException(code: 'VideoError', message: 'Persistent source error'));
     await settle(tester);
     expect(native.sources, hasLength(2));
     expect(find.text('Воспроизведение прервано'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(repo.calls, 3);
+    final retried = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    expect(retried.value.isPlaying, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(retried.value.isPlaying, isTrue);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
-    expect(native.disposed, [1, 2]);
+    expect(native.disposed, [1, 2, 3]);
   });
 
   testWidgets('persistent initialization failure has two attempts and a manual retry', (tester) async {

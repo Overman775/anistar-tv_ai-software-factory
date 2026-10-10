@@ -9,6 +9,7 @@ import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -92,6 +93,38 @@ void main() {
     expect(repository.loginCalls, 1);
     expect(tester.widget<TextFormField>(password).controller?.text, isEmpty);
     expect(find.text(const UnknownFailure().message), findsOneWidget);
+  });
+
+  testWidgets('restore focuses username and rejected login returns focus to password for remote retry', (tester) async {
+    repository.loginResult = const Result.failure(UnknownFailure());
+    await pumpTvApp(
+      tester,
+      const LoginScreen(),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    final username = find.byKey(const ValueKey('login_username'));
+    final password = find.byKey(const ValueKey('login_password'));
+    final field = find.byType(EditableText);
+    expect(tester.widget<EditableText>(find.descendant(of: username, matching: field)).focusNode.hasFocus, isTrue);
+    await tester.enterText(username, 'test');
+    await tester.testTextInput.receiveAction(TextInputAction.next);
+    await tester.pumpAndSettle();
+    expect(tester.widget<EditableText>(find.descendant(of: password, matching: field)).focusNode.hasFocus, isTrue);
+    await tester.enterText(password, 'secret');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(repository.loginCalls, 1);
+    // Focus is checked again after a separate, rejected network operation.
+    // ignore: avoid-duplicate-test-assertions
+    expect(tester.widget<EditableText>(find.descendant(of: password, matching: field)).focusNode.hasFocus, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+      const ValueKey('login_submit'),
+    );
   });
 
   test('concurrent login is blocked; expiry prevents a late login result from unlocking the app', () async {

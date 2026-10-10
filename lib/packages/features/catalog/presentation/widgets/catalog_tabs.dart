@@ -2,9 +2,19 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 class CatalogTabs extends StatelessWidget implements PreferredSizeWidget {
-  const CatalogTabs({required this.favoritesOnly, required this.onSelected, super.key});
+  const CatalogTabs({
+    required this.favoritesOnly,
+    required this.onSelected,
+    this.autofocus = false,
+    this.homeFocusNode,
+    this.favoritesFocusNode,
+    super.key,
+  });
 
   final bool favoritesOnly;
+  final bool autofocus;
+  final FocusNode? homeFocusNode;
+  final FocusNode? favoritesFocusNode;
   final ValueChanged<bool> onSelected;
 
   @override
@@ -31,6 +41,8 @@ class CatalogTabs extends StatelessWidget implements PreferredSizeWidget {
             selected: !favoritesOnly,
             child: TextButton(
               key: const ValueKey('catalog-tab-false'),
+              focusNode: homeFocusNode,
+              autofocus: autofocus && !favoritesOnly,
               onPressed: () => onSelected(false),
               style: style.copyWith(
                 backgroundColor: WidgetStatePropertyAll(favoritesOnly ? null : selectedColor),
@@ -46,6 +58,8 @@ class CatalogTabs extends StatelessWidget implements PreferredSizeWidget {
             selected: favoritesOnly,
             child: TextButton(
               key: const ValueKey('catalog-tab-true'),
+              focusNode: favoritesFocusNode,
+              autofocus: autofocus && favoritesOnly,
               onPressed: () => onSelected(true),
               style: style.copyWith(
                 backgroundColor: WidgetStatePropertyAll(favoritesOnly ? selectedColor : null),

@@ -16,14 +16,14 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после UI-правок; 203 Dart-файла |
-| Unit/widget/architecture | 135 passed после UI-правок; seed 20261010 |
-| Golden comparison | 16 passed после UI-правок; точное сравнение, 960×540 и 1280×720 |
+| Формат, analyzer, DCM | Passed после TV UX-правок; 205 Dart-файлов |
+| Unit/widget/architecture | 141 passed после TV UX-правок; seed 20261010 |
+| Golden comparison | 16 passed после TV UX-правок; точное сравнение, 960×540 и 1280×720 |
 | HTTPS fixture | 6 Python-тестов passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
 
-Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **8 сценариев прошли после добавления поиска зеркал при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
+Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после TV UX-правок при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
 | Сценарий | Проверено |
 | --- | --- |
@@ -33,6 +33,7 @@ Android E2E выполнен после обновления SDK: API 36 ARM64, 
 | Восстановление | Один автоматический refresh, остановка повторов, ручной retry |
 | Избранное | Held OK / касание, plus/minus с cookie и Referer, звезда, вкладка, новый runner, изменение другим клиентом |
 | Отказ избранного | HTTP 200 с error не меняет UI; свежий статус и ручной retry |
+| TV focus | Up на текущую вкладку, пустое избранное, возврат к той же карточке, отмена chooser и последующие pause/seek |
 
 ## 3. Живой AniStar
 
@@ -99,11 +100,11 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 ## 6. Текущая сборка
 
-[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 634 324 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
+[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 667 092 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `a6ff13e72e58f329dd81d5dd41241e36dc11857bdb067c91d4e48e5efc543e5b`.
+SHA-256: `6491cfeb334d8607b01579fe1778bc5290e564ce7af9a87f20f5c68d357d1e8b`.
 
-Промежуточные библиотеки проверены freshness checker после release-сборки с исправлениями входа и UI. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
+Промежуточные библиотеки проверены freshness checker после release-сборки с исправлениями входа, UI и TV UX. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
 Иконка и TV баннер обновлены через imagegen; экспортированы все пять density-вариантов и adaptive icon. Размеры проверены, баннер просмотрен в 320×180. В новом release APK через `aapt` подтверждены `AniStar TV`, `android:icon`, `android:banner` и LEANBACK launcher; freshness check прошёл для трёх ABI. Внешний вид в launcher физического TV отдельно не проверен. Экспорт: [Разработка и тестирование](05_development_and_testing.md#8-иконка-и-android-tv-баннер).
 
@@ -154,3 +155,27 @@ Credentials хранятся локально вне Git. Команда и пр
 После последней правки описания повторно прошёл live E2E с `overmantest`: вход, encrypted restore без нового POST, сайтное избранное с восстановлением исходного статуса, HLS 720p/360p, seek/пауза, смена серии, история после перезапуска и logout. CAPTCHA не потребовалась. Credentials переданы только integration test через локальный файл вне Git.
 
 Release APK пересобран после live E2E; freshness checker подтвердил текущий AOT для трёх ABI. Размер и SHA-256 обновлены в разделе 6. Файл credentials и integration entry point в release не передавались.
+
+## 11. UX управления пультом
+
+Критерии готовности: все найденные проблемы воспроизводятся тестом до исправления; стрелки/OK проходят путь без касаний; текущий выбор виден; Back возвращает управление предыдущему экрану без смены потока; retry доступен сразу после ошибки; проверки и обычная release-сборка проходят.
+
+| Проблема | Результат исправления |
+| --- | --- |
+| Восстановление сессии отключало поля раньше autofocus | После проверки focus получает логин |
+| После отказа входа focus терялся; Down редактировал курсор | Focus возвращается в очищенный пароль; Up/Down ведут между полями и кнопкой |
+| Up из первого ряда выбирал соседнюю вкладку, затем Right мог вести на logout | Up явно ведёт на текущую вкладку, независимо от геометрии native layout |
+| Пустое избранное теряло выбранную вкладку | Focus остаётся на вкладке; Left + OK возвращают главную, Down ведёт к карточкам |
+| Ошибка статуса избранного оставляла retry без focus | OK повторяет чтение свежего статуса |
+| Поздняя серия не показывалась при открытии списка | Выбранная серия видна сразу; стрелки прокручивают строки |
+| OK после отказа видео не нажимал видимую кнопку retry | Focus переходит на «Повторить» и возвращается видео после восстановления |
+
+Проверены выбор серии 20 из 24, прокрутка до последней и OK, отмена chooser через Back с последующими pause/seek без нового controller, восстановление focus после автоматического/ручного retry. Уже работавшие короткий/длинный OK, сетка каталога, прокрутка к карточке и освобождение плеера после Back остались в регрессиях.
+
+Format, analyzer и DCM прошли без замечаний; 141 unit/widget/architecture и 16 goldens прошли с seed 20261010. Два baseline входа обновлены и просмотрены: изменение — focus логина; остальные golden-снимки совпали. Контракт и ручной smoke: [TV-взаимодействие](specs/06_tv_interaction.md), [разработка и тестирование](05_development_and_testing.md#5-e2e-и-smoke-на-android-tv).
+
+На API 36 ARM64 с отключённым Chrome прошли девять fixture Android E2E и шесть Python-тестов HTTPS сервера. Вход fixture теперь отправляется стрелкой Down и OK вместо касания «Войти»; отказ HLS повторяется через OK. Новый E2E проверил текущую вкладку, пустое избранное, возврат к той же карточке, отмену chooser и последующие pause/seek на том же native controller.
+
+Повторно прошёл live Android E2E с тестовым аккаунтом: вход, encrypted restore, сайтное избранное с возвратом исходного статуса, HLS 720p/360p, seek/пауза, серии, история и logout. Обычный release APK пересобран после E2E без credentials и integration entry point; freshness checker прошёл для трёх ABI. Размер/SHA-256 обновлены в разделе 6. Физический TV и его экранная клавиатура отдельно не проверены.
+
+Обычный release APK установлен и запущен отдельно от integration entry point. Через native `adb input keyevent` проверены Back для закрытия IME, Down: логин → пароль → «Войти», OK: валидация пустой формы. Пароль для этой ручной проверки не вводился. У эмулятора TV hardware profile, но системная IME из образа Android; её внешний вид не подтверждает клавиатуру конкретного телевизора.

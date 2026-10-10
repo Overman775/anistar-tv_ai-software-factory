@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -18,7 +19,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _username = TextEditingController();
   final _password = TextEditingController();
+  final _usernameFocus = FocusNode(debugLabel: 'Логин');
+  final _passwordFocus = FocusNode(debugLabel: 'Пароль');
+  final _submitFocus = FocusNode(debugLabel: 'Войти');
   bool _obscurePassword = true;
+
+  KeyEventResult _moveFieldFocus(KeyEvent event, FocusNode down, [FocusNode? up]) {
+    final target = switch (event.logicalKey) {
+      LogicalKeyboardKey.arrowDown => down,
+      LogicalKeyboardKey.arrowUp => up,
+      _ => null,
+    };
+    if (target == null) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      target.requestFocus();
+    }
+
+    return KeyEventResult.handled;
+  }
+
+  void _focusAfterLoading() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || ref.read(authControllerProvider).isLoading) {
+        return;
+      }
+      (_username.text.isEmpty ? _usernameFocus : _passwordFocus).requestFocus();
+    });
+  }
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
@@ -33,6 +62,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
+    _usernameFocus.dispose();
+    _passwordFocus.dispose();
+    _submitFocus.dispose();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -40,6 +72,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(authControllerProvider, (previous, next) {
+      if (previous?.isLoading == true && !next.isLoading) {
+        _focusAfterLoading();
+      }
+    });
     final auth = ref.watch(authControllerProvider);
     final error = auth.error;
     final textTheme = Theme.of(context).textTheme;
@@ -79,44 +116,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             style: textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
                           ),
                           const SizedBox(height: AppSpacing.lg),
-                          TextFormField(
-                            key: const ValueKey('login_username'),
-                            controller: _username,
-                            autofocus: true,
-                            enabled: !auth.isLoading,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                              labelText: 'Логин',
-                              prefixIcon: Icon(Icons.person_outline_rounded),
+                          Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) => _moveFieldFocus(event, _passwordFocus),
+                            child: TextFormField(
+                              key: const ValueKey('login_username'),
+                              controller: _username,
+                              focusNode: _usernameFocus,
+                              onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                              autofocus: true,
+                              enabled: !auth.isLoading,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Логин',
+                                prefixIcon: Icon(Icons.person_outline_rounded),
+                              ),
+                              validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
                             ),
-                            validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
                           ),
                           const SizedBox(height: 16),
-                          TextFormField(
-                            key: const ValueKey('login_password'),
-                            controller: _password,
-                            enabled: !auth.isLoading,
-                            obscureText: _obscurePassword,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            textInputAction: TextInputAction.done,
-                            decoration: InputDecoration(
-                              labelText: 'Пароль',
-                              prefixIcon: const Icon(Icons.lock_outline_rounded),
-                              suffixIcon: IconButton(
-                                tooltip: _obscurePassword ? 'Показать пароль' : 'Скрыть пароль',
-                                onPressed: auth.isLoading
-                                    ? null
-                                    : () => setState(() => _obscurePassword = !_obscurePassword),
-                                icon: Icon(
-                                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                          Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) => _moveFieldFocus(event, _submitFocus, _usernameFocus),
+                            child: TextFormField(
+                              key: const ValueKey('login_password'),
+                              controller: _password,
+                              focusNode: _passwordFocus,
+                              enabled: !auth.isLoading,
+                              obscureText: _obscurePassword,
+                              autocorrect: false,
+                              enableSuggestions: false,
+                              textInputAction: TextInputAction.done,
+                              decoration: InputDecoration(
+                                labelText: 'Пароль',
+                                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                suffixIcon: IconButton(
+                                  tooltip: _obscurePassword ? 'Показать пароль' : 'Скрыть пароль',
+                                  onPressed: auth.isLoading
+                                      ? null
+                                      : () => setState(() => _obscurePassword = !_obscurePassword),
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                  ),
                                 ),
                               ),
+                              validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
+                              onFieldSubmitted: (_) => unawaited(_submit()),
                             ),
-                            validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
-                            onFieldSubmitted: (_) => unawaited(_submit()),
                           ),
                           if (error != null) ...[
                             const SizedBox(height: 16),
@@ -128,6 +176,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 24),
                           FilledButton(
                             key: const ValueKey('login_submit'),
+                            focusNode: _submitFocus,
                             onPressed: auth.isLoading ? null : () => unawaited(_submit()),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,

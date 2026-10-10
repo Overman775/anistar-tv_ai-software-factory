@@ -62,7 +62,11 @@ class _FavoriteActionsDialogState extends ConsumerState<FavoriteActionsDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(error ?? 'Не удалось проверить избранное.'),
-          TextButton(onPressed: _busy ? null : () => setState(_load), child: const Text('Обновить статус')),
+          TextButton(
+            autofocus: true,
+            onPressed: _busy ? null : () => setState(_load),
+            child: const Text('Обновить статус'),
+          ),
         ],
       );
     }

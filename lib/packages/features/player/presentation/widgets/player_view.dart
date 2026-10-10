@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../domain/models/playback_session.dart';
 import 'player_overlay.dart';
+import 'player_retry_view.dart';
 
 class PlayerView extends StatelessWidget {
   const PlayerView({
@@ -38,12 +39,11 @@ class PlayerView extends StatelessWidget {
     valueListenable: controller,
     builder: (context, value, child) {
       if (value.hasError) {
-        return TvStateView(
+        return PlayerRetryView(
           icon: Icons.play_disabled_rounded,
           title: 'Воспроизведение прервано',
           message: 'Не удалось продолжить поток. Повторите попытку или выберите другое качество.',
-          actionLabel: 'Повторить',
-          onAction: onRetry,
+          onRetry: onRetry,
         );
       }
       final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;

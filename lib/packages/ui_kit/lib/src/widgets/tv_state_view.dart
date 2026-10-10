@@ -10,8 +10,10 @@ class TvStateView extends StatelessWidget {
     this.message,
     this.actionLabel,
     this.onAction,
+    this.actionFocusNode,
   });
 
+  final FocusNode? actionFocusNode;
   final IconData icon;
   final String title;
   final String? message;
@@ -63,6 +65,7 @@ class TvStateView extends StatelessWidget {
                 const SizedBox(height: AppSpacing.lg),
                 FilledButton.icon(
                   autofocus: true,
+                  focusNode: actionFocusNode,
                   onPressed: onAction,
                   icon: const Icon(Icons.refresh_rounded),
                   label: Text(actionText),

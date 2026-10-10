@@ -7,6 +7,7 @@ import 'package:anistar_tv/packages/features/favorites/favorites_state.dart';
 import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_dialog.dart';
 import 'package:anistar_tv/packages/features/favorites/presentation/favorite_button.dart';
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -100,6 +101,23 @@ void main() {
     await pumpAndSettle();
     expect(retry, findsOneWidget);
     expect(repository.ids, isEmpty);
+  });
+
+  testWidgets('remote OK retries a failed status without needing to search for focus', (tester) async {
+    final repository = FakeFavoritesRepository()..statusFailure = const UnknownFailure();
+    await pumpTvApp(
+      tester,
+      const FavoriteButton(animeId: 1, slug: '1-test', title: 'Аниме 1'),
+      overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+    );
+    final settle = tester.pumpAndSettle;
+    await tester.tap(find.text('Избранное'));
+    await settle();
+    repository.statusFailure = null;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle();
+    expect(find.text('Добавить в избранное'), findsOneWidget);
+    expect(repository.writes, isEmpty);
   });
 
   testWidgets('a detail mutation removes the server row from the favorites tab', (tester) async {

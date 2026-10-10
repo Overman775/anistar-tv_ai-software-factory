@@ -31,10 +31,12 @@
 
 ### Проверки
 
+- Исправлены TV UX ошибки focus: вход после восстановления/отказа, пустая вкладка избранного, retry статуса, длинный список серий и повтор после отказа видео. Добавлены регрессии управления пультом и отдельный Android E2E переходов/возврата.
+
 - Для live Android E2E добавлены шаблон локального JSON и задача VS Code. Credentials автоматически передаются через Dart define; `env/*.local.json` исключены из Git.
 
 - Детерминированные команды format, analyzer, DCM, unit/widget/architecture и goldens с закреплённым SDK и seed.
-- 135 unit/widget/architecture-тестов и 16 golden-тестов прошли. Android E2E: 8 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
+- 141 unit/widget/architecture-тест и 16 golden-тестов прошли. Android E2E: 9 fixture-сценариев и 1 live-сценарий на API 36 ARM64 с отключённым Chrome, реальным native player, HTTP fixtures и хранилищем.
 - Release APK собран; соответствие текущему AOT и промежуточным библиотекам проверено для трёх ABI.
 - Live HTTP и HLS проверялись напрямую. С тестовым аккаунтом проверены вход, restore и изменение избранного в живом Android E2E; доступность сайта зависит от IP и зеркала.
 

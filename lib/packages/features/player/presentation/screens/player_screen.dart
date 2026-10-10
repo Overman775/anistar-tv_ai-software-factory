@@ -15,6 +15,7 @@ import '../../domain/models/playback_refresh_budget.dart';
 import '../../domain/models/playback_session.dart';
 import '../../player_providers.dart';
 import '../widgets/player_choices_dialog.dart';
+import '../widgets/player_retry_view.dart';
 import '../widgets/player_view.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -60,12 +61,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return const TvProgressView(label: 'Загружаем видео…');
     }
     if (snapshot.hasError) {
-      return TvStateView(
+      return PlayerRetryView(
         icon: Icons.wifi_off_rounded,
         title: 'Видео не запустилось',
         message: snapshot.error?.toString() ?? 'Неизвестная ошибка',
-        actionLabel: 'Повторить',
-        onAction: _retry,
+        onRetry: _retry,
       );
     }
 
