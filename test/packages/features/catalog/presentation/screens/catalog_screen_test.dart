@@ -2,6 +2,7 @@ import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tail.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
@@ -16,6 +17,58 @@ import '../../../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
+  testWidgets('empty favorites offer a direct return to the main catalog', (tester) async {
+    final settle = tester.pumpAndSettle;
+    final key = tester.sendKeyEvent;
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (_) => fail('Unexpected anime activation'), onSignOut: () => fail('Unexpected logout')),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+      ],
+    );
+    await settle();
+    await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
+    await settle();
+    expect(find.text('Избранное пусто'), findsOneWidget);
+    await key(LogicalKeyboardKey.arrowDown);
+    await settle();
+    await key(LogicalKeyboardKey.select);
+    await settle();
+    expect(find.text('Каталог'), findsOneWidget);
+    expect(find.byType(AnimeCard), findsWidgets);
+  });
+
+  testWidgets('portrait catalog keeps two readable columns and matches its loading layout', (tester) async {
+    const phoneSize = Size(412, 915);
+    final gridFinder = find.byType(SliverGrid);
+    await pumpTvApp(tester, const CatalogSkeleton(), size: phoneSize);
+    final loadingGrid = tester.widget<SliverGrid>(gridFinder);
+    expect((loadingGrid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount, 2);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await pumpTvApp(
+      tester,
+      CatalogScreen(
+        onAnimeTap: (_) => fail('Unexpected anime activation'),
+        onTabSelected: (_) => fail('Unexpected tab activation'),
+        onSignOut: () => fail('Unexpected logout'),
+        onOpenLogs: () => fail('Unexpected logs'),
+      ),
+      size: phoneSize,
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+    );
+    await tester.pumpAndSettle();
+    final grid = tester.widget<SliverGrid>(gridFinder);
+    expect((grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount, 2);
+    // Check the loaded screen separately from the skeleton above.
+    // ignore: avoid-duplicate-test-assertions
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('pagination failure waits for manual retry while focus and scrolling continue', (tester) async {
     final requests = <int>[];
     final pumpAndSettle = tester.pumpAndSettle;

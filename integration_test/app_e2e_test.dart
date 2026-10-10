@@ -196,6 +196,16 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'remote pause after cancellation');
     expect(identical(player, E2eHarness.requirePlayer(tester)), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(player.value.isPlaying, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await E2eHarness.waitFor(tester, () => player.value.isPlaying, 'dedicated media play');
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(player.value.isPlaying, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'dedicated media pause');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await E2eHarness.waitFor(tester, () => player.value.position.inSeconds >= 10, 'remote seek after cancellation');
     await tester.binding.handlePopRoute();

@@ -16,6 +16,7 @@ import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/catalog_heading.dart';
+import '../widgets/catalog_layout.dart';
 import '../widgets/catalog_skeleton.dart';
 import '../widgets/catalog_tabs.dart';
 import '../widgets/catalog_tail.dart';
@@ -79,6 +80,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         message: widget.favoritesOnly
             ? 'Добавьте сериал с главной страницы или из его карточки.'
             : 'На сайте AniStar не найдено аниме.',
+        actionLabel: widget.favoritesOnly && widget.onTabSelected != null ? 'Перейти на главную' : null,
+        onAction: widget.favoritesOnly && widget.onTabSelected != null ? () => widget.onTabSelected?.call(false) : null,
+        actionIcon: Icons.video_library_outlined,
+        autofocusAction: false,
       );
     }
 
@@ -157,19 +162,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     await showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title);
   }
 
-  int _columnCount(double width) {
-    if (width >= 1700) {
-      return 6;
-    }
-    if (width >= 1180) {
-      return 5;
-    }
-    if (width >= 820) {
-      return 4;
-    }
-
-    return 3;
-  }
+  int _columnCount(double width) => CatalogLayout.columnCount(width);
 
   void _loadMoreNearEnd() {
     if (_scrollController.hasClients && _scrollController.position.extentAfter < 500 && _canPreload) {
@@ -261,7 +254,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               children: [
                 Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: AppSpacing.sm),
-                const Text('AniStar TV'),
+                const Expanded(child: Text('AniStar TV', maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
             ),
             actions: [

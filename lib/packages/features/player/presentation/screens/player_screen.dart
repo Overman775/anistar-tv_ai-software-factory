@@ -105,6 +105,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _selectQuality();
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       _selectEpisode();
+    } else if (event.logicalKey == LogicalKeyboardKey.mediaPlay) {
+      _setPlaying(true);
+    } else if (event.logicalKey == LogicalKeyboardKey.mediaPause) {
+      _setPlaying(false);
     } else {
       return KeyEventResult.ignored;
     }
@@ -197,7 +201,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!player.value.hasError) {
       _markStarted(player);
       _resumePosition = player.value.position;
+      final wasPlaying = _resumePlaying;
       _resumePlaying = player.value.isPlaying;
+      if (!player.value.isPlaying) {
+        _controlsTimer?.cancel();
+        if (!_controlsVisible) {
+          setState(() => _controlsVisible = true);
+        }
+      } else if (!wasPlaying) {
+        _scheduleControlsHide();
+      }
 
       return;
     }
@@ -361,17 +374,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (controller == null) {
       return;
     }
-    if (controller.value.isPlaying) {
+
+    _setPlaying(!controller.value.isPlaying);
+  }
+
+  void _setPlaying(bool playing) {
+    if (playing) {
+      _logger.debugFor<PlayerScreen>('Resuming playback');
+      unawaited(_runPlayerCommand((player) => player.play()));
+      _scheduleControlsHide();
+    } else {
       _logger.debugFor<PlayerScreen>('Pausing playback');
       unawaited(_runPlayerCommand((player) => player.pause()));
       _controlsTimer?.cancel();
       if (!_controlsVisible) {
         setState(() => _controlsVisible = true);
       }
-    } else {
-      _logger.debugFor<PlayerScreen>('Resuming playback');
-      unawaited(_runPlayerCommand((player) => player.play()));
-      _scheduleControlsHide();
     }
   }
 

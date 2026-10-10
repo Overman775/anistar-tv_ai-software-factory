@@ -29,6 +29,8 @@ Referer — URL player page текущего origin с animeId. Заголово
 | Смена серии | Начать с нуля |
 | Изменение animeId/episode в route | Открыть новый источник с нуля |
 | Pause/play | Выполнить native команду; ошибка обрабатывается общим recovery |
+| Отдельные mediaPlay / mediaPause | Установить playing/paused state без переключения при повторе команды |
+| Native pause / завершение серии | Показать controls; не скрывать их, пока видео остановлено |
 | Seek | Ограничить позицию диапазоном 0…duration |
 | Back / logout / смена origin | Закрыть экран, освободить controller/listener/timer/focus |
 

@@ -4,6 +4,7 @@ import 'package:anistar_tv/packages/features/player/domain/models/playback_quali
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
+import 'package:anistar_tv/packages/features/player/presentation/widgets/player_view.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
@@ -55,6 +56,58 @@ void main() {
     );
     await settle(tester);
   }
+
+  testWidgets('dedicated media Play and Pause keys do not toggle their requested state', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    final states = <bool>[];
+    for (final key in [
+      LogicalKeyboardKey.mediaPlay,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPause,
+      LogicalKeyboardKey.mediaPlay,
+    ]) {
+      await tester.sendKeyEvent(key);
+      await settle(tester);
+      states.add(controller.value.isPlaying);
+    }
+    expect(states, [true, false, false, true]);
+    expect(video.sources, hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('native pause reveals hidden controls; native resume restores their hide timer', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isFalse);
+    await controller.pause();
+    await settle(tester);
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isTrue);
+    expect(controller.value.isPlaying, isFalse);
+    await controller.play();
+    await tester.pump(const Duration(seconds: 5));
+    // Check hiding again after a separate native resume transition.
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('completion reveals controls without fetching another source', (tester) async {
+    await mount(tester);
+    await tester.pump(const Duration(seconds: 5));
+    video.events[1]?.add(platform.VideoEvent(eventType: platform.VideoEventType.completed));
+    await settle(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    expect(controller.value.isCompleted, isTrue);
+    expect(controller.value.isPlaying, isFalse);
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isTrue);
+    expect(repository.calls, 1);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
 
   testWidgets('marks after native play, not during initialization; quality changes do not duplicate writes', (
     tester,
