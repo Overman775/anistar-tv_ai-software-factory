@@ -240,7 +240,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => player.value.isPlaying, 'resume');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await E2eHarness.waitFor(tester, () => find.text('Серия 2').evaluate().isNotEmpty, 'episode dialog');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     final firstEpisode = player;
     await E2eHarness.waitFor(

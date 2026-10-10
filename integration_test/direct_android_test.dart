@@ -99,7 +99,7 @@ void main() {
     expect(player.value.size.height, 360);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await _wait(tester, () => find.textContaining('Серия 2').evaluate().isNotEmpty, 'episode dialog');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     final firstEpisode = player;
     await _wait(

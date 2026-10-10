@@ -236,42 +236,48 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
     return BlocProvider.value(
       value: _bloc,
-      child: Scaffold(
-        appBar: AppBar(
-          bottom: switch (widget.onTabSelected) {
-            final onSelected? => CatalogTabs(
-              favoritesOnly: widget.favoritesOnly,
-              autofocus: widget.autofocusTab,
-              homeFocusNode: _homeTabFocus,
-              favoritesFocusNode: _favoritesTabFocus,
-              onSelected: onSelected,
+      child: TvBackdrop(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            flexibleSpace: const TvHeaderSurface(),
+            bottom: switch (widget.onTabSelected) {
+              final onSelected? => CatalogTabs(
+                favoritesOnly: widget.favoritesOnly,
+                autofocus: widget.autofocusTab,
+                homeFocusNode: _homeTabFocus,
+                favoritesFocusNode: _favoritesTabFocus,
+                onSelected: onSelected,
+              ),
+              null => null,
+            },
+            toolbarHeight: 88,
+            titleSpacing: AppSpacing.xxl,
+            title: Row(
+              children: [
+                Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: AppSpacing.sm),
+                const Text('AniStar TV'),
+              ],
             ),
-            null => null,
-          },
-          toolbarHeight: 88,
-          titleSpacing: AppSpacing.xxl,
-          title: Row(
-            children: [
-              Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: AppSpacing.sm),
-              const Text('AniStar TV'),
+            actions: [
+              if (widget.onSignOut != null)
+                IconButton(onPressed: widget.onSignOut, tooltip: 'Выйти из аккаунта', icon: const Icon(Icons.logout)),
+              IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
+              if (widget.onOpenLogs != null)
+                IconButton(
+                  onPressed: widget.onOpenLogs,
+                  tooltip: 'Открыть логи',
+                  icon: const Icon(Icons.article_outlined),
+                ),
+              const SizedBox(width: AppSpacing.xl),
             ],
           ),
-          actions: [
-            if (widget.onSignOut != null)
-              IconButton(onPressed: widget.onSignOut, tooltip: 'Выйти из аккаунта', icon: const Icon(Icons.logout)),
-            IconButton(onPressed: _reload, tooltip: 'Обновить каталог', icon: const Icon(Icons.refresh_rounded)),
-            if (widget.onOpenLogs != null)
-              IconButton(
-                onPressed: widget.onOpenLogs,
-                tooltip: 'Открыть логи',
-                icon: const Icon(Icons.article_outlined),
-              ),
-            const SizedBox(width: AppSpacing.xl),
-          ],
-        ),
-        body: TvBackdrop(
-          child: SafeArea(
+          body: SafeArea(
             top: false,
             minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
             child: BlocBuilder<CatalogBloc, CatalogState>(

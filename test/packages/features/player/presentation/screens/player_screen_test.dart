@@ -320,7 +320,7 @@ void main() {
     expect(native.seeks.last, const Duration(seconds: 120));
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await settle(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
     expect(repo.episode, 2);
