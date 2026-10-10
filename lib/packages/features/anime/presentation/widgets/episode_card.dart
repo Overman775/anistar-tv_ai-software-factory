@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_episode.dart';
@@ -9,10 +9,12 @@ class EpisodeCard extends StatelessWidget {
     required this.onTap,
     super.key,
     this.autofocus = false,
+    this.isWatched = false,
     this.onFocusChanged,
   });
 
   final bool autofocus;
+  final bool isWatched;
   final AnimeEpisode episode;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback onTap;
@@ -25,7 +27,7 @@ class EpisodeCard extends StatelessWidget {
       autofocus: autofocus,
       onFocusChanged: onFocusChanged,
       onPressed: onTap,
-      semanticLabel: episode.title,
+      semanticLabel: isWatched || episode.isWatched ? '${episode.title}, просмотрена' : episode.title,
       builder: (context, focused) {
         final theme = Theme.of(context);
         final primary = theme.colorScheme.primary;
@@ -70,6 +72,22 @@ class EpisodeCard extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (isWatched || episode.isWatched)
+                  const Positioned(
+                    top: AppSpacing.sm,
+                    right: AppSpacing.sm,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: Color(0xD9080B14), shape: BoxShape.circle),
+                      child: Padding(
+                        padding: EdgeInsets.all(AppSpacing.xs),
+                        child: Icon(
+                          Icons.check_circle_rounded,
+                          color: AppPalette.textPrimary,
+                          semanticLabel: 'Просмотрена',
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(
                   top: AppSpacing.sm,
                   left: AppSpacing.sm,

@@ -1,8 +1,8 @@
 # ADR-0004: Riverpod как единственный DI-контейнер
 
-## Статус
-
-Принято — 2026-07-19
+- **Статус:** Accepted
+- **Дата:** 2026-07-19
+- **Уточнено:** [0007](0007-neutral-core-and-infrastructure.md): владельцы провайдеров и app binding.
 
 ## Контекст
 
@@ -16,8 +16,8 @@
 - Использовать `flutter_riverpod` как единственный DI-контейнер приложения.
 - Создавать `ProviderScope` в `runner.dart`; logger, storage и `NetworkConfig`
   передавать через overrides.
-- Хранить wiring клиентов и repository implementations в
-  `app/app_providers.dart`.
+- Провайдеры клиентов принадлежат infrastructure-пакетам; binding repository
+  implementations находится в `app/app_container.dart` (уточнение ADR-0007).
 - Оставить `flutter_bloc` для feature state, но не использовать его как DI.
 - Сохранять constructor injection для repository, service и BLoC; domain/data
   не импортируют Riverpod.
@@ -34,6 +34,4 @@
 
 ## Связанные решения
 
-- [ADR-0002](0002-use-swagger-parser-retrofit-networking.md) — сетевые
-  зависимости, которые собираются в providers.
-- [ADR-0003](0003-public-core-and-tv-uikit.md) — границы общих пакетов.
+- [ADR-0007](0007-neutral-core-and-infrastructure.md): границы пакетов и владельцы провайдеров.

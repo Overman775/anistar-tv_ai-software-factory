@@ -1,0 +1,52 @@
+# 🎮 TV-взаимодействие | AniStar TV
+
+## 1. Focus и активация
+
+Интерактивная плитка должна быть доступна стрелками пульта и иметь видимый focus, Semantics button/focused и semanticLabel. Touch использует то же действие, что и пульт. Контролируемый экран не должен зависеть от наличия клавиатуры или указателя мыши.
+
+TvFocusable принимает Enter, Select/OK, Space и gameButtonA. KeyRepeat обрабатывается без повторного действия.
+
+| Вход | Поведение |
+| --- | --- |
+| KeyDown без long action | Однократный onPressed |
+| KeyDown при наличии long action | Запомнить клавишу и начать timer 600 мс, без немедленного открытия |
+| KeyUp той же клавиши раньше порога | onPressed |
+| KeyUp после порога | Только onLongPressed |
+| Потеря focus или dispose до release | Отменить timer/удержание; ничего не открыть |
+| Touch tap | Установить focus, вызвать onPressed |
+| Touch long press | Установить focus, вызвать onLongPressed без короткого действия |
+
+Длинное действие вызывается после release, чтобы повторяющийся OK не нажал первую кнопку нового диалога. Нельзя одновременно открыть detail и выполнить favorite action.
+
+## 2. Каталог и диалоги
+
+Главная/Избранное выбираются верхними вкладками. Focus карточки прокручивает её в видимую область. Дозагрузка возможна при extentAfter <500 logical pixels или focus в последних двух рядах, но только из Ready с hasMore. Защита повторных запросов и ручной retry относятся к [пагинации](03_page_loading.md).
+
+Favorite dialog сначала читает свежий статус, показывает loading, затем одно определённое действие. Ошибка предлагает «Обновить статус». Во время mutation кнопки действия/отмены не должны инициировать ещё одну операцию. Открытие диалога не изменяет избранное.
+
+После смены параметров detail/route нужно заново загрузить данные; старый Future не определяет содержимое нового экрана. Выход и смена origin закрывают protected navigation и диалоги предыдущего аккаунта.
+
+## 3. Управление player
+
+Обработка клавиш player разрешена только при существующем controller и primary focus самого player; диалог выбора не должен параллельно получать команду seek/play.
+
+| Клавиша | Действие |
+| --- | --- |
+| OK / Enter / Space / mediaPlayPause / gameButtonA | Play/pause |
+| Left / Right | Seek −10 / +10 секунд, с ограничением диапазона |
+| Up | Диалог качества |
+| Down | Диалог серии |
+| Back | Закрыть player и освободить native ресурсы |
+
+Обрабатывается KeyDown, не KeyRepeat. Команда показывает controls; timer скрытия — 4 секунды, с учётом текущего playback state. Выбор того же качества/серии или отмена диалога не перезагружают поток. Поздний выбор от уже закрытой initialization игнорируется.
+
+Player использует immersiveSticky; при dispose возвращается manual system UI без overlays, как ожидает TV-приложение. Не оставлять timers, listeners или focus nodes после ухода. Сохранение позиции при качестве и сброс при серии задаёт [playback](04_playback.md).
+
+## 4. Приёмка и источники
+
+Должны проверяться одно короткое OK; long action после release без повтора; отмена удержания при потере focus/dispose; touch hold; доступность диалогов; отсутствие overflow в 960×540 и 1280×720; Back без оставшегося controller.
+
+- [TvFocusable](../../lib/packages/ui_kit/lib/src/widgets/tv_focusable.dart), [catalog screen](../../lib/packages/features/catalog/presentation/screens/catalog_screen.dart), [favorite dialog](../../lib/packages/features/favorites/presentation/favorite_actions_dialog.dart), [player screen](../../lib/packages/features/player/presentation/screens/player_screen.dart).
+- [Focus/hold tests](../../test/packages/ui_kit/widgets/tv_focusable_test.dart), [catalog UI](../../test/packages/features/catalog/presentation/screens/catalog_screen_test.dart), [player UI](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart).
+
+Golden baselines закреплены за SDK и локальными шрифтами, сравнение точное. Эмулятор подтверждает Android путь, но не доказывает поведение каждого физического пульта/TV. Launcher icon, TV banner и экспорт ресурсов описаны в [руководстве](../05_development_and_testing.md#8-иконка-и-android-tv-баннер).

@@ -1,8 +1,0 @@
-{
-  "id": "native-hls-playback-finalization",
-  "type": "verification-maintenance",
-  "priority": "high",
-  "status": "completed",
-  "started": "2026-07-18",
-  "owner": "codex"
-}

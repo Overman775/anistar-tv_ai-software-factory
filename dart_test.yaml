@@ -1,0 +1,6 @@
+# The live Android test is deliberately outside test/ and runs separately.
+timeout: 1m
+concurrency: 4
+tags:
+  golden:
+    timeout: 1m

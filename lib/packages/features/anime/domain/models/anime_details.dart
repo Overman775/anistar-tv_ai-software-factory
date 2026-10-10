@@ -2,6 +2,7 @@ final class AnimeDetails {
   final String? description;
   final List<String> genres;
   final int id;
+  final bool? isFavorite;
   final bool isOngoing;
   final Uri? posterUri;
   final String? seriesInfo;
@@ -17,6 +18,7 @@ final class AnimeDetails {
     required this.genres,
     required this.isOngoing,
     this.description,
+    this.isFavorite,
     this.posterUri,
     this.seriesInfo,
     this.voiceover,

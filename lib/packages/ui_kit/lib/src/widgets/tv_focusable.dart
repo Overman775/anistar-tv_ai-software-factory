@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
 typedef TvFocusBuilder = Widget Function(BuildContext context, bool focused);
 
@@ -11,12 +13,14 @@ class TvFocusable extends StatefulWidget {
     super.key,
     this.autofocus = false,
     this.onFocusChanged,
+    this.onLongPressed,
     this.semanticLabel,
   });
 
   final bool autofocus;
   final TvFocusBuilder builder;
   final ValueChanged<bool>? onFocusChanged;
+  final VoidCallback? onLongPressed;
   final VoidCallback onPressed;
   final String? semanticLabel;
 
@@ -27,6 +31,9 @@ class TvFocusable extends StatefulWidget {
 class _TvFocusableState extends State<TvFocusable> {
   late final FocusNode _focusNode;
   bool _focused = false;
+  Timer? _holdTimer;
+  LogicalKeyboardKey? _heldKey;
+  bool _longPress = false;
 
   @override
   void initState() {
@@ -35,32 +42,73 @@ class _TvFocusableState extends State<TvFocusable> {
   }
 
   void _onFocusChange(bool focused) {
-    if (_focused == focused) return;
+    if (_focused == focused) {
+      return;
+    }
     setState(() => _focused = focused);
+    if (!focused) {
+      _cancelHold();
+    }
     widget.onFocusChanged?.call(focused);
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
     final activates =
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.space ||
         key == LogicalKeyboardKey.gameButtonA;
-    if (!activates) return KeyEventResult.ignored;
-    widget.onPressed();
+    if (!activates) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyRepeatEvent) {
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent) {
+      if (widget.onLongPressed == null) {
+        widget.onPressed();
+      } else if (_heldKey == null) {
+        _heldKey = key;
+        _holdTimer = Timer(const Duration(milliseconds: 600), () => _longPress = true);
+      }
 
-    return KeyEventResult.handled;
+      return KeyEventResult.handled;
+    }
+    if (event is KeyUpEvent && key == _heldKey) {
+      final action = _longPress ? widget.onLongPressed : widget.onPressed;
+      _cancelHold();
+      // Open the menu after release, so key repeats cannot activate its first action.
+      action?.call();
+
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _heldKey = null;
+    _longPress = false;
+  }
+
+  void _onLongPress() {
+    _cancelHold();
+    _focusNode.requestFocus();
+    widget.onLongPressed?.call();
   }
 
   void _onTap() {
+    _cancelHold();
     _focusNode.requestFocus();
     widget.onPressed();
   }
 
   @override
   void dispose() {
+    _cancelHold();
     _focusNode.dispose();
     super.dispose();
   }
@@ -80,6 +128,7 @@ class _TvFocusableState extends State<TvFocusable> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: _onTap,
+          onLongPress: widget.onLongPressed == null ? null : _onLongPress,
           child: widget.builder(context, _focused),
         ),
       ),

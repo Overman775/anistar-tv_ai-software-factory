@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
@@ -11,6 +11,8 @@ class PlayerView extends StatelessWidget {
     required this.controlsVisible,
     required this.episodeNumber,
     required this.onPlayPause,
+    required this.onSelectQuality,
+    required this.onSelectEpisode,
     required this.onRetry,
     required this.onSeek,
     required this.onShowControls,
@@ -23,6 +25,8 @@ class PlayerView extends StatelessWidget {
   final bool controlsVisible;
   final int episodeNumber;
   final VoidCallback onPlayPause;
+  final VoidCallback onSelectQuality;
+  final VoidCallback onSelectEpisode;
   final VoidCallback onRetry;
   final ValueChanged<Duration> onSeek;
   final VoidCallback onShowControls;
@@ -37,8 +41,8 @@ class PlayerView extends StatelessWidget {
         return TvStateView(
           icon: Icons.play_disabled_rounded,
           title: 'Воспроизведение прервано',
-          message: value.errorDescription ?? 'Не удалось продолжить HLS-поток.',
-          actionLabel: 'Создать новую сессию',
+          message: 'Не удалось продолжить поток. Повторите попытку или выберите другое качество.',
+          actionLabel: 'Повторить',
           onAction: onRetry,
         );
       }
@@ -65,6 +69,8 @@ class PlayerView extends StatelessWidget {
                     session: session,
                     value: value,
                     onPlayPause: onPlayPause,
+                    onSelectQuality: onSelectQuality,
+                    onSelectEpisode: onSelectEpisode,
                     onSeek: onSeek,
                   ),
                 ),

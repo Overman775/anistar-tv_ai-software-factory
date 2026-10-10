@@ -1,4 +1,4 @@
-import 'package:app_logger/app_logger.dart';
+import 'package:app_logging/app_logging.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../domain/repositories/catalog_repository.dart';
@@ -21,7 +21,12 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
 
   Future<void> _onMoreRequested(CatalogMoreRequested event, Emitter<CatalogState> emit) async {
     final current = state;
-    if (!current.hasMore || current.items.isEmpty || current is CatalogReady && current.isLoadingMore) return;
+    if (!current.hasMore ||
+        current.items.isEmpty ||
+        current is CatalogReady && current.isLoadingMore ||
+        current is CatalogFailure && !event.retry) {
+      return;
+    }
     final generation = _loadGeneration;
     final currentItems = current.items;
     emit(CatalogReady(items: currentItems, hasMore: true, isLoadingMore: true));
@@ -32,16 +37,16 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
 
       return;
     }
-    result.fold(
-      onLeft: (failure) {
+    result.when(
+      failure: (failure) {
         _logger.errorFor<CatalogBloc>(
           'Failed to load page ${_page + 1}',
-          error: failure.cause,
+          error: failure.message,
           stackTrace: failure.stackTrace,
         );
         emit(CatalogFailure(message: failure.message, items: currentItems, hasMore: current.hasMore));
       },
-      onRight: (nextPage) {
+      success: (nextPage) {
         _page = nextPage.page;
         final knownIds = currentItems.map((item) => item.id).toSet();
         final newItems = nextPage.items.where((item) => knownIds.add(item.id)).toList(growable: false);
@@ -57,12 +62,14 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     _page = 1;
 
     final result = await _repository.getPage(_page);
-    if (isClosed || emit.isDone || generation != _loadGeneration) return;
-    result.fold(
-      onLeft: (failure) {
+    if (isClosed || emit.isDone || generation != _loadGeneration) {
+      return;
+    }
+    result.when(
+      failure: (failure) {
         emit(CatalogFailure(message: failure.message));
       },
-      onRight: (page) {
+      success: (page) {
         _page = page.page;
         _logger.infoFor<CatalogBloc>('Catalog loaded: ${page.items.length} items');
         emit(CatalogReady(items: page.items, hasMore: page.hasNext));

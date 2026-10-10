@@ -1,20 +1,35 @@
 # 📚 Документация | AniStar TV
 
-Документация описывает текущее устройство проекта и практики, которые уже помогают поддерживать TV-приложение. Это компактный ориентир, а не корпоративный регламент.
+## Руководства
 
-## Основные документы
+| Документ | Содержание |
+| --- | --- |
+| [🏛️ Архитектура](01_architecture_principles.md) | Принципы, границы слоёв, DI и навигация |
+| [📂 Структура проекта](02_project_structure.md) | Workspace, пакеты, features и runner |
+| [📏 Code Style](03_codestyle_and_rules.md) | Именование, Dart, асинхронность и TV UI |
+| [🌐 Сеть и HLS](04_network_and_playback.md) | HTTP, HTML/JSON5, ошибки и native playback |
+| [🧪 Разработка и тестирование](05_development_and_testing.md) | Окружения, команды, тесты и диагностика |
 
-1. [🏛️ Архитектура и структура](01_architecture_and_structure.md) — слои, Riverpod DI, UIKit, модули и пользовательский поток.
-2. [📏 Рекомендации по коду и TV UI](02_code_style_and_tv_guidelines.md) — стиль Dart, Riverpod, UIKit и правила интерфейса для пульта.
-3. [🌐 Сеть, OpenAPI и HLS](03_network_openapi_and_playback.md) — контракт parser, генерация клиента и жизненный цикл playback-сессии.
-4. [🧪 Разработка и тестирование](04_development_and_testing.md) — запуск, проверки, тестовая стратегия и troubleshooting.
+## Спецификации
 
-## Архитектурные решения
+[📋 Контракты функций](specs/README.md): вход/сессия, избранное, страницы/пагинация, native playback, зеркала, TV-взаимодействие и просмотренные серии. Здесь инварианты, ошибки, границы реализации и связанные тесты для дальнейшей разработки.
 
-[ADR](adr/README.md) фиксируют решения, которые сложно понять только по коду. Новый ADR нужен, если меняется системная граница, способ получения данных или технология воспроизведения.
+## Пакеты и решения
 
-Корневой [README](../README.md) содержит быстрый старт.
+- [⚙️ Core](../infrastructure/core/README.md)
+- [🌐 Networking](../infrastructure/networking/README.md)
+- [💾 Storage](../infrastructure/storage/README.md)
+- [📝 App Logging](../infrastructure/app_logging/README.md)
+- [📺 AniStar](../infrastructure/anistar/README.md)
+- [🎨 UI Kit](../lib/packages/ui_kit/README.md)
+- [🧭 Architecture Decision Records](adr/README.md)
 
-## Исследования
+## История изменений
 
-[Прямая работа AniStar из Flutter](research/anistar-direct-2026-10-09.md) — эксперимент 9 октября 2026 года: Android, iOS, CORS Web, HLS/MP4 и офлайн, без изменения production-режима приложения.
+[CHANGELOG](../CHANGELOG.md): изменения по выпускам; текущая разработка — в разделе «Не выпущено».
+
+## Проверки
+
+- [Состояние проверок](06_verification.md): критерии готовности, результаты и пределы live-проверки.
+
+Быстрый старт: [README](../README.md).

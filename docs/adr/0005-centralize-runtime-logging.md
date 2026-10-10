@@ -1,7 +1,8 @@
 # 🧭 ADR-0005: Единое runtime-логирование
 
-**Статус:** Принято  
-**Дата:** 2026-07-19
+- **Статус:** Accepted
+- **Дата:** 2026-07-19
+- **Уточнено:** [0007](0007-neutral-core-and-infrastructure.md): app_logging и владелец Dio interceptor.
 
 ## Контекст
 
@@ -9,10 +10,10 @@
 
 ## Решение
 
-Вводим локальный package `app_logger` с единой инициализацией `Logger`. Он подключает file output только вне release, фильтрует release до уровня error и предоставляет observers для Dio, BLoC и навигации. Тестовый bootstrap использует `AppLogger.initForTest()` без I/O.
+Используем package `app_logging` с единой инициализацией `Logger`. Он подключает file output только вне release, фильтрует release до уровня error и предоставляет observers для BLoC и навигации. Dio interceptor принадлежит networking и использует тот же logger (уточнение ADR-0007). Тестовый bootstrap использует `AppLogger.initForTest()` без I/O.
 
 ## Последствия
 
 **Положительные:** единые форматы и уровни, безопасные транспортные логи, диагностический экран только в debug/profile, тихие тесты.
 
-**Ограничение:** application-код использует `app_logger`, а не создаёт независимый `Logger`; sensitive headers и query-параметры не добавляются в сообщения.
+**Ограничение:** application-код использует `app_logging`, а не создаёт независимый `Logger`; sensitive headers и query-параметры не добавляются в сообщения.

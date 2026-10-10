@@ -12,5 +12,7 @@ final class CatalogStarted extends CatalogEvent {
 
 @immutable
 final class CatalogMoreRequested extends CatalogEvent {
-  const CatalogMoreRequested();
+  final bool retry;
+
+  const CatalogMoreRequested({this.retry = false});
 }

@@ -5,48 +5,66 @@ publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.12.0
-  flutter: ">=3.44.0 <4.0.0"
+  sdk: ^3.13.0
+  flutter: ">=3.47.7 <4.0.0"
+
+workspace:
+  - infrastructure/core
+  - infrastructure/networking
+  - infrastructure/storage
+  - infrastructure/app_logging
+  - infrastructure/anistar
+  - lib/packages/ui_kit
 
 dependencies:
-  api:
-    path: api
-  app_logger:
-    path: lib/packages/app_logger
-  cached_network_image: ^3.4.1
-  dio: ^5.10.0
-  dio_smart_retry: ^7.0.1
-  equatable: ^2.1.0
+  anistar:
+    path: infrastructure/anistar
+  app_logging:
+    path: infrastructure/app_logging
+  core:
+    path: infrastructure/core
+  dio: ^5.11.1
+  equatable: ^3.0.0
   flutter:
     sdk: flutter
-  flutter_bloc: ^9.1.0
-  flutter_riverpod: ^3.3.1
-  flutter_secure_storage: ^10.3.1
-  go_router: ^17.3.0
-  http: ^1.6.0
-  intl: ^0.20.3
-  path_provider: ^2.0.0
-  share_plus: ^13.2.1
-  shared_preferences: ^2.5.3
+  flutter_bloc: ^9.1.1
+  flutter_riverpod: ^3.4.3
+  go_router: ^18.0.2
+  material_ui: ^1.6.0
+  networking:
+    path: infrastructure/networking
+  share_plus: ^13.3.1
+  storage:
+    path: infrastructure/storage
   ui_kit:
     path: lib/packages/ui_kit
-  video_player: ^2.13.0
+  video_player: ^2.14.1
 
 dev_dependencies:
+  analyzer: ^13.3.0
   bloc_test: ^10.0.0
-  build_runner: ^2.4.15
-  flutter_launcher_icons: ^0.14.3
+  build_runner: ^2.16.1
+  flutter_launcher_icons: ^0.14.4
   flutter_lints: ^6.0.0
   flutter_native_splash: ^2.4.8
   flutter_test:
     sdk: flutter
-  go_router_builder: ^4.3.1
+  go_router_builder: ^4.5.0
+  http: ^1.6.0
   http_mock_adapter: ^0.6.1
+  integration_test:
+    sdk: flutter
+  shared_preferences: ^2.5.6
+  video_player_platform_interface: ^6.9.0
+  yaml: ^3.1.4
 flutter:
   uses-material-design: true
 
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: false
-  image_path: "resources/android_icon.png"
+  image_path: "resources/anistar_launcher.png"
+  adaptive_icon_background: "#080B14"
+  adaptive_icon_foreground: "resources/anistar_launcher.png"
+  adaptive_icon_foreground_inset: 18
   min_sdk_android: 21

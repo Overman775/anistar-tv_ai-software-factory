@@ -3,7 +3,7 @@ part of 'log_viewer_bloc.dart';
 @immutable
 sealed class LogViewerState extends Equatable {
   @override
-  List<Object?> get props => const [];
+  List<Object?> get props => [runtimeType];
 
   const LogViewerState();
 }
@@ -26,7 +26,7 @@ final class LogViewerLoadedState extends LogViewerState {
   final String? error;
 
   @override
-  List<Object?> get props => [logFiles, selectedLogFile, logContent, error];
+  List<Object?> get props => [runtimeType, logFiles, selectedLogFile, logContent, error];
 
   const LogViewerLoadedState({required this.logFiles, this.selectedLogFile, this.logContent, this.error});
 
@@ -45,7 +45,7 @@ final class LogViewerErrorState extends LogViewerState {
   final String message;
 
   @override
-  List<Object?> get props => [message];
+  List<Object?> get props => [runtimeType, message];
 
   const LogViewerErrorState(this.message);
 }

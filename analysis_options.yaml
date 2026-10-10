@@ -8,11 +8,9 @@ analyzer:
   exclude:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
-    - "packages/anistar_api/**"
-    - "temp/**"
     - "build/**"
-    - test/.test_coverage.dart
     - lib/generated_plugin_registrant.dart
+    - android/**
   errors:
     avoid_print: error
     cancel_subscriptions: error
@@ -32,8 +30,8 @@ analyzer:
 formatter:
   page_width: 120
 
-# Adapted from the companion mobile application. Generated OpenAPI files are
-# excluded above, so the policy applies only to code maintained in this app.
+# Adapted from the companion mobile application. Generated sources are
+# excluded above; the policy applies to maintained app and infrastructure code.
 linter:
   rules:
     avoid_catching_errors: true
@@ -102,7 +100,6 @@ linter:
     prefer_spread_collections: true
     require_trailing_commas: true
     type_annotate_public_apis: true
-    unnecessary_await_in_return: true
     unnecessary_lambdas: true
     unnecessary_late: true
     unnecessary_null_aware_assignments: true
@@ -122,6 +119,136 @@ linter:
     provide_deprecation_message: true
     slash_for_doc_comments: true
 
+    # Remaining Effective Dart rules shared with rc-mobile-app.
+    avoid_print: true
+    cancel_subscriptions: true
+    close_sinks: true
+    collection_methods_unrelated_type: true
+    conditional_uri_does_not_exist: true
+    control_flow_in_finally: true
+    deprecated_member_use_from_same_package: true
+    implicit_reopen: true
+    invalid_case_patterns: true
+    invalid_runtime_check_with_js_interop_types: true
+    literal_only_boolean_expressions: true
+    missing_whitespace_between_adjacent_strings: true
+    no_adjacent_strings_in_list: true
+    no_duplicate_case_values: true
+    no_self_assignments: true
+    no_wildcard_variable_uses: true
+    null_check_on_nullable_type_parameter: true
+    null_closures: true
+    overridden_fields: true
+    recursive_getters: true
+    test_types_in_equals: true
+    throw_in_finally: true
+    unnecessary_null_checks: true
+    unrelated_type_equality_checks: true
+    valid_regexps: true
+    void_checks: true
+    always_put_control_body_on_new_line: true
+    avoid_bool_literals_in_conditional_expressions: true
+    avoid_double_and_int_checks: true
+    avoid_empty_else: true
+    avoid_equals_and_hash_code_on_mutable_classes: true
+    avoid_escaping_inner_quotes: true
+    avoid_field_initializers_in_const_classes: true
+    avoid_final_parameters: true
+    avoid_implementing_value_types: true
+    avoid_init_to_null: true
+    avoid_js_rounded_ints: true
+    avoid_multiple_declarations_per_line: true
+    avoid_positional_boolean_parameters: false
+    avoid_redundant_argument_values: true
+    avoid_renaming_method_parameters: true
+    avoid_returning_this: true
+    avoid_return_types_on_setters: true
+    avoid_setters_without_getters: true
+    avoid_shadowing_type_parameters: true
+    avoid_single_cascade_in_expression_statements: true
+    avoid_types_as_parameter_names: true
+    avoid_types_on_closure_parameters: true
+    camel_case_extensions: true
+    camel_case_types: true
+    cascade_invocations: true
+    constant_identifier_names: true
+    curly_braces_in_flow_control_structures: true
+    empty_constructor_bodies: true
+    empty_statements: true
+    implementation_imports: true
+    implicit_call_tearoffs: true
+    join_return_with_assignment: true
+    leading_newlines_in_multiline_strings: true
+    library_names: true
+    library_prefixes: true
+    matching_super_parameters: true
+    no_leading_underscores_for_library_prefixes: true
+    no_leading_underscores_for_local_identifiers: true
+    no_literal_bool_comparisons: true
+    non_constant_identifier_names: true
+    noop_primitive_operations: true
+    package_prefixed_library_names: true
+    parameter_assignments: true
+    prefer_adjacent_string_concatenation: true
+    prefer_asserts_with_message: true
+    prefer_constructors_over_static_methods: true
+    prefer_contains: true
+    prefer_final_in_for_each: true
+    prefer_foreach: true
+    prefer_generic_function_type_aliases: true
+    prefer_if_elements_to_conditional_expressions: true
+    prefer_inlined_adds: true
+    prefer_interpolation_to_compose_strings: true
+    prefer_is_not_operator: true
+    prefer_mixin: true
+    prefer_null_aware_operators: true
+    prefer_typing_uninitialized_variables: true
+    prefer_void_to_null: true
+    sort_constructors_first: false
+    sort_unnamed_constructors_first: false
+    tighten_type_of_initializing_formals: true
+    type_init_formals: true
+    type_literal_in_constant_pattern: true
+    unnecessary_brace_in_string_interps: true
+    unnecessary_breaks: true
+    unnecessary_const: true
+    unnecessary_constructor_name: true
+    unnecessary_getters_setters: true
+    unnecessary_library_directive: true
+    unnecessary_library_name: true
+    unnecessary_new: true
+    unnecessary_nullable_for_final_variable_declarations: true
+    unnecessary_raw_strings: true
+    unnecessary_statements: true
+    unnecessary_string_escapes: true
+    unnecessary_this: false
+    unnecessary_to_list_in_spreads: true
+    unreachable_from_main: true
+    use_enums: true
+    use_function_type_syntax_for_parameters: true
+    use_is_even_rather_than_modulo: true
+    use_late_for_private_fields_and_variables: true
+    use_named_constants: true
+    use_raw_strings: true
+    use_rethrow_when_possible: true
+    use_setters_to_change_properties: true
+    use_string_buffers: true
+    use_string_in_part_of_directives: true
+    use_to_and_as_if_applicable: true
+    package_names: true
+    comment_references: true
+    dangling_library_doc_comments: true
+    deprecated_consistency: true
+    library_annotations: true
+    missing_code_block_language_in_doc_comment: true
+    public_member_api_docs: false
+    unintended_html_in_doc_comment: true
+
+dcm:
+  exclude:
+    all:
+      - "**/build/**"
+
 dart_code_metrics:
   metrics:
     cyclomatic-complexity: 20
@@ -130,9 +257,6 @@ dart_code_metrics:
   exclude:
     metrics:
       - test/**
-      - packages/anistar_api/**
-    rules:
-      - packages/anistar_api/**
   formatter:
     indent: 0
     line-length: 120

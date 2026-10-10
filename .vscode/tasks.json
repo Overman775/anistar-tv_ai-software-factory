@@ -2,46 +2,72 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Flutter: Check",
+            "type": "shell",
+            "command": "bash scripts/check.sh",
+            "problemMatcher": []
+        },
+        {
             "label": "Flutter: Clean",
             "type": "shell",
-            "command": "flutter clean",
+            "command": "fvm flutter clean",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Pub Get",
             "type": "shell",
-            "command": "flutter pub get",
+            "command": "fvm flutter pub get",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Build APK",
             "type": "shell",
-            "command": "fvm flutter build apk --release --flavor prod -t lib/main_prod.dart --dart-define-from-file=env/prod.json",
+            "command": "fvm flutter build apk --release --flavor prod -t lib/main_prod.dart",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Build App Bundle",
             "type": "shell",
-            "command": "fvm flutter build appbundle --release --flavor prod -t lib/main_prod.dart --dart-define-from-file=env/prod.json",
+            "command": "fvm flutter build appbundle --release --flavor prod -t lib/main_prod.dart",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Run Tests",
             "type": "shell",
-            "command": "flutter test",
+            "command": "bash scripts/check.sh test:unit",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Format Code",
             "type": "shell",
-            "command": "flutter format lib",
+            "command": "bash scripts/check.sh format",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Analyze Code",
             "type": "shell",
-            "command": "flutter analyze",
+            "command": "bash scripts/check.sh analyze",
             "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Check Goldens",
+            "type": "shell",
+            "command": "bash scripts/check.sh test:goldens",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Android E2E",
+            "type": "shell",
+            "command": "bash scripts/e2e.sh ${input:androidEmulator}",
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "androidEmulator",
+            "type": "promptString",
+            "description": "Running Android emulator ID",
+            "default": "emulator-5554"
         }
     ]
 }

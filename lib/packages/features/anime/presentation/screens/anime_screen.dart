@@ -1,11 +1,15 @@
 import 'dart:async';
 
-import 'package:app_logger/app_logger.dart';
-import 'package:flutter/material.dart';
+import 'package:app_logging/app_logging.dart';
+import 'package:app_logging/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-import '../../../../../app/app_providers.dart';
+import '../../../favorites/favorites_providers.dart';
+import '../../../favorites/presentation/favorite_button.dart';
+import '../../../watch_history/watched_episodes.dart';
+import '../../anime_providers.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
 import '../widgets/anime_hero.dart';
@@ -63,6 +67,12 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         SliverToBoxAdapter(
           child: AnimeHero(
             data: data,
+            favoriteAction: FavoriteButton(
+              animeId: data.details.id,
+              slug: data.details.slug,
+              title: data.details.title,
+              initialFavorite: data.details.isFavorite,
+            ),
             onPlayFirstEpisode: episodes.isEmpty ? null : () => _openEpisode(episodes.first),
           ),
         ),
@@ -104,6 +114,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
 
                   return EpisodeCard(
                     episode: episode,
+                    isWatched:
+                        ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
                     onFocusChanged: (focused) => _onEpisodeFocusChanged(context, focused),
                     onTap: () => _openEpisode(episode),
                   );
@@ -116,23 +128,31 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   int _columnCount(double width) {
-    if (width >= 1600) return 4;
-    if (width >= 900) return 3;
+    if (width >= 1600) {
+      return 4;
+    }
+    if (width >= 900) {
+      return 3;
+    }
 
     return 2;
   }
 
   void _load() {
     final logger = ref.read(loggerProvider);
+    final revision = ref.read(favoritesControllerProvider).revision;
     _future = ref
         .read(animeRepositoryProvider)
         .getAnime(id: widget.animeId, slug: widget.slug)
         .then(
-          (result) => result.fold(
-            onLeft: (failure) {
+          (result) => result.when(
+            failure: (failure) {
               throw failure;
             },
-            onRight: (data) {
+            success: (data) {
+              if (mounted && ref.read(favoritesControllerProvider).revision == revision) {
+                ref.read(favoritesControllerProvider.notifier).observe(data.details.id, data.details.isFavorite);
+              }
               logger.infoFor<AnimeScreen>('Anime loaded: ${data.episodes.length} episodes');
 
               return data;
@@ -144,7 +164,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
 
   void _onEpisodeFocusChanged(BuildContext episodeContext, bool focused) {
-    if (!focused) return;
+    if (!focused) {
+      return;
+    }
     unawaited(
       Scrollable.ensureVisible(
         episodeContext,
@@ -159,6 +181,17 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   void _retry() {
     ref.read(loggerProvider).infoFor<AnimeScreen>('Retrying anime ${widget.animeId} loading');
     setState(_load);
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animeId != widget.animeId || oldWidget.slug != widget.slug) {
+      _load();
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    }
   }
 
   @override

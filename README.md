@@ -1,58 +1,47 @@
-# 📺 AniStar TV
+# AniStar TV
 
-**AniStar TV** — Flutter-приложение для Android TV: каталог аниме, выбор серии и нативное HLS-воспроизведение с управлением пультом.
+**AniStar TV**: Android TV-клиент на Flutter для просмотра аниме с управлением пультом.
 
-> ℹ️ **Концепция:** приложение отвечает за TV-интерфейс и воспроизведение. Каталог, серии и короткоживущие HLS-сессии предоставляет отдельный AniStar Parser через типизированный OpenAPI-контракт.
+Каталог, карточки и серии загружаются напрямую с AniStar через HTTP и HTML/JSON5. Видео воспроизводится нативно в HLS 360p/720p. Скачивание и офлайн-просмотр не поддерживаются.
 
 ## 🚀 Быстрый старт
 
-Требования: FVM, JDK 17, Android SDK и запущенный AniStar Parser.
+Проект использует **FVM** и **Dart pub workspace**. Нужны JDK 17, Android SDK и устройство или эмулятор.
 
 ```bash
-# 1. Установить закреплённую версию Flutter
 fvm install
-
-# 2. Получить зависимости
 fvm flutter pub get
-
-# 3. Запустить dev-сборку на Android Emulator
-fvm flutter run --flavor dev -t lib/main_dev.dart \
-  --dart-define-from-file=env/dev.json
+fvm flutter run --flavor dev -t lib/main_dev.dart
 ```
 
-Для физического телевизора замените URL в `env/dev.json` на LAN-адрес parser. Для production скопируйте `env/prod.example.json` в `env/prod.json` и укажите HTTPS endpoint; этот файл не попадает в Git.
+Полная локальная проверка: `bash scripts/check.sh` (нужен DCM). Команды тестов и CI: [Разработка и тестирование](docs/05_development_and_testing.md).
 
-## ✨ Возможности
+Начальное зеркало: `https://v30.astar.bz`. Для `vN.astar.bz` клиент сохраняет подтверждённый номер версии и при недоступности проверяет до четырёх следующих зеркал. Другое HTTPS-зеркало задаётся через `--dart-define=ANISTAR_MIRROR_URL=https://mirror.example` или `env/dev.json`. Доступность зависит от зеркала и IP; интерактивная CAPTCHA не обходится.
 
-- адаптивный каталог для TV с пагинацией и навигацией стрелками;
-- экран аниме с описанием и выбором серии;
-- нативное HLS-воспроизведение через `video_player` без WebView;
-- новая защищённая playback-сессия перед каждым просмотром;
-- dev/prod flavors, локальные логи и сгенерированный OpenAPI-клиент.
+При запуске введите логин и пароль существующего аккаунта AniStar. Сессия хранится в Secure Storage и проверяется при следующем запуске; пароль не сохраняется. Кнопка выхода находится в каталоге. Вкладка «Избранное» показывает список аккаунта на сайте; добавление и удаление синхронизируются с AniStar.
 
-## ⚙️ Конфигурация
+## 🎮 Управление
 
-| Параметр | Назначение | Значение по умолчанию |
-| --- | --- | --- |
-| `ANISTAR_API_URL` | Базовый URL AniStar Parser | Передаётся через `env/*.json`; для prod обязателен явный HTTPS URL |
-| `--flavor dev` | Локальная разработка, HTTP разрешён | — |
-| `--flavor prod` | Production, cleartext HTTP запрещён | — |
+| Экран | Кнопки |
+| --- | --- |
+| Каталог | Стрелки: фокус; короткое OK: открыть; удержание OK / долгое касание: избранное |
+| Карточка сериала | OK: выбрать действие/серию; кнопка добавления/удаления избранного; Back: вернуться |
+| Плеер | OK: пауза; ←/→: ±10 секунд; ↑: качество; ↓: серия; Back: вернуться |
+
+Смена качества сохраняет позицию. Новая серия начинается с нуля. После ошибки плеер один раз получает свежую ссылку; затем доступен ручной повтор.
 
 ## 📚 Документация
 
-- [🏛️ Архитектура и структура](docs/01_architecture_and_structure.md)
-- [📏 Рекомендации по коду и TV UI](docs/02_code_style_and_tv_guidelines.md)
-- [🌐 Сеть, OpenAPI и HLS](docs/03_network_openapi_and_playback.md)
-- [🧪 Разработка и тестирование](docs/04_development_and_testing.md)
-- [🧭 Архитектурные решения](docs/adr/README.md)
+- [🏛️ Архитектура](docs/01_architecture_principles.md): слои, зависимости и DI.
+- [📂 Структура проекта](docs/02_project_structure.md): пакеты, features и запуск.
+- [📏 Code Style](docs/03_codestyle_and_rules.md): Dart, асинхронность и TV UI.
+- [🌐 Сеть и HLS](docs/04_network_and_playback.md): HTML/JSON5, Referer, сессия, избранное и playback lifecycle.
+- [🧪 Разработка и тестирование](docs/05_development_and_testing.md): окружения, проверки и APK.
+- [⚙️ Core](infrastructure/core/README.md): Result и Failure.
+- [🎨 UI Kit](lib/packages/ui_kit/README.md): тема и общие TV-компоненты.
+- [🧭 ADR](docs/adr/README.md): принятые технические решения.
+- [✅ Состояние проверок](docs/06_verification.md): критерии готовности, результаты и ограничения.
 
-## ✅ Проверка проекта
+Спецификации для дальнейшей разработки: [вход, избранное, страницы, playback, зеркала и TV](docs/specs/README.md).
 
-```bash
-fvm dart format --output=none --set-exit-if-changed lib test
-fvm flutter analyze
-dcm analyze lib test
-fvm flutter test
-fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart \
-  --dart-define-from-file=env/dev.json
-```
+История изменений: [CHANGELOG](CHANGELOG.md). Новые изменения сначала описываются в «Не выпущено», номер и дата назначаются при отдельном выпуске.

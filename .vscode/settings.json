@@ -57,7 +57,7 @@
     "*.dart": "${capture}.g.dart, ${capture}.freezed.dart",
     "readme*": "changelog*, codeowners, LICENSE"
   },
-  "dart.flutterSdkPath": ".fvm/versions/3.44.2",
+  "dart.flutterSdkPath": ".fvm/versions/3.47.7",
   "files.trimTrailingWhitespace": true,
   "files.trimFinalNewlines": true,
   "markdown.validate.enabled": true,
