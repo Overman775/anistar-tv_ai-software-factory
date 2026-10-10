@@ -10,8 +10,11 @@ ADR фиксируют принятые системные решения, их 
 | 2026-07-19 | [0005: Единое runtime-логирование](0005-centralize-runtime-logging.md) | Accepted |
 | 2026-10-10 | [0006: Прямой AniStar на Android](0006-android-direct-anistar.md) | Accepted |
 | 2026-10-10 | [0007: Нейтральный Core и инфраструктура](0007-neutral-core-and-infrastructure.md) | Accepted |
+| 2026-10-11 | [0008: YouTube для телевизоров как ориентир взаимодействия](0008-youtube-tv-interaction-reference.md) | Accepted |
 
 Заменённые решения о parser-сервере и старом Core удалены при очистке проекта. Номера оставшихся ADR сохранены.
+
+Для изменений интерфейса сначала прочитайте [ADR-0008](0008-youtube-tv-interaction-reference.md): он задаёт основной TV-ориентир и порядок пересмотра UI-контрактов.
 
 ## Формат нового ADR
 

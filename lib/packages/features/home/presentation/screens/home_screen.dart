@@ -7,8 +7,9 @@ import '../../../catalog/presentation/screens/catalog_screen.dart';
 import '../../../favorites/favorites_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({required this.onAnimeTap, this.onOpenLogs, this.onSignOut, super.key});
+  const HomeScreen({required this.onAnimeTap, this.onOpenLogs, this.onSignOut, this.accountName, super.key});
 
+  final String? accountName;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onSignOut;
@@ -39,6 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     curve: AppMotion.enterCurve,
     builder: (context, value, child) => Opacity(opacity: value, child: child),
     child: CatalogScreen(
+      accountName: widget.accountName,
       favoritesOnly: _favoritesOnly,
       autofocusTab: _autofocusTab,
       onTabSelected: _selectTab,

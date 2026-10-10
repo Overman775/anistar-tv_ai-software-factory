@@ -1,12 +1,15 @@
+// Each pump commits a separate remote focus transition.
+// ignore_for_file: prefer-moving-to-variable
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Navigate the visible player menu, without activating controls by touch.
 abstract final class RemoteControls {
-  static Future<void> openQuality(WidgetTester tester) => _open(tester, 1);
+  static Future<void> openQuality(WidgetTester tester) => _open(tester, 4);
 
-  static Future<void> openEpisodes(WidgetTester tester) => _open(tester, 2);
+  static Future<void> openEpisodes(WidgetTester tester) => _open(tester, 3);
 
   static Future<void> backToEpisodes(WidgetTester tester) => _open(tester, 0);
 
@@ -19,6 +22,12 @@ abstract final class RemoteControls {
         fail('Player menu did not receive focus.');
       }
       await tester.pump(const Duration(milliseconds: 100));
+    }
+    if (steps > 0) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
     }
     for (var step = 0; step < steps; step++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);

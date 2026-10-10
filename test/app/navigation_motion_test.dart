@@ -11,6 +11,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -43,6 +44,8 @@ void main() {
       await settle();
       if (favorites) {
         await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
+        await settle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await settle();
       }
       final heroFinder = find.byType(AnimeHero);

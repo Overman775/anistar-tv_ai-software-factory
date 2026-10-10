@@ -7,6 +7,7 @@ import 'package:anistar_tv/packages/features/player/presentation/widgets/player_
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../support/test_app.dart';
 
@@ -20,7 +21,7 @@ void main() {
         builder: (context) => FilledButton(
           autofocus: true,
           onPressed: () => unawaited(
-            showDialog<int>(
+            showTvSideSheet<int>(
               context: context,
               builder: (_) => PlayerChoicesDialog(
                 title: 'Выберите серию',

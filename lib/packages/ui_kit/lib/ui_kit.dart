@@ -8,6 +8,7 @@ export './src/widgets/tv_header_surface.dart';
 export './src/widgets/tv_poster_hero.dart';
 export './src/widgets/tv_progress_view.dart';
 export './src/widgets/tv_section_header.dart';
+export './src/widgets/tv_side_sheet.dart';
 export './src/widgets/tv_skeleton.dart';
 export './src/widgets/tv_skeleton_box.dart';
 export './src/widgets/tv_state_view.dart';

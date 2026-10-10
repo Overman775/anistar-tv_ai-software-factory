@@ -238,9 +238,16 @@ Future<void> _verifyWatched(WidgetTester tester, String slug, Set<int> expected)
 }
 
 Future<void> _selectTab(WidgetTester tester, String label) async {
-  final tab = find.text(label).hitTestable();
+  final tab = find.byKey(ValueKey('catalog-tab-${label == 'Избранное'}'));
   await _wait(tester, () => tab.evaluate().isNotEmpty, 'tab available: $label');
   await tester.tap(tab);
+  await _wait(
+    tester,
+    () => find.byType(AnimeCard).evaluate().isNotEmpty || find.text('Избранное пусто').evaluate().isNotEmpty,
+    'catalog after menu selection',
+  );
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 Future<void> _showCatalogCard(WidgetTester tester, Finder card, String step) async {

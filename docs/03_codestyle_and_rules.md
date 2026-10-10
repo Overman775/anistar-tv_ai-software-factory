@@ -71,6 +71,8 @@ logger.infoFor<CatalogBloc>('Catalog loading started');
 
 ## 5. TV UI
 
+Основной UX-ориентир — YouTube для телевизоров по [ADR-0008](adr/0008-youtube-tv-interaction-reference.md). При изменении layout одновременно пересмотрите начальный фокус, стрелки, OK/удержание, Back и возврат после закрытия панели. Контракты: [TV-взаимодействие](specs/06_tv_interaction.md) и [анимации](specs/08_motion.md).
+
 ### Focus и пульт
 
 1. После открытия экрана есть понятный начальный focus target.

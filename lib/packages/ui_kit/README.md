@@ -2,6 +2,8 @@
 
 UI Kit содержит тему и общие TV-компоненты. Публичный импорт: `package:ui_kit/ui_kit.dart`.
 
+Ориентир взаимодействия и границы адаптации: [ADR-0008](../../../docs/adr/0008-youtube-tv-interaction-reference.md).
+
 ## 1. Тема и токены
 
 | API | Назначение |
@@ -25,6 +27,7 @@ UI Kit содержит тему и общие TV-компоненты. Публ
 | --- | --- |
 | TvFocusable | Focus, активация OK и semantic label |
 | AppNetworkImage | Cached image, skeleton, fallback и управляемый fade |
+| TvSideSheet / showTvSideSheet | Правая модальная панель, переход, контрастный focus и замкнутая навигация |
 | TvPosterHero | Одинаковый скруглённый постер для обоих концов Hero |
 | TvSkeleton / TvSkeletonBox | Примитивы загрузки |
 | TvStateView / TvProgressView | Empty/error/retry и прогресс |
