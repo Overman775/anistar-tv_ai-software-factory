@@ -3,21 +3,22 @@ import 'dart:async';
 import 'package:core/data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../favorites_providers.dart';
 
-class FavoriteActionsDialog extends ConsumerStatefulWidget {
-  const FavoriteActionsDialog({required this.animeId, required this.slug, required this.title, super.key});
+class FavoriteActionsSheet extends ConsumerStatefulWidget {
+  const FavoriteActionsSheet({required this.animeId, required this.slug, required this.title, super.key});
 
   final int animeId;
   final String slug;
   final String title;
 
   @override
-  ConsumerState<FavoriteActionsDialog> createState() => _FavoriteActionsDialogState();
+  ConsumerState<FavoriteActionsSheet> createState() => _FavoriteActionsSheetState();
 }
 
-class _FavoriteActionsDialogState extends ConsumerState<FavoriteActionsDialog> {
+class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
   late Future<Result<bool, Failure>> _future;
   String? _error;
   bool _busy = false;
@@ -92,12 +93,19 @@ class _FavoriteActionsDialogState extends ConsumerState<FavoriteActionsDialog> {
   Widget build(BuildContext context) {
     ref.watch(favoritesControllerProvider);
 
-    return AlertDialog(
-      title: Text(widget.title),
-      content: FutureBuilder<Result<bool, Failure>>(future: _future, builder: _content),
-      actions: [
-        TextButton(onPressed: _busy ? null : () => Navigator.of(context).pop(false), child: const Text('Отмена')),
-      ],
+    return TvSideSheet(
+      title: widget.title,
+      child: ListView(
+        children: [
+          FutureBuilder<Result<bool, Failure>>(future: _future, builder: _content),
+          const SizedBox(height: AppSpacing.md),
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).pop(false),
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Закрыть'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -107,7 +115,7 @@ Future<bool?> showFavoriteActions(
   required int animeId,
   required String slug,
   required String title,
-}) => showDialog<bool>(
+}) => showTvSideSheet<bool>(
   context: context,
-  builder: (_) => FavoriteActionsDialog(animeId: animeId, slug: slug, title: title),
+  builder: (_) => FavoriteActionsSheet(animeId: animeId, slug: slug, title: title),
 );

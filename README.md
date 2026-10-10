@@ -40,6 +40,7 @@ fvm flutter run --flavor dev -t lib/main_dev.dart
 - [⚙️ Core](infrastructure/core/README.md): Result и Failure.
 - [🎨 UI Kit](lib/packages/ui_kit/README.md): тема и общие TV-компоненты.
 - [🧭 ADR](docs/adr/README.md): принятые технические решения.
+- [📺 Ориентир интерфейса](docs/adr/0008-youtube-tv-interaction-reference.md): YouTube для телевизоров, правила навигации, плеера, фокуса и анимаций для будущих изменений.
 - [✅ Состояние проверок](docs/06_verification.md): критерии готовности, результаты и ограничения.
 
 Спецификации для дальнейшей разработки: [вход, избранное, страницы, playback, зеркала, TV и историю просмотра](docs/specs/README.md).

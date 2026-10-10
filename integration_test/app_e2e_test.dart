@@ -84,7 +84,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.text('Добавить в избранное').evaluate().isNotEmpty, 'held OK menu');
     expect(find.byType(AnimeScreen), findsNothing);
     expect((await fixture.state())['favorite_writes'], 0);
-    await tester.tap(find.text('Добавить в избранное'));
+    await _tapSheetAction(tester, 'Добавить в избранное');
     final marker = find.byKey(const ValueKey('favorite-10938'));
     await E2eHarness.waitFor(tester, () => marker.evaluate().isNotEmpty, 'confirmed catalog star');
     final added = await fixture.state();
@@ -99,7 +99,9 @@ void main() {
     await E2eHarness.waitFor(tester, () => marker.evaluate().isNotEmpty, 'site star after client restart');
     await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().length == 1, 'website favorites tab');
-    await tester.tap(find.byType(AnimeCard));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(
       tester,
       () => find.text('Удалить из избранного').evaluate().isNotEmpty,
@@ -137,18 +139,18 @@ void main() {
       () => find.text('Добавить в избранное').evaluate().isNotEmpty,
       'touch favorite menu',
     );
-    await tester.tap(find.text('Добавить в избранное'));
+    await _tapSheetAction(tester, 'Добавить в избранное');
     await E2eHarness.waitFor(tester, () => find.text('Обновить статус').evaluate().isNotEmpty, 'favorite rejection');
     expect(find.byKey(const ValueKey('favorite-10938')), findsNothing);
     expect((await fixture.state())['favorites'], isEmpty);
     await fixture.configure(reset: false);
-    await tester.tap(find.text('Обновить статус'));
+    await _tapSheetAction(tester, 'Обновить статус');
     await E2eHarness.waitFor(
       tester,
       () => find.text('Добавить в избранное').evaluate().isNotEmpty,
       'fresh favorite status',
     );
-    await tester.tap(find.text('Добавить в избранное'));
+    await _tapSheetAction(tester, 'Добавить в избранное');
     await E2eHarness.waitFor(
       tester,
       () => find.byKey(const ValueKey('favorite-10938')).evaluate().isNotEmpty,
@@ -163,13 +165,13 @@ void main() {
     await fixture.launch(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'remote catalog');
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump(const Duration(milliseconds: 250));
     expect(
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
       const ValueKey('catalog-tab-false'),
     );
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump(const Duration(milliseconds: 250));
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
@@ -177,10 +179,10 @@ void main() {
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
       const ValueKey('catalog-tab-true'),
     );
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'remote home tab');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'remote detail');
@@ -440,3 +442,15 @@ Iterable<Map<String, Object?>> _events(Map<String, Object?> state) {
 }
 
 String _path(Map<String, Object?> event) => event['path']?.toString() ?? '';
+
+Future<void> _tapSheetAction(WidgetTester tester, String label) async {
+  final action = find.text(label).hitTestable();
+  await E2eHarness.waitFor(tester, () {
+    if (action.evaluate().isEmpty) {
+      return false;
+    }
+
+    return ModalRoute.of(tester.element(action))?.animation?.status == AnimationStatus.completed;
+  }, 'sheet ready: $label');
+  await tester.tap(action);
+}

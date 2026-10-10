@@ -1,10 +1,15 @@
+// Each pump and snapshot observes a distinct navigation state.
+// ignore_for_file: prefer-moving-to-variable
+
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_sheet.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -42,6 +47,37 @@ void main() {
       );
       await tester.pumpAndSettle();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/main_$name.png'));
+    }, tags: ['golden']);
+
+    testWidgets('expanded navigation and right action sheet at $name', (tester) async {
+      await pumpTvApp(
+        tester,
+        HomeScreen(
+          onAnimeTap: (_) => fail('Unexpected activation'),
+          onSignOut: () => fail('Unexpected logout'),
+          onOpenLogs: () => fail('Unexpected logs'),
+          accountName: 'anime_fan',
+        ),
+        size: size,
+        wrapInScaffold: false,
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+          favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+        ],
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/navigation_expanded_$name.png'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+      await tester.pump(const Duration(milliseconds: 650));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(find.byType(FavoriteActionsSheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/actions_sheet_$name.png'));
     }, tags: ['golden']);
 
     testWidgets('favorites tab and website row at $name', (tester) async {

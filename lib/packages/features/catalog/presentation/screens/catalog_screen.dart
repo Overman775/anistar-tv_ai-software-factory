@@ -8,17 +8,16 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../favorites/favorites_providers.dart';
-import '../../../favorites/presentation/favorite_actions_dialog.dart';
+import '../../../favorites/presentation/favorite_actions_sheet.dart';
 import '../../catalog_providers.dart';
 import '../../domain/models/anime_summary.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
 import '../widgets/anime_card.dart';
-import '../widgets/catalog_heading.dart';
 import '../widgets/catalog_layout.dart';
+import '../widgets/catalog_navigation_rail.dart';
 import '../widgets/catalog_skeleton.dart';
-import '../widgets/catalog_tabs.dart';
 import '../widgets/catalog_tail.dart';
 
 class CatalogScreen extends ConsumerStatefulWidget {
@@ -26,12 +25,14 @@ class CatalogScreen extends ConsumerStatefulWidget {
     required this.onAnimeTap,
     this.onOpenLogs,
     this.onSignOut,
+    this.accountName,
     this.onTabSelected,
     this.favoritesOnly = false,
     this.autofocusTab = false,
     super.key,
   });
 
+  final String? accountName;
   final bool favoritesOnly;
   final bool autofocusTab;
   final ValueChanged<AnimeSummary> onAnimeTap;
@@ -51,6 +52,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   final _signOutFocus = FocusNode(debugLabel: 'Выйти из аккаунта');
   final _refreshFocus = FocusNode(debugLabel: 'Обновить каталог');
   final _logsFocus = FocusNode(debugLabel: 'Открыть логи');
+  final _contentFocus = FocusScopeNode(debugLabel: 'Каталог');
+  bool _railExpanded = false;
   FocusNode? _lastCardFocus;
   int _selectedIndex = 0;
 
@@ -62,6 +65,35 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       logger: ref.read(loggerProvider),
     )..add(const CatalogStarted());
     _scrollController.addListener(_loadMoreNearEnd);
+  }
+
+  void _onRailFocusChanged(bool focused) {
+    if (_railExpanded != focused) {
+      setState(() => _railExpanded = focused);
+    }
+  }
+
+  void _focusContent() {
+    final previous = _lastCardFocus;
+    if (previous?.context != null && previous?.canRequestFocus == true) {
+      previous?.requestFocus();
+    } else {
+      (_contentFocus.traversalDescendants.firstOrNull ?? _contentFocus).requestFocus();
+    }
+  }
+
+  void _focusRail() {
+    if (widget.onTabSelected == null) {
+      _refreshFocus.requestFocus();
+    } else {
+      (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
+    }
+  }
+
+  void _onPopInvoked(bool didPop, Object? result) {
+    if (!didPop) {
+      _focusContent();
+    }
   }
 
   KeyEventResult _handleHeaderKey(FocusNode node, KeyEvent event) {
@@ -77,15 +109,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     final key = event.logicalKey;
     FocusNode? target;
-    if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
-      final next = index + (key == LogicalKeyboardKey.arrowRight ? 1 : -1);
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
+      final next = index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
       target = nodes[next.clamp(0, nodes.length - 1)];
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      target = _lastCardFocus;
-      if (target?.context == null || target?.canRequestFocus != true) {
-        return KeyEventResult.ignored;
+    } else if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.escape) {
+      if (event is KeyDownEvent) {
+        _focusContent();
       }
-    } else if (key != LogicalKeyboardKey.arrowUp) {
+
+      return KeyEventResult.handled;
+    } else if (key != LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
@@ -132,17 +165,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           controller: _scrollController,
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
-              sliver: SliverToBoxAdapter(
-                child: CatalogHeading(
-                  itemCount: state.items.length,
-                  favoritesOnly: widget.favoritesOnly,
-                  showFavoriteHint: widget.onTabSelected != null,
-                ),
-              ),
-            ),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 72),
               sliver: SliverGrid.builder(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: _columnCount(constraints.maxWidth),
@@ -163,7 +186,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       anime: anime,
                       isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
                       onLongPressed: () => unawaited(_favoriteActions(anime)),
-                      autofocus: index == _selectedIndex,
+                      autofocus: !widget.autofocusTab && !_railExpanded && index == _selectedIndex,
                       onFocusChanged: (focused) =>
                           _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
                       onTap: () => _selectAndOpen(anime, index),
@@ -180,14 +203,33 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   KeyEventResult _handleCatalogKey(KeyEvent event, int columns) {
     final fromCard = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>() != null;
-    if (widget.onTabSelected == null ||
-        !fromCard ||
-        _selectedIndex >= columns ||
-        event.logicalKey != LogicalKeyboardKey.arrowUp) {
+    if (!fromCard) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft && _selectedIndex % columns == 0) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _focusRail();
+      }
+
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp && _selectedIndex < columns ||
+        key == LogicalKeyboardKey.arrowRight &&
+            (_selectedIndex % columns == columns - 1 || _selectedIndex == _bloc.state.items.length - 1)) {
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
+  KeyEventResult _handleContentKey(FocusNode node, KeyEvent event) {
+    final fromCard = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>() != null;
+    if (fromCard || event.logicalKey != LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent) {
-      (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
+      _focusRail();
     }
 
     return KeyEventResult.handled;
@@ -195,6 +237,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   Future<void> _favoriteActions(AnimeSummary anime) async {
     await showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title);
+    if (mounted && _lastCardFocus?.context == null) {
+      _focusRail();
+    }
+  }
+
+  void _onCatalogStateChanged(BuildContext context, CatalogState state) {
+    if (state is CatalogReady && state.items.isEmpty && ModalRoute.of(context)?.isCurrent == true) {
+      _focusRail();
+    }
   }
 
   int _columnCount(double width) => CatalogLayout.columnCount(width);
@@ -252,6 +303,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   @override
   void dispose() {
+    _contentFocus.dispose();
     _homeTabFocus.dispose();
     _favoritesTabFocus.dispose();
     _signOutFocus.dispose();
@@ -277,69 +329,116 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         }
       });
 
+    final items = <CatalogNavigationItem>[
+      if (widget.onTabSelected != null) ...[
+        (
+          key: const ValueKey('catalog-tab-false'),
+          icon: Icons.home_outlined,
+          label: 'Главная',
+          focusNode: _homeTabFocus,
+          onPressed: () => widget.onTabSelected?.call(false),
+          selected: !widget.favoritesOnly,
+          autofocus: widget.autofocusTab && !widget.favoritesOnly,
+        ),
+        (
+          key: const ValueKey('catalog-tab-true'),
+          icon: Icons.star_border_rounded,
+          label: 'Избранное',
+          focusNode: _favoritesTabFocus,
+          onPressed: () => widget.onTabSelected?.call(true),
+          selected: widget.favoritesOnly,
+          autofocus: widget.autofocusTab && widget.favoritesOnly,
+        ),
+      ],
+      if (widget.onSignOut case final onSignOut?)
+        (
+          key: const ValueKey('catalog-account'),
+          icon: Icons.account_circle_outlined,
+          label: 'Выйти из аккаунта',
+          focusNode: _signOutFocus,
+          onPressed: onSignOut,
+          selected: false,
+          autofocus: false,
+        ),
+      (
+        key: const ValueKey('catalog-refresh'),
+        icon: Icons.refresh_rounded,
+        label: 'Обновить каталог',
+        focusNode: _refreshFocus,
+        onPressed: _reload,
+        selected: false,
+        autofocus: false,
+      ),
+      if (widget.onOpenLogs case final onOpenLogs?)
+        (
+          key: const ValueKey('catalog-logs'),
+          icon: Icons.article_outlined,
+          label: 'Открыть логи',
+          focusNode: _logsFocus,
+          onPressed: onOpenLogs,
+          selected: false,
+          autofocus: false,
+        ),
+    ];
+
     return BlocProvider.value(
       value: _bloc,
-      child: Focus(
-        canRequestFocus: false,
-        onKeyEvent: _handleHeaderKey,
+      child: PopScope(
+        canPop: !_railExpanded,
+        onPopInvokedWithResult: _onPopInvoked,
         child: TvBackdrop(
           child: Scaffold(
             backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              flexibleSpace: const TvHeaderSurface(),
-              bottom: switch (widget.onTabSelected) {
-                final onSelected? => CatalogTabs(
-                  favoritesOnly: widget.favoritesOnly,
-                  autofocus: widget.autofocusTab,
-                  homeFocusNode: _homeTabFocus,
-                  favoritesFocusNode: _favoritesTabFocus,
-                  onSelected: onSelected,
-                ),
-                null => null,
-              },
-              toolbarHeight: 88,
-              titleSpacing: AppSpacing.xxl,
-              title: Row(
-                children: [
-                  Icon(Icons.live_tv_rounded, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Expanded(child: Text('AniStar TV', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                ],
-              ),
-              actions: [
-                if (widget.onSignOut != null)
-                  IconButton(
-                    focusNode: _signOutFocus,
-                    onPressed: widget.onSignOut,
-                    tooltip: 'Выйти из аккаунта',
-                    icon: const Icon(Icons.logout),
-                  ),
-                IconButton(
-                  focusNode: _refreshFocus,
-                  onPressed: _reload,
-                  tooltip: 'Обновить каталог',
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-                if (widget.onOpenLogs != null)
-                  IconButton(
-                    focusNode: _logsFocus,
-                    onPressed: widget.onOpenLogs,
-                    tooltip: 'Открыть логи',
-                    icon: const Icon(Icons.article_outlined),
-                  ),
-                const SizedBox(width: AppSpacing.xl),
-              ],
-            ),
             body: SafeArea(
-              top: false,
-              minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-              child: BlocBuilder<CatalogBloc, CatalogState>(
-                buildWhen: (previous, current) => previous != current,
-                builder: _buildState,
+              child: Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: CatalogNavigationRail.collapsedWidth),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 32),
+                        Expanded(
+                          child: FocusScope(
+                            node: _contentFocus,
+                            onKeyEvent: _handleContentKey,
+                            child: BlocConsumer<CatalogBloc, CatalogState>(
+                              listener: _onCatalogStateChanged,
+                              buildWhen: (previous, current) => previous != current,
+                              builder: _buildState,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned.fill(
+                    left: CatalogNavigationRail.collapsedWidth,
+                    child: IgnorePointer(
+                      ignoring: !_railExpanded,
+                      child: AnimatedOpacity(
+                        opacity: _railExpanded ? 1 : 0,
+                        duration: AppMotion.durationOf(context, AppMotion.standard),
+                        child: GestureDetector(
+                          onTap: _focusContent,
+                          child: const ColoredBox(color: Color(0x66000000)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    right: null,
+                    child: Focus(
+                      canRequestFocus: false,
+                      onFocusChange: _onRailFocusChanged,
+                      onKeyEvent: _handleHeaderKey,
+                      child: CatalogNavigationRail(
+                        expanded: _railExpanded,
+                        items: items,
+                        accountName: widget.accountName,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

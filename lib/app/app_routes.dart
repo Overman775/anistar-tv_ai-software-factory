@@ -55,6 +55,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) => Consumer(
     builder: (context, ref, _) => HomeScreen(
+      accountName: ref.watch(authControllerProvider).value,
       onSignOut: () => unawaited(_signOut(context, ref)),
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) {

@@ -14,30 +14,8 @@ class CatalogSkeleton extends StatelessWidget {
       child: CustomScrollView(
         physics: const NeverScrollableScrollPhysics(),
         slivers: [
-          const SliverPadding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TvSkeletonBox(width: 180, height: 28, borderRadius: AppRadii.small),
-                        SizedBox(height: AppSpacing.xs),
-                        TvSkeletonBox(width: 360, height: 26, borderRadius: AppRadii.small),
-                      ],
-                    ),
-                  ),
-                  SizedBox(width: AppSpacing.md),
-                  TvSkeletonBox(width: 140, height: 42, borderRadius: AppRadii.pill),
-                ],
-              ),
-            ),
-          ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 72),
             sliver: SliverGrid.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: CatalogLayout.columnCount(constraints.maxWidth),

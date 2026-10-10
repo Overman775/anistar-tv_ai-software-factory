@@ -52,35 +52,30 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
   }
 
   @override
-  Widget build(BuildContext context) => SimpleDialog(
-    title: Text(widget.title),
-    children: [
-      SizedBox(
-        width: 420,
-        height: widget.choices.length <= 4 ? widget.choices.length * _rowHeight : 320,
-        child: ListView(
-          controller: _scrollController,
-          itemExtent: _rowHeight,
-          padding: EdgeInsets.zero,
-          children: widget.choices
-              .map(
-                (choice) => Builder(
-                  builder: (choiceContext) => Focus(
-                    canRequestFocus: false,
-                    onFocusChange: (focused) => _revealChoice(choiceContext, focused),
-                    child: ListTile(
-                      autofocus: choice == widget.selected,
-                      selected: choice == widget.selected,
-                      title: Text(widget.label(choice), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: choice == widget.selected ? const Icon(Icons.check) : null,
-                      onTap: () => Navigator.of(context).pop(choice),
-                    ),
-                  ),
+  Widget build(BuildContext context) => TvSideSheet(
+    title: widget.title,
+    child: ListView(
+      controller: _scrollController,
+      itemExtent: _rowHeight,
+      padding: EdgeInsets.zero,
+      children: widget.choices
+          .map(
+            (choice) => Builder(
+              builder: (choiceContext) => Focus(
+                canRequestFocus: false,
+                onFocusChange: (focused) => _revealChoice(choiceContext, focused),
+                child: ListTile(
+                  focusColor: Colors.white,
+                  autofocus: choice == widget.selected,
+                  selected: choice == widget.selected,
+                  title: Text(widget.label(choice), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: choice == widget.selected ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.of(context).pop(choice),
                 ),
-              )
-              .toList(growable: false),
-        ),
-      ),
-    ],
+              ),
+            ),
+          )
+          .toList(growable: false),
+    ),
   );
 }

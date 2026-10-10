@@ -5,6 +5,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tail.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_sheet.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
@@ -20,10 +21,7 @@ import '../../../../../support/test_app.dart';
 // ignore_for_file: prefer-moving-to-variable
 
 void main() {
-  testWidgets('header traverses tabs and every toolbar action and returns to the same card', (tester) async {
-    final key = tester.sendKeyEvent;
-    final settle = tester.pumpAndSettle;
-    String? focusedLabel() => FocusManager.instance.primaryFocus?.debugLabel;
+  testWidgets('rail expands from any first-column card and returns to the same card', (tester) async {
     await pumpTvApp(
       tester,
       CatalogScreen(
@@ -35,80 +33,205 @@ void main() {
       wrapInScaffold: false,
       overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
     );
-    await settle();
-    await key(LogicalKeyboardKey.arrowRight);
-    await settle();
+    await tester.pumpAndSettle();
+    final rail = find.byKey(const ValueKey('catalog-navigation-rail'));
+    expect(tester.getSize(rail).width, 88);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
     final card = FocusManager.instance.primaryFocus;
-    await key(LogicalKeyboardKey.arrowUp);
-    await settle();
-    final labels = <String?>[focusedLabel()];
-    for (var step = 0; step < 4; step++) {
-      await key(LogicalKeyboardKey.arrowRight);
-      await settle();
-      labels.add(focusedLabel());
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(tester.getSize(rail).width, inExclusiveRange(88, 264));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(rail).width, 264);
+    final labels = <String?>[FocusManager.instance.primaryFocus?.debugLabel];
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      labels.add(FocusManager.instance.primaryFocus?.debugLabel);
     }
     expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Обновить каталог', 'Открыть логи']);
-    await key(LogicalKeyboardKey.arrowRight);
-    await key(LogicalKeyboardKey.arrowUp);
-    await settle();
-    expect(focusedLabel(), 'Открыть логи');
-    await key(LogicalKeyboardKey.arrowDown);
-    await settle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Открыть логи');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(card));
+    // Check the final collapsed width after the return transition.
+    // ignore: avoid-duplicate-test-assertions
+    expect(tester.getSize(rail).width, 88);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('release header skips unavailable log action in both directions', (tester) async {
-    final key = tester.sendKeyEvent;
-    final settle = tester.pumpAndSettle;
-    String? focusedLabel() => FocusManager.instance.primaryFocus?.debugLabel;
+  testWidgets('release rail skips logs and Back collapses it without leaving the catalog', (tester) async {
     await pumpTvApp(
       tester,
       CatalogScreen(
         onAnimeTap: (_) => fail('Unexpected activation'),
-        onTabSelected: (_) => fail('Unexpected tab selection'),
+        onTabSelected: (_) => fail('Unexpected navigation'),
         onSignOut: () => fail('Unexpected logout'),
       ),
       wrapInScaffold: false,
       overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
     );
-    await settle();
-    await key(LogicalKeyboardKey.arrowUp);
-    for (var step = 0; step < 4; step++) {
-      await key(LogicalKeyboardKey.arrowRight);
-      await settle();
+    await tester.pumpAndSettle();
+    final card = FocusManager.instance.primaryFocus;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    for (var i = 0; i < 4; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
     }
-    expect(focusedLabel(), 'Обновить каталог');
-    final labels = <String?>[];
-    for (var step = 0; step < 3; step++) {
-      await key(LogicalKeyboardKey.arrowLeft);
-      await settle();
-      labels.add(focusedLabel());
-    }
-    expect(labels, ['Выйти из аккаунта', 'Избранное', 'Главная']);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить каталог');
+    expect(find.byKey(const ValueKey('catalog-logs')), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(card));
+    expect(find.byType(CatalogScreen), findsOneWidget);
   });
 
-  testWidgets('empty favorites offer a direct return to the main catalog', (tester) async {
-    final settle = tester.pumpAndSettle;
-    final key = tester.sendKeyEvent;
+  testWidgets('empty favorites can focus their content action and return home', (tester) async {
     await pumpTvApp(
       tester,
-      HomeScreen(onAnimeTap: (_) => fail('Unexpected anime activation'), onSignOut: () => fail('Unexpected logout')),
+      HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
       wrapInScaffold: false,
       overrides: [
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
       ],
     );
-    await settle();
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
-    await settle();
+    await tester.pumpAndSettle();
     expect(find.text('Избранное пусто'), findsOneWidget);
-    await key(LogicalKeyboardKey.arrowDown);
-    await settle();
-    await key(LogicalKeyboardKey.select);
-    await settle();
-    expect(find.text('Каталог'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
     expect(find.byType(AnimeCard), findsWidgets);
+  });
+
+  testWidgets('long OK slides actions from the right, traps focus and restores the card on Back', (tester) async {
+    final favorites = FakeFavoritesRepository();
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (_) => fail('Long OK must not open details')),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(favorites),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final card = FocusManager.instance.primaryFocus;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 650));
+    expect(find.byType(FavoriteActionsSheet), findsNothing);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final sheet = find.byType(TvSideSheet);
+    final surface = find.descendant(of: sheet, matching: find.byType(Material)).first;
+    expect(tester.getTopLeft(surface).dx, greaterThan(520));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(surface).right, 960);
+    expect(tester.getRect(surface).left, 520);
+    for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowDown]) {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TvSideSheet>(), isNotNull);
+    }
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(card));
+    expect(favorites.writes, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('removing the last favorite from its sheet returns focus to navigation', (tester) async {
+    final favorites = FakeFavoritesRepository()..ids.add(1);
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(favorites),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.pump(const Duration(milliseconds: 650));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Избранное пусто'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное');
+    expect(find.byType(FavoriteActionsSheet), findsNothing);
+    expect(favorites.ids, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reduced motion expands the rail immediately without moving the grid', (tester) async {
+    await pumpTvApp(
+      tester,
+      MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+    );
+    await tester.pumpAndSettle();
+    final card = find.byType(AnimeCard).first;
+    final before = tester.getRect(card);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump();
+    expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 264);
+    expect(tester.getRect(card), before);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('catalog errors focus retry and allow a round trip through the rail', (tester) async {
+    var requests = 0;
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (_) async {
+              requests++;
+
+              return requests == 1
+                  ? const Result.failure(UnknownFailure())
+                  : const FakeCatalogScreenRepository().getPage(1);
+            },
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final retry = FocusManager.instance.primaryFocus;
+    expect(retry?.context?.findAncestorWidgetOfExactType<FilledButton>(), isNotNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Главная');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(retry));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(requests, 2);
+    expect(find.byType(AnimeCard), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('portrait catalog keeps two readable columns and matches its loading layout', (tester) async {
@@ -227,7 +350,7 @@ void main() {
     await key(LogicalKeyboardKey.arrowUp);
     await settle();
     final card = find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(Material));
-    final bodyTop = tester.getBottomLeft(find.byType(AppBar)).dy;
+    const bodyTop = 32.0;
     expect(tester.getTopLeft(card).dy, greaterThanOrEqualTo(bodyTop));
     expect(tester.getBottomRight(card).dy, lessThanOrEqualTo(compactTvSize.height));
     expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).clipBehavior, Clip.hardEdge);
@@ -247,22 +370,24 @@ void main() {
     final settle = tester.pumpAndSettle;
     final key = tester.sendKeyEvent;
     await settle();
-    await key(LogicalKeyboardKey.arrowUp);
+    await key(LogicalKeyboardKey.arrowLeft);
     await settle();
-    await key(LogicalKeyboardKey.arrowRight);
+    await key(LogicalKeyboardKey.arrowDown);
     await key(LogicalKeyboardKey.select);
     await settle();
     Key? focusedTab() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key;
     expect(find.text('Избранное пусто'), findsOneWidget);
     // Re-read focus after the tab's widget tree has been replaced.
     expect(focusedTab(), const ValueKey('catalog-tab-true'));
-    await key(LogicalKeyboardKey.arrowLeft);
+    await key(LogicalKeyboardKey.arrowUp);
     await key(LogicalKeyboardKey.select);
     await settle();
-    expect(find.text('Каталог'), findsOneWidget);
+    expect(find.text('Каталог'), findsNothing);
+    expect(find.textContaining('загружено'), findsNothing);
+    expect(find.textContaining('OK —'), findsNothing);
     // Re-read focus after the tab's widget tree has been replaced.
     expect(focusedTab(), const ValueKey('catalog-tab-false'));
-    await key(LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.arrowRight);
     await settle();
     await key(LogicalKeyboardKey.select);
   });
@@ -275,7 +400,9 @@ void main() {
       overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
     );
     await tester.pumpAndSettle();
-    expect(find.text('Каталог'), findsOneWidget);
+    expect(find.text('Каталог'), findsNothing);
+    expect(find.textContaining('загружено'), findsNothing);
+    expect(find.textContaining('OK —'), findsNothing);
     expect(find.byType(AnimeCard), findsAtLeastNWidgets(4));
     expect(tester.takeException(), isNull);
   });

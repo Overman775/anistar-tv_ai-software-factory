@@ -331,7 +331,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (session == null) {
       return;
     }
-    final choice = await showDialog<PlaybackQuality>(
+    final choice = await showTvSideSheet<PlaybackQuality>(
       context: context,
       builder: (context) => PlayerChoicesDialog<PlaybackQuality>(
         title: 'Качество видео',
@@ -360,7 +360,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final episodes = session.episodeNumbers.toList()..sort((a, b) => b.compareTo(a));
-    final choice = await showDialog<int>(
+    final choice = await showTvSideSheet<int>(
       context: context,
       builder: (context) => PlayerChoicesDialog<int>(
         title: 'Выбор серии',

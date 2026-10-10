@@ -4,7 +4,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalo
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_state.dart';
-import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_dialog.dart';
+import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_sheet.dart';
 import 'package:anistar_tv/packages/features/favorites/presentation/favorite_button.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
@@ -73,7 +73,7 @@ void main() {
     await tester.tap(add);
     await pumpAndSettle();
     expect(repository.ids, {1});
-    expect(find.byType(FavoriteActionsDialog), findsNothing);
+    expect(find.byType(FavoriteActionsSheet), findsNothing);
     expect(remove, findsOneWidget);
     await tester.tap(remove);
     await pumpAndSettle();
@@ -87,7 +87,7 @@ void main() {
     final repository = FakeFavoritesRepository()..statusFailure = const UnknownFailure();
     await pumpTvApp(
       tester,
-      const FavoriteActionsDialog(animeId: 1, slug: '1-test', title: 'Аниме 1'),
+      const FavoriteActionsSheet(animeId: 1, slug: '1-test', title: 'Аниме 1'),
       overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
     );
     await pumpAndSettle();

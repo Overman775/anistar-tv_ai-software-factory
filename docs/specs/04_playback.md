@@ -1,5 +1,7 @@
 # ▶️ Воспроизведение | AniStar TV
 
+Интерфейс плеера следует [ADR-0008](../adr/0008-youtube-tv-interaction-reference.md): ориентир — YouTube для телевизоров, с адаптацией под AniStar TV. Контракт кнопок, шкалы и фокуса находится в [TV-взаимодействии](06_tv_interaction.md#3-управление-player), переходы — в [анимациях](08_motion.md). Изменение внешнего вида не меняет описанные ниже правила HLS и lifecycle.
+
 ## 1. Источник и session
 
 Только онлайн HLS, Android native video_player / Media3. Chrome, WebView, parser-сервер, proxy, MP4 download и offline playlist не участвуют.

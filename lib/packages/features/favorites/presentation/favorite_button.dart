@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../favorites_providers.dart';
-import 'favorite_actions_dialog.dart';
+import 'favorite_actions_sheet.dart';
 
 class FavoriteButton extends ConsumerWidget {
   const FavoriteButton({

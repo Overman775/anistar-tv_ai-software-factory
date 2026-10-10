@@ -60,9 +60,11 @@ void main() {
   Future<void> openMenu(WidgetTester tester, {bool episodes = false}) async {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await settle(tester);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    if (episodes) {
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    for (var i = 0; i < (episodes ? 3 : 4); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
     }
@@ -99,9 +101,9 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'К сериям');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Качество');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Позиция видео');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пауза / воспроизведение');
@@ -137,7 +139,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     await tester.pump();
-    expect(find.text('К сериям'), findsOneWidget);
+    expect(find.byTooltip('К сериям'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
     expect(find.byType(PlayerScreen), findsNothing);
