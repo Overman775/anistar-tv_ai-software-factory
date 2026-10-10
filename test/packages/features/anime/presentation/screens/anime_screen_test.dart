@@ -1,6 +1,7 @@
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -63,6 +64,9 @@ void main() {
     expect(openedEpisode, 1);
     await sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await pumpAndSettle();
+    expect(tester.widgetList<EpisodeCard>(find.byType(EpisodeCard)).map((card) => card.episode.number), [3, 2, 1]);
+    await sendKeyEvent(LogicalKeyboardKey.select);
+    expect(openedEpisode, 3);
     await sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(AppMotion.fast);
     await sendKeyEvent(LogicalKeyboardKey.select);

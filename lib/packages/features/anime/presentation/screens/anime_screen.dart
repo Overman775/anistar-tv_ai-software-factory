@@ -59,7 +59,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       );
     }
     final data = snapshot.requireData;
-    final episodes = data.episodes;
+    final episodes = data.episodes.toList()..sort((a, b) => b.number.compareTo(a.number));
 
     return CustomScrollView(
       controller: _scrollController,
@@ -73,7 +73,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
               title: data.details.title,
               initialFavorite: data.details.isFavorite,
             ),
-            onPlayFirstEpisode: episodes.isEmpty ? null : () => _openEpisode(episodes.first),
+            onPlayFirstEpisode: episodes.isEmpty ? null : () => _openEpisode(data.episodes.first),
           ),
         ),
         SliverPadding(
@@ -191,14 +191,20 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      toolbarHeight: 80,
-      titleSpacing: AppSpacing.lg,
-      title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-    ),
-    body: TvBackdrop(
-      child: SafeArea(
+  Widget build(BuildContext context) => TvBackdrop(
+    child: Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        flexibleSpace: const TvHeaderSurface(),
+        toolbarHeight: 80,
+        titleSpacing: AppSpacing.lg,
+        title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+      ),
+      body: SafeArea(
         top: false,
         minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
         child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),

@@ -305,11 +305,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
+    final episodes = session.episodeNumbers.toList()..sort((a, b) => b.compareTo(a));
     final choice = await showDialog<int>(
       context: context,
       builder: (context) => PlayerChoicesDialog<int>(
         title: 'Выбор серии',
-        choices: session.episodeNumbers,
+        choices: episodes,
         selected: _episodeNumber,
         label: (number) => watched.contains(number) || session.watchedEpisodes.contains(number)
             ? 'Серия $number — просмотрена ✓'
