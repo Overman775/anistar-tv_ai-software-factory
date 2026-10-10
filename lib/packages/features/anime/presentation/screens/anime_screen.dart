@@ -13,6 +13,7 @@ import '../../anime_providers.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
 import '../widgets/anime_hero.dart';
+import '../widgets/anime_layout.dart';
 import '../widgets/anime_skeleton.dart';
 import '../widgets/episode_card.dart';
 
@@ -62,7 +63,6 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
 
     return CustomScrollView(
       controller: _scrollController,
-      clipBehavior: Clip.none,
       slivers: [
         SliverToBoxAdapter(
           child: AnimeHero(
@@ -103,7 +103,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) => SliverGrid.builder(
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _columnCount(constraints.crossAxisExtent),
+                  crossAxisCount: AnimeLayout.episodeColumns(constraints.crossAxisExtent),
                   mainAxisSpacing: AppSpacing.xl,
                   crossAxisSpacing: AppSpacing.lg,
                   childAspectRatio: 16 / 9,
@@ -112,12 +112,14 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
                 itemBuilder: (context, index) {
                   final episode = episodes[index];
 
-                  return EpisodeCard(
-                    episode: episode,
-                    isWatched:
-                        ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
-                    onFocusChanged: (focused) => _onEpisodeFocusChanged(context, focused),
-                    onTap: () => _openEpisode(episode),
+                  return Builder(
+                    builder: (episodeContext) => EpisodeCard(
+                      episode: episode,
+                      isWatched:
+                          ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
+                      onFocusChanged: (focused) => _onEpisodeFocusChanged(episodeContext, focused),
+                      onTap: () => _openEpisode(episode),
+                    ),
                   );
                 },
               ),
@@ -125,17 +127,6 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
           ),
       ],
     );
-  }
-
-  int _columnCount(double width) {
-    if (width >= 1600) {
-      return 4;
-    }
-    if (width >= 900) {
-      return 3;
-    }
-
-    return 2;
   }
 
   void _load() {
@@ -171,7 +162,6 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       Scrollable.ensureVisible(
         episodeContext,
         alignment: 0.58,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
         duration: AppMotion.standard,
         curve: Curves.easeOutCubic,
       ),

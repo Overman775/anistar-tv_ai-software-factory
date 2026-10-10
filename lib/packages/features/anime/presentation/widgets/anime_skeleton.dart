@@ -1,20 +1,11 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-/// Anime-details placeholder layout. Episode-grid ownership stays in this feature.
+import 'anime_layout.dart';
+
+/// Uses the same hero bounds and padded episode grid as the loaded page.
 class AnimeSkeleton extends StatelessWidget {
   const AnimeSkeleton({super.key});
-
-  int _columnCount(double width) {
-    if (width >= 1600) {
-      return 4;
-    }
-    if (width >= 900) {
-      return 3;
-    }
-
-    return 2;
-  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -23,40 +14,71 @@ class AnimeSkeleton extends StatelessWidget {
       child: CustomScrollView(
         physics: const NeverScrollableScrollPhysics(),
         slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.all(AppSpacing.xxl),
-            sliver: SliverToBoxAdapter(
-              child: SizedBox(
-                height: constraints.maxWidth >= 1200 ? 410 : 350,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(color: AppPalette.surface, borderRadius: AppRadii.large),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: AnimeLayout.heroHeight(constraints.maxWidth),
+              child: const Padding(
+                padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.xl),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AspectRatio(
+                      aspectRatio: 2 / 3,
+                      child: TvSkeletonBox(borderRadius: AppRadii.large),
+                    ),
+                    SizedBox(width: AppSpacing.xl),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TvSkeletonBox(width: 220, height: 34, borderRadius: AppRadii.pill),
+                          SizedBox(height: AppSpacing.md),
+                          TvSkeletonBox(height: 38, borderRadius: AppRadii.small),
+                          SizedBox(height: AppSpacing.sm),
+                          TvSkeletonBox(width: 260, height: 24, borderRadius: AppRadii.small),
+                          SizedBox(height: AppSpacing.md),
+                          TvSkeletonBox(height: 22, borderRadius: AppRadii.small),
+                          SizedBox(height: AppSpacing.sm),
+                          FractionallySizedBox(
+                            widthFactor: 0.8,
+                            child: TvSkeletonBox(height: 22, borderRadius: AppRadii.small),
+                          ),
+                          Spacer(),
+                          TvSkeletonBox(width: 260, height: 56),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
           const SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.xxl),
+            padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.sm),
             sliver: SliverToBoxAdapter(
-              child: SizedBox(
-                width: 180,
-                height: 28,
-                child: DecoratedBox(decoration: BoxDecoration(color: AppPalette.surface)),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TvSkeletonBox(width: 140, height: 28, borderRadius: AppRadii.small),
               ),
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, 72),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _columnCount(constraints.maxWidth),
-                mainAxisSpacing: AppSpacing.xl,
-                crossAxisSpacing: AppSpacing.lg,
-                childAspectRatio: 16 / 9,
-              ),
-              itemCount: _columnCount(constraints.maxWidth) * 2,
-              itemBuilder: (_, _) => const DecoratedBox(
-                decoration: BoxDecoration(color: AppPalette.surface, borderRadius: AppRadii.large),
-              ),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
+            sliver: SliverLayoutBuilder(
+              builder: (context, constraints) {
+                final columns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
+
+                return SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: AppSpacing.xl,
+                    crossAxisSpacing: AppSpacing.lg,
+                    childAspectRatio: 16 / 9,
+                  ),
+                  itemCount: columns * 2,
+                  itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),
+                );
+              },
             ),
           ),
         ],

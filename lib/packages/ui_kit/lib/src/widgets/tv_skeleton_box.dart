@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:skeletonizer/skeletonizer.dart';
 
 import '../theme/app_palette.dart';
 import 'tv_skeleton.dart';
@@ -12,14 +13,9 @@ class TvSkeletonBox extends StatelessWidget {
   final double? width;
 
   @override
-  Widget build(BuildContext context) => TvSkeleton(
-    isLoading: true,
-    child: SizedBox(
-      width: width,
-      height: height,
-      child: DecoratedBox(
-        decoration: BoxDecoration(color: AppPalette.surfaceElevated, borderRadius: borderRadius),
-      ),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final shape = Bone(width: width ?? double.infinity, height: height, borderRadius: borderRadius);
+
+    return Skeletonizer.maybeOf(context)?.enabled ?? false ? shape : TvSkeleton(isLoading: true, child: shape);
+  }
 }

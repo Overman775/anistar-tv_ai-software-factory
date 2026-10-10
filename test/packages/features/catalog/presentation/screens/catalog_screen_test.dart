@@ -77,6 +77,34 @@ void main() {
     expect(openedAnimeId, 12);
   });
 
+  testWidgets('returning to the first row reveals the whole focused card below the tabs', (tester) async {
+    await pumpTvApp(
+      tester,
+      CatalogScreen(
+        onAnimeTap: (_) => fail('Unexpected anime activation'),
+        onTabSelected: (_) => fail('Unexpected tab activation'),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+    );
+    final settle = tester.pumpAndSettle;
+    final key = tester.sendKeyEvent;
+    await settle();
+    await key(LogicalKeyboardKey.arrowDown);
+    await settle();
+    await key(LogicalKeyboardKey.arrowDown);
+    await settle();
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    final card = find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(Material));
+    final bodyTop = tester.getBottomLeft(find.byType(AppBar)).dy;
+    expect(tester.getTopLeft(card).dy, greaterThanOrEqualTo(bodyTop));
+    expect(tester.getBottomRight(card).dy, lessThanOrEqualTo(compactTvSize.height));
+    expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).clipBehavior, Clip.hardEdge);
+  });
+
   testWidgets('keeps the catalog heading and first row visible at 960x540', (tester) async {
     await pumpTvApp(
       tester,

@@ -27,12 +27,24 @@ class CatalogSkeleton extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         slivers: [
           const SliverPadding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.md),
+            padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
             sliver: SliverToBoxAdapter(
-              child: SizedBox(
-                width: 280,
-                height: 34,
-                child: DecoratedBox(decoration: BoxDecoration(color: AppPalette.surface)),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TvSkeletonBox(width: 180, height: 28, borderRadius: AppRadii.small),
+                        SizedBox(height: AppSpacing.xs),
+                        TvSkeletonBox(width: 360, height: 26, borderRadius: AppRadii.small),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: AppSpacing.md),
+                  TvSkeletonBox(width: 140, height: 42, borderRadius: AppRadii.pill),
+                ],
               ),
             ),
           ),
@@ -46,9 +58,7 @@ class CatalogSkeleton extends StatelessWidget {
                 mainAxisSpacing: AppSpacing.xl,
               ),
               itemCount: _columnCount(constraints.maxWidth) * 2,
-              itemBuilder: (_, _) => const DecoratedBox(
-                decoration: BoxDecoration(color: AppPalette.surface, borderRadius: AppRadii.large),
-              ),
+              itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),
             ),
           ),
         ],

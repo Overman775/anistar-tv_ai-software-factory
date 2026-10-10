@@ -16,9 +16,9 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после обновления SDK; 194 Dart-файла |
-| Unit/widget/architecture | 124 passed после добавления поиска зеркал; seed 20261010 |
-| Golden comparison | 8 passed после обновления; точное сравнение, 960×540 и 1280×720 |
+| Формат, analyzer, DCM | Passed после UI-правок; 203 Dart-файла |
+| Unit/widget/architecture | 135 passed после UI-правок; seed 20261010 |
+| Golden comparison | 16 passed после UI-правок; точное сравнение, 960×540 и 1280×720 |
 | HTTPS fixture | 6 Python-тестов passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
@@ -99,11 +99,11 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 ## 6. Текущая сборка
 
-[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 551 932 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
+[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 634 324 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `817ff204759c9bed4ab96626e3c20861da1598a4d07420787abb5842a66e6511`.
+SHA-256: `a6ff13e72e58f329dd81d5dd41241e36dc11857bdb067c91d4e48e5efc543e5b`.
 
-Промежуточные библиотеки проверены freshness checker после release-сборки с исправлением входа. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
+Промежуточные библиотеки проверены freshness checker после release-сборки с исправлениями входа и UI. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
 Иконка и TV баннер обновлены через imagegen; экспортированы все пять density-вариантов и adaptive icon. Размеры проверены, баннер просмотрен в 320×180. В новом release APK через `aapt` подтверждены `AniStar TV`, `android:icon`, `android:banner` и LEANBACK launcher; freshness check прошёл для трёх ABI. Внешний вид в launcher физического TV отдельно не проверен. Экспорт: [Разработка и тестирование](05_development_and_testing.md#8-иконка-и-android-tv-баннер).
 
@@ -138,3 +138,19 @@ Credentials хранятся локально вне Git. Команда и пр
 Восемь fixture Android E2E и шесть Python-тестов сервера прошли после добавления javascript ссылки в member HTML. Дополнительно прошёл отдельный live-сценарий с настоящим аккаунтом.
 
 Обычный release APK пересобран с исправлением входа; freshness checker прошёл для трёх ABI. Размер и SHA-256 обновлены в разделе 6. Integration entry point и файл credentials при этой сборке не использовались.
+
+## 10. UI Android TV
+
+Исправлена прокрутка при focus: контекст передаётся от конкретной карточки, а не от всей SliverGrid. Возврат к первой карточке возвращает начало каталога. Scroll view ограничен областью под AppBar, карточки больше не рисуются поверх вкладок. На 960×540 уменьшены верхние отступы, чтобы focus-масштабирование первой строки помещалось целиком.
+
+Скелетоны каталога и карточки повторяют расположение заголовка, постера, текста, кнопки и сетки. Hero height и число столбцов серий общие с ready; учитываются горизонтальные отступы. Формы используют один shimmer-контейнер, поддерживают системное отключение анимации и исключены из Semantics.
+
+Экран входа оформлен общей темой, добавлены видимость пароля и индикатор отправки. У вкладок повышен контраст выбранной подписи и добавлена отдельная focus-рамка; все стили текста используют Inter. Длинные названия/метаданные ограничены строками, описание учитывает доступную высоту и масштаб текста; последняя видимая строка получает многоточие. Error icon фонового изображения hero скрыт. Контракт — [TV-взаимодействие](specs/06_tv_interaction.md).
+
+Проверки после правок: format, analyzer и DCM без замечаний; 135 unit/widget/architecture и 16 goldens прошли с seed 20261010. Восемь новых golden-снимков проверяют loading каталога/карточки, длинное содержимое карточки и вход на 960×540 и 1280×720. Baselines просмотрены; сравнение точное. Регрессия focus проверяет рамку самой карточки при возврате из нижнего ряда.
+
+На API 36 ARM64 с отключённым Chrome повторно прошли все восемь fixture E2E-сценариев, включая вход/сессию, избранное, HLS, управление пультом и watched history.
+
+После последней правки описания повторно прошёл live E2E с `overmantest`: вход, encrypted restore без нового POST, сайтное избранное с восстановлением исходного статуса, HLS 720p/360p, seek/пауза, смена серии, история после перезапуска и logout. CAPTCHA не потребовалась. Credentials переданы только integration test через локальный файл вне Git.
+
+Release APK пересобран после live E2E; freshness checker подтвердил текущий AOT для трёх ABI. Размер и SHA-256 обновлены в разделе 6. Файл credentials и integration entry point в release не передавались.

@@ -75,6 +75,18 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'test');
     final password = find.byKey(const ValueKey('login_password'));
     await tester.enterText(password, 'secret');
+    await tester.tap(find.byTooltip('Показать пароль'));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(find.descendant(of: password, matching: find.byType(TextField))).obscureText,
+      isFalse,
+    );
+    await tester.tap(find.byTooltip('Скрыть пароль'));
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(find.descendant(of: password, matching: find.byType(TextField))).obscureText,
+      isTrue,
+    );
     await tester.tap(submit);
     await settle();
     expect(repository.loginCalls, 1);

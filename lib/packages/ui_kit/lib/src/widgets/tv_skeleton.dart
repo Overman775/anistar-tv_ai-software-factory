@@ -11,13 +11,18 @@ class TvSkeleton extends StatelessWidget {
   final bool isLoading;
 
   @override
-  Widget build(BuildContext context) => Skeletonizer(
-    enabled: isLoading,
-    effect: const ShimmerEffect(
-      duration: Duration(milliseconds: 1100),
-      baseColor: AppPalette.surfaceElevated,
-      highlightColor: AppPalette.outline,
+  Widget build(BuildContext context) => ExcludeSemantics(
+    excluding: isLoading,
+    child: Skeletonizer(
+      enabled: isLoading,
+      effect: MediaQuery.disableAnimationsOf(context)
+          ? const SolidColorEffect(color: AppPalette.surfaceElevated)
+          : const ShimmerEffect(
+              duration: Duration(milliseconds: 1100),
+              baseColor: AppPalette.surfaceElevated,
+              highlightColor: AppPalette.outline,
+            ),
+      child: child,
     ),
-    child: child,
   );
 }
