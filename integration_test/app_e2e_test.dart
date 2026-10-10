@@ -386,6 +386,7 @@ Future<void> _openAnime(WidgetTester tester) async {
 
 Future<void> _pressPlay(WidgetTester tester) async {
   final button = find.text('Смотреть серию 1');
+  await E2eHarness.waitFor(tester, () => button.hitTestable().evaluate().isNotEmpty, 'detail action after transition');
   await tester.ensureVisible(button);
   await tester.tap(button);
 }

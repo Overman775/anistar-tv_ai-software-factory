@@ -15,9 +15,11 @@ class AppNetworkImage extends StatelessWidget {
     this.height,
     this.semanticLabel,
     this.width,
+    this.animateLoading = true,
   });
 
   final BorderRadiusGeometry borderRadius;
+  final bool animateLoading;
   final Widget? errorWidget;
   final BoxFit fit;
   final double? height;
@@ -59,6 +61,8 @@ class AppNetworkImage extends StatelessWidget {
           width: width,
           height: height,
           fit: fit,
+          fadeInDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
+          fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
           placeholder: (_, _) => TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
           errorWidget: (_, _, _) => fallback,
         ),

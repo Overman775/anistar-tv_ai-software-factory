@@ -59,7 +59,7 @@ class PlayerView extends StatelessWidget {
             ),
             AnimatedOpacity(
               opacity: controlsVisible ? 1 : 0,
-              duration: AppMotion.fast,
+              duration: AppMotion.durationOf(context, AppMotion.fast),
               child: IgnorePointer(
                 ignoring: !controlsVisible,
                 child: ExcludeFocus(

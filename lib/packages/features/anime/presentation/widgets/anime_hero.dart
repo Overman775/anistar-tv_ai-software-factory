@@ -7,16 +7,23 @@ import 'anime_layout.dart';
 import 'anime_metadata_chip.dart';
 
 class AnimeHero extends StatelessWidget {
-  const AnimeHero({required this.data, super.key, this.onPlayFirstEpisode, this.favoriteAction});
+  const AnimeHero({
+    required this.data,
+    super.key,
+    this.onPlayFirstEpisode,
+    this.favoriteAction,
+    this.fallbackPosterUri,
+  });
 
   final AnimeScreenData data;
   final Widget? favoriteAction;
+  final Uri? fallbackPosterUri;
   final VoidCallback? onPlayFirstEpisode;
 
   @override
   Widget build(BuildContext context) {
     final details = data.details;
-    final posterUri = details.posterUri;
+    final posterUri = details.posterUri ?? fallbackPosterUri;
     final posterUrl = posterUri?.toString();
     final metadata = [details.year, details.seriesInfo, details.voiceover].whereType<String>().join(' • ');
     final textTheme = Theme.of(context).textTheme;
@@ -55,22 +62,19 @@ class AnimeHero extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (posterUrl != null)
-                    Hero(
-                      tag: 'anime-poster-${details.id}',
-                      child: AspectRatio(
-                        aspectRatio: 2 / 3,
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(
-                            borderRadius: AppRadii.large,
-                            boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 28, offset: Offset(0, 14))],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: AppRadii.large,
-                            child: AppNetworkImage(
-                              imageUrl: posterUrl,
-                              borderRadius: AppRadii.large,
-                              semanticLabel: details.title,
-                            ),
+                    AspectRatio(
+                      aspectRatio: 2 / 3,
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          borderRadius: AppRadii.large,
+                          boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 28, offset: Offset(0, 14))],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: AppRadii.large,
+                          child: TvPosterHero(
+                            tag: 'anime-poster-${details.id}',
+                            imageUrl: posterUrl,
+                            semanticLabel: details.title,
                           ),
                         ),
                       ),

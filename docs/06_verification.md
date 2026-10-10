@@ -17,14 +17,14 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после доработок управления плеером и каталога; 212 Dart-файлов |
-| Unit/widget/architecture | 150 passed после доработок управления плеером и каталога; seed 20261010 |
+| Формат, analyzer, DCM | Passed после добавления анимаций; 215 Dart-файлов |
+| Unit/widget/architecture | 155 passed после добавления анимаций; seed 20261010 |
 | Golden comparison | 18 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
 | HTTPS fixture | 7 Python-тестов passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после E2E; текущие AOT libraries подтверждены для трёх ABI |
 
-Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после доработок управления плеером и каталога при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
+Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **9 сценариев прошли после добавления анимаций при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
 | Сценарий | Проверено |
 | --- | --- |
@@ -101,9 +101,9 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 ## 6. Текущая сборка
 
-[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 732 628 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
+[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 830 932 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `2acb47f2e81e3d6af8e48ea3f229676817139baa18945a8f5d4bf6040fba0666`.
+SHA-256: `026eae1f77b917e5ac2c0e2da2b0113cbb123f04b3c2f9443bc3614cdc5c647c`.
 
 APK собран после исправления авторизованного избранного и серверной истории, включая новую шапку и убывающий порядок серий. Freshness checker подтвердил соответствие AOT/JNI/merge/stripped libraries для трёх ABI. Тестовые credentials в распакованных entries APK отсутствуют. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
@@ -221,3 +221,17 @@ Live harness теперь ждёт доступную кнопку после ro
 Live-сайт в этой доработке повторно не изменялся: проверенный контракт авторизации, избранного и истории остался прежним. Результат последнего авторизованного live-прогона приведён в разделе 13. Физический пульт и TV по-прежнему требуют ручного smoke.
 
 После финальной правки timer повторно прошли analyzer, DCM и 16 lifecycle-тестов player. Собран обычный prod release APK без Dart define credentials; freshness checker подтвердил текущий AOT для всех трёх ABI. Во всех ZIP entries APK и изменённых файлах проверено отсутствие значений локальных тестовых credentials. Размер и SHA-256 актуальной сборки приведены в разделе 6.
+
+
+## 15. Hero и спокойные переходы
+
+10 октября 2026 года анимации приведены к общим токенам по принципам RC Mobile App. Постер передаётся через typed route extra и присутствует в AnimeSkeleton с первого кадра. До окончания входного перехода HTTP-результат не заменяет Hero; служебный offstage layout не считается завершением. На Back постер возвращается в карточку из исходной вкладки.
+
+Detail использует fade и вертикальный сдвиг 2%, player — только fade. Вкладки получают короткий fade-in без одновременного удержания двух каталогов. Подтверждённая звёздочка использует AnimatedSwitcher. Focus, scroll и controls учитывают reduced motion; Hero и shimmer отключаются также при accessibleNavigation.
+
+Прошли format, analyzer, DCM, 155 unit/widget/architecture-тестов и 18 goldens с seed 20261010. Все прежние эталоны совпали, допуск не менялся. Пять новых route-тестов проверяют полёт до HTTP из обеих вкладок, ответ посреди перехода, обратный Hero, быстрый Back и две настройки reduced motion. Контракт и исходники: [анимации](specs/08_motion.md).
+
+
+После обновления ожидания кнопки Play повторно прошли 9 Android fixture E2E на API 36 ARM64 и 7 Python-тестов fixture. Проверены focus вкладок, избранное, возврат к той же карточке, detail/player, 720p/360p, серия, seek и bounded recovery. E2E ждёт доступного действия после transition, а не только появления AnimeScreen. Финальный analyzer/DCM чистые. Live-протокол сайта в этой доработке не менялся; физический TV и оценка плавности на его GPU отдельно не проверены.
+
+Собран prod release APK с текущими анимациями; freshness checker подтвердил AOT для трёх ABI. Значения локальных credentials отсутствуют во всех ZIP entries APK и изменённых файлах. Актуальные размер и SHA-256 — в разделе 6.

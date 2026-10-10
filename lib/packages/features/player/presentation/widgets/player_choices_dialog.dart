@@ -39,7 +39,9 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
 
   void _revealChoice(BuildContext context, bool focused) {
     if (focused) {
-      unawaited(Scrollable.ensureVisible(context, duration: AppMotion.fast, alignment: 0.5));
+      unawaited(
+        Scrollable.ensureVisible(context, duration: AppMotion.durationOf(context, AppMotion.fast), alignment: 0.5),
+      );
     }
   }
 

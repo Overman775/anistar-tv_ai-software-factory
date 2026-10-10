@@ -38,12 +38,12 @@ class AnimeCard extends StatelessWidget {
         final textTheme = theme.textTheme;
 
         return AnimatedScale(
-          duration: AppMotion.fast,
+          duration: AppMotion.durationOf(context, AppMotion.fast),
           scale: focused ? 1.055 : 1,
-          curve: Curves.easeOutCubic,
+          curve: AppMotion.enterCurve,
           child: AnimatedContainer(
-            duration: AppMotion.fast,
-            curve: Curves.easeOutCubic,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
+            curve: AppMotion.enterCurve,
             decoration: BoxDecoration(
               borderRadius: AppRadii.large,
               border: Border.fromBorderSide(
@@ -65,12 +65,10 @@ class AnimeCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Hero(
+                  TvPosterHero(
                     tag: 'anime-poster-${anime.id}',
-                    child: AppNetworkImage(
-                      imageUrl: posterUri.hasScheme ? posterUrl : null,
-                      semanticLabel: anime.title,
-                    ),
+                    imageUrl: posterUri.hasScheme ? posterUrl : null,
+                    semanticLabel: anime.title,
                   ),
                   const DecoratedBox(
                     decoration: BoxDecoration(
@@ -117,26 +115,33 @@ class AnimeCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (isFavorite ?? anime.isFavorite ?? false)
-                    Positioned(
-                      top: AppSpacing.sm,
-                      left: AppSpacing.sm,
-                      child: Tooltip(
-                        message: 'В избранном',
-                        child: DecoratedBox(
-                          decoration: const BoxDecoration(color: Color(0xDD080B14), shape: BoxShape.circle),
-                          child: Padding(
-                            padding: const EdgeInsets.all(AppSpacing.xs),
-                            child: Icon(
-                              Icons.star_rounded,
-                              key: ValueKey('favorite-${anime.id}'),
-                              color: AppPalette.secondary,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
+                  Positioned(
+                    top: AppSpacing.sm,
+                    left: AppSpacing.sm,
+                    child: AnimatedSwitcher(
+                      duration: AppMotion.durationOf(context, AppMotion.fast),
+                      switchInCurve: AppMotion.enterCurve,
+                      switchOutCurve: AppMotion.exitCurve,
+                      child: (isFavorite ?? anime.isFavorite ?? false)
+                          ? Tooltip(
+                              key: const ValueKey(true),
+                              message: 'В избранном',
+                              child: DecoratedBox(
+                                decoration: const BoxDecoration(color: Color(0xDD080B14), shape: BoxShape.circle),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(AppSpacing.xs),
+                                  child: Icon(
+                                    Icons.star_rounded,
+                                    key: ValueKey('favorite-${anime.id}'),
+                                    color: AppPalette.secondary,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(key: ValueKey(false)),
                     ),
+                  ),
                 ],
               ),
             ),

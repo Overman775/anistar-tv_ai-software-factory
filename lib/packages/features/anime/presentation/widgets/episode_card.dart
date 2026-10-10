@@ -34,11 +34,11 @@ class EpisodeCard extends StatelessWidget {
         final textTheme = theme.textTheme;
 
         return AnimatedScale(
-          duration: AppMotion.fast,
+          duration: AppMotion.durationOf(context, AppMotion.fast),
           scale: focused ? 1.045 : 1,
-          curve: Curves.easeOutCubic,
+          curve: AppMotion.enterCurve,
           child: AnimatedContainer(
-            duration: AppMotion.fast,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
             decoration: BoxDecoration(
               border: Border.fromBorderSide(
                 BorderSide(color: focused ? primary : AppPalette.outline, width: focused ? 4 : 1),

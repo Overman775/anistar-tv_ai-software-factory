@@ -15,10 +15,10 @@ class TvSkeleton extends StatelessWidget {
     excluding: isLoading,
     child: Skeletonizer(
       enabled: isLoading,
-      effect: MediaQuery.disableAnimationsOf(context)
+      effect: AppMotion.reducedOf(context)
           ? const SolidColorEffect(color: AppPalette.surfaceElevated)
           : const ShimmerEffect(
-              duration: Duration(milliseconds: 1100),
+              duration: AppMotion.shimmer,
               baseColor: AppPalette.surfaceElevated,
               highlightColor: AppPalette.outline,
             ),

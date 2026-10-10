@@ -80,6 +80,7 @@ mixin $AnimeRoute on GoRouteData {
     animeId: int.parse(state.uri.queryParameters['anime-id']!),
     slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
+    $extra: state.extra as AnimeSummary?,
   );
 
   AnimeRoute get _self => this as AnimeRoute;
@@ -95,17 +96,19 @@ mixin $AnimeRoute on GoRouteData {
   );
 
   @override
-  void go(BuildContext context) => context.go(location);
+  void go(BuildContext context) => context.go(location, extra: _self.$extra);
 
   @override
-  Future<T?> push<T>(BuildContext context) => context.push<T>(location);
+  Future<T?> push<T>(BuildContext context) =>
+      context.push<T>(location, extra: _self.$extra);
 
   @override
   void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+      context.pushReplacement(location, extra: _self.$extra);
 
   @override
-  void replace(BuildContext context) => context.replace(location);
+  void replace(BuildContext context) =>
+      context.replace(location, extra: _self.$extra);
 }
 
 mixin $PlayerRoute on GoRouteData {
@@ -114,6 +117,7 @@ mixin $PlayerRoute on GoRouteData {
     episodeNumber: int.parse(state.uri.queryParameters['episode-number']!),
     slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
+    $extra: state.extra as AnimeSummary?,
   );
 
   PlayerRoute get _self => this as PlayerRoute;
@@ -130,15 +134,17 @@ mixin $PlayerRoute on GoRouteData {
   );
 
   @override
-  void go(BuildContext context) => context.go(location);
+  void go(BuildContext context) => context.go(location, extra: _self.$extra);
 
   @override
-  Future<T?> push<T>(BuildContext context) => context.push<T>(location);
+  Future<T?> push<T>(BuildContext context) =>
+      context.push<T>(location, extra: _self.$extra);
 
   @override
   void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+      context.pushReplacement(location, extra: _self.$extra);
 
   @override
-  void replace(BuildContext context) => context.replace(location);
+  void replace(BuildContext context) =>
+      context.replace(location, extra: _self.$extra);
 }

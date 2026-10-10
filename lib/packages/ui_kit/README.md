@@ -11,7 +11,9 @@ UI Kit содержит тему и общие TV-компоненты. Публ
 | AppPalette | Цвета |
 | AppSpacing | Отступы |
 | AppRadii | Радиусы |
-| AppMotion | Длительности анимаций |
+| AppMotion | Длительности, кривые и reduced motion |
+
+Анимации описаны в [контракте](../../../docs/specs/08_motion.md). Feature не задаёт собственные duration/curve для этих эффектов; durationOf отключает их по настройкам доступности.
 
 Текстовые стили доступны через Theme.of(context).textTheme. Цвета Material через colorScheme; общие TV-токены через публичные классы пакета.
 
@@ -22,7 +24,8 @@ UI Kit содержит тему и общие TV-компоненты. Публ
 | Компонент | Контракт |
 | --- | --- |
 | TvFocusable | Focus, активация OK и semantic label |
-| AppNetworkImage | Cached image, skeleton и fallback |
+| AppNetworkImage | Cached image, skeleton, fallback и управляемый fade |
+| TvPosterHero | Одинаковый скруглённый постер для обоих концов Hero |
 | TvSkeleton / TvSkeletonBox | Примитивы загрузки |
 | TvStateView / TvProgressView | Empty/error/retry и прогресс |
 | TvBackdrop / TvSectionHeader | Фон и заголовок секции |
