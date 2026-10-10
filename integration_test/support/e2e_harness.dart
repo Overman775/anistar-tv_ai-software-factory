@@ -7,6 +7,7 @@ import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -96,7 +97,13 @@ final class E2eHarness {
     );
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
     await tester.enterText(find.byKey(const ValueKey('login_password')), password);
-    await tester.tap(submit);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+      const ValueKey('login_submit'),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pump();
   }
 

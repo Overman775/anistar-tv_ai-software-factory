@@ -3,6 +3,8 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.da
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tail.dart';
+import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
+import '../../../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
@@ -94,6 +97,8 @@ void main() {
     await settle();
     await key(LogicalKeyboardKey.arrowDown);
     await settle();
+    await key(LogicalKeyboardKey.arrowRight);
+    await settle();
     await key(LogicalKeyboardKey.arrowUp);
     await settle();
     await key(LogicalKeyboardKey.arrowUp);
@@ -103,6 +108,42 @@ void main() {
     expect(tester.getTopLeft(card).dy, greaterThanOrEqualTo(bodyTop));
     expect(tester.getBottomRight(card).dy, lessThanOrEqualTo(compactTvSize.height));
     expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).clipBehavior, Clip.hardEdge);
+  });
+
+  testWidgets('switching to empty favorites keeps focus on its tab and allows remote return home', (tester) async {
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (anime) => expect(anime.id, 1), onSignOut: () => fail('Unexpected logout')),
+      size: wideTvSize,
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+      ],
+    );
+    final settle = tester.pumpAndSettle;
+    final key = tester.sendKeyEvent;
+    await settle();
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    await key(LogicalKeyboardKey.arrowRight);
+    await key(LogicalKeyboardKey.select);
+    await settle();
+    Key? focusedTab() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key;
+    expect(find.text('Избранное пусто'), findsOneWidget);
+    // Re-read focus after the tab's widget tree has been replaced.
+    // ignore: prefer-moving-to-variable
+    expect(focusedTab(), const ValueKey('catalog-tab-true'));
+    await key(LogicalKeyboardKey.arrowLeft);
+    await key(LogicalKeyboardKey.select);
+    await settle();
+    expect(find.text('Каталог'), findsOneWidget);
+    // Re-read focus after the tab's widget tree has been replaced.
+    // ignore: prefer-moving-to-variable
+    expect(focusedTab(), const ValueKey('catalog-tab-false'));
+    await key(LogicalKeyboardKey.arrowDown);
+    await settle();
+    await key(LogicalKeyboardKey.select);
   });
 
   testWidgets('keeps the catalog heading and first row visible at 960x540', (tester) async {

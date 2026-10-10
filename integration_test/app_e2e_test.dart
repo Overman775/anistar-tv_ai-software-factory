@@ -158,6 +158,52 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('remote tabs, empty favorites, dialog cancellation and route focus restoration', (tester) async {
+    await fixture.configure(favorites: '');
+    await fixture.launch(tester);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'remote catalog');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
+      const ValueKey('catalog-tab-false'),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
+    expect(
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
+      const ValueKey('catalog-tab-true'),
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'remote home tab');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'remote detail');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isEmpty, 'return to same card');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'reopen same card');
+    await _openVideo(tester);
+    final player = E2eHarness.requirePlayer(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'remote chooser');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isEmpty, 'cancel chooser');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'remote pause after cancellation');
+    expect(identical(player, E2eHarness.requirePlayer(tester)), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await E2eHarness.waitFor(tester, () => player.value.position.inSeconds >= 10, 'remote seek after cancellation');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'remote player back');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('catalog, real HTML, native 720/360 HLS, remote, episode and back', (tester) async {
     await SharedPreferencesStorage().remove('anistar.watched.v1.${Uri.encodeComponent('тест')}.10938');
     await fixture.configure();
@@ -302,7 +348,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     expect((await fixture.state())['player_pages'], 3, reason: 'no background retry loop');
     await fixture.configure(reset: false);
-    await tester.tap(find.text('Повторить'));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(
       tester,
       () => E2eHarness.player(tester)?.value.isInitialized ?? false,

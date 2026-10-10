@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:app_logging/providers.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -26,10 +27,12 @@ class CatalogScreen extends ConsumerStatefulWidget {
     this.onSignOut,
     this.onTabSelected,
     this.favoritesOnly = false,
+    this.autofocusTab = false,
     super.key,
   });
 
   final bool favoritesOnly;
+  final bool autofocusTab;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onSignOut;
@@ -42,6 +45,8 @@ class CatalogScreen extends ConsumerStatefulWidget {
 class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   late final CatalogBloc _bloc;
   final ScrollController _scrollController = ScrollController();
+  final _homeTabFocus = FocusNode(debugLabel: 'Главная');
+  final _favoritesTabFocus = FocusNode(debugLabel: 'Избранное');
   int _selectedIndex = 0;
 
   @override
@@ -80,53 +85,72 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     final showTail = state is CatalogReady && state.isLoadingMore || state is CatalogFailure;
 
     return LayoutBuilder(
-      builder: (context, constraints) => CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
-            sliver: SliverToBoxAdapter(
-              child: CatalogHeading(
-                itemCount: state.items.length,
-                favoritesOnly: widget.favoritesOnly,
-                showFavoriteHint: widget.onTabSelected != null,
+      builder: (context, constraints) => Focus(
+        canRequestFocus: false,
+        onKeyEvent: (_, event) => _handleCatalogKey(event, _columnCount(constraints.maxWidth)),
+        child: CustomScrollView(
+          controller: _scrollController,
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.md, AppSpacing.xxl, AppSpacing.sm),
+              sliver: SliverToBoxAdapter(
+                child: CatalogHeading(
+                  itemCount: state.items.length,
+                  favoritesOnly: widget.favoritesOnly,
+                  showFavoriteHint: widget.onTabSelected != null,
+                ),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: _columnCount(constraints.maxWidth),
-                childAspectRatio: 0.68,
-                crossAxisSpacing: AppSpacing.lg,
-                mainAxisSpacing: AppSpacing.xl,
-              ),
-              itemCount: state.items.length + (showTail ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == state.items.length) {
-                  return CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore);
-                }
-                final anime = state.items[index];
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
+              sliver: SliverGrid.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _columnCount(constraints.maxWidth),
+                  childAspectRatio: 0.68,
+                  crossAxisSpacing: AppSpacing.lg,
+                  mainAxisSpacing: AppSpacing.xl,
+                ),
+                itemCount: state.items.length + (showTail ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == state.items.length) {
+                    return CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore);
+                  }
+                  final anime = state.items[index];
 
-                return Builder(
-                  key: ValueKey(anime.id),
-                  builder: (cardContext) => AnimeCard(
-                    anime: anime,
-                    isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
-                    onLongPressed: () => unawaited(_favoriteActions(anime)),
-                    autofocus: index == _selectedIndex,
-                    onFocusChanged: (focused) =>
-                        _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
-                    onTap: () => _selectAndOpen(anime, index),
-                  ),
-                );
-              },
+                  return Builder(
+                    key: ValueKey(anime.id),
+                    builder: (cardContext) => AnimeCard(
+                      anime: anime,
+                      isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                      onLongPressed: () => unawaited(_favoriteActions(anime)),
+                      autofocus: index == _selectedIndex,
+                      onFocusChanged: (focused) =>
+                          _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
+                      onTap: () => _selectAndOpen(anime, index),
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  KeyEventResult _handleCatalogKey(KeyEvent event, int columns) {
+    final fromCard = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>() != null;
+    if (widget.onTabSelected == null ||
+        !fromCard ||
+        _selectedIndex >= columns ||
+        event.logicalKey != LogicalKeyboardKey.arrowUp) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
+    }
+
+    return KeyEventResult.handled;
   }
 
   Future<void> _favoriteActions(AnimeSummary anime) async {
@@ -188,6 +212,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   @override
   void dispose() {
+    _homeTabFocus.dispose();
+    _favoritesTabFocus.dispose();
     _scrollController
       ..removeListener(_loadMoreNearEnd)
       ..dispose();
@@ -213,7 +239,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       child: Scaffold(
         appBar: AppBar(
           bottom: switch (widget.onTabSelected) {
-            final onSelected? => CatalogTabs(favoritesOnly: widget.favoritesOnly, onSelected: onSelected),
+            final onSelected? => CatalogTabs(
+              favoritesOnly: widget.favoritesOnly,
+              autofocus: widget.autofocusTab,
+              homeFocusNode: _homeTabFocus,
+              favoritesFocusNode: _favoritesTabFocus,
+              onSelected: onSelected,
+            ),
             null => null,
           },
           toolbarHeight: 88,

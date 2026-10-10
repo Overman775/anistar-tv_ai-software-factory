@@ -18,11 +18,15 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _favoritesOnly = false;
+  bool _autofocusTab = false;
 
   void _selectTab(bool favorite) {
     if (favorite != _favoritesOnly) {
       ref.read(favoritesControllerProvider.notifier).invalidate();
-      setState(() => _favoritesOnly = favorite);
+      setState(() {
+        _favoritesOnly = favorite;
+        _autofocusTab = true;
+      });
     }
   }
 
@@ -30,6 +34,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) => CatalogScreen(
     key: ValueKey(_favoritesOnly),
     favoritesOnly: _favoritesOnly,
+    autofocusTab: _autofocusTab,
     onTabSelected: _selectTab,
     onAnimeTap: widget.onAnimeTap,
     onOpenLogs: widget.onOpenLogs,
