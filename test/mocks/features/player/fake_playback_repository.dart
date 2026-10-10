@@ -6,6 +6,7 @@ import 'package:anistar_tv/packages/features/player/domain/repositories/playback
 import 'package:core/data.dart';
 
 final class FakePlaybackRepository implements PlaybackRepository {
+  List<int> episodeNumbers = const [1, 2];
   int calls = 0;
   int episode = 1;
   int anime = 10938;
@@ -17,7 +18,7 @@ final class FakePlaybackRepository implements PlaybackRepository {
     requestedQuality: quality,
     selectedQuality: quality,
     availableQualities: PlaybackQuality.values,
-    episodeNumbers: const [1, 2],
+    episodeNumbers: episodeNumbers,
     httpHeaders: const {'Referer': 'https://v30.astar.bz/player?id=10938'},
   );
 

@@ -75,6 +75,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final data = snapshot.requireData;
 
     return PlayerView(
+      onPreviousEpisode: data.session.previousEpisode(_episodeNumber) == null ? null : _previousEpisode,
+      onNextEpisode: data.session.nextEpisode(_episodeNumber) == null ? null : _nextEpisode,
       onBack: _backToEpisodes,
       onReturnToVideo: _returnToVideo,
       controlsFocusNode: _controlsFocus,
@@ -350,6 +352,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _reload(resetBudget: true, preservePosition: true);
   }
 
+  void _previousEpisode() => _switchEpisode(_session?.previousEpisode(_episodeNumber));
+
+  void _nextEpisode() => _switchEpisode(_session?.nextEpisode(_episodeNumber));
+
+  void _switchEpisode(int? number) {
+    if (number == null || number == _episodeNumber) {
+      return;
+    }
+    _episodeNumber = number;
+    _reload(resetBudget: true, preservePosition: false);
+  }
+
   void _selectEpisode() => unawaited(_chooseEpisode());
 
   Future<void> _chooseEpisode() async {
@@ -377,8 +391,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!_isCurrent(initializationId) || choice == null || choice == _episodeNumber) {
       return;
     }
-    _episodeNumber = choice;
-    _reload(resetBudget: true, preservePosition: false);
+    _switchEpisode(choice);
   }
 
   void _scheduleControlsHide() {

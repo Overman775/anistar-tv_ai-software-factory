@@ -15,6 +15,8 @@ class PlayerOverlay extends StatefulWidget {
     required this.onSeek,
     this.onSelectQuality,
     this.onSelectEpisode,
+    this.onPreviousEpisode,
+    this.onNextEpisode,
     this.onBack,
     this.onReturnToVideo,
     this.backFocusNode,
@@ -31,6 +33,8 @@ class PlayerOverlay extends StatefulWidget {
   }
 
   final int episodeNumber;
+  final VoidCallback? onPreviousEpisode;
+  final VoidCallback? onNextEpisode;
   final VoidCallback? onBack;
   final VoidCallback? onReturnToVideo;
   final FocusNode? backFocusNode;
@@ -55,6 +59,8 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
   final _episodes = FocusNode(debugLabel: 'Серии');
   final _rewind = FocusNode(debugLabel: 'Назад на 10 секунд');
   final _play = FocusNode(debugLabel: 'Пауза / воспроизведение');
+  final _previousEpisode = FocusNode(debugLabel: 'Предыдущая серия');
+  final _nextEpisode = FocusNode(debugLabel: 'Следующая серия');
   final _forward = FocusNode(debugLabel: 'Вперёд на 10 секунд');
 
   bool _timelineFocused = false;
@@ -81,6 +87,8 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
       widget.playFocusNode ?? _play,
       _rewind,
       _forward,
+      if (widget.onPreviousEpisode != null) _previousEpisode,
+      if (widget.onNextEpisode != null) _nextEpisode,
       if (widget.onSelectEpisode != null) _episodes,
       if (widget.onSelectQuality != null) _quality,
     ];
@@ -145,7 +153,17 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
 
   @override
   void dispose() {
-    for (final node in [_back, _quality, _episodes, _rewind, _play, _forward, _timeline]) {
+    for (final node in [
+      _back,
+      _quality,
+      _episodes,
+      _rewind,
+      _play,
+      _forward,
+      _previousEpisode,
+      _nextEpisode,
+      _timeline,
+    ]) {
       node.dispose();
     }
     super.dispose();
@@ -156,15 +174,10 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
     final value = widget.value;
     final durationMs = value.duration.inMilliseconds;
     final positionMs = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
-    final buttonStyle =
-        IconButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size(52, 52), iconSize: 30).copyWith(
-          foregroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.focused) ? Colors.black : Colors.white,
-          ),
-          backgroundColor: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.transparent,
-          ),
-        );
+    final buttonStyle = AppFocusStyle.button().copyWith(
+      minimumSize: const WidgetStatePropertyAll(Size(52, 52)),
+      iconSize: const WidgetStatePropertyAll(30),
+    );
 
     return Focus(
       canRequestFocus: false,
@@ -265,6 +278,24 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                     tooltip: 'Вперёд на 10 секунд',
                     icon: const Icon(Icons.forward_10_rounded),
                   ),
+                  if (widget.onPreviousEpisode != null)
+                    IconButton(
+                      key: const ValueKey('player-previous-episode'),
+                      style: buttonStyle,
+                      focusNode: _previousEpisode,
+                      onPressed: widget.onPreviousEpisode,
+                      tooltip: 'Предыдущая серия',
+                      icon: const Icon(Icons.skip_previous_rounded),
+                    ),
+                  if (widget.onNextEpisode != null)
+                    IconButton(
+                      key: const ValueKey('player-next-episode'),
+                      style: buttonStyle,
+                      focusNode: _nextEpisode,
+                      onPressed: widget.onNextEpisode,
+                      tooltip: 'Следующая серия',
+                      icon: const Icon(Icons.skip_next_rounded),
+                    ),
                   const SizedBox(width: AppSpacing.md),
                   Text(
                     '${PlayerOverlay._format(value.position)} / ${PlayerOverlay._format(value.duration)}',

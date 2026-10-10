@@ -5,7 +5,9 @@ import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'anistar_html_parser.dart';
 import 'direct_anime.dart';
+import 'direct_catalog_filter.dart';
 import 'direct_catalog_page.dart';
+import 'direct_catalog_sort.dart';
 import 'direct_episode.dart';
 import 'html_decoder.dart';
 
@@ -15,14 +17,24 @@ final class AnistarSource {
 
   AnistarSource(this._dio) : baseUri = Uri.parse(_dio.options.baseUrl);
 
-  Future<DirectCatalogPage> catalog(int page) async {
+  Future<DirectCatalogPage> catalog(int page, {String? filterPath, DirectCatalogSort? sort}) async {
     if (page < 1) {
       throw const AnistarFailure(message: 'Некорректный номер страницы.');
     }
-    final source = await _html(page == 1 ? 'anime/' : 'anime/page/$page/');
+    if (filterPath != null && !DirectCatalogFilter.isValidPath(filterPath)) {
+      throw const AnistarFailure(message: 'Некорректный адрес фильтра.');
+    }
+    final path = (filterPath ?? '/anime/').substring(1);
+    final source = await _html(
+      page == 1 ? path : '${path}page/$page/',
+      sortCookies: sort?.cookies(filterPath ?? '/anime/'),
+    );
+    sort?.verify(source);
 
-    return AnistarHtmlParser(baseUri).catalog(source, page);
+    return AnistarHtmlParser(baseUri).catalog(source, page, filterPath: filterPath);
   }
+
+  Future<List<DirectCatalogFilter>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
 
   Future<DirectAnime> details(String slug) async {
     if (!RegExp(r'^\d+-[^/?#]+$').hasMatch(slug)) {
@@ -147,14 +159,21 @@ final class AnistarSource {
     return confirmed;
   }
 
-  Future<String> _html(String path) async {
+  Future<String> _html(String path, {Map<String, String>? sortCookies}) async {
     final Response<List<int>> response;
     try {
       response = await _dio.get<List<int>>(
         path,
         options: Options(
           responseType: ResponseType.bytes,
-          headers: const {'Accept': 'text/html', 'User-Agent': 'AniStarTV/1.0', 'Cache-Control': 'no-cache'},
+          extra: {'anistarSortCookies': ?sortCookies},
+          headers: {
+            'Accept': 'text/html',
+            'User-Agent': 'AniStarTV/1.0',
+            'Cache-Control': 'no-cache',
+            if (sortCookies != null)
+              'Cookie': sortCookies.entries.map((entry) => '${entry.key}=${entry.value}').join('; '),
+          },
         ),
       );
     } on DioException catch (error, stackTrace) {

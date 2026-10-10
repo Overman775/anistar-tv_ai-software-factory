@@ -7,6 +7,9 @@ import 'package:material_ui/material_ui.dart';
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/auth/auth_providers.dart';
 import '../packages/features/catalog/domain/models/anime_summary.dart';
+import '../packages/features/catalog/domain/models/catalog_filter.dart';
+import '../packages/features/catalog/presentation/screens/catalog_screen.dart';
+import '../packages/features/catalog/presentation/screens/genres_screen.dart';
 import '../packages/features/common/presentation/widgets/error_screen.dart';
 import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
@@ -56,6 +59,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
   Widget build(BuildContext context, GoRouterState state) => Consumer(
     builder: (context, ref, _) => HomeScreen(
       accountName: ref.watch(authControllerProvider).value,
+      onOpenGenres: () => const GenresRoute().push<void>(context),
       onSignOut: () => unawaited(_signOut(context, ref)),
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) {
@@ -83,14 +87,17 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
     slug: slug,
     fallbackTitle: title,
     fallbackPosterUri: $extra?.id == animeId ? $extra?.posterUri : null,
+    onFilterTap: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
     onEpisodeTap: (episode) {
-      PlayerRoute(
-        animeId: animeId,
-        episodeNumber: episode.number,
-        slug: slug,
-        title: title,
-        $extra: $extra,
-      ).go(context);
+      unawaited(
+        PlayerRoute(
+          animeId: animeId,
+          episodeNumber: episode.number,
+          slug: slug,
+          title: title,
+          $extra: $extra,
+        ).push<void>(context),
+      );
     },
   );
 }
@@ -124,4 +131,32 @@ Future<void> _signOut(BuildContext context, WidgetRef ref) async {
   if (failure != null && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
   }
+}
+
+@TypedGoRoute<GenresRoute>(path: '/genres')
+class GenresRoute extends GoRouteData with $GenresRoute {
+  const GenresRoute();
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => GenresScreen(
+    onSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
+  );
+}
+
+@TypedGoRoute<FilterRoute>(path: '/browse')
+class FilterRoute extends GoRouteData with $FilterRoute {
+  final String path;
+  final String title;
+
+  const FilterRoute({required this.path, required this.title});
+
+  @override
+  Widget build(BuildContext context, GoRouterState state) => CatalogScreen(
+    key: ValueKey(path),
+    filter: CatalogFilter(label: title, path: path),
+    onBack: () => context.pop(),
+    onOpenGenres: () => const GenresRoute().push<void>(context),
+    onAnimeTap: (anime) =>
+        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title, $extra: anime).push<void>(context),
+  );
 }

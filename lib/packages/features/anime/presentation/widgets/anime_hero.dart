@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
 import 'anime_description.dart';
 import 'anime_layout.dart';
@@ -11,12 +12,16 @@ class AnimeHero extends StatelessWidget {
     required this.data,
     super.key,
     this.onPlayFirstEpisode,
+    this.playEpisode,
     this.favoriteAction,
     this.fallbackPosterUri,
     this.playFocusNode,
+    this.filterActions,
   });
 
   final AnimeScreenData data;
+  final AnimeEpisode? playEpisode;
+  final Widget? filterActions;
   final FocusNode? playFocusNode;
   final Widget? favoriteAction;
   final Uri? fallbackPosterUri;
@@ -59,11 +64,16 @@ class AnimeHero extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.xl),
+              padding: EdgeInsets.fromLTRB(
+                constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
+                AppSpacing.lg,
+                constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
+                AppSpacing.xl,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (posterUrl != null)
+                  if (posterUrl != null && constraints.maxWidth >= 600)
                     AspectRatio(
                       aspectRatio: 2 / 3,
                       child: DecoratedBox(
@@ -81,20 +91,21 @@ class AnimeHero extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (posterUrl != null) const SizedBox(width: AppSpacing.xl),
+                  if (posterUrl != null && constraints.maxWidth >= 600) const SizedBox(width: AppSpacing.xl),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Wrap(
-                          spacing: AppSpacing.sm,
-                          runSpacing: AppSpacing.sm,
-                          children: [
-                            if (details.isOngoing)
-                              const AnimeMetadataChip(icon: Icons.sensors_rounded, label: 'ОНГОИНГ'),
-                            for (final genre in details.genres.take(3)) AnimeMetadataChip(label: genre),
-                          ],
-                        ),
+                        filterActions ??
+                            Wrap(
+                              spacing: AppSpacing.sm,
+                              runSpacing: AppSpacing.sm,
+                              children: [
+                                if (details.isOngoing)
+                                  const AnimeMetadataChip(icon: Icons.sensors_rounded, label: 'ОНГОИНГ'),
+                                for (final genre in details.genres.take(3)) AnimeMetadataChip(label: genre),
+                              ],
+                            ),
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           details.title,
@@ -127,7 +138,7 @@ class AnimeHero extends StatelessWidget {
                                 autofocus: true,
                                 onPressed: playAction,
                                 icon: const Icon(Icons.play_arrow_rounded, size: 30),
-                                label: Text('Смотреть серию ${data.episodes.first.number}'),
+                                label: Text('Смотреть серию ${playEpisode?.number ?? data.episodes.first.number}'),
                               ),
                             ?favoriteAction,
                           ],

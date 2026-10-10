@@ -2,6 +2,7 @@ import 'package:anistar/anistar.dart';
 import 'package:core/data.dart';
 import 'package:networking/networking.dart';
 
+import '../../../catalog/domain/models/catalog_filter.dart';
 import '../../domain/models/anime_details.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
@@ -30,6 +31,9 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
         slug: detail.slug,
         title: detail.title,
         genres: detail.genres,
+        filters: detail.filters
+            .map((item) => CatalogFilter(label: item.label, path: item.path))
+            .toList(growable: false),
         isOngoing: detail.isOngoing,
         description: detail.description,
         posterUri: detail.posterUri,

@@ -1,5 +1,7 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/app_focus_style.dart';
 import '../theme/app_palette.dart';
 
 /// A TV action surface with a stable right edge and its own focus scope.
@@ -10,32 +12,32 @@ class TvSideSheet extends StatelessWidget {
   final Widget child;
 
   ThemeData _theme(BuildContext context) {
-    final foreground = WidgetStateColor.resolveWith(
-      (states) => states.contains(WidgetState.focused) ? Colors.black : Colors.white,
-    );
-    final background = WidgetStateColor.resolveWith(
-      (states) => states.contains(WidgetState.focused) ? Colors.white : Colors.transparent,
-    );
-    final style =
-        TextButton.styleFrom(
-          minimumSize: const Size(0, 56),
-          shape: const RoundedRectangleBorder(borderRadius: AppRadii.pill),
-        ).copyWith(
-          foregroundColor: WidgetStateProperty.resolveWith(foreground.resolve),
-          backgroundColor: WidgetStateProperty.resolveWith(background.resolve),
-        );
+    final style = AppFocusStyle.button();
 
     return Theme.of(context).copyWith(
+      focusColor: AppPalette.focusSurface,
+      hoverColor: AppPalette.focusSurface,
       textButtonTheme: TextButtonThemeData(style: style),
       filledButtonTheme: FilledButtonThemeData(style: style),
-      listTileTheme: ListTileThemeData(
-        textColor: foreground,
-        iconColor: foreground,
-        selectedColor: foreground,
-        selectedTileColor: Colors.white10,
-        shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+      listTileTheme: const ListTileThemeData(
+        textColor: AppPalette.textPrimary,
+        iconColor: AppPalette.textPrimary,
+        selectedColor: AppPalette.textPrimary,
+        selectedTileColor: AppPalette.surfaceElevated,
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.medium),
       ),
     );
+  }
+
+  KeyEventResult _handleKey(BuildContext context, KeyEvent event) {
+    if (event.logicalKey != LogicalKeyboardKey.arrowLeft) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent) {
+      Navigator.of(context).pop();
+    }
+
+    return KeyEventResult.handled;
   }
 
   @override
@@ -46,23 +48,27 @@ class TvSideSheet extends StatelessWidget {
       height: double.infinity,
       child: Theme(
         data: _theme(context),
-        child: Material(
-          color: AppPalette.backgroundElevated,
-          elevation: 16,
-          child: SafeArea(
-            minimum: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  title,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Expanded(child: child),
-              ],
+        child: Focus(
+          canRequestFocus: false,
+          onKeyEvent: (_, event) => _handleKey(context, event),
+          child: Material(
+            color: AppPalette.backgroundElevated,
+            elevation: 16,
+            child: SafeArea(
+              minimum: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Expanded(child: child),
+                ],
+              ),
             ),
           ),
         ),

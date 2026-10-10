@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -37,14 +35,6 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
     );
   }
 
-  void _revealChoice(BuildContext context, bool focused) {
-    if (focused) {
-      unawaited(
-        Scrollable.ensureVisible(context, duration: AppMotion.durationOf(context, AppMotion.fast), alignment: 0.5),
-      );
-    }
-  }
-
   @override
   void dispose() {
     _scrollController.dispose();
@@ -60,19 +50,11 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
       padding: EdgeInsets.zero,
       children: widget.choices
           .map(
-            (choice) => Builder(
-              builder: (choiceContext) => Focus(
-                canRequestFocus: false,
-                onFocusChange: (focused) => _revealChoice(choiceContext, focused),
-                child: ListTile(
-                  focusColor: Colors.white,
-                  autofocus: choice == widget.selected,
-                  selected: choice == widget.selected,
-                  title: Text(widget.label(choice), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: choice == widget.selected ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.of(context).pop(choice),
-                ),
-              ),
+            (choice) => TvChoiceTile(
+              autofocus: choice == widget.selected,
+              selected: choice == widget.selected,
+              label: widget.label(choice),
+              onPressed: () => Navigator.of(context).pop(choice),
             ),
           )
           .toList(growable: false),

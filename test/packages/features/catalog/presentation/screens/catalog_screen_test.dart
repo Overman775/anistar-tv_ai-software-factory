@@ -111,7 +111,7 @@ void main() {
     expect(find.byType(AnimeCard), findsWidgets);
   });
 
-  testWidgets('long OK slides actions from the right, traps focus and restores the card on Back', (tester) async {
+  testWidgets('long OK slides actions from the right and Left closes it restoring the card', (tester) async {
     final favorites = FakeFavoritesRepository();
     await pumpTvApp(
       tester,
@@ -140,12 +140,12 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(favorites.writes, isEmpty);
-    for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowDown]) {
+    for (final key in [LogicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowDown]) {
       await tester.sendKeyEvent(key);
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TvSideSheet>(), isNotNull);
     }
-    await tester.binding.handlePopRoute();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(card));
     expect(favorites.writes, isEmpty);

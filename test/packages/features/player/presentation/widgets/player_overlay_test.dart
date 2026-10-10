@@ -144,6 +144,8 @@ void main() {
             onSeek: (_) => fail('Unexpected seek'),
             onBack: () => fail('Unexpected activation'),
             onSelectEpisode: () => fail('Unexpected activation'),
+            onPreviousEpisode: () => fail('Unexpected activation'),
+            onNextEpisode: () => fail('Unexpected activation'),
             onSelectQuality: () => fail('Unexpected activation'),
           ),
         ),

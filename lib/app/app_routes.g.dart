@@ -6,17 +6,13 @@ part of 'app_routes.dart';
 // GoRouterGenerator
 // **************************************************************************
 
-List<RouteBase> get $appRoutes => [$logViewerRoute, $homeRoute];
+List<RouteBase> get $appRoutes => [$logViewerRoute, $homeRoute, $genresRoute, $filterRoute];
 
-RouteBase get $logViewerRoute => GoRouteData.$route(
-  path: '/logs',
-  hasOverriddenOnExit: false,
-  factory: $LogViewerRoute._fromState,
-);
+RouteBase get $logViewerRoute =>
+    GoRouteData.$route(path: '/logs', hasOverriddenOnExit: false, factory: $LogViewerRoute._fromState);
 
 mixin $LogViewerRoute on GoRouteData {
-  static LogViewerRoute _fromState(GoRouterState state) =>
-      const LogViewerRoute();
+  static LogViewerRoute _fromState(GoRouterState state) => const LogViewerRoute();
 
   @override
   String get location => GoRouteData.$location('/logs');
@@ -28,8 +24,7 @@ mixin $LogViewerRoute on GoRouteData {
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
   @override
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   @override
   void replace(BuildContext context) => context.replace(location);
@@ -44,13 +39,7 @@ RouteBase get $homeRoute => GoRouteData.$route(
       path: 'anime',
       hasOverriddenOnExit: false,
       factory: $AnimeRoute._fromState,
-      routes: [
-        GoRouteData.$route(
-          path: 'player',
-          hasOverriddenOnExit: false,
-          factory: $PlayerRoute._fromState,
-        ),
-      ],
+      routes: [GoRouteData.$route(path: 'player', hasOverriddenOnExit: false, factory: $PlayerRoute._fromState)],
     ),
   ],
 );
@@ -68,8 +57,7 @@ mixin $HomeRoute on GoRouteData {
   Future<T?> push<T>(BuildContext context) => context.push<T>(location);
 
   @override
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
 
   @override
   void replace(BuildContext context) => context.replace(location);
@@ -88,27 +76,20 @@ mixin $AnimeRoute on GoRouteData {
   @override
   String get location => GoRouteData.$location(
     '/home/anime',
-    queryParams: {
-      'anime-id': _self.animeId.toString(),
-      'slug': _self.slug,
-      'title': _self.title,
-    },
+    queryParams: {'anime-id': _self.animeId.toString(), 'slug': _self.slug, 'title': _self.title},
   );
 
   @override
   void go(BuildContext context) => context.go(location, extra: _self.$extra);
 
   @override
-  Future<T?> push<T>(BuildContext context) =>
-      context.push<T>(location, extra: _self.$extra);
+  Future<T?> push<T>(BuildContext context) => context.push<T>(location, extra: _self.$extra);
 
   @override
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location, extra: _self.$extra);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location, extra: _self.$extra);
 
   @override
-  void replace(BuildContext context) =>
-      context.replace(location, extra: _self.$extra);
+  void replace(BuildContext context) => context.replace(location, extra: _self.$extra);
 }
 
 mixin $PlayerRoute on GoRouteData {
@@ -137,14 +118,58 @@ mixin $PlayerRoute on GoRouteData {
   void go(BuildContext context) => context.go(location, extra: _self.$extra);
 
   @override
-  Future<T?> push<T>(BuildContext context) =>
-      context.push<T>(location, extra: _self.$extra);
+  Future<T?> push<T>(BuildContext context) => context.push<T>(location, extra: _self.$extra);
 
   @override
-  void pushReplacement(BuildContext context) =>
-      context.pushReplacement(location, extra: _self.$extra);
+  void pushReplacement(BuildContext context) => context.pushReplacement(location, extra: _self.$extra);
 
   @override
-  void replace(BuildContext context) =>
-      context.replace(location, extra: _self.$extra);
+  void replace(BuildContext context) => context.replace(location, extra: _self.$extra);
+}
+
+RouteBase get $genresRoute =>
+    GoRouteData.$route(path: '/genres', hasOverriddenOnExit: false, factory: $GenresRoute._fromState);
+
+mixin $GenresRoute on GoRouteData {
+  static GenresRoute _fromState(GoRouterState state) => const GenresRoute();
+
+  @override
+  String get location => GoRouteData.$location('/genres');
+
+  @override
+  void go(BuildContext context) => context.go(location);
+
+  @override
+  Future<T?> push<T>(BuildContext context) => context.push<T>(location);
+
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
+
+  @override
+  void replace(BuildContext context) => context.replace(location);
+}
+
+RouteBase get $filterRoute =>
+    GoRouteData.$route(path: '/browse', hasOverriddenOnExit: false, factory: $FilterRoute._fromState);
+
+mixin $FilterRoute on GoRouteData {
+  static FilterRoute _fromState(GoRouterState state) =>
+      FilterRoute(path: state.uri.queryParameters['path']!, title: state.uri.queryParameters['title']!);
+
+  FilterRoute get _self => this as FilterRoute;
+
+  @override
+  String get location => GoRouteData.$location('/browse', queryParams: {'path': _self.path, 'title': _self.title});
+
+  @override
+  void go(BuildContext context) => context.go(location);
+
+  @override
+  Future<T?> push<T>(BuildContext context) => context.push<T>(location);
+
+  @override
+  void pushReplacement(BuildContext context) => context.pushReplacement(location);
+
+  @override
+  void replace(BuildContext context) => context.replace(location);
 }

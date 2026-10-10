@@ -1,8 +1,10 @@
+export './src/theme/app_focus_style.dart';
 export './src/theme/app_palette.dart';
 export './src/theme/app_theme.dart';
 export './src/theme/tv_typography.dart';
 export './src/widgets/app_network_image.dart';
 export './src/widgets/tv_backdrop.dart';
+export './src/widgets/tv_choice_tile.dart';
 export './src/widgets/tv_focusable.dart';
 export './src/widgets/tv_header_surface.dart';
 export './src/widgets/tv_poster_hero.dart';

@@ -23,6 +23,7 @@ void main() {
 
     expect(find.text('Красивое аниме'), findsOneWidget);
     expect(find.text('2026'), findsOneWidget);
+    expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(taps, 1);
   });

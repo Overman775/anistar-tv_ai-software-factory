@@ -11,6 +11,9 @@ import '../../../favorites/favorites_providers.dart';
 import '../../../favorites/presentation/favorite_actions_sheet.dart';
 import '../../catalog_providers.dart';
 import '../../domain/models/anime_summary.dart';
+import '../../domain/models/catalog_filter.dart';
+import '../../domain/models/catalog_sort.dart';
+import '../../domain/repositories/filtered_catalog_repository.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
@@ -18,12 +21,16 @@ import '../widgets/anime_card.dart';
 import '../widgets/catalog_layout.dart';
 import '../widgets/catalog_navigation_rail.dart';
 import '../widgets/catalog_skeleton.dart';
+import '../widgets/catalog_sort_sheet.dart';
 import '../widgets/catalog_tail.dart';
 
 class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({
     required this.onAnimeTap,
     this.onOpenLogs,
+    this.onOpenGenres,
+    this.filter,
+    this.onBack,
     this.onSignOut,
     this.accountName,
     this.onTabSelected,
@@ -33,6 +40,9 @@ class CatalogScreen extends ConsumerStatefulWidget {
   });
 
   final String? accountName;
+  final VoidCallback? onOpenGenres;
+  final VoidCallback? onBack;
+  final CatalogFilter? filter;
   final bool favoritesOnly;
   final bool autofocusTab;
   final ValueChanged<AnimeSummary> onAnimeTap;
@@ -46,22 +56,36 @@ class CatalogScreen extends ConsumerStatefulWidget {
 
 class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   late final CatalogBloc _bloc;
+  FilteredCatalogRepository? _filteredRepository;
+  final _sortFocus = FocusNode(debugLabel: 'Сортировка');
+  CatalogSort get _sort => _filteredRepository?.sort ?? defaultCatalogSort;
   final ScrollController _scrollController = ScrollController();
   final _homeTabFocus = FocusNode(debugLabel: 'Главная');
+  final _genresFocus = FocusNode(debugLabel: 'Жанры');
+  final _backFocus = FocusNode(debugLabel: 'Назад');
   final _favoritesTabFocus = FocusNode(debugLabel: 'Избранное');
   final _signOutFocus = FocusNode(debugLabel: 'Выйти из аккаунта');
   final _refreshFocus = FocusNode(debugLabel: 'Обновить каталог');
   final _logsFocus = FocusNode(debugLabel: 'Открыть логи');
   final _contentFocus = FocusScopeNode(debugLabel: 'Каталог');
   bool _railExpanded = false;
+  bool _initialFilteredLoad = true;
+  bool _sortInteracted = false;
+  bool _keepSortFocus = false;
   FocusNode? _lastCardFocus;
   int _selectedIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    final filter = widget.filter;
+    if (filter != null) {
+      _filteredRepository = FilteredCatalogRepository(ref.read(catalogBrowseRepositoryProvider), filter);
+    }
     _bloc = CatalogBloc(
-      repository: widget.favoritesOnly ? ref.read(favoritesRepositoryProvider) : ref.read(catalogRepositoryProvider),
+      repository:
+          _filteredRepository ??
+          (widget.favoritesOnly ? ref.read(favoritesRepositoryProvider) : ref.read(catalogRepositoryProvider)),
       logger: ref.read(loggerProvider),
     )..add(const CatalogStarted());
     _scrollController.addListener(_loadMoreNearEnd);
@@ -78,13 +102,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     if (previous?.context != null && previous?.canRequestFocus == true) {
       previous?.requestFocus();
     } else {
-      (_contentFocus.traversalDescendants.firstOrNull ?? _contentFocus).requestFocus();
+      (_contentFocus.traversalDescendants.where((node) => node.canRequestFocus && node.context != null).firstOrNull ??
+              (widget.filter != null ? _sortFocus : _contentFocus))
+          .requestFocus();
     }
   }
 
   void _focusRail() {
+    _keepSortFocus = false;
     if (widget.onTabSelected == null) {
-      _refreshFocus.requestFocus();
+      (widget.onBack != null ? _backFocus : _refreshFocus).requestFocus();
     } else {
       (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
     }
@@ -99,6 +126,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   KeyEventResult _handleHeaderKey(FocusNode node, KeyEvent event) {
     final nodes = [
       if (widget.onTabSelected != null) ...[_homeTabFocus, _favoritesTabFocus],
+      if (widget.onBack != null) _backFocus,
+      if (widget.onOpenGenres != null) _genresFocus,
       if (widget.onSignOut != null) _signOutFocus,
       _refreshFocus,
       if (widget.onOpenLogs != null) _logsFocus,
@@ -113,7 +142,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       final next = index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
       target = nodes[next.clamp(0, nodes.length - 1)];
     } else if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.escape) {
-      if (event is KeyDownEvent) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
         _focusContent();
       }
 
@@ -186,7 +215,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       anime: anime,
                       isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
                       onLongPressed: () => unawaited(_favoriteActions(anime)),
-                      autofocus: !widget.autofocusTab && !_railExpanded && index == _selectedIndex,
+                      autofocus: !widget.autofocusTab && !_railExpanded && !_keepSortFocus && index == _selectedIndex,
                       onFocusChanged: (focused) =>
                           _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
                       onTap: () => _selectAndOpen(anime, index),
@@ -214,6 +243,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
       return KeyEventResult.handled;
     }
+    if (key == LogicalKeyboardKey.arrowUp && _selectedIndex < columns && widget.filter != null) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _sortFocus.requestFocus();
+      }
+
+      return KeyEventResult.handled;
+    }
     if (key == LogicalKeyboardKey.arrowUp && _selectedIndex < columns ||
         key == LogicalKeyboardKey.arrowRight &&
             (_selectedIndex % columns == columns - 1 || _selectedIndex == _bloc.state.items.length - 1)) {
@@ -224,6 +260,13 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   KeyEventResult _handleContentKey(FocusNode node, KeyEvent event) {
+    if (widget.filter != null && _bloc.state.items.isEmpty && event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        _sortFocus.requestFocus();
+      }
+
+      return KeyEventResult.handled;
+    }
     final fromCard = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>() != null;
     if (fromCard || event.logicalKey != LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.ignored;
@@ -243,6 +286,23 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _onCatalogStateChanged(BuildContext context, CatalogState state) {
+    if (_keepSortFocus && state is CatalogReady && state.items.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _keepSortFocus && ModalRoute.of(context)?.isCurrent == true) {
+          _sortFocus.requestFocus();
+        }
+      });
+    }
+    if (_initialFilteredLoad && state is! CatalogInitial && state is! CatalogLoading) {
+      _initialFilteredLoad = false;
+      if (widget.filter != null && !_sortInteracted && state is CatalogReady && state.items.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && ModalRoute.of(context)?.isCurrent == true && _sortFocus.hasFocus) {
+            _focusContent();
+          }
+        });
+      }
+    }
     if (state is CatalogReady && state.items.isEmpty && ModalRoute.of(context)?.isCurrent == true) {
       _focusRail();
     }
@@ -262,6 +322,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     if (!focused) {
       return;
     }
+    _keepSortFocus = false;
     _selectedIndex = index;
     _lastCardFocus = FocusManager.instance.primaryFocus;
     if (index == 0 && _scrollController.hasClients) {
@@ -288,7 +349,88 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
   }
 
+  Future<void> _chooseSort() async {
+    _sortInteracted = true;
+    final selected = await showTvSideSheet<CatalogSort>(
+      context: context,
+      builder: (_) => CatalogSortSheet(selected: _sort),
+    );
+    if (!mounted) {
+      return;
+    }
+    _sortFocus.requestFocus();
+    if (selected == null || selected == _sort) {
+      return;
+    }
+    setState(() {
+      _keepSortFocus = true;
+      _filteredRepository?.sort = selected;
+      _selectedIndex = 0;
+      _lastCardFocus = null;
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    _bloc.add(const CatalogStarted());
+  }
+
+  KeyEventResult _handleSortKey(FocusNode node, KeyEvent event) {
+    _sortInteracted = true;
+    final key = event.logicalKey;
+    if (![
+      LogicalKeyboardKey.arrowDown,
+      LogicalKeyboardKey.arrowLeft,
+      LogicalKeyboardKey.arrowUp,
+      LogicalKeyboardKey.arrowRight,
+    ].contains(key)) {
+      return KeyEventResult.ignored;
+    }
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      if (key == LogicalKeyboardKey.arrowDown) {
+        _focusContent();
+      } else if (key == LogicalKeyboardKey.arrowLeft) {
+        _focusRail();
+      }
+    }
+
+    return KeyEventResult.handled;
+  }
+
+  Widget _sortButton() => Focus(
+    canRequestFocus: false,
+    onKeyEvent: _handleSortKey,
+    child: TvFocusable(
+      key: const ValueKey('catalog-sort'),
+      autofocus: true,
+      focusNode: _sortFocus,
+      semanticLabel: 'Сортировка: ${catalogSortLabel(_sort)}',
+      onPressed: () => unawaited(_chooseSort()),
+      builder: (context, focused) => AnimatedContainer(
+        duration: AppMotion.durationOf(context, AppMotion.fast),
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: AppFocusStyle.decoration(focused: focused, restingColor: AppPalette.surfaceElevated),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.sort, color: AppPalette.textPrimary),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                catalogSortLabel(_sort),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppPalette.textPrimary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
   void _reload() {
+    _keepSortFocus = false;
     ref.read(favoritesControllerProvider.notifier).invalidate();
     setState(() => _selectedIndex = 0);
     _bloc.add(const CatalogStarted());
@@ -303,8 +445,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   @override
   void dispose() {
+    _sortFocus.dispose();
     _contentFocus.dispose();
     _homeTabFocus.dispose();
+    _genresFocus.dispose();
+    _backFocus.dispose();
     _favoritesTabFocus.dispose();
     _signOutFocus.dispose();
     _refreshFocus.dispose();
@@ -350,6 +495,26 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           autofocus: widget.autofocusTab && widget.favoritesOnly,
         ),
       ],
+      if (widget.onBack case final onBack?)
+        (
+          key: const ValueKey('catalog-back'),
+          icon: Icons.arrow_back,
+          label: 'Назад',
+          focusNode: _backFocus,
+          onPressed: onBack,
+          selected: false,
+          autofocus: false,
+        ),
+      if (widget.onOpenGenres case final onOpenGenres?)
+        (
+          key: const ValueKey('catalog-genres'),
+          icon: Icons.category_outlined,
+          label: 'Жанры',
+          focusNode: _genresFocus,
+          onPressed: onOpenGenres,
+          selected: widget.filter != null,
+          autofocus: false,
+        ),
       if (widget.onSignOut case final onSignOut?)
         (
           key: const ValueKey('catalog-account'),
@@ -396,7 +561,35 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                     padding: const EdgeInsets.only(left: CatalogNavigationRail.collapsedWidth),
                     child: Column(
                       children: [
-                        const SizedBox(height: 32),
+                        if (widget.filter case final filter?)
+                          Padding(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final title = Text(
+                                  filter.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.headlineSmall,
+                                );
+
+                                return constraints.maxWidth < 600
+                                    ? Column(
+                                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                                        children: [title, const SizedBox(height: 8), _sortButton()],
+                                      )
+                                    : Row(
+                                        children: [
+                                          Expanded(child: title),
+                                          const SizedBox(width: 16),
+                                          Flexible(child: _sortButton()),
+                                        ],
+                                      );
+                              },
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 32),
                         Expanded(
                           child: FocusScope(
                             node: _contentFocus,

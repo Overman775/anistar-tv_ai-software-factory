@@ -20,4 +20,8 @@ final class PlaybackSession {
     this.watchedEpisodes = const {},
     this.expiresAt,
   });
+
+  int? previousEpisode(int current) => (episodeNumbers.where((number) => number < current).toList()..sort()).lastOrNull;
+
+  int? nextEpisode(int current) => (episodeNumbers.where((number) => number > current).toList()..sort()).firstOrNull;
 }

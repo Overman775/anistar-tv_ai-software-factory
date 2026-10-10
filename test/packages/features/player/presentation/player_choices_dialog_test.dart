@@ -12,6 +12,24 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../../support/test_app.dart';
 
 void main() {
+  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
+    testWidgets('quality choices at $name', (tester) async {
+      await pumpTvApp(
+        tester,
+        PlayerChoicesDialog<String>(
+          title: 'Качество',
+          choices: const ['1080p', '720p', '480p', '360p'],
+          selected: '720p',
+          label: (quality) => quality,
+        ),
+        size: size,
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_choices_$name.png'));
+    }, tags: ['golden']);
+  }
+
   testWidgets('late episode starts visible and remote scrolling keeps the next choice visible', (tester) async {
     int? selected;
     final choices = List.generate(24, (index) => index + 1);
@@ -55,7 +73,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(find.byType(PlayerChoicesDialog<int>), findsOneWidget);
-    await tester.binding.handlePopRoute();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(selected, isNull);
   });

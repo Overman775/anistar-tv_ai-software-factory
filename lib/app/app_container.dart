@@ -46,6 +46,9 @@ List<Override> createAppOverrides({
   favoritesRepositoryProvider.overrideWith(
     (ref) => AnistarFavoritesRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
   ),
+  catalogBrowseRepositoryProvider.overrideWith(
+    (ref) => AnistarCatalogRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+  ),
   catalogRepositoryProvider.overrideWith(
     (ref) => AnistarCatalogRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
   ),

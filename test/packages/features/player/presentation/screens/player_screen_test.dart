@@ -64,7 +64,7 @@ void main() {
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    for (var i = 0; i < (episodes ? 3 : 4); i++) {
+    for (var i = 0; i < 8 && FocusManager.instance.primaryFocus?.debugLabel != (episodes ? 'Серии' : 'Качество'); i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
     }
@@ -72,6 +72,28 @@ void main() {
     await settle(tester);
     expect(find.text(episodes ? 'Выбор серии' : 'Качество видео'), findsOneWidget);
   }
+
+  testWidgets('next and previous replace native playback at zero keeping quality and respecting edges', (tester) async {
+    repository.episodeNumbers = [3, 1];
+    await mount(tester);
+    final first = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await first.seekTo(const Duration(seconds: 40));
+    expect(find.byKey(const ValueKey('player-previous-episode')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('player-next-episode')));
+    await settle(tester);
+    final second = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    expect(repository.episode, 3);
+    expect(second, isNot(same(first)));
+    expect(second.value.position, Duration.zero);
+    expect(repository.quality, PlaybackQuality.high);
+    expect(find.byKey(const ValueKey('player-next-episode')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('player-previous-episode')));
+    await settle(tester);
+    expect(repository.episode, 1);
+    expect(repository.calls, 3);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
 
   testWidgets('dedicated media Play and Pause keys do not toggle their requested state', (tester) async {
     await mount(tester);

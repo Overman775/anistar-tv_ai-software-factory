@@ -23,7 +23,14 @@ final class AnistarSessionInterceptor extends Interceptor {
     try {
       if (_session.owns(options.uri)) {
         options.followRedirects = false;
-        final cookie = await _session.cookieHeader(options.uri);
+        var cookie = await _session.cookieHeader(options.uri);
+        final sort = options.extra['anistarSortCookies'];
+        if (sort is Map<String, String>) {
+          final existing = (cookie ?? '')
+              .split('; ')
+              .where((part) => part.isNotEmpty && !sort.containsKey(part.split('=').first));
+          cookie = [...existing, ...sort.entries.map((entry) => '${entry.key}=${entry.value}')].join('; ');
+        }
         options.extra['anistarGeneration'] = _session.generation;
         if (cookie != null) {
           options.headers['Cookie'] = cookie;
@@ -52,7 +59,11 @@ final class AnistarSessionInterceptor extends Interceptor {
         if (generation is! int || generation != _session.generation) {
           throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
         }
-        await _session.saveCookies(options.uri, response.headers['set-cookie'] ?? const [], generation);
+        final sort = options.extra['anistarSortCookies'];
+        final cookies = (response.headers['set-cookie'] ?? const <String>[])
+            .where((header) => sort is! Map<String, String> || !sort.containsKey(header.split('=').first))
+            .toList(growable: false);
+        await _session.saveCookies(options.uri, cookies, generation);
         if (generation != _session.generation) {
           throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
         }

@@ -19,6 +19,8 @@ class PlayerView extends StatelessWidget {
     required this.onShowControls,
     required this.session,
     required this.title,
+    this.onPreviousEpisode,
+    this.onNextEpisode,
     this.onBack,
     this.onReturnToVideo,
     this.controlsFocusNode,
@@ -28,6 +30,8 @@ class PlayerView extends StatelessWidget {
   });
 
   final VideoPlayerController controller;
+  final VoidCallback? onPreviousEpisode;
+  final VoidCallback? onNextEpisode;
   final VoidCallback? onBack;
   final VoidCallback? onReturnToVideo;
   final FocusNode? controlsFocusNode;
@@ -78,6 +82,8 @@ class PlayerView extends StatelessWidget {
                     focusNode: controlsFocusNode,
                     skipTraversal: true,
                     child: PlayerOverlay(
+                      onPreviousEpisode: onPreviousEpisode,
+                      onNextEpisode: onNextEpisode,
                       onBack: onBack,
                       onReturnToVideo: onReturnToVideo,
                       backFocusNode: backFocusNode,

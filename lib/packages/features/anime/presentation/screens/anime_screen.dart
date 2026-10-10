@@ -7,12 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../catalog/domain/models/catalog_filter.dart';
 import '../../../favorites/favorites_providers.dart';
 import '../../../favorites/presentation/favorite_button.dart';
 import '../../../watch_history/watched_episodes.dart';
 import '../../anime_providers.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
+import '../widgets/anime_filter_row.dart';
 import '../widgets/anime_hero.dart';
 import '../widgets/anime_layout.dart';
 import '../widgets/anime_skeleton.dart';
@@ -25,10 +27,12 @@ class AnimeScreen extends ConsumerStatefulWidget {
     required this.fallbackTitle,
     required this.onEpisodeTap,
     this.fallbackPosterUri,
+    this.onFilterTap,
     super.key,
   });
 
   final int animeId;
+  final ValueChanged<CatalogFilter>? onFilterTap;
   final String fallbackTitle;
   final Uri? fallbackPosterUri;
   final ValueChanged<AnimeEpisode> onEpisodeTap;
@@ -45,6 +49,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final _favoriteFocus = FocusNode(debugLabel: 'Избранное сериала');
   final Map<int, FocusNode> _episodeFocus = {};
   List<int> _episodeNumbers = [];
+  final Map<String, FocusNode> _filterFocus = {};
+  List<CatalogFilter> _filters = [];
+  int _lastFilterIndex = 0;
   int _episodeColumns = 2;
   late Future<AnimeScreenData> _future;
   Animation<double>? _routeAnimation;
@@ -70,7 +77,13 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       );
     }
     final data = snapshot.requireData;
-    final episodes = data.episodes.toList()..sort((a, b) => b.number.compareTo(a.number));
+    _filters = widget.onFilterTap == null ? [] : data.details.filters;
+    final watched = ref.watch(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
+    final ascending = data.episodes.toList()..sort((a, b) => a.number.compareTo(b.number));
+    final playEpisode =
+        ascending.where((episode) => !episode.isWatched && !watched.contains(episode.number)).firstOrNull ??
+        ascending.firstOrNull;
+    final episodes = ascending.reversed.toList();
     _episodeNumbers = episodes.map((episode) => episode.number).toList(growable: false);
 
     return CustomScrollView(
@@ -80,6 +93,14 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
           child: AnimeHero(
             playFocusNode: _playFocus,
             data: data,
+            filterActions: _filters.isEmpty
+                ? null
+                : AnimeFilterRow(
+                    filters: _filters,
+                    focusNodes: _filterFocus,
+                    onSelected: (filter) => widget.onFilterTap?.call(filter),
+                    onFocused: (index) => _lastFilterIndex = index,
+                  ),
             fallbackPosterUri: widget.fallbackPosterUri,
             favoriteAction: FavoriteButton(
               focusNode: _favoriteFocus,
@@ -89,7 +110,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
               title: data.details.title,
               initialFavorite: data.details.isFavorite,
             ),
-            onPlayFirstEpisode: episodes.isEmpty ? null : () => _openEpisode(data.episodes.first),
+            playEpisode: playEpisode,
+            onPlayFirstEpisode: playEpisode == null ? null : () => _openEpisode(playEpisode),
           ),
         ),
         SliverPadding(
@@ -183,11 +205,24 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     final key = event.logicalKey;
     FocusNode? target;
     final firstAction = _episodeNumbers.isEmpty ? _favoriteFocus : _playFocus;
+    final filterIndex = _filters.indexWhere((filter) => _filterFocus[filter.path] == current);
     final index = _episodeNumbers.indexWhere((number) => identical(_episodeFocus[number], current));
     if (key == LogicalKeyboardKey.arrowUp && (current == _playFocus || current == _favoriteFocus)) {
       target = _backFocus.context == null ? null : _backFocus;
+      if (_filters.isNotEmpty) {
+        target = _filterFocus[_filters[_lastFilterIndex.clamp(0, _filters.length - 1)].path];
+      }
     } else if (key == LogicalKeyboardKey.arrowDown && current == _backFocus) {
+      target = _filters.isEmpty
+          ? firstAction
+          : _filterFocus[_filters[_lastFilterIndex.clamp(0, _filters.length - 1)].path];
+    } else if (filterIndex >= 0 && key == LogicalKeyboardKey.arrowDown) {
       target = firstAction;
+    } else if (filterIndex >= 0 && key == LogicalKeyboardKey.arrowUp) {
+      target = _backFocus.context == null ? current : _backFocus;
+    } else if (filterIndex >= 0 && (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight)) {
+      final next = (filterIndex + (key == LogicalKeyboardKey.arrowRight ? 1 : -1)).clamp(0, _filters.length - 1);
+      target = _filterFocus[_filters[next].path];
     } else if (key == LogicalKeyboardKey.arrowDown &&
         (current == _playFocus || current == _favoriteFocus) &&
         _episodeNumbers.isNotEmpty) {
@@ -280,6 +315,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     _backFocus.dispose();
     _playFocus.dispose();
     _favoriteFocus.dispose();
+    for (final focus in _filterFocus.values) {
+      focus.dispose();
+    }
     for (final focus in _episodeFocus.values) {
       focus.dispose();
     }

@@ -7,11 +7,19 @@ import '../../../catalog/presentation/screens/catalog_screen.dart';
 import '../../../favorites/favorites_providers.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({required this.onAnimeTap, this.onOpenLogs, this.onSignOut, this.accountName, super.key});
+  const HomeScreen({
+    required this.onAnimeTap,
+    this.onOpenLogs,
+    this.onOpenGenres,
+    this.onSignOut,
+    this.accountName,
+    super.key,
+  });
 
   final String? accountName;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
+  final VoidCallback? onOpenGenres;
   final VoidCallback? onSignOut;
 
   @override
@@ -46,6 +54,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onTabSelected: _selectTab,
       onAnimeTap: widget.onAnimeTap,
       onOpenLogs: widget.onOpenLogs,
+      onOpenGenres: widget.onOpenGenres,
       onSignOut: widget.onSignOut,
     ),
   );

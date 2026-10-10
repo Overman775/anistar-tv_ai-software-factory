@@ -103,18 +103,6 @@ class AnimeCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (focused)
-                    Positioned(
-                      top: AppSpacing.sm,
-                      right: AppSpacing.sm,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(color: primary, shape: BoxShape.circle),
-                        child: const Padding(
-                          padding: EdgeInsets.all(AppSpacing.xs),
-                          child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 30),
-                        ),
-                      ),
-                    ),
                   Positioned(
                     top: AppSpacing.sm,
                     left: AppSpacing.sm,

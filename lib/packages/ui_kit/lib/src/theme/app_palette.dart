@@ -5,6 +5,10 @@ abstract final class AppPalette {
   static const backgroundElevated = Color(0xFF0D1220);
   static const surface = Color(0xFF141B2D);
   static const surfaceElevated = Color(0xFF1B2440);
+  static const focusSurface = Color(0xFF392451);
+  static const focusSurfaceEnd = Color(0xFF25203C);
+  static const focusOutline = Color(0xFFC69AFA);
+  static const focusGlow = Color(0x487C3AED);
   static const primary = Color(0xFFA855F7);
   static const primarySoft = Color(0xFF7C3AED);
   static const secondary = Color(0xFF22D3EE);

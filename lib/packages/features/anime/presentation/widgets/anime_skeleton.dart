@@ -22,24 +22,30 @@ class AnimeSkeleton extends StatelessWidget {
             child: SizedBox(
               height: AnimeLayout.heroHeight(constraints.maxWidth),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.xl),
+                padding: EdgeInsets.fromLTRB(
+                  constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
+                  AppSpacing.lg,
+                  constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
+                  AppSpacing.xl,
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    AspectRatio(
-                      aspectRatio: 2 / 3,
-                      child: animeId != null && posterUri != null
-                          ? ClipRRect(
-                              borderRadius: AppRadii.large,
-                              child: TvPosterHero(
-                                tag: 'anime-poster-$animeId',
-                                imageUrl: posterUri.toString(),
-                                semanticLabel: title,
-                              ),
-                            )
-                          : const TvSkeletonBox(borderRadius: AppRadii.large),
-                    ),
-                    const SizedBox(width: AppSpacing.xl),
+                    if (constraints.maxWidth >= 600)
+                      AspectRatio(
+                        aspectRatio: 2 / 3,
+                        child: animeId != null && posterUri != null
+                            ? ClipRRect(
+                                borderRadius: AppRadii.large,
+                                child: TvPosterHero(
+                                  tag: 'anime-poster-$animeId',
+                                  imageUrl: posterUri.toString(),
+                                  semanticLabel: title,
+                                ),
+                              )
+                            : const TvSkeletonBox(borderRadius: AppRadii.large),
+                      ),
+                    if (constraints.maxWidth >= 600) const SizedBox(width: AppSpacing.xl),
                     const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

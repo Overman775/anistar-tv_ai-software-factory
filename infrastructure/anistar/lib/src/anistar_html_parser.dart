@@ -5,6 +5,7 @@ import 'package:json5/json5.dart';
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'direct_anime.dart';
+import 'direct_catalog_filter.dart';
 import 'direct_catalog_page.dart';
 import 'direct_episode.dart';
 import 'playlist_literal.dart';
@@ -14,7 +15,7 @@ final class AnistarHtmlParser {
 
   const AnistarHtmlParser(this.baseUri);
 
-  DirectCatalogPage catalog(String source, int page, {bool favorites = false}) {
+  DirectCatalogPage catalog(String source, int page, {bool favorites = false, String? filterPath}) {
     final document = _document(source);
     final items = <DirectAnime>[];
     final ids = <int>{};
@@ -28,15 +29,19 @@ final class AnistarHtmlParser {
     if (items.isEmpty && (!favorites || !AnistarFavoritesHtml.isEmpty(document, baseUri))) {
       throw const AnistarFailure(message: 'Не удалось разобрать каталог AniStar. Возможно, сайт изменился.');
     }
-    final hasNext = document.querySelectorAll('a[href]').any((link) {
-      final uri = _uri(link.attributes['href']);
-      final pageNumber = favorites
-          ? _favoritePage(uri)
-          : RegExp(r'^/anime/page/(\d+)/?$').firstMatch(uri?.path ?? '')?.group(1);
-      final number = int.tryParse(pageNumber ?? '');
+    final hasNext = document
+        .querySelectorAll(filterPath == null ? 'a[href]' : '.pages a[href], .navigation a[href]')
+        .any((link) {
+          final uri = _uri(link.attributes['href']);
+          final pageNumber = favorites
+              ? _favoritePage(uri)
+              : RegExp(filterPath == null ? r'^/anime/page/(\d+)/?$' : r'^/.+/page/(\d+)/?$')
+                    .firstMatch(uri?.path ?? '')
+                    ?.group(1);
+          final number = int.tryParse(pageNumber ?? '');
 
-      return uri?.origin == baseUri.origin && number != null && number > page;
-    });
+          return uri?.origin == baseUri.origin && number != null && number > page;
+        });
 
     return DirectCatalogPage(items: List.unmodifiable(items), page: page, hasNext: hasNext);
   }
@@ -55,6 +60,7 @@ final class AnistarHtmlParser {
     return DirectAnime(
       id: id,
       isFavorite: AnistarFavoritesHtml.documentStatus(document, id),
+      filters: _filters(document.querySelectorAll('.ful-cat a[href], .tags a[href], ul.head li a[href]'), detail: true),
       slug: slug,
       title: title,
       posterUri: _uri(document.querySelector('.news_avatar img, img[itemprop="image"]')?.attributes['src']),
@@ -67,6 +73,16 @@ final class AnistarHtmlParser {
       description: document.querySelector('.descripts')?.text.trim(),
       isOngoing: category.contains('новинки') || category.contains('онгоинг'),
     );
+  }
+
+  List<DirectCatalogFilter> genres(String source) {
+    final document = _document(source);
+    final filters = _filters(document.querySelectorAll('.block-janrs a[href]'));
+    if (filters.isEmpty) {
+      throw const AnistarFailure(message: 'Не удалось загрузить жанры AniStar. Попробуйте снова.');
+    }
+
+    return filters;
   }
 
   List<DirectEpisode> episodes(String source) {
@@ -101,6 +117,36 @@ final class AnistarHtmlParser {
     items.sort((left, right) => left.number.compareTo(right.number));
 
     return List.unmodifiable(items);
+  }
+
+  List<DirectCatalogFilter> _filters(List<Element> links, {bool detail = false}) {
+    final paths = <String>{};
+    final labels = <String>{};
+    final result = <DirectCatalogFilter>[];
+    for (final link in links) {
+      final uri = _uri(link.attributes['href']);
+      final label = link.text.trim();
+      if (uri == null ||
+          uri.origin != baseUri.origin ||
+          uri.hasQuery ||
+          uri.hasFragment ||
+          label.isEmpty ||
+          !DirectCatalogFilter.isValidPath(uri.path)) {
+        continue;
+      }
+      if (detail &&
+          uri.path != '/new/' &&
+          uri.path != '/anime/' &&
+          !uri.path.startsWith('/anime/') &&
+          !uri.path.startsWith('/filter/janrs/')) {
+        continue;
+      }
+      if (paths.add(uri.path) && labels.add(label.toLowerCase())) {
+        result.add(DirectCatalogFilter(label: label, path: uri.path));
+      }
+    }
+
+    return List.unmodifiable(result);
   }
 
   String? _favoritePage(Uri? uri) => uri?.queryParameters['do'] == 'favorites'

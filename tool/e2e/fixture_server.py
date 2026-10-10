@@ -1,6 +1,7 @@
 """Loopback-only HTTPS AniStar/HLS fixture. No external network or dependencies."""
 import argparse
 import json
+from http.cookies import SimpleCookie
 from pathlib import Path
 import re
 import ssl
@@ -122,19 +123,28 @@ class Handler(BaseHTTPRequestHandler):
                 body += ''
             body += '</div>'
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
-        elif path in ('/anime/', '/anime/page/2/'):
+        elif path in ('/anime/', '/anime/page/2/', '/anime/comedy/', '/anime/comedy/page/2/', '/new/', '/new/page/2/'):
             if self.server.catalog_error and self.authenticated():
                 self.reply(403, b'Forbidden', 'text/plain')
             else:
-                start = 10938 if path == '/anime/' else 10950
                 cards = (MEMBER if self.authenticated() else GUEST) + SETTINGS + '<div class="news"><a href="/9493-ad.html">Реклама</a></div>'
-                for anime_id in range(start, start + 12):
+                cookies = SimpleCookie(self.headers.get('Cookie', ''))
+                sort = cookies['dle_sort_cat'].value if 'dle_sort_cat' in cookies else 'date'
+                direction = cookies['dle_direction_cat'].value if 'dle_direction_cat' in cookies else 'desc'
+                opposite = 'desc' if direction == 'asc' else 'asc'
+                cards += f'''<form id="news_set_sort"><a class="sort-actv" onclick="dle_change_sort('{sort}','{opposite}'); return false;">sort</a></form>'''
+                ids = list(range(10938, 10962))
+                if sort == 'title':
+                    ids.sort(reverse=direction == 'desc')
+                offset = 12 if path.endswith('/page/2/') else 0
+                for anime_id in ids[offset:offset + 12]:
                     cards += self.card(anime_id)
-                if path == '/anime/':
-                    cards += '<a href="/anime/page/2/">2</a>'
+                cards += '<div class="block-janrs"><a href="/anime/comedy/">Комедия</a><a href="/anime/drama/">Драма</a></div>'
+                if not path.endswith('/page/2/'):
+                    cards += f'<div class="pages"><a href="{path}page/2/">2</a></div>'
                 self.reply(200, cards.encode('cp1251'), 'text/html; charset=windows-1251')
         elif re.fullmatch(r'/\d+-test.html', path):
-            body = (MEMBER if self.authenticated() else GUEST) + '<h1 itemprop="name">Тестовое аниме</h1><ul class="head"><li>Год выпуска: 2026</li><li>Жанр: Комедия</li><li>Серии: 2 эп.</li></ul><div class="descripts">Локальный E2E fixture.</div>'
+            body = (MEMBER if self.authenticated() else GUEST) + '<h1 itemprop="name">Тестовое аниме</h1><p class="tags"><a href="/new/">Онгоинги</a><a href="/anime/comedy/">Комедия</a></p><ul class="head"><li>Год выпуска: 2026</li><li>Жанр: Комедия</li><li>Серии: 2 эп.</li></ul><div class="descripts">Локальный E2E fixture.</div>'
             body += SETTINGS + self.favorite_control(int(path.split('-')[0][1:]))
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
         elif path == '/test/player2/videoas_p2p_new.php':
@@ -200,7 +210,7 @@ class Handler(BaseHTTPRequestHandler):
     def reply(self, status, body, content_type, *, record=True, content_range=None, session_cookie=False):
         if record:
             with self.server.lock:
-                event = {'path': self.path, 'status': status, 'referer': self.headers.get('Referer'), 'method': self.command, 'authenticated': self.authenticated()}
+                event = {'path': self.path, 'status': status, 'referer': self.headers.get('Referer'), 'method': self.command, 'authenticated': self.authenticated(), 'sort': {key: value.value for key, value in SimpleCookie(self.headers.get('Cookie', '')).items() if key.startswith(('dle_sort_', 'dle_direction_'))}}
                 self.server.events.append(event)
                 if self.server.event_log:
                     with self.server.event_log.open('a') as stream:

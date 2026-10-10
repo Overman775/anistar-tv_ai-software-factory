@@ -1,6 +1,9 @@
+import 'direct_catalog_filter.dart';
+
 final class DirectAnime {
   final String? description;
   final List<String> genres;
+  final List<DirectCatalogFilter> filters;
   final int id;
   final bool? isFavorite;
   final bool isOngoing;
@@ -19,6 +22,7 @@ final class DirectAnime {
     this.isFavorite,
     this.year,
     this.genres = const [],
+    this.filters = const [],
     this.voiceover,
     this.seriesInfo,
     this.description,

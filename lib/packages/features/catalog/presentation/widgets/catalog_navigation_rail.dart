@@ -86,23 +86,9 @@ class CatalogNavigationRail extends StatelessWidget {
                               focusNode: item.focusNode,
                               autofocus: item.autofocus,
                               onPressed: item.onPressed,
-                              style:
-                                  TextButton.styleFrom(
-                                    minimumSize: const Size(56, 56),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    shape: const RoundedRectangleBorder(borderRadius: AppRadii.pill),
-                                  ).copyWith(
-                                    foregroundColor: WidgetStateProperty.resolveWith(
-                                      (states) => states.contains(WidgetState.focused) ? Colors.black : Colors.white,
-                                    ),
-                                    backgroundColor: WidgetStateProperty.resolveWith((states) {
-                                      if (states.contains(WidgetState.focused)) {
-                                        return Colors.white;
-                                      }
-
-                                      return item.selected ? AppPalette.surfaceElevated : Colors.transparent;
-                                    }),
-                                  ),
+                              style: AppFocusStyle.button(
+                                selected: item.selected,
+                              ).copyWith(padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16))),
                               child: ExcludeSemantics(
                                 child: Row(
                                   children: [

@@ -40,7 +40,7 @@ void main() {
       );
       await pumpTvApp(
         tester,
-        HomeScreen(onAnimeTap: (_) => fail('Unexpected navigation')),
+        HomeScreen(onAnimeTap: (_) => fail('Unexpected navigation'), onOpenGenres: () => fail('Unexpected genres')),
         size: size,
         wrapInScaffold: false,
         overrides: [catalogRepositoryProvider.overrideWithValue(repository)],
@@ -56,6 +56,7 @@ void main() {
           onAnimeTap: (_) => fail('Unexpected activation'),
           onSignOut: () => fail('Unexpected logout'),
           onOpenLogs: () => fail('Unexpected logs'),
+          onOpenGenres: () => fail('Unexpected genres'),
           accountName: 'anime_fan',
         ),
         size: size,
