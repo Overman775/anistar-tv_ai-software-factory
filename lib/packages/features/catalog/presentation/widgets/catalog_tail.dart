@@ -22,7 +22,7 @@ class CatalogTail extends StatelessWidget {
       onPressed: onRetry,
       semanticLabel: 'Повторить загрузку каталога',
       builder: (context, focused) => AnimatedContainer(
-        duration: AppMotion.fast,
+        duration: AppMotion.durationOf(context, AppMotion.fast),
         decoration: BoxDecoration(
           color: AppPalette.surface,
           borderRadius: AppRadii.large,

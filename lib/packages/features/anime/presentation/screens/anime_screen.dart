@@ -23,11 +23,13 @@ class AnimeScreen extends ConsumerStatefulWidget {
     required this.slug,
     required this.fallbackTitle,
     required this.onEpisodeTap,
+    this.fallbackPosterUri,
     super.key,
   });
 
   final int animeId;
   final String fallbackTitle;
+  final Uri? fallbackPosterUri;
   final ValueChanged<AnimeEpisode> onEpisodeTap;
   final String slug;
 
@@ -38,6 +40,8 @@ class AnimeScreen extends ConsumerStatefulWidget {
 class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final ScrollController _scrollController = ScrollController();
   late Future<AnimeScreenData> _future;
+  Animation<double>? _routeAnimation;
+  bool _entered = false;
 
   @override
   void initState() {
@@ -46,8 +50,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<AnimeScreenData> snapshot) {
-    if (snapshot.connectionState != ConnectionState.done) {
-      return const AnimeSkeleton();
+    if (!_entered || snapshot.connectionState != ConnectionState.done) {
+      return AnimeSkeleton(animeId: widget.animeId, posterUri: widget.fallbackPosterUri, title: widget.fallbackTitle);
     }
     if (snapshot.hasError) {
       return TvStateView(
@@ -67,6 +71,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         SliverToBoxAdapter(
           child: AnimeHero(
             data: data,
+            fallbackPosterUri: widget.fallbackPosterUri,
             favoriteAction: FavoriteButton(
               animeId: data.details.id,
               slug: data.details.slug,
@@ -162,8 +167,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       Scrollable.ensureVisible(
         episodeContext,
         alignment: 0.58,
-        duration: AppMotion.standard,
-        curve: Curves.easeOutCubic,
+        duration: AppMotion.durationOf(context, AppMotion.standard),
+        curve: AppMotion.enterCurve,
       ),
     );
   }
@@ -171,6 +176,12 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   void _retry() {
     ref.read(loggerProvider).infoFor<AnimeScreen>('Retrying anime ${widget.animeId} loading');
     setState(_load);
+  }
+
+  void _onRouteStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && mounted && !_entered && ModalRoute.of(context)?.offstage != true) {
+      setState(() => _entered = true);
+    }
   }
 
   @override
@@ -185,7 +196,27 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    final animation = route?.animation;
+    if (!identical(animation, _routeAnimation)) {
+      _routeAnimation?.removeStatusListener(_onRouteStatus);
+      _routeAnimation = animation;
+      animation?.addStatusListener(_onRouteStatus);
+    }
+    // HeroController temporarily lays out the destination offstage with a
+    // completed proxy animation. That is not the end of the actual flight.
+    if (animation == null ||
+        AppMotion.reducedOf(context) ||
+        route?.offstage != true && animation.status == AnimationStatus.completed) {
+      _entered = true;
+    }
+  }
+
+  @override
   void dispose() {
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
     _scrollController.dispose();
     super.dispose();
   }

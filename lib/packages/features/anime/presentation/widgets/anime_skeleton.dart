@@ -5,7 +5,11 @@ import 'anime_layout.dart';
 
 /// Uses the same hero bounds and padded episode grid as the loaded page.
 class AnimeSkeleton extends StatelessWidget {
-  const AnimeSkeleton({super.key});
+  const AnimeSkeleton({super.key, this.animeId, this.posterUri, this.title = ''});
+
+  final int? animeId;
+  final Uri? posterUri;
+  final String title;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -17,17 +21,26 @@ class AnimeSkeleton extends StatelessWidget {
           SliverToBoxAdapter(
             child: SizedBox(
               height: AnimeLayout.heroHeight(constraints.maxWidth),
-              child: const Padding(
-                padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.xl),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.xl),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AspectRatio(
                       aspectRatio: 2 / 3,
-                      child: TvSkeletonBox(borderRadius: AppRadii.large),
+                      child: animeId != null && posterUri != null
+                          ? ClipRRect(
+                              borderRadius: AppRadii.large,
+                              child: TvPosterHero(
+                                tag: 'anime-poster-$animeId',
+                                imageUrl: posterUri.toString(),
+                                semanticLabel: title,
+                              ),
+                            )
+                          : const TvSkeletonBox(borderRadius: AppRadii.large),
                     ),
-                    SizedBox(width: AppSpacing.xl),
-                    Expanded(
+                    const SizedBox(width: AppSpacing.xl),
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [

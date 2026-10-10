@@ -178,10 +178,21 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     _selectedIndex = index;
     if (index == 0 && _scrollController.hasClients) {
-      unawaited(_scrollController.animateTo(0, duration: AppMotion.standard, curve: Curves.easeOutCubic));
+      unawaited(
+        _scrollController.animateTo(
+          0,
+          duration: AppMotion.durationOf(context, AppMotion.standard),
+          curve: Curves.easeOutCubic,
+        ),
+      );
     } else {
       unawaited(
-        Scrollable.ensureVisible(cardContext, alignment: 0.5, duration: AppMotion.standard, curve: Curves.easeOutCubic),
+        Scrollable.ensureVisible(
+          cardContext,
+          alignment: 0.5,
+          duration: AppMotion.durationOf(context, AppMotion.standard),
+          curve: Curves.easeOutCubic,
+        ),
       );
     }
     final preloadDistance = columns * 2;

@@ -5,6 +5,7 @@ export './src/widgets/app_network_image.dart';
 export './src/widgets/tv_backdrop.dart';
 export './src/widgets/tv_focusable.dart';
 export './src/widgets/tv_header_surface.dart';
+export './src/widgets/tv_poster_hero.dart';
 export './src/widgets/tv_progress_view.dart';
 export './src/widgets/tv_section_header.dart';
 export './src/widgets/tv_skeleton.dart';
