@@ -57,45 +57,37 @@ final class FileLogOutput implements LogOutput {
     if (directory == null) {
       return [];
     }
+    final List<FileSystemEntity> files;
     try {
-      // ignore: avoid_slow_async_io, log discovery must not block the UI isolate.
-      if (!await directory.exists()) {
+      // ignore: avoid_slow_async_io, directory listing must not block the UI isolate.
+      files = await directory.list(followLinks: false).toList();
+    } on FileSystemException catch (error) {
+      if (error.osError?.errorCode == 2) {
+        // The logger may not have created its directory yet.
         return [];
       }
-      // ignore: avoid_slow_async_io, directory listing must not block the UI isolate.
-      final files = await directory.list(followLinks: false).toList();
-
-      return files
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.txt'))
-          .map((file) => file.uri.pathSegments.last)
-          .toList()
-        ..sort((a, b) => b.compareTo(a));
-    } on FileSystemException catch (error) {
-      debugPrint('Error listing log files: $error');
-
-      return [];
+      rethrow;
     }
+
+    return files
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.txt'))
+        .map((file) => file.uri.pathSegments.last)
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
   }
 
   static Future<String> getLogContent(String fileName) async {
     if (!RegExp(r'^[^/\\]+\.txt$').hasMatch(fileName)) {
-      return 'Invalid log file name.';
+      throw const FormatException('Invalid log file name');
     }
     final directory = _logDirectory;
     if (directory == null) {
-      return 'Log directory not available.';
+      throw const FileSystemException('Log directory not available');
     }
-    try {
-      final file = File('${directory.path}/$fileName');
+    // Missing files and read errors propagate to the repository boundary.
 
-      // ignore: avoid_slow_async_io, reading logs must not block the UI isolate.
-      return await file.exists() ? await file.readAsString() : 'File not found: $fileName';
-    } on FileSystemException catch (error) {
-      debugPrint('Error reading log file: $error');
-
-      return 'Error reading log file: $error';
-    }
+    return File('${directory.path}/$fileName').readAsString();
   }
 
   @override

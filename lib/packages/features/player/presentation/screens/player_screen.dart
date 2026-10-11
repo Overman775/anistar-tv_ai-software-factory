@@ -318,7 +318,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       _updateScreenAwake();
       _markStarted(player);
       _scheduleControlsHide();
-      _logger.infoFor<PlayerScreen>('Playback started (episode $_episodeNumber, ${session.selectedQuality.apiValue}p)');
+      _logger.infoFor<PlayerScreen>('Playback started (episode $_episodeNumber, ${session.selectedQuality.height}p)');
 
       return _PlayerData(controller: player, session: session);
     } on Object catch (_, stackTrace) {
@@ -456,7 +456,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         title: 'Качество видео',
         choices: session.availableQualities,
         selected: session.selectedQuality,
-        label: (quality) => '${quality.apiValue}p',
+        label: (quality) => '${quality.height}p',
       ),
     );
     if (_isCurrent(initializationId)) {

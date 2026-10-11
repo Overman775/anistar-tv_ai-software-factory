@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -41,7 +42,7 @@ void main() {
       interceptors: [AnistarSessionInterceptor(session)],
     );
     addTearDown(() => dio.close(force: true));
-    final client = DioAnistarClient(dio, session, ensureMirror: mirrors.ensureAvailable);
+    final client = HtmlAnistarClient(dio, session, ensureMirror: mirrors.ensureAvailable);
     final page = await _step('anonymous catalog', () => client.catalog(1));
     debugPrint('Live catalog: ${page.items.length} items');
     const credentialsPath = String.fromEnvironment(
@@ -80,7 +81,7 @@ Future<T> _step<T>(String name, Future<T> Function() operation) async {
       '$name: ${error.type.name}; status=${error.response?.statusCode}; '
       'host=${error.requestOptions.uri.host}; challenge=${error.response?.headers.value('cf-mitigated')}',
     );
-  } on AnistarFailure catch (error) {
+  } on AnistarClientException catch (error) {
     fail('$name: ${error.message}');
   } on Object catch (error) {
     fail('$name: ${error.runtimeType}');

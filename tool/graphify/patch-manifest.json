@@ -1,0 +1,18 @@
+{
+  "distribution": "graphifyy",
+  "version": "0.9.85",
+  "files": {
+    "extractors/dart.py": {
+      "original": "36766e1f2ed5e2eb968b01e63fcc62258a7a34f0df68f939b43db19632373ed7",
+      "patched": "1a633974f99819f75fe1ff6afe4c5fa9fe210f22172c5664c2c9a98346e26518"
+    },
+    "extractors/engine.py": {
+      "original": "2d7fc34914f100c6261133a77685d8df1bb07bcc029e2697df7ad1d713f9e639",
+      "patched": "3113896bf27362d3a6b76d26f26d8325ba233fc720efa9048649f83002cf421b"
+    },
+    "extract.py": {
+      "original": "ad98bb65b80df2b4b97706f7d3081dfa5e9701395228ad84acc2c15bc8010661",
+      "patched": "36f77f10a35425c516575495e380ef977d143623c1a1cdee6f7f3cb436b12825"
+    }
+  }
+}

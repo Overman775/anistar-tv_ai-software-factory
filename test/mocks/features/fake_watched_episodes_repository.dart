@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:anistar/anistar.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
+import 'package:anistar_tv/packages/features/watch_history/domain/repositories/watched_episodes_repository.dart';
 import 'package:core/data.dart';
+import 'package:networking/networking.dart';
 
 final class FakeWatchedEpisodesRepository implements WatchedEpisodesRepository {
   final Map<int, Set<int>> watched = {};
@@ -13,7 +13,7 @@ final class FakeWatchedEpisodesRepository implements WatchedEpisodesRepository {
 
   @override
   Future<Result<Set<int>, Failure>> getWatched(int animeId) async => failRead
-      ? const Result.failure(AnistarFailure(message: 'Read rejected'))
+      ? const Result.failure(RequestFailure(message: 'Read rejected'))
       : Result.success({...?watched[animeId]});
 
   @override
@@ -24,7 +24,7 @@ final class FakeWatchedEpisodesRepository implements WatchedEpisodesRepository {
     writes++;
     await writeGate?.future;
     if (failWrite) {
-      return const Result.failure(AnistarFailure(message: 'Mark rejected'));
+      return const Result.failure(RequestFailure(message: 'Mark rejected'));
     }
     final confirmed = watched.putIfAbsent(animeId, () => {})..add(episodeNumber);
 

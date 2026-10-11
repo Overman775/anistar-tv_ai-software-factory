@@ -7,11 +7,11 @@ import 'package:networking/providers.dart';
 import 'package:storage/providers.dart';
 
 import 'anistar_active_mirror.dart';
-import 'anistar_client.dart';
 import 'anistar_mirror_interceptor.dart';
 import 'anistar_session.dart';
 import 'anistar_session_interceptor.dart';
-import 'dio_anistar_client.dart';
+import 'contract/anistar_client.dart';
+import 'html_anistar_client.dart';
 
 export 'anistar_active_mirror.dart' show anistarActiveMirrorProvider, anistarMirrorManagerProvider;
 
@@ -39,7 +39,7 @@ final anistarDioProvider = Provider<Dio>((ref) {
 });
 
 final anistarClientProvider = Provider<AnistarClient>(
-  (ref) => DioAnistarClient(
+  (ref) => HtmlAnistarClient(
     ref.watch(anistarDioProvider),
     ref.watch(anistarSessionProvider),
     ensureMirror: ref.watch(anistarMirrorManagerProvider)?.ensureAvailable,

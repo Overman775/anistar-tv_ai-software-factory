@@ -1,4 +1,5 @@
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -11,5 +12,5 @@ AnistarClient createTestAnistarClient(Dio dio, {AnistarSession? session}) {
     addTearDown(clientSession.close);
   }
 
-  return DioAnistarClient(dio, clientSession);
+  return HtmlAnistarClient(dio, clientSession);
 }

@@ -13,6 +13,53 @@ import '../../../../../mocks/features/catalog/fake_catalog_repository.dart';
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
 
 void main() {
+  test('replacement captures source and generation while late old pages and first pages are ignored', () async {
+    final oldMore = Completer<Result<AnimePage, Failure>>();
+    final intermediate = Completer<Result<AnimePage, Failure>>();
+    final oldRequests = <int>[];
+    final latestRequests = <int>[];
+    final old = FakeCatalogScreenRepository(
+      load: (page) {
+        oldRequests.add(page);
+
+        return page == 1 ? Future.value(Result.success(_page(id: 1, page: 1, hasNext: true))) : oldMore.future;
+      },
+    );
+    final middle = FakeCatalogScreenRepository(load: (_) => intermediate.future);
+    final latest = FakeCatalogScreenRepository(
+      load: (page) {
+        latestRequests.add(page);
+
+        return Future.value(Result.success(_page(id: page + 10, page: page, hasNext: true)));
+      },
+    );
+    final bloc = CatalogBloc(
+      repository: old,
+      logger: Logger(level: Level.off),
+    );
+    addTearDown(bloc.close);
+    bloc.add(const CatalogStarted());
+    await _flushEvents();
+    bloc.add(const CatalogMoreRequested());
+    await _flushEvents();
+    bloc.add(CatalogStarted(repository: middle, preserveContent: true));
+    await _flushEvents();
+    expect(bloc.state.items, isEmpty);
+    bloc.add(CatalogStarted(repository: latest));
+    await _flushEvents();
+    oldMore.complete(Result.success(_page(id: 2, page: 2, hasNext: true)));
+    intermediate.complete(Result.success(_page(id: 3, page: 1, hasNext: true)));
+    await _flushEvents();
+    final firstLatest = bloc.state;
+    expect(firstLatest.items.map((item) => item.id), [11]);
+    bloc.add(const CatalogMoreRequested());
+    await _flushEvents();
+    final secondLatest = bloc.state;
+    expect(secondLatest.items.map((item) => item.id), [11, 12]);
+    expect(oldRequests, [1, 2]);
+    expect(latestRequests, [1, 2]);
+  });
+
   test('failed pull keeps the loaded pages and next page number, without duplicate refreshes', () async {
     final refresh = Completer<Result<AnimePage, Failure>>();
     final requests = <int>[];

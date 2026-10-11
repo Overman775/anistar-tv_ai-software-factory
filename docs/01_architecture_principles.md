@@ -23,13 +23,13 @@
 
 Внутри feature:
 
-- **Domain**: модели и repository interfaces; зависит только от Core.
+- **Domain**: модели и repository interfaces; зависит от Dart SDK, Core и согласованных domain-моделей других features.
 - **Data**: repository implementations; использует публичные API инфраструктуры.
 - **Presentation**: экраны, виджеты и BLoC; работает с domain-контрактами.
 
 > **Правило зависимости:** Core не имеет package-зависимостей. Infrastructure не импортирует app/features. Сетевые features используют domain-контракты вместо Data и не импортируют app DI. Чужой `src/**` не используется.
 
-Локальный dev viewer создаёт FileLogRepository внутри LogViewerScreen; его файловый доступ отделён от сетевых репозиториев.
+LogViewerScreen получает LogRepository через feature provider. App composition создаёт FileLogRepository; чтение файлов возвращает Result и безопасный LogFailure.
 
 ```mermaid
 flowchart TD
@@ -38,7 +38,7 @@ flowchart TD
   UI --> Domain["Feature Domain: контракты"]
   Repos --> Domain
   Domain --> Core["Core: Result / Failure"]
-  Repos --> Anistar["AnistarClient: Dio / HTML / cookies"]
+  Repos --> Anistar["AnistarClient: общий контракт DTO"]
   Repos --> Network["Networking: BaseRepository"]
   Anistar --> Network
   Anistar --> Core
@@ -53,7 +53,7 @@ flowchart TD
 
 ## 3. Dependency Injection и состояние
 
-**Riverpod** связывает зависимости. Один `anistarClientProvider` в корневом `ProviderScope` служит общей точкой доступа к данным сайта для всех сетевых репозиториев. `DioAnistarClient` координирует HTTP, парсинг и общую cookie-сессию; репозитории зависят от контракта `AnistarClient`. Репозитории, сервисы и BLoC получают их через конструктор.
+**Riverpod** связывает зависимости. Один `anistarClientProvider` в корневом `ProviderScope` служит общей точкой доступа к данным сайта для всех сетевых репозиториев. `HtmlAnistarClient` координирует HTTP, парсинг и общую cookie-сессию; репозитории зависят от контракта `AnistarClient`. Репозитории, сервисы и BLoC получают их через конструктор.
 
 ```dart
 catalogRepositoryProvider.overrideWith(
@@ -89,7 +89,7 @@ catalogRepositoryProvider.overrideWith(
 Репозитории каталога, карточки и воспроизведения возвращают `Future<Result<T, Failure>>`. Парсер и transport возвращают данные или бросают исключения. BaseRepository переводит их в Result один раз; UI превращает результат в состояние экрана.
 
 - **NetworkFailure** принадлежит networking.
-- **AnistarFailure** принадлежит адаптеру сайта.
+- **AnistarClientException** описывает ожидаемый безопасный отказ клиента; общий data mapper переводит его в network Failure перед Result. Внутренний AnistarFailure остаётся в HTML-адаптере.
 - **PlaybackFailure** принадлежит domain плеера.
 - **UnknownFailure** хранится в Core.
 
@@ -102,3 +102,5 @@ GoRouter и typed routes находятся в app. Экраны получаю�
 HomeScreen компонует CatalogScreen. Остальные features не получают прямые ссылки на экраны друг друга. Локальные диалоги плеера закрываются через Navigator.
 
 Структура файлов: [Структура проекта](02_project_structure.md). Решения: [ADR](adr/README.md).
+
+Границы общего контракта, неизменяемые результаты и ограничения REST: [ADR-0010](adr/0010-normalized-anistar-contract.md).

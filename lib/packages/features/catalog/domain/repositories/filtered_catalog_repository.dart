@@ -9,9 +9,9 @@ import 'catalog_repository.dart';
 final class FilteredCatalogRepository implements CatalogRepository {
   final CatalogBrowseRepository repository;
   final CatalogFilter filter;
-  CatalogSort sort = defaultCatalogSort;
+  final CatalogSort sort;
 
-  FilteredCatalogRepository(this.repository, this.filter);
+  FilteredCatalogRepository(this.repository, this.filter, {this.sort = defaultCatalogSort});
 
   @override
   Future<Result<AnimePage, Failure>> getPage(int page) => repository.getFilteredPage(filter, page, sort: sort);

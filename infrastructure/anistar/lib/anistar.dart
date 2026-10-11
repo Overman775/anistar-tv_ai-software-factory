@@ -1,12 +1,12 @@
-export 'src/anistar_client.dart';
-export 'src/anistar_failure.dart';
-export 'src/anistar_mirror_config.dart';
-export 'src/anistar_mirror_manager.dart';
-export 'src/anistar_session.dart';
-export 'src/anistar_session_interceptor.dart';
-export 'src/dio_anistar_client.dart';
-export 'src/direct_anime.dart';
-export 'src/direct_catalog_filter.dart';
-export 'src/direct_catalog_page.dart';
-export 'src/direct_catalog_sort.dart';
-export 'src/direct_episode.dart';
+/// Transport-independent operation contract and normalized data.
+library;
+
+export 'src/contract/anistar_anime_details_dto.dart';
+export 'src/contract/anistar_anime_summary_dto.dart';
+export 'src/contract/anistar_catalog_filter_dto.dart';
+export 'src/contract/anistar_catalog_page_dto.dart';
+export 'src/contract/anistar_catalog_sort.dart';
+export 'src/contract/anistar_client.dart';
+export 'src/contract/anistar_client_exception.dart';
+export 'src/contract/anistar_episode_dto.dart';
+export 'src/contract/anistar_video_source_dto.dart';

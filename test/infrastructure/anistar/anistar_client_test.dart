@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
+import 'package:anistar/parsing.dart';
 import 'package:anistar_tv/packages/features/auth/data/anistar_auth_repository.dart';
+import 'package:core/data.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:networking/networking.dart';
 
 import '../../mocks/anistar/auth_fixture_adapter.dart';
 import '../../mocks/storage/memory_secure_storage.dart';
@@ -29,7 +33,7 @@ void main() {
   test('restore reports session checking only after the mirror is available', () async {
     final available = Completer<void>();
     var checks = 0;
-    final client = DioAnistarClient(dio, session, ensureMirror: () => available.future);
+    final client = HtmlAnistarClient(dio, session, ensureMirror: () => available.future);
     final pending = AnistarAuthRepository(client).restore(onSessionCheck: () => checks++);
     await Future<void>.delayed(Duration.zero);
     expect(checks, 0);
@@ -42,7 +46,7 @@ void main() {
 
   test('failed mirror check sends no credentials; recovery permits one login POST', () async {
     var available = false;
-    final client = DioAnistarClient(
+    final client = HtmlAnistarClient(
       dio,
       session,
       ensureMirror: () async {
@@ -55,7 +59,7 @@ void main() {
     // The same login must be retried after mirror availability changes.
     // ignore: prefer-moving-to-variable
     final blocked = await repository.signIn('test', 'private-password');
-    expect(blocked.failureOrNull, isA<AnistarFailure>());
+    expect(blocked.failureOrNull, isA<RequestFailure>());
     expect(adapter.requests, isEmpty);
 
     available = true;
@@ -66,7 +70,7 @@ void main() {
   });
 
   test('unexpected mirror error is sanitized at the client boundary', () async {
-    final client = DioAnistarClient(
+    final client = HtmlAnistarClient(
       dio,
       session,
       ensureMirror: () async {
@@ -75,18 +79,18 @@ void main() {
     );
     final result = await AnistarAuthRepository(client).restore();
     final failure = result.failureOrNull;
-    expect(failure, isA<AnistarFailure>());
-    expect(failure?.message, 'Не удалось выполнить вход. Повторите попытку.');
+    expect(failure, isA<UnknownFailure>());
+    expect(failure?.message, const UnknownFailure().message);
     expect(adapter.requests, isEmpty);
   });
 
   test('session expiry propagates through the client and repository contract', () async {
-    final client = DioAnistarClient(dio, session);
+    final client = HtmlAnistarClient(dio, session);
     final repository = AnistarAuthRepository(client);
     await client.signIn('test', 'private-password');
     final expired = repository.expired.first;
     adapter.expired = true;
-    await expectLater(client.catalog(1), throwsA(isA<AnistarFailure>()));
+    await expectLater(client.catalog(1), throwsA(isA<AnistarClientException>()));
     await expired.timeout(const Duration(seconds: 1));
     expect(session.account, isNull);
   });

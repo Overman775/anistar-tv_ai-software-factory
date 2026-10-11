@@ -328,7 +328,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                       style: buttonStyle,
                       focusNode: _quality,
                       onPressed: widget.onSelectQuality,
-                      tooltip: 'Качество: ${widget.session.selectedQuality.apiValue}p',
+                      tooltip: 'Качество: ${widget.session.selectedQuality.height}p',
                       icon: const Icon(Icons.settings_outlined),
                     ),
                 ],

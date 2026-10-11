@@ -63,7 +63,7 @@ void main() {
       ],
     );
     await tester.pump();
-    pending.complete(const Result.success(AnimePage(page: 1, hasNext: false, items: [])));
+    pending.complete(Result.success(AnimePage(page: 1, hasNext: false, items: [])));
     await tester.pumpAndSettle();
     expect(find.text('Каталог пуст'), findsOneWidget);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Назад');

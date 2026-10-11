@@ -24,7 +24,7 @@ class AnimeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final posterUri = anime.posterUri;
-    final posterUrl = posterUri.toString();
+    final posterUrl = posterUri?.toString();
     final ratingLabel = anime.rating?.toStringAsFixed(1) ?? '';
 
     return TvFocusable(
@@ -69,7 +69,7 @@ class AnimeCard extends StatelessWidget {
                   children: [
                     TvPosterHero(
                       tag: 'anime-poster-${anime.id}',
-                      imageUrl: posterUri.hasScheme ? posterUrl : null,
+                      imageUrl: posterUri?.hasScheme == true ? posterUrl : null,
                       semanticLabel: anime.title,
                     ),
                     const DecoratedBox(

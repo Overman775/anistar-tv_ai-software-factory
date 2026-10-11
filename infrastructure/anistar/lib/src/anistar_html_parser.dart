@@ -4,10 +4,14 @@ import 'package:json5/json5.dart';
 
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
-import 'direct_anime.dart';
-import 'direct_catalog_filter.dart';
-import 'direct_catalog_page.dart';
-import 'direct_episode.dart';
+import 'contract/anistar_anime_details_dto.dart';
+import 'contract/anistar_anime_summary_dto.dart';
+import 'contract/anistar_catalog_filter_dto.dart';
+import 'contract/anistar_catalog_page_dto.dart';
+import 'contract/anistar_episode_dto.dart';
+import 'contract/anistar_video_source_dto.dart';
+import 'html_catalog_parameters.dart';
+import 'parsed_episode.dart';
 import 'playlist_literal.dart';
 
 final class AnistarHtmlParser {
@@ -15,9 +19,9 @@ final class AnistarHtmlParser {
 
   const AnistarHtmlParser(this.baseUri);
 
-  DirectCatalogPage catalog(String source, int page, {bool favorites = false, String? filterPath}) {
+  AnistarCatalogPageDto catalog(String source, int page, {bool favorites = false, String? filterPath}) {
     final document = _document(source);
-    final items = <DirectAnime>[];
+    final items = <AnistarAnimeSummaryDto>[];
     final ids = <int>{};
     final content = favorites ? document.querySelector('#dle-content') ?? document : document;
     for (final card in content.querySelectorAll('.news, .plash')) {
@@ -43,10 +47,10 @@ final class AnistarHtmlParser {
           return uri?.origin == baseUri.origin && number != null && number > page;
         });
 
-    return DirectCatalogPage(items: List.unmodifiable(items), page: page, hasNext: hasNext);
+    return AnistarCatalogPageDto(items: List.unmodifiable(items), page: page, hasNext: hasNext);
   }
 
-  DirectAnime details(String source, String slug) {
+  AnistarAnimeDetailsDto details(String source, String slug) {
     final document = _document(source);
     final title = document.querySelector('h1[itemprop="name"]')?.text.trim();
     final head = document.querySelector('ul.head');
@@ -57,7 +61,7 @@ final class AnistarHtmlParser {
     final genres = _metadata(head, 'Жанр');
     final category = document.querySelector('.ful-cat, .tags')?.text.toLowerCase() ?? '';
 
-    return DirectAnime(
+    return AnistarAnimeDetailsDto(
       id: id,
       isFavorite: AnistarFavoritesHtml.documentStatus(document, id),
       filters: _filters(document.querySelectorAll('.ful-cat a[href], .tags a[href], ul.head li a[href]'), detail: true),
@@ -75,7 +79,7 @@ final class AnistarHtmlParser {
     );
   }
 
-  List<DirectCatalogFilter> genres(String source) {
+  List<AnistarCatalogFilterDto> genres(String source) {
     final document = _document(source);
     final filters = _filters(document.querySelectorAll('.block-janrs a[href]'));
     if (filters.isEmpty) {
@@ -85,7 +89,10 @@ final class AnistarHtmlParser {
     return filters;
   }
 
-  List<DirectEpisode> episodes(String source) {
+  List<AnistarEpisodeDto> episodes(String source, {Map<String, String> httpHeaders = const {}}) =>
+      List.unmodifiable(parsedEpisodes(source, httpHeaders: httpHeaders).map((item) => item.episode));
+
+  List<ParsedEpisode> parsedEpisodes(String source, {Map<String, String> httpHeaders = const {}}) {
     _checkChallenge(source);
     final literal = PlaylistLiteral().extract(source);
     Object? decoded;
@@ -100,29 +107,29 @@ final class AnistarHtmlParser {
     if (decoded is! List<Object?>) {
       throw const AnistarFailure(message: 'Не удалось прочитать серии AniStar.');
     }
-    final items = <DirectEpisode>[];
+    final items = <ParsedEpisode>[];
     final numbers = <int>{};
     for (final value in decoded) {
       if (value is! Map<String, Object?>) {
         continue;
       }
-      final episode = _episode(value);
-      if (episode != null && numbers.add(episode.number)) {
+      final episode = _episode(value, httpHeaders);
+      if (episode != null && numbers.add(episode.episode.number)) {
         items.add(episode);
       }
     }
     if (items.isEmpty) {
       throw const AnistarFailure(message: 'У этого аниме пока нет доступных серий.');
     }
-    items.sort((left, right) => left.number.compareTo(right.number));
+    items.sort((left, right) => left.episode.number.compareTo(right.episode.number));
 
     return List.unmodifiable(items);
   }
 
-  List<DirectCatalogFilter> _filters(List<Element> links, {bool detail = false}) {
+  List<AnistarCatalogFilterDto> _filters(List<Element> links, {bool detail = false}) {
     final paths = <String>{};
     final labels = <String>{};
-    final result = <DirectCatalogFilter>[];
+    final result = <AnistarCatalogFilterDto>[];
     for (final link in links) {
       final uri = _uri(link.attributes['href']);
       final label = link.text.trim();
@@ -131,7 +138,7 @@ final class AnistarHtmlParser {
           uri.hasQuery ||
           uri.hasFragment ||
           label.isEmpty ||
-          !DirectCatalogFilter.isValidPath(uri.path)) {
+          !HtmlCatalogParameters.isValidPath(uri.path)) {
         continue;
       }
       if (detail &&
@@ -142,7 +149,7 @@ final class AnistarHtmlParser {
         continue;
       }
       if (paths.add(uri.path) && labels.add(label.toLowerCase())) {
-        result.add(DirectCatalogFilter(label: label, path: uri.path));
+        result.add(AnistarCatalogFilterDto(label: label, path: uri.path));
       }
     }
 
@@ -153,7 +160,7 @@ final class AnistarHtmlParser {
       ? uri?.queryParameters['cstart']
       : RegExp(r'^/favorites/page/(\d+)/?$').firstMatch(uri?.path ?? '')?.group(1);
 
-  DirectAnime? _card(Element card) {
+  AnistarAnimeSummaryDto? _card(Element card) {
     final link = card.querySelector('.title_left a') ?? card.querySelector('a[href]');
     final uri = _uri(link?.attributes['href']);
     final match = RegExp(r'^/(\d+)-[^/]+\.html$').firstMatch(uri?.path ?? '');
@@ -166,7 +173,7 @@ final class AnistarHtmlParser {
       return null;
     }
 
-    return DirectAnime(
+    return AnistarAnimeSummaryDto(
       id: id,
       isFavorite: AnistarFavoritesHtml.status(card, id),
       rating: _rating(card),
@@ -204,7 +211,7 @@ final class AnistarHtmlParser {
     return html.parse(source);
   }
 
-  DirectEpisode? _episode(Map<String, Object?> item) {
+  ParsedEpisode? _episode(Map<String, Object?> item, Map<String, String> httpHeaders) {
     final title = item['title'];
     if (title is! String) {
       return null;
@@ -213,7 +220,7 @@ final class AnistarHtmlParser {
     if (number == null || number <= 0) {
       return null;
     }
-    final sources = <String, Uri>{};
+    final sources = <int, AnistarVideoSourceDto>{};
     final files = item['files'];
     if (files is List<Object?>) {
       for (final file in files.whereType<Map<String, Object?>>()) {
@@ -221,21 +228,38 @@ final class AnistarHtmlParser {
         final value = file['file'];
         final uri = value is String ? _uri(value) : null;
         if (quality is String && (quality == '360' || quality == '720') && uri != null && uri.scheme == 'https') {
-          sources[quality] = uri;
+          final height = int.parse(quality);
+          sources[height] = AnistarVideoSourceDto(
+            height: height,
+            manifestUri: uri,
+            httpHeaders: httpHeaders,
+            expiresAt: _expiry(uri),
+          );
         }
       }
     }
     final image = item['image'];
     final mediaId = item['media_id'];
 
-    return DirectEpisode(
-      number: number,
-      title: title.trim(),
-      isWatched: item['viewing'] == true,
-      mediaId: mediaId is String && mediaId.isNotEmpty ? mediaId : null,
-      sources: Map.unmodifiable(sources),
-      previewUri: image is String ? _uri(image) : null,
+    return ParsedEpisode(
+      AnistarEpisodeDto(
+        number: number,
+        title: title.trim(),
+        isWatched: item['viewing'] == true,
+        sources: sources.values.toList(),
+        previewUri: image is String ? _uri(image) : null,
+      ),
+      mediaId is String && mediaId.isNotEmpty ? mediaId : null,
     );
+  }
+
+  DateTime? _expiry(Uri uri) {
+    final raw = RegExp(r'end=(\d+)').firstMatch(uri.toString())?.group(1);
+    final seconds = int.tryParse(raw ?? '');
+
+    return seconds == null || seconds > 8640000000000
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }
 
   String? _metadata(Element head, String name) {

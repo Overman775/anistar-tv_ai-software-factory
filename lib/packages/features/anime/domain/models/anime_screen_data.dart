@@ -5,5 +5,6 @@ final class AnimeScreenData {
   final AnimeDetails details;
   final List<AnimeEpisode> episodes;
 
-  const AnimeScreenData({required this.details, required this.episodes});
+  AnimeScreenData({required this.details, required List<AnimeEpisode> episodes})
+    : episodes = List.unmodifiable(episodes);
 }

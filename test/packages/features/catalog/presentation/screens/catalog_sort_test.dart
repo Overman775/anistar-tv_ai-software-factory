@@ -125,7 +125,7 @@ void main() {
     await tester.pump();
     await _applyTitle(tester);
     expect(find.byType(AnimeCard), findsNothing);
-    oldMore.complete(const Result.success(AnimePage(page: 2, hasNext: false, items: [])));
+    oldMore.complete(Result.success(AnimePage(page: 2, hasNext: false, items: [])));
     await tester.pump();
     expect(find.byType(AnimeCard), findsNothing);
     newFirst.complete(const Result.failure(UnknownFailure()));
@@ -195,7 +195,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(CatalogSortSheet), findsOneWidget);
     await _key(tester, LogicalKeyboardKey.escape);
-    pending.complete(const Result.success(AnimePage(page: 1, hasNext: false, items: [])));
+    pending.complete(Result.success(AnimePage(page: 1, hasNext: false, items: [])));
     await tester.pumpAndSettle();
     await _key(tester, LogicalKeyboardKey.arrowRight);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');

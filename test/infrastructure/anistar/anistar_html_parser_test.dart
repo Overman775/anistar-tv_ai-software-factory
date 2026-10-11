@@ -1,4 +1,3 @@
-import 'package:anistar/anistar.dart';
 import 'package:anistar/parsing.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -56,9 +55,24 @@ void main() {
   test('JSON5 preserves signed HLS .mp4, episode association and preview', () {
     final episodes = parser.episodes(playerHtml);
     expect(episodes.map((episode) => episode.number), [1, 2]);
-    expect(episodes.first.sources['720']?.toString(), signed720);
-    expect(episodes.last.sources.keys, ['360']);
+    expect(episodes.first.sources.firstWhere((source) => source.height == 720).manifestUri.toString(), signed720);
+    expect(episodes.last.sources.map((source) => source.height), [360]);
     expect(episodes.first.previewUri, Uri.parse('https://v30.astar.bz/preview.jpg'));
+  });
+
+  test('each source keeps its signed URI and optional expiry independently', () {
+    final episodes = parser.episodes(
+      "var playlst=[{title:'Серия 1',files:[ "
+      "{title:'360',file:'https://cdn.test/low?token=a%2Bb&end=1893456000'}, "
+      "{title:'720',file:'https://cdn.test/high?token=c%2Fd&end=unsupported'}]}];",
+      httpHeaders: {'Referer': 'https://mirror.test/player'},
+    );
+    final sources = episodes.single.sources;
+    expect(sources.first.manifestUri.toString(), 'https://cdn.test/low?token=a%2Bb&end=1893456000');
+    expect(sources.first.expiresAt, DateTime.utc(2030));
+    expect(sources.last.manifestUri.toString(), 'https://cdn.test/high?token=c%2Fd&end=unsupported');
+    expect(sources.last.expiresAt, isNull);
+    expect(sources.last.httpHeaders, {'Referer': 'https://mirror.test/player'});
   });
 
   test('viewing is read from its episode object and only boolean true is watched', () {
@@ -79,7 +93,7 @@ void main() {
     final episodes = parser.episodes(
       r'''const playlst=[/* ] */ {title:'Серия 1', image:'x]y',files:[{title:'360',file:'https://cdn.test/a.m3u8'}], note:'don\'t ]'},]; throwError();''',
     );
-    expect(episodes.single.sources['360'], Uri.parse('https://cdn.test/a.m3u8'));
+    expect(episodes.single.sources.single.manifestUri, Uri.parse('https://cdn.test/a.m3u8'));
     expect(() => parser.episodes('var playlst=[{title:"Серия 1"}'), throwsA(isA<AnistarFailure>()));
   });
 

@@ -1,5 +1,6 @@
-abstract interface class LogRepository {
-  Future<List<String>> getLogFiles();
+import 'package:core/data.dart';
 
-  Future<String> getLogContent(String fileName);
+abstract interface class LogRepository {
+  Future<Result<List<String>, Failure>> getLogFiles();
+  Future<Result<String, Failure>> getLogContent(String fileName);
 }

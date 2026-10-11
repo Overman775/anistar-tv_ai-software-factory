@@ -18,7 +18,7 @@ final class FakeAnimeScreenRepository implements AnimeRepository {
 
     return Result.success(
       AnimeScreenData(
-        details: const AnimeDetails(
+        details: AnimeDetails(
           id: 1,
           slug: 'test-anime',
           title: 'Тестовое аниме',

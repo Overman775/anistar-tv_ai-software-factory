@@ -21,7 +21,7 @@ void main() {
       );
       dio.httpClientAdapter = adapter;
       addTearDown(() => dio.close(force: true));
-      await expectLater(createTestAnistarClient(dio).catalog(1), throwsA(isA<AnistarFailure>()));
+      await expectLater(createTestAnistarClient(dio).catalog(1), throwsA(isA<AnistarClientException>()));
       final headers = adapter.requests.single.headers;
       expect(headers['Accept'], 'text/html');
       expect(headers['User-Agent'], 'AniStarTV/1.0');
@@ -29,10 +29,15 @@ void main() {
     }
   });
 
-  test('transport errors remain Dio errors for the repository boundary', () async {
+  test('transport errors normalize at the client boundary', () async {
     final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'))
       ..httpClientAdapter = HtmlFixtureAdapter({'/anime/': 'Unavailable'}, statusCode: 503);
     addTearDown(() => dio.close(force: true));
-    await expectLater(createTestAnistarClient(dio).catalog(1), throwsA(isA<DioException>()));
+    await expectLater(
+      createTestAnistarClient(dio).catalog(1),
+      throwsA(
+        isA<AnistarClientException>().having((error) => error.category, 'category', AnistarClientErrorCategory.server),
+      ),
+    );
   });
 }

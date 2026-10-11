@@ -1,5 +1,5 @@
-import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/packages/features/player/data/repositories/anistar_playback_repository.dart';
+import 'package:anistar_tv/packages/features/player/domain/models/playback_failure.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +43,6 @@ void main() {
     expect(adapter.requests, hasLength(2));
     expect(adapter.requests.last.headers['Cache-Control'], 'no-cache');
     final missing = await repository.createSession(animeId: 10938, episodeNumber: 9);
-    expect(missing.when(failure: (failure) => failure, success: (_) => null), isA<AnistarFailure>());
+    expect(missing.when(failure: (failure) => failure, success: (_) => null), isA<PlaybackFailure>());
   });
 }

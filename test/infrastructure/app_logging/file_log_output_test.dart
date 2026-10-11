@@ -50,11 +50,34 @@ void main() {
     expect(contents.any((content) => content.contains('first') && content.contains('second')), isFalse);
   });
 
+  test('reader preserves error-like content and throws for a disappeared selected file', () async {
+    final output = FileLogOutput(directory: directory);
+    await output.init();
+    await output.destroy();
+    final file = File('${directory.path}/manual.txt');
+    const text = 'Error reading log file: Invalid log file name.';
+    await file.writeAsString(text);
+    expect(await FileLogOutput.getLogContent('manual.txt'), text);
+    await file.delete();
+    await expectLater(FileLogOutput.getLogContent('manual.txt'), throwsA(isA<FileSystemException>()));
+  });
+
+  test('missing log directory is empty but a directory read failure propagates', () async {
+    final child = Directory('${directory.path}/logs');
+    final output = FileLogOutput(directory: child);
+    await output.init();
+    await output.destroy();
+    await child.delete(recursive: true);
+    expect(await FileLogOutput.getLogFiles(), isEmpty);
+    await File(child.path).writeAsString('not a directory');
+    await expectLater(FileLogOutput.getLogFiles(), throwsA(isA<FileSystemException>()));
+  });
+
   test('log reader rejects directory traversal', () async {
     final output = FileLogOutput(directory: directory);
     await output.init();
     await output.destroy();
-    expect(await FileLogOutput.getLogContent('../outside.txt'), 'Invalid log file name.');
-    expect(await FileLogOutput.getLogContent(r'..\outside.txt'), 'Invalid log file name.');
+    await expectLater(FileLogOutput.getLogContent('../outside.txt'), throwsFormatException);
+    await expectLater(FileLogOutput.getLogContent(r'..\outside.txt'), throwsFormatException);
   });
 }

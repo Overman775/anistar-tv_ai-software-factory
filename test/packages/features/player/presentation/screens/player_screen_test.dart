@@ -5,8 +5,8 @@ import 'package:anistar_tv/packages/features/player/domain/models/playback_sessi
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
 import 'package:anistar_tv/packages/features/player/presentation/widgets/player_view.dart';
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

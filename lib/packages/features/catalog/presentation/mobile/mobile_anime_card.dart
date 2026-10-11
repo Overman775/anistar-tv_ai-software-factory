@@ -35,7 +35,7 @@ class MobileAnimeCard extends StatelessWidget {
               children: [
                 TvPosterHero(
                   tag: 'anime-poster-${anime.id}',
-                  imageUrl: anime.posterUri.hasScheme ? anime.posterUri.toString() : null,
+                  imageUrl: anime.posterUri?.hasScheme == true ? anime.posterUri?.toString() : null,
                   semanticLabel: anime.title,
                 ),
                 if (isFavorite ?? anime.isFavorite ?? false)

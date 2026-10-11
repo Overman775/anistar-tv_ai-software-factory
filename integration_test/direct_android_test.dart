@@ -2,7 +2,7 @@
 // must be repeated rather than cached across those transitions.
 // ignore_for_file: prefer-moving-to-variable
 
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar_tv/app/app.dart';
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
@@ -13,7 +13,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalo
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -63,8 +63,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     final slug = tester.widget<AnimeCard>(card).anime.slug;
     await tester.tap(card);
-    final playFirst = find.text('Смотреть серию 1');
-    await _wait(tester, () => playFirst.evaluate().isNotEmpty, 'anime details and episodes');
+    await _wait(
+      tester,
+      () => find.textContaining('Смотреть серию ').evaluate().isNotEmpty,
+      'anime details and episodes',
+    );
     await _verifyFavorites(tester, live, slug);
     final activeContainer = ProviderScope.containerOf(tester.element(find.byType(App)));
     final anime = (await activeContainer.read(animeRepositoryProvider).getAnime(id: 10938, slug: slug)).when(
@@ -73,6 +76,11 @@ void main() {
     );
     final unviewed = anime.episodes.where((episode) => !episode.isWatched && episode.number != 1);
     final secondEpisode = unviewed.isEmpty ? 2 : unviewed.first.number;
+    // The primary action resumes the first unviewed episode. Server history
+    // survives live runs, so select episode 1 explicitly instead of clearing it.
+    final playFirst = find.byWidgetPredicate((widget) => widget is EpisodeCard && widget.episode.number == 1);
+    final episodeScroll = find.descendant(of: find.byType(AnimeScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(playFirst, 180, scrollable: episodeScroll);
     await tester.ensureVisible(playFirst);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(playFirst);
@@ -160,7 +168,7 @@ Future<void> _verifyFavorites(WidgetTester tester, LiveHarness live, String slug
     enableRetry: false,
   );
   dio.interceptors.add(AnistarSessionInterceptor(session));
-  final client = DioAnistarClient(dio, session);
+  final client = HtmlAnistarClient(dio, session);
   bool? original;
   var bodyFailed = false;
   try {

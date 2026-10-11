@@ -4,7 +4,11 @@ import 'package:anistar_tv/app/app_container.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
+import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/log_viewer/domain/repositories/log_repository.dart';
+import 'package:anistar_tv/packages/features/log_viewer/log_viewer_providers.dart';
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,10 +19,65 @@ import 'package:storage/storage.dart';
 
 import '../mocks/anistar/anistar_fixtures.dart';
 import '../mocks/anistar/auth_fixture_adapter.dart';
+import '../mocks/anistar/fake_anistar_client.dart';
+import '../mocks/features/log_viewer/fake_log_repository.dart';
 import '../mocks/networking/html_fixture_adapter.dart';
 import '../mocks/storage/memory_secure_storage.dart';
 
 void main() {
+  test('all network repository bindings receive a contract-only client override without HTML startup', () async {
+    final client = FakeAnistarClient()..watchedResult = {1};
+    final container = ProviderContainer(
+      overrides: [
+        ...createAppOverrides(
+          logger: Logger(level: Level.off),
+          mirrorUri: Uri.parse('https://mirror.test/'),
+          preferences: SharedPreferencesStorage(),
+          secureStorage: MemorySecureStorage(),
+        ),
+        anistarClientProvider.overrideWithValue(client),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(authRepositoryProvider).restore();
+    await container.read(catalogRepositoryProvider).getPage(1);
+    await container.read(catalogBrowseRepositoryProvider).getGenres();
+    await container.read(animeRepositoryProvider).getAnime(id: 1, slug: '1-anime');
+    await container.read(playbackRepositoryProvider).createSession(animeId: 1, episodeNumber: 1);
+    await container.read(favoritesRepositoryProvider).getPage(1);
+    await container.read(watchedEpisodesRepositoryProvider).getWatched(1);
+    expect(client.calls, [
+      'restore',
+      'catalog',
+      'genres',
+      'details',
+      'episodes',
+      'episodes',
+      'favorites',
+      'watchedEpisodes',
+    ]);
+    expect(container.read(anistarClientProvider), same(client));
+  });
+
+  test('log binding is supplied by composition and can be overridden independently', () async {
+    final production = ProviderContainer(
+      overrides: createAppOverrides(
+        logger: Logger(level: Level.off),
+        mirrorUri: Uri.parse('https://mirror.test/'),
+        preferences: SharedPreferencesStorage(),
+        secureStorage: MemorySecureStorage(),
+      ),
+    );
+    addTearDown(production.dispose);
+    expect(production.read(logRepositoryProvider), isA<LogRepository>());
+    final logs = FakeLogRepository(files: ['test.txt'], content: 'Test');
+    final isolated = ProviderContainer(overrides: [logRepositoryProvider.overrideWithValue(logs)]);
+    addTearDown(isolated.dispose);
+    final repository = isolated.read(logRepositoryProvider);
+    expect((await repository.getLogFiles()).successOrNull, ['test.txt']);
+    expect((await repository.getLogContent('test.txt')).successOrNull, 'Test');
+  });
+
   test('auth and catalog share one client, transport and cookie session; logout clears both', () async {
     final container = ProviderContainer(
       overrides: createAppOverrides(
@@ -45,7 +104,7 @@ void main() {
 
     expect((await auth.signOut()).isSuccess, isTrue);
     expect(await client.restore(), isNull);
-    await expectLater(client.catalog(1), throwsA(isA<AnistarFailure>()));
+    await expectLater(client.catalog(1), throwsA(isA<AnistarClientException>()));
     // ignore: prefer-moving-to-variable
     final guestHeaders = adapter.requests.last.headers;
     expect(guestHeaders.containsKey('Cookie'), isFalse);

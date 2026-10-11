@@ -1,17 +1,17 @@
 import 'dart:async';
 
-import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/app/app.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:networking/networking.dart';
 
 import '../../../mocks/features/auth/fake_auth_repository.dart';
 import '../../../support/test_app.dart';
 
 void main() {
-  const unavailable = AnistarFailure(
+  const unavailable = RequestFailure(
     message:
         'AniStar недоступен: текущее и следующие зеркала не отвечают. Проверьте интернет и повторите через минуту.',
   );

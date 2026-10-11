@@ -40,7 +40,8 @@
 | networking | `package:networking/networking.dart` | HTTP и BaseRepository |
 | storage | `package:storage/storage.dart` | Preferences и secure storage |
 | app_logging | `package:app_logging/app_logging.dart` | Logger и observers |
-| anistar | `package:anistar/anistar.dart` | AnistarClient, зеркало и DTO |
+| anistar | `package:anistar/anistar.dart` | AnistarClient, DTO, параметры и ожидаемые ошибки |
+| anistar | `package:anistar/html.dart` | HTML-клиент, сессия и зеркало для composition |
 | anistar | `package:anistar/parsing.dart` | Чистые парсеры и декодирование |
 | ui_kit | `package:ui_kit/ui_kit.dart` | Тема и TV-компоненты |
 
@@ -80,3 +81,6 @@ Domain не импортирует Flutter, transport и парсер. Presentat
 6. Feature Auth восстанавливает и проверяет защищённую сессию. App создаёт router только после входа; при выходе или истечении сессии router освобождается.
 
 Зависимости и lifecycle: [Архитектура](01_architecture_principles.md). Команды запуска: [Разработка и тестирование](05_development_and_testing.md).
+
+Watch history разделён на domain/repositories, data/repositories и watch_history_providers.dart.
+Log viewer использует log_viewer_providers.dart; app связывает FileLogRepository. Общий DTO API находится в anistar/src/contract.

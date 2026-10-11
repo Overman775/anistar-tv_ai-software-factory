@@ -1,4 +1,4 @@
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

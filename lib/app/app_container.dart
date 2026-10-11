@@ -1,4 +1,4 @@
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar/providers.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
@@ -16,11 +16,13 @@ import '../packages/features/catalog/catalog_providers.dart';
 import '../packages/features/catalog/data/repositories/anistar_catalog_repository.dart';
 import '../packages/features/favorites/data/anistar_favorites_repository.dart';
 import '../packages/features/favorites/favorites_providers.dart';
+import '../packages/features/log_viewer/data/repositories/file_log_repository.dart';
+import '../packages/features/log_viewer/log_viewer_providers.dart';
 import '../packages/features/player/data/repositories/anistar_playback_repository.dart';
 import '../packages/features/player/player_providers.dart';
-import '../packages/features/watch_history/anistar_watched_episodes_repository.dart';
+import '../packages/features/watch_history/data/repositories/anistar_watched_episodes_repository.dart';
+import '../packages/features/watch_history/watch_history_providers.dart';
 import '../packages/features/watch_history/watched_episodes.dart';
-import '../packages/features/watch_history/watched_episodes_repository.dart';
 import 'app_config.dart';
 
 /// The application owns concrete bindings; features declare their interfaces.
@@ -32,6 +34,7 @@ List<Override> createAppOverrides({
   AnistarMirrorManager? mirrorManager,
 }) => [
   loggerProvider.overrideWithValue(logger),
+  logRepositoryProvider.overrideWith((ref) => FileLogRepository()),
   anistarMirrorManagerProvider.overrideWithValue(mirrorManager),
   if (mirrorManager == null)
     networkConfigProvider.overrideWithValue(

@@ -9,8 +9,8 @@ import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_he
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,7 +33,7 @@ void main() {
         calls++;
 
         return calls == 1
-            ? const Result.success(
+            ? Result.success(
                 AnimeScreenData(
                   details: AnimeDetails(id: 1, slug: 'test', title: 'Тест', genres: [], isOngoing: false),
                   episodes: [],
@@ -201,13 +201,13 @@ void main() {
         watchedEpisodesRepositoryProvider.overrideWithValue(history),
         animeRepositoryProvider.overrideWithValue(
           FakeAnimeScreenRepository(
-            load: (_, _) async => const Result.success(
+            load: (_, _) async => Result.success(
               AnimeScreenData(
                 details: AnimeDetails(id: 1, slug: 'anime', title: 'Аниме', genres: [], isOngoing: false),
                 episodes: [
-                  AnimeEpisode(number: 5, title: 'Серия 5'),
-                  AnimeEpisode(number: 1, title: 'Серия 1'),
-                  AnimeEpisode(number: 3, title: 'Серия 3'),
+                  const AnimeEpisode(number: 5, title: 'Серия 5'),
+                  const AnimeEpisode(number: 1, title: 'Серия 1'),
+                  const AnimeEpisode(number: 3, title: 'Серия 3'),
                 ],
               ),
             ),

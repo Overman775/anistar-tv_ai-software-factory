@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'watched_episodes_repository.dart';
+import 'watch_history_providers.dart';
 
 /// The application supplies the signed-in account, independent of mirror origin.
 final watchHistoryAccountProvider = Provider<String?>((ref) => null);

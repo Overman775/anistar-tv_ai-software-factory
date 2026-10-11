@@ -3,7 +3,6 @@
 
 import 'package:anistar/anistar.dart';
 import 'package:app_logging/app_logging.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:networking/networking.dart';
 
@@ -36,19 +35,24 @@ void main() {
 
   test('HTTP 200 without persisted viewing is a failure, missing series or media ID never writes', () async {
     adapter.persist = false;
-    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<AnistarFailure>()));
+    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<AnistarClientException>()));
     adapter.requests.clear();
-    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 42), throwsA(isA<AnistarFailure>()));
+    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 42), throwsA(isA<AnistarClientException>()));
     adapter.missingMediaId = true;
     // A separate malformed media ID must also fail before mutation.
     // ignore: avoid-duplicate-test-assertions
-    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<AnistarFailure>()));
+    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<AnistarClientException>()));
     expect(adapter.requests.where((request) => request.uri.path == '/engine/ajax/ns.php'), isEmpty);
   });
 
   test('failed mutating GET has no automatic retries', () async {
     adapter.mutationStatus = 503;
-    await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<DioException>()));
+    await expectLater(
+      source.markWatched(animeId: 10938, episodeNumber: 1),
+      throwsA(
+        isA<AnistarClientException>().having((error) => error.category, 'category', AnistarClientErrorCategory.server),
+      ),
+    );
     expect(adapter.requests.where((request) => request.uri.path == '/engine/ajax/ns.php'), hasLength(1));
     expect(adapter.watched, isEmpty);
   });

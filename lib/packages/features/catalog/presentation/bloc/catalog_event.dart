@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../domain/repositories/catalog_repository.dart';
+
 @immutable
 sealed class CatalogEvent {
   const CatalogEvent();
@@ -8,8 +10,9 @@ sealed class CatalogEvent {
 @immutable
 final class CatalogStarted extends CatalogEvent {
   final bool preserveContent;
+  final CatalogRepository? repository;
 
-  const CatalogStarted({this.preserveContent = false});
+  const CatalogStarted({this.preserveContent = false, this.repository});
 }
 
 @immutable

@@ -1,8 +1,8 @@
 enum PlaybackQuality {
-  low('360'),
-  high('720');
+  low(360),
+  high(720);
 
-  const PlaybackQuality(this.apiValue);
+  const PlaybackQuality(this.height);
 
-  final String apiValue;
+  final int height;
 }

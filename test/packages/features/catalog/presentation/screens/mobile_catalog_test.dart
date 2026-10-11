@@ -234,7 +234,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump();
     await refresh;
-    pending.complete(const Result.success(AnimePage(items: [], page: 1, hasNext: false)));
+    pending.complete(Result.success(AnimePage(items: [], page: 1, hasNext: false)));
     // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

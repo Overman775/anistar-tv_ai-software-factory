@@ -2,8 +2,9 @@ import 'package:anistar/anistar.dart';
 import 'package:core/data.dart';
 import 'package:networking/networking.dart';
 
+import '../../catalog/data/mapping/anistar_catalog_mapping.dart';
 import '../../catalog/domain/models/anime_page.dart';
-import '../../catalog/domain/models/anime_summary.dart';
+import '../../common/data/anistar_errors.dart';
 import '../domain/favorites_repository.dart';
 
 final class AnistarFavoritesRepository extends BaseRepository implements FavoritesRepository {
@@ -12,33 +13,37 @@ final class AnistarFavoritesRepository extends BaseRepository implements Favorit
   AnistarFavoritesRepository(this._client, [super.logger]);
 
   @override
-  Future<Result<AnimePage, Failure>> getPage(int page) => makeApiCall(() async {
-    final result = await _client.favorites(page);
+  Future<Result<AnimePage, Failure>> getPage(int page) => makeApiCall(
+    () => mapAnistarErrors(() async {
+      if (page < 1) {
+        throw const RequestFailure(message: 'Некорректный номер страницы.');
+      }
+      final result = await _client.favorites(page);
 
-    return AnimePage(
-      page: result.page,
-      hasNext: result.hasNext,
-      items: result.items
-          .map(
-            (item) => AnimeSummary(
-              id: item.id,
-              slug: item.slug,
-              title: item.title,
-              posterUri: item.posterUri ?? Uri(),
-              year: item.year,
-              rating: item.rating,
-              isFavorite: true,
-            ),
-          )
-          .toList(growable: false),
-    );
-  });
+      return mapCatalogPage(result, page, favoriteList: true);
+    }),
+  );
 
   @override
-  Future<Result<bool, Failure>> getStatus({required int animeId, required String slug}) =>
-      makeApiCall(() => _client.favoriteStatus(animeId: animeId, slug: slug));
+  Future<Result<bool, Failure>> getStatus({required int animeId, required String slug}) => makeApiCall(
+    () => mapAnistarErrors(() async {
+      if (animeId <= 0) {
+        throw const RequestFailure(message: 'Некорректный номер аниме.');
+      }
+
+      return _client.favoriteStatus(animeId: animeId, slug: slug);
+    }),
+  );
 
   @override
   Future<Result<bool, Failure>> setFavorite({required int animeId, required String slug, required bool favorite}) =>
-      makeApiCall(() => _client.setFavorite(animeId: animeId, slug: slug, favorite: favorite));
+      makeApiCall(
+        () => mapAnistarErrors(() async {
+          if (animeId <= 0) {
+            throw const RequestFailure(message: 'Некорректный номер аниме.');
+          }
+
+          return _client.setFavorite(animeId: animeId, slug: slug, favorite: favorite);
+        }),
+      );
 }

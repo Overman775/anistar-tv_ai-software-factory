@@ -19,7 +19,11 @@ abstract base class BaseRepository {
     } on Failure catch (failure) {
       return Result.failure(failure);
     } on Object catch (error, stackTrace) {
-      _logger.errorFor<BaseRepository>('Unexpected repository error', error: error, stackTrace: stackTrace);
+      _logger.errorFor<BaseRepository>(
+        'Unexpected repository error',
+        error: error.runtimeType.toString(),
+        stackTrace: stackTrace,
+      );
 
       return Result.failure(UnknownFailure(cause: error, stackTrace: stackTrace));
     }

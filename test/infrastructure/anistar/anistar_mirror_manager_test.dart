@@ -1,4 +1,5 @@
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
+import 'package:anistar/parsing.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';

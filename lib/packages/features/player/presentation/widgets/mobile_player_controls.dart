@@ -220,7 +220,7 @@ class MobilePlayerControls extends StatelessWidget {
                             onPressed: onSelectQuality,
                             icon: const Icon(Icons.settings_outlined, size: 24),
                             label: Text(
-                              '${session.selectedQuality.apiValue}p',
+                              '${session.selectedQuality.height}p',
                               style: textTheme.bodySmall?.copyWith(color: Colors.white),
                             ),
                           ),

@@ -7,8 +7,8 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_da
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -185,7 +185,7 @@ void main() {
                 throw StateError('secret');
               }
 
-              return const Result.success(
+              return Result.success(
                 AnimeScreenData(
                   details: AnimeDetails(id: 1, slug: 'test', title: 'Тест', genres: [], isOngoing: false),
                   episodes: [],

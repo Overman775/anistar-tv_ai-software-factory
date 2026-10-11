@@ -1,3 +1,4 @@
+import 'package:core/data.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,18 +27,21 @@ final class LogViewerBloc extends Bloc<LogViewerEvent, LogViewerState> {
     final generation = ++_requestGeneration;
     emit(currentState.selecting(event.fileName));
     try {
-      final content = await _repository.getLogContent(event.fileName);
+      final result = await _repository.getLogContent(event.fileName);
       if (isClosed || emit.isDone || generation != _requestGeneration) {
         return;
       }
 
-      emit(currentState.withContent(fileName: event.fileName, content: content));
-    } on Object catch (error) {
+      result.when(
+        failure: (failure) => emit(currentState.withError(fileName: event.fileName, message: failure.message)),
+        success: (content) => emit(currentState.withContent(fileName: event.fileName, content: content)),
+      );
+    } on Object {
       if (isClosed || emit.isDone || generation != _requestGeneration) {
         return;
       }
 
-      emit(currentState.withError(fileName: event.fileName, message: 'Failed to load log content: $error'));
+      emit(currentState.withError(fileName: event.fileName, message: const UnknownFailure().message));
     }
   }
 
@@ -45,18 +49,21 @@ final class LogViewerBloc extends Bloc<LogViewerEvent, LogViewerState> {
     final generation = ++_requestGeneration;
     emit(const LogViewerLoadingState());
     try {
-      final files = await _repository.getLogFiles();
+      final result = await _repository.getLogFiles();
       if (isClosed || emit.isDone || generation != _requestGeneration) {
         return;
       }
 
-      emit(LogViewerLoadedState(logFiles: files));
-    } on Object catch (error) {
+      result.when(
+        failure: (failure) => emit(LogViewerErrorState(failure.message)),
+        success: (files) => emit(LogViewerLoadedState(logFiles: List.unmodifiable(files))),
+      );
+    } on Object {
       if (isClosed || emit.isDone || generation != _requestGeneration) {
         return;
       }
 
-      emit(LogViewerErrorState('Failed to fetch log files: $error'));
+      emit(LogViewerErrorState(const UnknownFailure().message));
     }
   }
 }

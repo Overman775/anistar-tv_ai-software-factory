@@ -82,13 +82,16 @@ void main() {
       '/filter/janrs/%2F/',
       '/filter/janrs/%2E%2E/',
     ]) {
-      await expectLater(createTestAnistarClient(dio).catalog(1, filterPath: path), throwsA(isA<AnistarFailure>()));
+      await expectLater(
+        createTestAnistarClient(dio).catalog(1, filterPath: path),
+        throwsA(isA<AnistarClientException>()),
+      );
     }
     expect(adapter.requests, isEmpty);
   });
 
   test('missing genre markup is an error instead of an empty successful list', () async {
     dio.httpClientAdapter = HtmlFixtureAdapter({'/anime/': '<html>Changed site</html>'});
-    await expectLater(createTestAnistarClient(dio).genres(), throwsA(isA<AnistarFailure>()));
+    await expectLater(createTestAnistarClient(dio).genres(), throwsA(isA<AnistarClientException>()));
   });
 }

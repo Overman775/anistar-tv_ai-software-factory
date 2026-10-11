@@ -5,5 +5,6 @@ final class AnimePage {
   final List<AnimeSummary> items;
   final int page;
 
-  const AnimePage({required this.items, required this.page, required this.hasNext});
+  AnimePage({required List<AnimeSummary> items, required this.page, required this.hasNext})
+    : items = List.unmodifiable(items);
 }

@@ -66,6 +66,23 @@ void main() {
     expect((bloc.state as LogViewerLoadedState).logContent, 'new content');
   });
 
+  test('pending content cannot emit after bloc disposal', () async {
+    final content = Completer<String>();
+    final bloc = LogViewerBloc(
+      repository: FakeLogRepository(files: ['log.txt'], loadContent: (_) => content.future),
+    );
+    final loaded = bloc.stream.firstWhere((state) => state is LogViewerLoadedState);
+    bloc.add(const LogViewerStartedEvent());
+    await loaded;
+    bloc.add(const LogFileSelectedEvent('log.txt'));
+    await Future<void>.delayed(Duration.zero);
+    final closing = bloc.close();
+    content.complete('late content');
+    await closing;
+    expect(bloc.isClosed, isTrue);
+    expect((bloc.state as LogViewerLoadedState).logContent, isNull);
+  });
+
   group(LogViewerBloc, () {
     blocTest<LogViewerBloc, LogViewerState>(
       'loads the available log files',
@@ -98,7 +115,7 @@ void main() {
         LogViewerLoadedState(
           logFiles: ['latest.log'],
           selectedLogFile: 'latest.log',
-          error: 'Failed to load log content: Bad state: file unavailable',
+          error: 'Не удалось выполнить запрос.',
         ),
       ],
     );
@@ -109,7 +126,7 @@ void main() {
       act: (bloc) => bloc.add(const LogViewerStartedEvent()),
       expect: () => <LogViewerState>[
         const LogViewerLoadingState(),
-        const LogViewerErrorState('Failed to fetch log files: Bad state: storage unavailable'),
+        const LogViewerErrorState('Не удалось выполнить запрос.'),
       ],
     );
   });

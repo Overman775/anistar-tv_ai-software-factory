@@ -1,4 +1,5 @@
 import 'package:anistar_tv/packages/features/log_viewer/domain/repositories/log_repository.dart';
+import 'package:core/data.dart';
 
 final class FakeLogRepository implements LogRepository {
   final List<String> files;
@@ -18,30 +19,38 @@ final class FakeLogRepository implements LogRepository {
   });
 
   @override
-  Future<String> getLogContent(String fileName) {
-    final loader = loadContent;
-    if (loader != null) {
-      return loader(fileName);
-    }
-    final error = contentError;
-    if (error != null) {
-      return Future<String>.error(error);
-    }
+  Future<Result<String, Failure>> getLogContent(String fileName) async {
+    try {
+      final loader = loadContent;
+      if (loader != null) {
+        return Result.success(await loader(fileName));
+      }
+      final error = contentError;
+      if (error != null) {
+        return const Result.failure(UnknownFailure());
+      }
 
-    return Future.value(content);
+      return Result.success(content);
+    } on Object {
+      return const Result.failure(UnknownFailure());
+    }
   }
 
   @override
-  Future<List<String>> getLogFiles() {
-    final loader = loadFiles;
-    if (loader != null) {
-      return loader();
-    }
-    final error = filesError;
-    if (error != null) {
-      return Future<List<String>>.error(error);
-    }
+  Future<Result<List<String>, Failure>> getLogFiles() async {
+    try {
+      final loader = loadFiles;
+      if (loader != null) {
+        return Result.success(List.unmodifiable(await loader()));
+      }
+      final error = filesError;
+      if (error != null) {
+        return const Result.failure(UnknownFailure());
+      }
 
-    return Future.value(files);
+      return Result.success(List.unmodifiable(files));
+    } on Object {
+      return const Result.failure(UnknownFailure());
+    }
   }
 }

@@ -543,14 +543,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     setState(() {
       _keepSortFocus = true;
-      _filteredRepository?.sort = selected;
+      final current = _filteredRepository;
+      if (current != null) {
+        _filteredRepository = FilteredCatalogRepository(current.repository, current.filter, sort: selected);
+      }
       _selectedIndex = 0;
       _lastCardFocus = null;
     });
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
-    _bloc.add(const CatalogStarted());
+    _bloc.add(CatalogStarted(repository: _filteredRepository));
   }
 
   KeyEventResult _handleSortKey(FocusNode node, KeyEvent event) {

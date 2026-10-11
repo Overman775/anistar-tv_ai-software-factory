@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';

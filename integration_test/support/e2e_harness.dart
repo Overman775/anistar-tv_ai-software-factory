@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io' as io;
 
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/runner/runner.dart';
 import 'package:app_logging/app_logging.dart';

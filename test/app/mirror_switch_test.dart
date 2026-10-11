@@ -1,4 +1,4 @@
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar/providers.dart';
 import 'package:anistar_tv/app/app_container.dart';
 import 'package:app_logging/app_logging.dart';

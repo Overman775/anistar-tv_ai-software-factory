@@ -10,6 +10,8 @@
 
 ## Решение
 
+Уточнение от 2026-10-12: [ADR-0010](0010-normalized-anistar-contract.md) разделяет общий DTO API и HTML-библиотеку; текущая реализация называется HtmlAnistarClient. Историческое описание ниже сохраняет контекст принятия ADR.
+
 Цепочка получения данных: UI → BLoC/controller → domain repository interface → repository implementation → AnistarClient → Dio и внутренние парсеры. Для экранов с локальным async lifecycle роль controller выполняет State.
 
 - AnistarClient — общий контракт инфраструктуры AniStar. Он предоставляет авторизацию, события истечения сессии, каталог, фильтры, карточки, избранное, плейлисты и отметки просмотра.

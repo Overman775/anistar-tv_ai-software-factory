@@ -4,12 +4,14 @@ import 'package:networking/networking.dart';
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'anistar_html_parser.dart';
-import 'direct_anime.dart';
-import 'direct_catalog_filter.dart';
-import 'direct_catalog_page.dart';
-import 'direct_catalog_sort.dart';
-import 'direct_episode.dart';
+import 'contract/anistar_anime_details_dto.dart';
+import 'contract/anistar_catalog_filter_dto.dart';
+import 'contract/anistar_catalog_page_dto.dart';
+import 'contract/anistar_catalog_sort.dart';
+import 'contract/anistar_episode_dto.dart';
+import 'html_catalog_parameters.dart';
 import 'html_decoder.dart';
+import 'parsed_episode.dart';
 
 final class AnistarSource {
   final Uri baseUri;
@@ -17,26 +19,27 @@ final class AnistarSource {
 
   AnistarSource(this._dio) : baseUri = Uri.parse(_dio.options.baseUrl);
 
-  Future<DirectCatalogPage> catalog(int page, {String? filterPath, DirectCatalogSort? sort}) async {
+  Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort}) async {
     if (page < 1) {
       throw const AnistarFailure(message: 'Некорректный номер страницы.');
     }
-    if (filterPath != null && !DirectCatalogFilter.isValidPath(filterPath)) {
+    if (filterPath != null && !HtmlCatalogParameters.isValidPath(filterPath)) {
       throw const AnistarFailure(message: 'Некорректный адрес фильтра.');
     }
+    final parameters = sort == null ? null : HtmlCatalogParameters(sort);
     final path = (filterPath ?? '/anime/').substring(1);
     final source = await _html(
       page == 1 ? path : '${path}page/$page/',
-      sortCookies: sort?.cookies(filterPath ?? '/anime/'),
+      sortCookies: parameters?.cookies(filterPath ?? '/anime/'),
     );
-    sort?.verify(source);
+    parameters?.verify(source);
 
     return AnistarHtmlParser(baseUri).catalog(source, page, filterPath: filterPath);
   }
 
-  Future<List<DirectCatalogFilter>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
+  Future<List<AnistarCatalogFilterDto>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
 
-  Future<DirectAnime> details(String slug) async {
+  Future<AnistarAnimeDetailsDto> details(String slug) async {
     if (!RegExp(r'^\d+-[^/?#]+$').hasMatch(slug)) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
@@ -45,7 +48,7 @@ final class AnistarSource {
     return AnistarHtmlParser(baseUri).details(source, slug);
   }
 
-  Future<DirectCatalogPage> favorites(int page) async {
+  Future<AnistarCatalogPageDto> favorites(int page) async {
     if (page < 1) {
       throw const AnistarFailure(message: 'Некорректный номер страницы.');
     }
@@ -109,29 +112,24 @@ final class AnistarSource {
     return confirmed;
   }
 
-  Future<List<DirectEpisode>> episodes(int animeId) async {
-    if (animeId <= 0) {
-      throw const AnistarFailure(message: 'Некорректный номер аниме.');
-    }
-    final source = await _html('test/player2/videoas_p2p_new.php?id=$animeId');
-
-    return AnistarHtmlParser(baseUri).episodes(source);
-  }
+  Future<List<AnistarEpisodeDto>> episodes(int animeId) async =>
+      List.unmodifiable((await _playlist(animeId)).map((item) => item.episode));
 
   Uri playerUri(int animeId) => baseUri.resolve('test/player2/videoas_p2p_new.php?id=$animeId');
 
-  Future<Set<int>> watchedEpisodes(int animeId) async =>
-      (await episodes(animeId)).where((episode) => episode.isWatched).map((episode) => episode.number).toSet();
+  Future<Set<int>> watchedEpisodes(int animeId) async => Set.unmodifiable(
+    (await episodes(animeId)).where((episode) => episode.isWatched).map((episode) => episode.number),
+  );
 
   Future<Set<int>> markWatched({required int animeId, required int episodeNumber}) async {
-    final playlist = await episodes(animeId);
-    final matches = playlist.where((episode) => episode.number == episodeNumber);
+    final playlist = await _playlist(animeId);
+    final matches = playlist.where((item) => item.episode.number == episodeNumber);
     if (matches.isEmpty) {
       throw const AnistarFailure(message: 'Не удалось найти серию для отметки просмотра.');
     }
     final episode = matches.first;
-    if (episode.isWatched) {
-      return playlist.where((item) => item.isWatched).map((item) => item.number).toSet();
+    if (episode.episode.isWatched) {
+      return Set.unmodifiable(playlist.where((item) => item.episode.isWatched).map((item) => item.episode.number));
     }
     final mediaId = episode.mediaId;
     if (mediaId == null) {
@@ -157,6 +155,15 @@ final class AnistarSource {
     }
 
     return confirmed;
+  }
+
+  Future<List<ParsedEpisode>> _playlist(int animeId) async {
+    if (animeId <= 0) {
+      throw const AnistarFailure(message: 'Некорректный номер аниме.');
+    }
+    final source = await _html('test/player2/videoas_p2p_new.php?id=$animeId');
+
+    return AnistarHtmlParser(baseUri).parsedEpisodes(source, httpHeaders: {'Referer': playerUri(animeId).toString()});
   }
 
   Future<String> _html(String path, {Map<String, String>? sortCookies}) async {

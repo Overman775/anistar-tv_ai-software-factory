@@ -4,6 +4,7 @@
 import 'dart:convert';
 
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar/parsing.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -26,7 +27,7 @@ void main() {
     dio = Dio(BaseOptions(baseUrl: origin.toString()))
       ..httpClientAdapter = adapter
       ..interceptors.add(AnistarSessionInterceptor(session));
-    service = DioAnistarClient(dio, session);
+    service = HtmlAnistarClient(dio, session);
   });
   tearDown(() async {
     dio.close(force: true);
@@ -43,7 +44,7 @@ void main() {
     addTearDown(restored.close);
     dio.interceptors.clear();
     dio.interceptors.add(AnistarSessionInterceptor(restored));
-    expect(await DioAnistarClient(dio, restored).restore(), 'test');
+    expect(await HtmlAnistarClient(dio, restored).restore(), 'test');
     expect(adapter.requests.last.headers['Cookie'], contains('dle_password=session-secret'));
     expect(await restored.cookieHeader(Uri.parse('https://sfv.an-media.org/video')), isNull);
     expect(await restored.cookieHeader(Uri.parse('https://v31.astar.bz/')), isNull);
@@ -52,7 +53,7 @@ void main() {
 
   test('HTTP 200 with the login form is rejected and leaves no session', () async {
     adapter.rejectLogin = true;
-    await expectLater(service.signIn('test', 'wrong'), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.signIn('test', 'wrong'), throwsA(isA<AnistarClientException>()));
     expect(storage.values, isEmpty);
     expect(session.account, isNull);
     expect(adapter.requests.where((request) => request.method == 'POST'), hasLength(1));
@@ -77,14 +78,14 @@ void main() {
 
   test('external form actions and redirects never receive credentials or cookies', () async {
     adapter.formAction = 'https://other.example/login';
-    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarClientException>()));
     expect(adapter.requests, hasLength(1));
     adapter
       ..formAction = null
       ..redirect = 'https://other.example/login';
     // Redirect and form action are separate rejection paths.
     // ignore: avoid-duplicate-test-assertions
-    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarClientException>()));
     expect(adapter.requests.every((request) => request.uri.origin == origin.origin), isTrue);
     expect(storage.values, isEmpty);
   });
@@ -111,11 +112,11 @@ void main() {
 
   test('secure read or write failure cannot authenticate', () async {
     storage.failRead = true;
-    await expectLater(service.restore(), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.restore(), throwsA(isA<AnistarClientException>()));
     storage
       ..failRead = false
       ..failWrite = true;
-    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarClientException>()));
     expect(session.account, isNull);
     expect(storage.values, isEmpty);
   });
@@ -125,7 +126,7 @@ void main() {
     storage.values['another-feature'] = 'keep';
     final generation = session.generation;
     storage.failDelete = true;
-    await expectLater(service.signOut(), throwsA(isA<AnistarFailure>()));
+    await expectLater(service.signOut(), throwsA(isA<AnistarClientException>()));
     expect(session.account, 'test');
     storage.failDelete = false;
     await service.signOut();

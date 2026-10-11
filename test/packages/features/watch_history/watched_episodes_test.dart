@@ -3,12 +3,11 @@
 
 import 'dart:async';
 
-import 'package:anistar/anistar.dart';
-
+import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
-import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:networking/networking.dart';
 
 import '../../../mocks/features/fake_watched_episodes_repository.dart';
 
@@ -90,7 +89,7 @@ void main() {
     repository
       ..failRead = true
       ..failWrite = true;
-    await expectLater(container.read(provider.future), throwsA(isA<AnistarFailure>()));
+    await expectLater(container.read(provider.future), throwsA(isA<RequestFailure>()));
     expect(await container.read(provider.notifier).markStarted(1), isFalse);
     expect(repository.writes, 1);
     repository

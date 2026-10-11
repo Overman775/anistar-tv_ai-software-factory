@@ -7,7 +7,7 @@ import 'catalog_state.dart';
 
 final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
   final Logger _logger;
-  final CatalogRepository _repository;
+  CatalogRepository _repository;
   int _loadGeneration = 0;
   int _page = 1;
 
@@ -29,19 +29,21 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
       return;
     }
     final generation = _loadGeneration;
+    final repository = _repository;
+    final page = _page + 1;
     final currentItems = current.items;
     emit(CatalogReady(items: currentItems, hasMore: true, isLoadingMore: true));
 
-    final result = await _repository.getPage(_page + 1);
+    final result = await repository.getPage(page);
     if (isClosed || emit.isDone || generation != _loadGeneration) {
-      _logger.debugFor<CatalogBloc>('Ignored outdated page ${_page + 1} response');
+      _logger.debugFor<CatalogBloc>('Ignored outdated page $page response');
 
       return;
     }
     result.when(
       failure: (failure) {
         _logger.errorFor<CatalogBloc>(
-          'Failed to load page ${_page + 1}',
+          'Failed to load page $page',
           error: failure.message,
           stackTrace: failure.stackTrace,
         );
@@ -52,27 +54,31 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
         final knownIds = currentItems.map((item) => item.id).toSet();
         final newItems = nextPage.items.where((item) => knownIds.add(item.id)).toList(growable: false);
         _logger.infoFor<CatalogBloc>('Loaded page ${nextPage.page}: ${newItems.length} new items');
-        emit(CatalogReady(items: [...currentItems, ...newItems], hasMore: nextPage.hasNext));
+        emit(CatalogReady(items: List.unmodifiable([...currentItems, ...newItems]), hasMore: nextPage.hasNext));
       },
     );
   }
 
   Future<void> _onStarted(CatalogStarted event, Emitter<CatalogState> emit) async {
-    if (event.preserveContent && state is CatalogRefreshing) {
+    final replacement = event.repository;
+    final preserveContent = event.preserveContent && replacement == null;
+    if (preserveContent && state is CatalogRefreshing) {
       return;
     }
+    if (replacement != null) {
+      _repository = replacement;
+    }
+    final repository = _repository;
     final previous = state;
     final generation = ++_loadGeneration;
-    if (!event.preserveContent) {
+    if (!preserveContent) {
       _page = 1;
     }
     emit(
-      event.preserveContent
-          ? CatalogRefreshing(items: previous.items, hasMore: previous.hasMore)
-          : const CatalogLoading(),
+      preserveContent ? CatalogRefreshing(items: previous.items, hasMore: previous.hasMore) : const CatalogLoading(),
     );
 
-    final result = await _repository.getPage(1);
+    final result = await repository.getPage(1);
     if (isClosed || emit.isDone || generation != _loadGeneration) {
       return;
     }
@@ -81,9 +87,9 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
         emit(
           CatalogFailure(
             message: failure.message,
-            items: event.preserveContent ? previous.items : const [],
-            hasMore: event.preserveContent && previous.hasMore,
-            isRefreshFailure: event.preserveContent,
+            items: preserveContent ? previous.items : const [],
+            hasMore: preserveContent && previous.hasMore,
+            isRefreshFailure: preserveContent,
           ),
         );
       },

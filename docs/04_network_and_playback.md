@@ -8,7 +8,7 @@ Dio получает HTML AniStar; DOM и JSON5 разбираются на ус
 | --- | --- | --- |
 | DioClient | networking | Единая фабрика HTTP transport, таймауты, retry и сетевые логи |
 | BaseRepository | networking | Исключения → Result / Failure |
-| AnistarClient / DioAnistarClient | anistar | Общий клиент: HTML, авторизация, cookie-сессия и DTO |
+| AnistarClient / HtmlAnistarClient | anistar | Общий клиент: HTML, авторизация, cookie-сессия и DTO |
 | HtmlDecoder / AnistarHtmlParser | anistar | Charset, DOM, playlst и DTO |
 | Feature repository | Feature Data | DTO → domain |
 | VideoPlayerController | Player UI | Native HLS и lifecycle |
@@ -125,7 +125,7 @@ SecureStorage использует Android backend flutter_secure_storage по �
 
 ## 7. Избранное сайта
 
-FavoritesRepository использует общий авторизованный AnistarClient. Список читается через `/index.php?do=favorites&cstart={page}`; пагинация поддерживает query и `/favorites/page/{page}/`. Рекламный ID 9493 исключается. Пустой список принимается только при явном сообщении сайта в `#dle-content`; неизвестная разметка считается ошибкой.
+FavoritesRepository использует общий авторизованный AnistarClient. Список читается через `/index.php?do=favorites&cstart={page}`; пагинация поддерживает query и `/favorites/page/{page}/`. Рекламный ID 9493 исключается. Пустой список принимается при явном сообщении сайта в `#dle-content` либо при пустом контейнере без дочерних элементов, если одновременно подтверждены авторизация, заголовок «Мои закладки» и canonical URL избранного того же origin. Неизвестная разметка считается ошибкой.
 
 Статус читается из `doFavorites(id, 'plus'|'minus')` в HTML: plus означает «добавить», minus — «удалить». Проверяется ID текущего сериала. Отсутствующий или противоречивый control означает неизвестный статус; клиент предлагает перечитать страницу. Скрипты не исполняются.
 
@@ -156,3 +156,5 @@ Mutating GET исключён из transport retry. После ошибки по
 ## Отметки просмотра
 
 Галочки читаются из серверного `viewing` в playlst авторизованного аккаунта. После успешного native play клиент отправляет `GET /engine/ajax/ns.php?vid={media_id}` с Cookie и Referer, затем подтверждает результат свежим player HTML. Гостевой HTML не содержит этого запроса; прежний вывод только о localStorage был неполным. Контракт и проверки: [Просмотренные серии](specs/07_watched_episodes.md).
+
+HTML-адаптер выдаёт источники с готовыми headers и optional expiry для каждого качества. Playback repository выбирает 360/720 и переносит URI без пересборки; Referer/end не входят в domain mapping. Контракт: [ADR-0010](adr/0010-normalized-anistar-contract.md).

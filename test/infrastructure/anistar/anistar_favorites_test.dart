@@ -1,8 +1,6 @@
 import 'package:anistar/anistar.dart';
-import 'package:anistar/src/anistar_favorites_html.dart';
-import 'package:anistar/src/anistar_html_parser.dart';
+import 'package:anistar/parsing.dart';
 import 'package:app_logging/app_logging.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:networking/networking.dart';
 
@@ -124,16 +122,27 @@ void main() {
         ..reject = mode == 'reject'
         ..wrongId = mode == 'wrongId'
         ..persist = mode != 'persist';
-      await expectLater(source.setFavorite(animeId: id, slug: slug, favorite: true), throwsA(isA<AnistarFailure>()));
+      await expectLater(
+        source.setFavorite(animeId: id, slug: slug, favorite: true),
+        throwsA(isA<AnistarClientException>()),
+      );
     }
   });
 
   test('mutating GET is not automatically retried on 503; mismatched ID never writes', () async {
     adapter.mutationStatus = 503;
-    await expectLater(source.setFavorite(animeId: id, slug: slug, favorite: true), throwsA(isA<DioException>()));
+    await expectLater(
+      source.setFavorite(animeId: id, slug: slug, favorite: true),
+      throwsA(
+        isA<AnistarClientException>().having((error) => error.category, 'category', AnistarClientErrorCategory.server),
+      ),
+    );
     expect(adapter.requests.where((request) => request.uri.path.contains('/ajax/')), hasLength(1));
     final requestCount = adapter.requests.length;
-    await expectLater(source.setFavorite(animeId: 42, slug: slug, favorite: true), throwsA(isA<AnistarFailure>()));
+    await expectLater(
+      source.setFavorite(animeId: 42, slug: slug, favorite: true),
+      throwsA(isA<AnistarClientException>()),
+    );
     expect(adapter.requests, hasLength(requestCount));
   });
 }

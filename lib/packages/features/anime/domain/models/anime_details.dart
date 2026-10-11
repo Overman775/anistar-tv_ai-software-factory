@@ -14,18 +14,19 @@ final class AnimeDetails {
   final String? voiceover;
   final String? year;
 
-  const AnimeDetails({
+  AnimeDetails({
     required this.id,
     required this.slug,
     required this.title,
-    required this.genres,
+    required List<String> genres,
     required this.isOngoing,
-    this.filters = const [],
+    List<CatalogFilter> filters = const [],
     this.description,
     this.isFavorite,
     this.posterUri,
     this.seriesInfo,
     this.voiceover,
     this.year,
-  });
+  }) : genres = List.unmodifiable(genres),
+       filters = List.unmodifiable(filters);
 }

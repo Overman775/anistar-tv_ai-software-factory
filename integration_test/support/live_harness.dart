@@ -1,4 +1,4 @@
-import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
@@ -8,6 +8,7 @@ import 'package:anistar_tv/runner/runner.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,27 +53,36 @@ final class LiveHarness {
     final previousObserver = Bloc.observer;
     addTearDown(() => Bloc.observer = previousObserver);
     final logger = AppLogger.initForTest();
-    await runApplication(
-      logger: logger,
-      overrides: [
-        dioProvider.overrideWith((ref) {
-          final dio = DioClient.create(config: ref.watch(networkConfigProvider), logger: logger);
-          dio.interceptors.add(
-            InterceptorsWrapper(
-              onRequest: (options, handler) {
-                if (options.method == 'POST') {
-                  loginPosts++;
-                }
-                handler.next(options);
-              },
-            ),
-          );
-          ref.onDispose(() => dio.close(force: true));
+    final previousFrameworkError = FlutterError.onError;
+    final previousPlatformError = PlatformDispatcher.instance.onError;
+    try {
+      await runApplication(
+        logger: logger,
+        overrides: [
+          dioProvider.overrideWith((ref) {
+            final dio = DioClient.create(config: ref.watch(networkConfigProvider), logger: logger);
+            dio.interceptors.add(
+              InterceptorsWrapper(
+                onRequest: (options, handler) {
+                  if (options.method == 'POST') {
+                    loginPosts++;
+                  }
+                  handler.next(options);
+                },
+              ),
+            );
+            ref.onDispose(() => dio.close(force: true));
 
-          return dio;
-        }),
-      ],
-    );
+            return dio;
+          }),
+        ],
+      );
+    } finally {
+      // The production runner installs logging handlers. Keep the integration
+      // binding's handlers so framework failures still fail the live test.
+      FlutterError.onError = previousFrameworkError;
+      PlatformDispatcher.instance.onError = previousPlatformError;
+    }
     await tester.pump();
   }
 

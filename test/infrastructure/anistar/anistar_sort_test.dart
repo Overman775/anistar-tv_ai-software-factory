@@ -1,4 +1,5 @@
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -7,18 +8,26 @@ import '../../mocks/anistar/test_anistar_client.dart';
 import '../../mocks/networking/html_fixture_adapter.dart';
 import '../../mocks/storage/memory_secure_storage.dart';
 
-String _html(DirectCatalogSort sort) =>
+String _field(AnistarCatalogSort sort) => switch (sort.criterion) {
+  AnistarSortCriterion.date => 'date',
+  AnistarSortCriterion.rating => 'rating',
+  AnistarSortCriterion.views => 'news_read',
+  AnistarSortCriterion.comments => 'comm_num',
+  AnistarSortCriterion.title => 'title',
+};
+
+String _html(AnistarCatalogSort sort) =>
     '''
-<form id="news_set_sort"><a class="sort-actv" onclick="dle_change_sort('${sort.field}','${sort.ascending ? 'desc' : 'asc'}'); return false;">sort</a>
+<form id="news_set_sort"><a class="sort-actv" onclick="dle_change_sort('${_field(sort)}','${sort.ascending ? 'desc' : 'asc'}'); return false;">sort</a>
 <input name="dlenewssortby" value="date"><input name="dledirection" value="DESC"></form>
 $catalogHtml
 ''';
 
 void main() {
-  for (final criterion in DirectSortCriterion.values) {
+  for (final criterion in AnistarSortCriterion.values) {
     for (final ascending in [false, true]) {
       test('GET ${criterion.name} ascending=$ascending keeps order through category and encoded pagination', () async {
-        final sort = DirectCatalogSort(criterion, ascending: ascending);
+        final sort = AnistarCatalogSort(criterion, ascending: ascending);
         final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));
         addTearDown(() => dio.close(force: true));
         for (final path in ['/comedy/', '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/']) {
@@ -29,12 +38,14 @@ void main() {
           await source.catalog(1, filterPath: path, sort: sort);
           await source.catalog(2, filterPath: path, sort: sort);
           expect(adapter.requests.map((request) => request.uri.path), [path, '${path}page/2/']);
+          final suffix = path.startsWith('/filter/') ? 'xfsearch' : 'cat';
           for (final request in adapter.requests) {
             expect(request.method, 'GET');
             expect(request.uri.query, isEmpty);
             expect(
               request.headers['Cookie'],
-              sort.cookies(path).entries.map((entry) => '${entry.key}=${entry.value}').join('; '),
+              'dle_sort_$suffix=${_field(sort)}; '
+              'dle_direction_$suffix=${ascending ? 'asc' : 'desc'}; dle_no_cache=1',
             );
           }
         }
@@ -54,7 +65,7 @@ void main() {
     // Read before and after the request to detect mutation.
     // ignore: prefer-moving-to-variable
     final before = await session.cookieHeader(origin);
-    const sort = DirectCatalogSort(DirectSortCriterion.title, ascending: true);
+    const sort = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
     final dio = Dio(BaseOptions(baseUrl: origin.toString()));
     addTearDown(() => dio.close(force: true));
     dio.interceptors.add(AnistarSessionInterceptor(session));
@@ -80,16 +91,16 @@ void main() {
   test('unchanged indicator, changed direction and absent sort form are errors, never fallback results', () async {
     final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));
     addTearDown(() => dio.close(force: true));
-    const requested = DirectCatalogSort(DirectSortCriterion.title, ascending: true);
+    const requested = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
     for (final html in [
       catalogHtml,
-      _html(const DirectCatalogSort(DirectSortCriterion.date)),
-      _html(const DirectCatalogSort(DirectSortCriterion.title)),
+      _html(const AnistarCatalogSort(AnistarSortCriterion.date)),
+      _html(const AnistarCatalogSort(AnistarSortCriterion.title)),
     ]) {
       dio.httpClientAdapter = HtmlFixtureAdapter({'/comedy/': html});
       await expectLater(
         createTestAnistarClient(dio).catalog(1, filterPath: '/comedy/', sort: requested),
-        throwsA(isA<AnistarFailure>()),
+        throwsA(isA<AnistarClientException>()),
       );
     }
   });

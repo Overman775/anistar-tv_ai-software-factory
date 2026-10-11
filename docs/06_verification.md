@@ -1,6 +1,6 @@
 # ✅ Состояние проверок | AniStar TV
 
-Дата: 11 октября 2026 года. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
+Дата: 12 октября 2026 года. Последние результаты DTO/live smoke — в разделе 43; предыдущие записи сохраняют свой исторический scope. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
 
 ## 1. Критерии готовности
 
@@ -746,3 +746,76 @@ Live исправления: реальный TV viewport вместо 1280×720
 | Graphify | AST-only: **2943 nodes / 4811 edges / 205 communities** |
 
 Логи: `build/verification/release-1.1/`. Результаты относятся к локальному SDK/fixture окружению. Production release APK, физические устройства и живой аккаунт в этой подготовке не проверялись. Старые четыре golden-сценария оставлены отдельной задачей по предыдущему решению пользователя.
+
+
+## 43. DTO-рефакторинг и live/native smoke (2026-10-12)
+
+DTO/контракт отделены от HTML implementation; domain/mapping, шесть сетевых репозиториев,
+каталог, watch history и log viewer переработаны по плану. Slug, routes, SDK и зависимости
+сохранены. Доказательства D1–D12: [отчёт](plans/anistar-client-dto-refactoring-report.md).
+По прямому указанию пользователя актуализированы шесть устаревших golden PNG четырёх
+исходно падавших тестов; сценарии и точность сравнения сохранены.
+
+Дополнительная проверка с настоящим сайтом/CDN прошла на Android TV AVD `anistar_tv_e2e`,
+API 36 ARM64, seed 20261010: host network smoke — 1 passed; live Android native smoke —
+1 case passed, 0 failures/errors/skipped. Проверены вход и encrypted restore без повторного
+POST, каталог и карточка, серверное избранное и звезда после перезапуска, HLS 720p/360p,
+remote seek, pause/resume, сохранение позиции при смене качества, смена серии, Back,
+серверные галочки после перезапуска, logout и снятие screen-awake flag.
+
+Live-тест выбирает серию 1 явно через EpisodeCard: hero продолжает первую непросмотренную
+серию и не обязан показывать «Смотреть серию 1» при сохранённой серверной истории.
+LiveHarness восстанавливает error handlers тестового binding после runner, сохраняя
+обнаружение framework failures. Использован Python 3.12: системный Python 3.9 не поддерживает
+аннотации E2E tooling. Production/UI код при этих поправках не менялся.
+
+Избранное восстановлено; начатая серия 4 осталась отмеченной в тестовом аккаунте.
+После прогона обычная dev APK с `main_dev.dart` собрана и установлена без live credentials.
+Release APK, физический TV/декодер/пульт и mobile live smoke в этом дополнительном прогоне
+не проверялись. Логи и summary/JUnit находятся в `build/verification/dto-refactoring/live-native-smoke/`.
+
+После исправления live-сценария полный `bash scripts/check.sh` прошёл: formatter 299 files /
+0 changes, analyzer/DCM без замечаний, 376 unit/widget/architecture и 66 golden tests passed.
+Baselines в gate не обновлялись. После него обновлён graphify; итоговый diff проверен.
+
+## 44. Полная пересборка graphify и устранение ложных связей (2026-10-12)
+
+По дополнительному указанию пользователя выполнена полная свежая AST/semantic
+пересборка корпуса (333 code files и 60 документов). Два пустых endpoint происходили
+из HTML в Dart-строках; шесть mixin loops — из слияния `$Route`/`Route`; пять Kotlin
+loops — из неверного связывания `super.method()` с override. Причины исправлены
+version/SHA-256 guarded патчем **graphifyy 0.9.85**, см.
+[tool/graphify](../tool/graphify/README.md). App source ради графа не менялся.
+
+Семь regression tests: **7 failed** на оригинальном graphify, **7 passed** после
+исправления. Подтверждены настоящая рекурсия, локальный superclass, fail-closed внешнего
+superclass, import URI/navigation и номера строк. Python E2E helpers **38/38** и APK
+verifier **8/8 passed** с Python 3.12 в PATH.
+
+Raw и post-build: **0 пустых endpoints, 0 self-loops**; post-build также **0 dangling
+endpoints**. В raw остаются внешние imports до materialization и разные отношения/
+позиции одной пары, объединяемые simple Graph; исходное extraction сохранено для аудита.
+Три Gradle DSL файла без symbols, regex-based Dart и исключённые generated/assets
+остаются ограничениями покрытия. Внешние URLs только цитируются. Host-agent tokens
+не измерены; external API не использовался. Старый граф/кеш сохранены отдельно.
+
+После чтения актуализированы описание пустого favorites и watch-history ссылки;
+доказательства и свежие счётчики: `build/verification/graphify-rebuild/summary.json`,
+`regressions-before.log`, `regressions-after.log`, `raw-health.log`, `post-build-health.log`.
+Последний полный Flutter gate и live/native smoke относятся к §43; после них app code
+в этой работе не менялся. Подробности: [дополнение отчёта D1–D12](plans/anistar-client-dto-refactoring-report.md).
+
+## 45. Подготовка версии 1.1.1 (2026-10-12)
+
+По указанию пользователя версия приложения поднята с `1.1.0+3` до `1.1.1+4`,
+обновлены CHANGELOG и README. SDK, зависимости, lockfile и маршруты сохранены.
+
+Повторный полный `bash scripts/check.sh` завершился с **exit 0**: format 299 files /
+0 changes, analyzer и DCM без замечаний, **376 unit/widget/architecture** и **66 golden**
+tests passed. Baselines в этом прогоне не обновлялись. Семь graphify regression tests
+прошли; применение сохранённого патча отдельно проверено на копии исходной установки
+с подтверждением SHA-256. Staged diff проверен через `git diff --cached --check`.
+
+Логи: `build/verification/release-1.1.1/`. Live/native smoke из §43 сохраняет применимость
+к app code; после него изменены только release metadata, документация и graphify tooling.
+APK с новым versionCode в этом этапе не пересобирался.

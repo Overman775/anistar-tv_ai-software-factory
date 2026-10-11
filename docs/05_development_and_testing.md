@@ -6,6 +6,8 @@
 
 Нужны **FVM**, Flutter **3.47.7** из `.fvmrc`, Dart **3.13.5**, JDK **17**, Android SDK и устройство/эмулятор.
 
+Для Android E2E-скриптов нужен Python **3.10 или новее** в PATH: их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
+
 ```bash
 fvm install
 fvm flutter pub get
