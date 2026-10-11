@@ -11,6 +11,7 @@ import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
@@ -75,6 +76,14 @@ void main() {
         await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Жанры');
         expect(find.byType(GenresScreen), findsNothing);
+        final menu = tester.element(find.byType(CatalogNavigationRail));
+        final menuFocus = FocusManager.instance.primaryFocus;
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        router.router.pop();
+        await tester.pumpAndSettle();
+        expect(tester.element(find.byType(CatalogNavigationRail)), same(menu));
+        expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();
       }

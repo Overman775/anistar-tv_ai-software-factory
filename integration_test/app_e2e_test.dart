@@ -6,7 +6,9 @@ import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
+import 'package:anistar_tv/packages/features/player/presentation/widgets/player_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -151,6 +153,41 @@ void main() {
     // Verify the gate again after this separate session transition.
     // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
+    await E2eHarness.waitFor(
+      tester,
+      () => FocusManager.instance.primaryFocus?.debugLabel == 'Пароль',
+      'password retry',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Логин');
+    await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пароль');
+    await tester.enterText(find.byKey(const ValueKey('login_password')), 'wrong-again');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Войти');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Логин');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(
+      tester,
+      () => FocusManager.instance.primaryFocus?.debugLabel == 'Пароль',
+      'second rejection',
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Логин');
     await E2eHarness.login(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'authenticated catalog');
     final postCount = _events(await fixture.state()).where((event) => event['method'] == 'POST').length;
@@ -286,10 +323,27 @@ void main() {
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
       const ValueKey('catalog-tab-false'),
     );
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump(const Duration(milliseconds: 250));
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
+    final rail = tester.element(find.byType(CatalogNavigationRail));
+    final menuFocus = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-true'))).focusNode;
+    for (var transition = 0; transition < 3; transition++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pump();
+      expect(tester.element(find.byType(CatalogNavigationRail)), same(rail));
+      expect(FocusManager.instance.primaryFocus, same(menuFocus));
+      expect(
+        tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width,
+        CatalogNavigationRail.expandedWidth,
+      );
+      await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
+      if (transition < 2) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'repeated home');
+      }
+    }
     expect(
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
       const ValueKey('catalog-tab-true'),
@@ -328,6 +382,91 @@ void main() {
     await E2eHarness.waitFor(tester, () => player.value.position.inSeconds >= 10, 'remote seek after cancellation');
     await RemoteControls.backToEpisodes(tester);
     await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'visible remote back button');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('native seek hold release and controls idle after Play Back and pause resume', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester);
+    await _openAnime(tester);
+    await _openVideo(tester);
+    final player = E2eHarness.requirePlayer(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'pause for seek hold');
+    await player.seekTo(const Duration(seconds: 15));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await E2eHarness.waitFor(tester, () => player.value.position <= Duration.zero, 'held rewind to start');
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await E2eHarness.waitFor(tester, () => player.value.position.inSeconds == 10, 'one short seek step');
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(player.value.position.inSeconds, 10, reason: 'release stops native repeat');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await E2eHarness.waitFor(
+      tester,
+      () => FocusManager.instance.primaryFocus?.debugLabel == 'Пауза / воспроизведение',
+      'play focus',
+    );
+    await tester.pump(const Duration(seconds: 5));
+    expect(_controlsVisible(tester), isTrue, reason: 'paused controls stay visible');
+    await player.seekTo(Duration.zero);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => player.value.isPlaying, 'resume from play button');
+    await E2eHarness.waitFor(tester, () => !_controlsVisible(tester), 'hide after play focus');
+    await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Видео', 'hidden focus');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'К сериям', 'Back focus');
+    await tester.pump(const Duration(seconds: 3));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(seconds: 2));
+    expect(_controlsVisible(tester), isTrue, reason: 'interaction renews timer even at focus boundary');
+    await E2eHarness.waitFor(tester, () => !_controlsVisible(tester), 'hide after renewed Back inactivity');
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'pause before closing hold');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.binding.handlePopRoute();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'Back during hold');
+    await _expectScreenAwake(tester, false);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Android screen flag follows playback lifecycle and repeated catalog returns', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester);
+    await _expectScreenAwake(tester, false);
+    await _openAnime(tester);
+    for (var entry = 0; entry < 2; entry++) {
+      await _openVideo(tester);
+      final player = E2eHarness.requirePlayer(tester);
+      await _expectScreenAwake(tester, true);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+      await _expectScreenAwake(tester, false);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(player.value.isPlaying, isFalse);
+      await _expectScreenAwake(tester, false);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+      await _expectScreenAwake(tester, true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await _expectScreenAwake(tester, false);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await _expectScreenAwake(tester, true);
+      await player.seekTo(player.value.duration - const Duration(milliseconds: 300));
+      await E2eHarness.waitFor(tester, () => player.value.isCompleted, 'native completion');
+      await _expectScreenAwake(tester, false);
+      await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+      await _expectScreenAwake(tester, true);
+      await tester.binding.handlePopRoute();
+      await _expectScreenAwake(tester, false);
+      await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'player disposed');
+    }
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isEmpty, 'catalog return');
+    await _expectScreenAwake(tester, false);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -497,6 +636,7 @@ void main() {
       () => find.text('Видео не запустилось').evaluate().isNotEmpty,
       'bounded video error',
     );
+    await _expectScreenAwake(tester, false);
     expect((await fixture.state())['player_pages'], 4);
     await tester.pump(const Duration(seconds: 2));
     expect((await fixture.state())['player_pages'], 4, reason: 'no background retry loop');
@@ -603,3 +743,19 @@ Future<void> _waitFilter(WidgetTester tester, String path) async {
   // The previous route remains onstage during the entrance transition.
   await tester.pump(const Duration(milliseconds: 400));
 }
+
+Future<void> _expectScreenAwake(WidgetTester tester, bool expected) async {
+  const channel = MethodChannel('anistar_tv/playback_screen_awake');
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  bool? actual;
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 50));
+    actual = await channel.invokeMethod<bool>('isEnabled');
+    if (actual == expected) {
+      return;
+    }
+  }
+  expect(actual, expected, reason: 'actual Android FLAG_KEEP_SCREEN_ON');
+}
+
+bool _controlsVisible(WidgetTester tester) => tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible;

@@ -19,6 +19,7 @@ class PlayerView extends StatelessWidget {
     required this.onShowControls,
     required this.session,
     required this.title,
+    this.onSeekKeyEvent,
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.onBack,
@@ -29,6 +30,7 @@ class PlayerView extends StatelessWidget {
     super.key,
   });
 
+  final bool Function(KeyEvent)? onSeekKeyEvent;
   final VideoPlayerController controller;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
@@ -96,6 +98,7 @@ class PlayerView extends StatelessWidget {
                       onSelectQuality: onSelectQuality,
                       onSelectEpisode: onSelectEpisode,
                       onSeek: onSeek,
+                      onSeekKeyEvent: onSeekKeyEvent,
                     ),
                   ),
                 ),

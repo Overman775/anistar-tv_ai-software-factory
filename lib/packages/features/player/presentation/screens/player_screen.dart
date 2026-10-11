@@ -14,6 +14,9 @@ import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_refresh_budget.dart';
 import '../../domain/models/playback_session.dart';
 import '../../player_providers.dart';
+import '../playback_screen_awake.dart';
+import '../player_route_observer.dart';
+import '../player_seek_hold.dart';
 import '../widgets/player_choices_dialog.dart';
 import '../widgets/player_retry_view.dart';
 import '../widgets/player_view.dart';
@@ -29,14 +32,25 @@ class PlayerScreen extends ConsumerStatefulWidget {
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBindingObserver, RouteAware {
   late Future<_PlayerData> _future;
   late final Logger _logger;
+  late final PlaybackScreenAwake _screenAwake;
+  PageRoute<Object?>? _route;
+  PlayerRouteObserver? _routeObserver;
+  bool _routeActive = true;
+  bool _appResumed = false;
+  bool _lifecycleResumePlaying = false;
   final FocusNode _focusNode = FocusNode(debugLabel: 'Видео', skipTraversal: true);
   final _controlsFocus = FocusNode(debugLabel: 'Меню видео', skipTraversal: true);
   final _backFocus = FocusNode(debugLabel: 'К сериям');
   final _playFocus = FocusNode(debugLabel: 'Пауза / воспроизведение');
   Timer? _controlsTimer;
+  late final PlayerSeekHold _seekHold;
+  FocusNode? _seekFocus;
+  Duration? _seekTarget;
+  Duration? _pendingSeek;
+  VideoPlayerController? _seekingPlayer;
   VideoPlayerController? _controller;
   bool _controlsVisible = true;
   bool _disposed = false;
@@ -53,6 +67,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void initState() {
     super.initState();
     _logger = ref.read(loggerProvider);
+    _screenAwake = PlaybackScreenAwake(_logger);
+    _seekHold = PlayerSeekHold(_seekRelative);
+    HardwareKeyboard.instance.addHandler(_observeKey);
+    FocusManager.instance.addListener(_onFocusChanged);
+    _appResumed = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(_screenAwake.setEnabled(false));
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
     _episodeNumber = widget.episodeNumber;
     _future = _initialize(++_initializationId);
@@ -90,6 +111,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       onPlayPause: _togglePlayback,
       onRetry: _retry,
       onSeek: _seek,
+      onSeekKeyEvent: _handleSeekKey,
       onShowControls: _showControls,
       session: data.session,
       title: widget.title,
@@ -97,6 +119,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (_focusNode.hasPrimaryFocus && _controller != null && _handleSeekKey(event)) {
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent || _controller == null) {
       return KeyEventResult.ignored;
     }
@@ -122,10 +147,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         event.logicalKey == LogicalKeyboardKey.mediaPlayPause ||
         event.logicalKey == LogicalKeyboardKey.gameButtonA) {
       _togglePlayback();
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-      _seekRelative(const Duration(seconds: -10));
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-      _seekRelative(const Duration(seconds: 10));
     } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
       _focusMenu(_backFocus);
     } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -137,7 +158,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return KeyEventResult.handled;
   }
 
-  void _backToEpisodes() => unawaited(Navigator.of(context).maybePop());
+  bool _observeKey(KeyEvent event) {
+    if (_disposed || !_appResumed || !_routeActive || !(_route?.isCurrent ?? true) || !_focusNode.hasFocus) {
+      return false;
+    }
+    if (event is KeyUpEvent) {
+      _seekHold.handle(event);
+      if (event.logicalKey == LogicalKeyboardKey.arrowLeft || event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        _scheduleControlsHide();
+      }
+    } else if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      if (event.logicalKey != LogicalKeyboardKey.arrowLeft && event.logicalKey != LogicalKeyboardKey.arrowRight) {
+        _seekHold.stop();
+      }
+      _showControls();
+    }
+
+    return false;
+  }
+
+  bool _handleSeekKey(KeyEvent event) {
+    if (!_appResumed || !_routeActive || !(_route?.isCurrent ?? true)) {
+      return false;
+    }
+    if (event is KeyDownEvent) {
+      _seekFocus = FocusManager.instance.primaryFocus;
+    }
+
+    return _seekHold.handle(event);
+  }
+
+  void _onFocusChanged() {
+    if (_seekHold.isActive && FocusManager.instance.primaryFocus != _seekFocus) {
+      _seekHold.stop();
+    }
+    if (!_disposed && _controlsVisible && _appResumed && (_route?.isCurrent ?? true) && _focusNode.hasFocus) {
+      _scheduleControlsHide();
+    }
+  }
+
+  void _backToEpisodes() {
+    _seekHold.stop();
+    unawaited(Navigator.of(context).maybePop());
+  }
 
   void _focusMenu(FocusNode target) {
     // Hidden controls are excluded from focus until the next frame.
@@ -192,7 +255,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       session.manifestUri,
       httpHeaders: session.httpHeaders,
       formatHint: VideoFormat.hls,
-      videoPlayerOptions: VideoPlayerOptions(),
+      // This screen owns foreground pause/resume together with its screen flag.
+      videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: true),
     );
     _controller = player;
     try {
@@ -208,14 +272,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (!_isCurrent(initializationId)) {
         throw const _PlaybackInitializationCancelled();
       }
-      if (_resumePlaying) {
+      if (_resumePlaying && _appResumed) {
         await player.play();
+      } else if (_resumePlaying) {
+        _lifecycleResumePlaying = true;
       }
       if (!_isCurrent(initializationId)) {
         throw const _PlaybackInitializationCancelled();
       }
       _session = session;
       player.addListener(_onPlayerChanged);
+      _updateScreenAwake();
       _markStarted(player);
       _scheduleControlsHide();
       _logger.infoFor<PlayerScreen>('Playback started (episode $_episodeNumber, ${session.selectedQuality.apiValue}p)');
@@ -224,6 +291,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } on Object catch (_, stackTrace) {
       if (identical(_controller, player)) {
         _controller = null;
+        _updateScreenAwake();
         await player.dispose();
       }
       if (!_isCurrent(initializationId)) {
@@ -237,6 +305,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _controller;
     if (_disposed || player == null) {
       return;
+    }
+    _updateScreenAwake();
+    if (player.value.hasError) {
+      _seekHold.stop();
     }
     if (!player.value.hasError) {
       _markStarted(player);
@@ -287,10 +359,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _onControlsTimer() {
-    if (!mounted || _controlsFocus.hasFocus || !(_controller?.value.isPlaying ?? false)) {
+    if (!mounted || !_appResumed || !(_route?.isCurrent ?? true) || !(_controller?.value.isPlaying ?? false)) {
+      return;
+    }
+    if (_seekHold.isActive) {
+      _scheduleControlsHide();
+
       return;
     }
     setState(() => _controlsVisible = false);
+    _focusNode.requestFocus();
   }
 
   void _retry() => _reload(resetBudget: true, preservePosition: true);
@@ -303,6 +381,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
     _controlsTimer?.cancel();
+    _seekHold.stop();
+    _pendingSeek = null;
+    _seekTarget = null;
     if (resetBudget) {
       _refreshBudget.reset();
       _markedEpisodes.clear();
@@ -310,12 +391,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final player = _controller;
     if (preservePosition && player != null && !player.value.hasError) {
       _resumePosition = player.value.position;
-      _resumePlaying = player.value.isPlaying;
+      _resumePlaying = _appResumed ? player.value.isPlaying : _lifecycleResumePlaying;
     } else if (!preservePosition) {
       _resumePosition = Duration.zero;
       _resumePlaying = true;
     }
     _controller = null;
+    _updateScreenAwake();
     _session = null;
     player?.removeListener(_onPlayerChanged);
     final initializationId = ++_initializationId;
@@ -333,6 +415,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (session == null) {
       return;
     }
+    _seekHold.stop();
     final choice = await showTvSideSheet<PlaybackQuality>(
       context: context,
       builder: (context) => PlayerChoicesDialog<PlaybackQuality>(
@@ -374,6 +457,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final episodes = session.episodeNumbers.toList()..sort((a, b) => b.compareTo(a));
+    _seekHold.stop();
     final choice = await showTvSideSheet<int>(
       context: context,
       builder: (context) => PlayerChoicesDialog<int>(
@@ -400,12 +484,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _seek(Duration position) {
-    final controller = _controller;
-    if (controller != null) {
-      _logger.debugFor<PlayerScreen>('Seeking to ${position.inSeconds}s');
-      unawaited(_runPlayerCommand((player) => player.seekTo(position)));
+    final player = _controller;
+    if (player == null || !player.value.isInitialized || player.value.hasError) {
+      return;
     }
+    final target = Duration(milliseconds: position.inMilliseconds.clamp(0, player.value.duration.inMilliseconds));
+    final previous = _seekTarget ?? player.value.position;
     _showControls();
+    if (target == previous) {
+      return;
+    }
+    _seekTarget = target;
+    _pendingSeek = target;
+    if (!identical(_seekingPlayer, player)) {
+      unawaited(_drainSeeks(player));
+    }
+  }
+
+  Future<void> _drainSeeks(VideoPlayerController player) async {
+    _seekingPlayer = player;
+    try {
+      while (!_disposed && identical(player, _controller) && !player.value.hasError) {
+        final target = _pendingSeek;
+        if (target == null) {
+          break;
+        }
+        _pendingSeek = null;
+        await _runPlayerCommand((current) => current.seekTo(target));
+      }
+    } finally {
+      if (identical(_seekingPlayer, player)) {
+        _seekingPlayer = null;
+        if (identical(player, _controller)) {
+          _seekTarget = null;
+          _pendingSeek = null;
+        }
+      }
+    }
   }
 
   void _seekRelative(Duration offset) {
@@ -414,9 +529,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       return;
     }
     final duration = controller.value.duration;
-    final target = controller.value.position + offset;
+    final target = (_seekTarget ?? controller.value.position) + offset;
     final clamped = Duration(milliseconds: target.inMilliseconds.clamp(0, duration.inMilliseconds));
     _seek(clamped);
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    _seekHold.stop();
+    _showControls();
   }
 
   void _showControls() {
@@ -436,6 +556,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _setPlaying(bool playing) {
+    if (!_appResumed) {
+      _lifecycleResumePlaying = playing;
+      if (playing) {
+        return;
+      }
+    }
     if (playing) {
       _logger.debugFor<PlayerScreen>('Resuming playback');
       unawaited(_runPlayerCommand((player) => player.play()));
@@ -468,6 +594,78 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  void _updateScreenAwake() {
+    final value = _controller?.value;
+    final enabled =
+        !_disposed &&
+        _routeActive &&
+        _appResumed &&
+        value != null &&
+        value.isInitialized &&
+        value.isPlaying &&
+        !value.isBuffering &&
+        !value.isCompleted &&
+        !value.hasError;
+    unawaited(_screenAwake.setEnabled(enabled));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    final observer = Navigator.of(context).widget.observers.whereType<PlayerRouteObserver>().firstOrNull;
+    if (route is PageRoute<Object?> && (!identical(_route, route) || !identical(_routeObserver, observer))) {
+      _routeObserver?.unsubscribe(this);
+      _route = route;
+      _routeObserver = observer;
+      _routeActive = route.isCurrent;
+      observer?.subscribe(this, route);
+      _updateScreenAwake();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    if (_appResumed && !resumed) {
+      _lifecycleResumePlaying = _controller?.value.isPlaying ?? _resumePlaying;
+      _appResumed = false;
+      _seekHold.stop();
+      _controlsTimer?.cancel();
+      _updateScreenAwake();
+      unawaited(_runPlayerCommand((player) => player.pause()));
+    } else if (!_appResumed && resumed) {
+      _appResumed = true;
+      if (_lifecycleResumePlaying) {
+        _lifecycleResumePlaying = false;
+        _setPlaying(true);
+      }
+      _updateScreenAwake();
+    }
+  }
+
+  @override
+  void didPushNext() {
+    _routeActive = false;
+    _seekHold.stop();
+    _controlsTimer?.cancel();
+    _updateScreenAwake();
+  }
+
+  @override
+  void didPopNext() {
+    _routeActive = true;
+    _updateScreenAwake();
+  }
+
+  @override
+  void didPop() {
+    _routeActive = false;
+    _seekHold.stop();
+    _controlsTimer?.cancel();
+    _updateScreenAwake();
+  }
+
   @override
   void didUpdateWidget(covariant PlayerScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -485,6 +683,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _logger.debugFor<PlayerScreen>('Disposing player');
     _disposed = true;
+    _seekHold.stop();
+    HardwareKeyboard.instance.removeHandler(_observeKey);
+    FocusManager.instance.removeListener(_onFocusChanged);
+    _updateScreenAwake();
+    WidgetsBinding.instance.removeObserver(this);
+    _routeObserver?.unsubscribe(this);
     _initializationId++;
     _controlsTimer?.cancel();
     final controller = _controller;
@@ -504,11 +708,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Colors.black,
-    body: Focus(
-      autofocus: true,
-      focusNode: _focusNode,
-      onKeyEvent: _handleKey,
-      child: FutureBuilder<_PlayerData>(future: _future, builder: _buildFuture),
+    body: Listener(
+      onPointerDown: _onPointerDown,
+      child: Focus(
+        autofocus: true,
+        focusNode: _focusNode,
+        onKeyEvent: _handleKey,
+        child: FutureBuilder<_PlayerData>(future: _future, builder: _buildFuture),
+      ),
     ),
   );
 }

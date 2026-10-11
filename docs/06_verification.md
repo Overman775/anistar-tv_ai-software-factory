@@ -17,16 +17,16 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после добавления жанров и фильтров; 228 Dart-файлов |
-| Unit/widget/architecture | 187 passed после добавления жанров и фильтров; seed 20261010 |
-| Golden comparison | 26 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
+| Формат, analyzer, DCM | Passed после ускорения seek и исправления idle controls; 241 Dart-файл |
+| Unit/widget/architecture | 232 passed; seed 20261010 |
+| Golden comparison | 28 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
 | HTTPS fixture | 7 Python-тестов passed |
 | Emulator hardware input | 4 Python-теста passed; проверка текущего AVD passed |
 | APK freshness checker | 8 Python-тестов passed |
-| Release APK | Предыдущая сборка проверена до добавления фильтров; AOT libraries подтверждены для трёх ABI |
-| Debug APK с фильтрами | Passed; обычный `main_dev.dart` с `env/dev.json`, пересобрана после E2E |
+| Release APK | Passed после ускорения seek и исправления idle controls; AOT libraries подтверждены для трёх ABI |
+| Debug APK | Passed; обычный `main_dev.dart` с `env/dev.json`, пересобрана после E2E ускорения seek и idle controls |
 
-Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **10 сценариев прошли после добавления жанров и фильтров при seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
+Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **Последний прогон: 13 сценариев passed после ускорения seek и исправления idle controls, seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
 | Сценарий | Проверено |
 | --- | --- |
@@ -111,11 +111,11 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 
 ## 6. Текущая сборка
 
-[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 912 908 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
+[app-prod-release.apk](../build/app/outputs/flutter-apk/app-prod-release.apk): 59 913 556 байт, Flutter 3.47.7 / Kotlin 2.4.21, три ABI: `armeabi-v7a`, `arm64-v8a`, `x86_64`.
 
-SHA-256: `94c341907fdac4bd7bb3f64ced404375e271e2dc252d699c9759703d6237cf46`.
+SHA-256: `9ba104606cf843d6c64a7965ee84534796c55b20117a2d3d991f476f8df0a508`.
 
-APK собран после исправления авторизованного избранного и серверной истории, включая новую шапку и убывающий порядок серий. Freshness checker подтвердил соответствие AOT/JNI/merge/stripped libraries для трёх ABI. Тестовые credentials в распакованных entries APK отсутствуют. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
+APK собран обычной командой `fvm flutter build apk --release --flavor prod -t lib/main_prod.dart` после ускорения удержания seek и исправления idle controls, вслед за Android E2E. Freshness checker подтвердил соответствие AOT/JNI/merge/stripped libraries для трёх ABI. Реальные аккаунты и credentials для этой проверки не использовались. APK сохранён; повторная проверка требует сохранённых build intermediates либо новой сборки.
 
 Иконка и TV баннер обновлены через imagegen; экспортированы все пять density-вариантов и adaptive icon. Размеры проверены, баннер просмотрен в 320×180. В новом release APK через `aapt` подтверждены `AniStar TV`, `android:icon`, `android:banner` и LEANBACK launcher; freshness check прошёл для трёх ABI. Внешний вид в launcher физического TV отдельно не проверен. Экспорт: [Разработка и тестирование](05_development_and_testing.md#8-иконка-и-android-tv-баннер).
 
@@ -309,3 +309,104 @@ Right в левом меню возвращает последнюю карто�
 `bash scripts/e2e.sh emulator-5554` прошёл все 11 Android-сценариев, включая native переходы к предыдущей/следующей серии с сохранением 360p, восстановление фокуса видео после Left в панели качества и прежние сценарии истории/избранного/сортировки. Python preflight/fixture tooling: 11 тестов. Физический TV и release не проверялись; коммиты не создавались.
 
 Обычная debug APK успешно пересобрана с `lib/main_dev.dart` и `env/dev.json`: `build/app/outputs/flutter-apk/app-dev-debug.apk`. `git diff --check` прошёл.
+
+
+## 21. Форма входа и сохранение левого меню (2026-10-11)
+
+Форма задаёт явный порядок Up/Down для логина, пароля, «Войти» и доступной после ошибки кнопки проверки сессии. KeyRepeat теперь перемещает фокус так же, как KeyDown. В исходном коде новая регрессия удержания Up оставляла фокус в пароле вместо логина; одиночные стрелки в прежнем widget-сценарии проходили. После двух отказов пароль очищается, фокус восстанавливается, оба поля остаются редактируемыми; Left/Right сохраняют движение курсора. Next/Done экранной клавиатуры покрыты прежними тестами.
+
+Причина мигания меню — ключ ValueKey выбранного раздела на TweenAnimationBuilder вокруг всего CatalogScreen: смена вкладки пересоздавала экран, меню, его FocusNode и анимацию раскрытия, а opacity применялся ко всему экрану. Теперь CatalogScreen остаётся смонтированным, а переход затрагивает только содержимое. При смене раздела заменяется CatalogBloc, сбрасываются карточки и их прокрутка; меню сохраняет фокус, ширину и прокрутку пунктов. Фильтр сравнивается по path: новый объект того же маршрута при открытии detail не перезапускает загрузку и не уничтожает фокус карточки.
+
+Проверки:
+
+- `bash scripts/check.sh check`: форматирование, analyzer и DCM без замечаний; 211 unit/widget/architecture и 28 golden-тестов, seed 20261010. Baselines не изменены.
+- Целевой прогон формы, разделов, жанров и переходов: 29 passed. Новые регрессии проверяют идентичность меню и FocusNode на промежуточных кадрах, reduced motion, пустое избранное, поздний ответ предыдущего каталога и Back из жанров/detail.
+- `bash scripts/e2e.sh emulator-5554`: 11 passed на AVD anistar_e2e, API 36 ARM64, seed 20261010, hardware D-pad preflight passed. Два отказа входа, редактирование логина, удержание Up, успешный повтор и три переключения в пустое избранное проверены с localhost HTTPS fixture; repository, router, storage и native player не подменялись.
+- Python quality: 8 passed; Python E2E fixture/input: 11 passed. Release APK и `verify_android_apk.py` прошли; текущий hash указан в разделе 6.
+- `graphify update .` выполнил AST-обновление без API; `git diff --check` прошёл.
+
+Ограничения: ручная визуальная проверка окна эмулятора и Extended Controls недоступна — Mac заблокирован, CUA не смог открыть native UI. Автоматические Android-сценарии и golden comparison выполнены, но не заменяют эту проверку, физический TV и реальную экранную клавиатуру. Сборка вывела предупреждения KGP и отсутствующего CupertinoIcons font, завершилась успешно. Ссылка AGENTS.md на ../.tessl/RULES.md отсутствует в checkout; соблюдены доступные AGENTS.md, ADR-0008 и спецификации. Реальные аккаунты, внешние сервисы, push, merge и deploy не использовались.
+
+
+## 22. Удержание экрана только во время воспроизведения (2026-10-10 UTC)
+
+`PlayerScreen` включает `FLAG_KEEP_SCREEN_ON` только для инициализированного играющего controller без буферизации, завершения и ошибки, пока страница активна и приложение находится в `resumed`. Pause/native stop, ошибка, завершение, reload/смена видео и dispose снимают флаг; Back снимает его до окончания обратного перехода. Обычные страницы поверх player и каталоги не удерживают экран; popup выбора качества/серий не прерывает играющее видео. Удержание управляет только окном Activity, не меняет системный timeout и не отключает keyguard.
+
+PlayerScreen владеет lifecycle pause/resume. Уход из `resumed` ставит видео на паузу и снимает флаг; возврат возобновляет лишь видео, игравшее до ухода. Поздняя initialization в фоне не запускает воспроизведение. Activity дополнительно очищает флаг в `onPause`, при detach engine и уничтожении; команда включения в фоне не применяется. Observer принадлежит каждому Navigator отдельно, поэтому вложенные маршрутизаторы не конфликтуют. Ошибки MethodChannel не выходят из async callbacks и не запускают HLS recovery.
+
+Проверки:
+
+- Полный `bash scripts/check.sh check`: format, analyzer и DCM без замечаний; 217 unit/widget/architecture и 28 golden, seed 20261010. Baselines не изменены. После финальной корректировки E2E harness analyzer/DCM также прошли.
+- 25 тестов player: play → pause → resume, native stop, buffering start/end, completed, initialization/runtime/command error, recovery, смена серии, поздний результат после dispose, inactive/hidden/paused/detached/resumed, пользовательская пауза после возврата, initialization в фоне, немедленный release при pop, обычная страница поверх player и повторные входы.
+- `bash scripts/e2e.sh emulator-5554`: 12 passed на API 36 ARM64, seed 20261010, hardware D-pad preflight passed. Новый сценарий читает фактический Android-флаг окна через MethodChannel, проверяет pause/resume, completed/replay, возврат в каталог и два повторных входа. Ошибка HLS также проверяет отсутствие флага. Repository/router/storage/native video не подменялись.
+- Lifecycle-переходы в widget/E2E задаются Flutter binding; E2E читает настоящий native-флаг. Первый Android-прогон обнаружил сброс test binding lifecycle в null между сценариями и был остановлен с ошибками. Fixture harness теперь явно восстанавливает resumed перед запуском, когда native Activity остаётся foreground; финальный полный Android-прогон прошёл.
+- Python quality: 8 passed; Python E2E fixture/input: 11 passed.
+- Обычная dev debug APK успешно пересобрана после E2E с `lib/main_dev.dart` и `env/dev.json`.
+- `graphify update .` обновил AST без API; `git diff --check` прошёл.
+- Prod release APK успешно собран обычной командой с `lib/main_prod.dart`; `verify_android_apk.py` подтвердил текущий AOT/JNI/merge/stripped output для трёх ABI. Размер и SHA-256 — в разделе 6. Сборка сохранила прежние предупреждения KGP/CupertinoIcons font, ошибок нет.
+
+Затронутые файлы этой задачи:
+
+- Runtime: [MainActivity.kt](../android/app/src/main/kotlin/com/anistar/anistar_tv/MainActivity.kt), [PlayerScreen](../lib/packages/features/player/presentation/screens/player_screen.dart), новые [PlaybackScreenAwake](../lib/packages/features/player/presentation/playback_screen_awake.dart) и [PlayerRouteObserver](../lib/packages/features/player/presentation/player_route_observer.dart), [AppRouter](../lib/app/app_router.dart).
+- Тесты: [player_screen_test.dart](../test/packages/features/player/presentation/screens/player_screen_test.dart), [test_app.dart](../test/support/test_app.dart), [app_e2e_test.dart](../integration_test/app_e2e_test.dart), [e2e_harness.dart](../integration_test/support/e2e_harness.dart).
+- Документация: [контракт воспроизведения](specs/04_playback.md), [руководство проверок](05_development_and_testing.md), этот отчёт. Логи: [check](../build/verification/playback-screen-awake/check.log), [Android E2E](../build/verification/playback-screen-awake/e2e.log), [release](../build/verification/playback-screen-awake/release.log).
+
+Изменения предыдущей задачи в login/home/catalog, тестах и спецификациях фокуса/навигации сохранены; исходные diff этих файлов сопоставлены с сохранённым перед началом задачи diff. Раздел 21 остаётся отчётом предыдущей задачи.
+
+Ограничения: ручная визуальная проверка, реальное ожидание системного timeout/Ambient Mode, ручная защитная блокировка и физический TV не проверялись. Native onPause/engine detach/destroy имеют защитное снятие флага в коде, но отдельный автоматический Home/возврат через ОС не выполнялся. E2E lifecycle через binding не заменяет такую проверку. Ссылка AGENTS.md на ../.tessl/RULES.md отсутствует в checkout; доступные инструкции соблюдены. Коммиты, push, merge и deploy не выполнялись.
+
+
+## 23. Ускорение перемотки и автоскрытие после смены фокуса (2026-10-10 UTC)
+
+Причины: `_handleKey` видео принимал только KeyDown и отбрасывал KeyRepeat, а шкала отдельно выполняла фиксированный шаг на аппаратный repeat. `_onControlsTimer` возвращался при `_controlsFocus.hasFocus`, поэтому однажды сработавший timer переставал скрывать controls при focus Play/Back/шкалы. Клавиши, обработанные дочерним меню, также не продлевали timer экрана. После pause/resume новый timer снова упирался в этот focus guard.
+
+`PlayerSeekHold` задаёт общий повтор для видео и шкалы. Короткое нажатие сохраняет ±10 секунд. Первый повтор через 500 мс, последующие — каждые 500 мс; частота аппаратного KeyRepeat не добавляет команды.
+
+| Длительность текущего удержания | Шаг повторной перемотки |
+| --- | --- |
+| 0,5…<2 секунды | 10 секунд |
+| 2…<4 секунды | 20 секунд |
+| 4…<6 секунды | 30 секунд |
+| 6…<8 секунд | 60 секунд |
+| От 8 секунд | 120 секунд |
+
+KeyUp текущего направления останавливает timer. Новое удержание/другое направление начинает с шага 10 секунд; отпускание прежнего направления не отменяет новое. Другая команда, уход focus, панель выбора, смена источника, foreground loss, Back и dispose отменяют повтор. Кнопки сохраняют D-pad navigation: Left/Right перемещают focus без seek. Все UI seek ограничены 0…duration; одинаковые цели на границах не отправляются native player повторно.
+
+Native seek выполняются последовательно для текущего controller. Пока команда ожидается, относительные шаги накапливаются от последней запрошенной цели и объединяются в последнюю позицию. Это сохраняет скорость удержания при задержанном native seek без параллельных команд; запоздалый результат после reload/dispose не запускает отложенную перемотку нового controller. Native command error сохраняет прежний bounded recovery.
+
+Во время воспроизведения controls скрываются после 4 секунд бездействия независимо от focus; перед скрытием focus получает видео. Up/Down снова показывает controls и переводит focus на Back/Play после layout. Наблюдатель hardware input только учитывает активность текущего foreground player и не перехватывает D-pad команды кнопок/панелей. KeyDown/KeyRepeat, focus change, pointer down и seek обновляют timer; позиционные события native playback его не продлевают. Удержание seek сохраняет controls и на границах; после отпускания отсчитываются новые 4 секунды. Pause, native stop/completed и chooser сохраняют видимое управление. Условие Android screen-awake не менялось.
+
+Подтверждение регрессий: на точном runtime до этой задачи, восстановленном из сохранённого исходного diff, три новые проверки ожидаемо упали: hold на первом повторе оставался на 10 вместо 20 секунд, Play-focus и Back-focus оставляли controls видимыми. После проверки исправленные runtime-файлы восстановлены побайтно. Итоговый код прошёл общий check и Android E2E.
+
+Проверки текущих изменений:
+
+- `bash scripts/check.sh check`: format/analyzer/DCM без замечаний, 241 Dart-файл; **232 unit/widget/architecture**, **28 golden**, seed 20261010. Baselines не изменены.
+- **40 player widget-тестов**: добавлены 15 регрессий короткого/длинного press, нескольких KeyRepeat между тиками, KeyUp, сброса после нового удержания и смены направления, старого KeyUp, обеих границ, serial/coalesced slow seek, timeline/menu navigation, Back в начале обратного перехода, background/dispose, поздней native команды после dispose, reload серии во время удержания, chooser isolation, Play/Back focus и его восстановления, pause/focus/resume, обновления idle на повторном вводе и после seek. Прежние lifecycle/recovery/экран-awake проверки прошли.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, AVD anistar_e2e, API 36 ARM64, hardware D-pad preflight passed, seed 20261010. Новый совместный сценарий проверил настоящий native rewind до начала, short seek после отпускания, отсутствие дальнейшего движения на паузе, Play focus → resume → hide, возврат focus видео, Back focus → обновление idle → hide, выход во время hold и снятие фактического window flag. Все 12 прежних сценариев также прошли.
+- Python quality — **8 passed**, fixture/input — **11 passed**. Для локальных loopback fixture и adb потребовался разрешённый запуск вне sandbox; первичная fixture-попытка внутри sandbox не могла открыть socket. Это ограничение окружения, итоговые проверки прошли.
+- Обычные dev debug (`main_dev.dart`, `env/dev.json`) и prod release (`main_prod.dart`) APK успешно пересобраны после E2E. `verify_android_apk.py` подтвердил актуальные AOT/JNI staging/merge/stripped libraries для **armeabi-v7a, arm64-v8a, x86_64**. Release: **59 913 556 байт**, SHA-256 `9ba104606cf843d6c64a7965ee84534796c55b20117a2d3d991f476f8df0a508`. Предупреждения KGP и отсутствующего CupertinoIcons font сохранены; сборки завершились успешно.
+- `graphify update .` завершился AST-only без API: 2559 nodes / 3829 edges. `git diff --check` прошёл.
+
+Изменённые файлы этой задачи:
+
+- Runtime: новый [player_seek_hold.dart](../lib/packages/features/player/presentation/player_seek_hold.dart), [player_screen.dart](../lib/packages/features/player/presentation/screens/player_screen.dart), [player_view.dart](../lib/packages/features/player/presentation/widgets/player_view.dart), [player_overlay.dart](../lib/packages/features/player/presentation/widgets/player_overlay.dart).
+- Тесты: [player_screen_test.dart](../test/packages/features/player/presentation/screens/player_screen_test.dart), [fake_video_platform.dart](../test/mocks/features/player/fake_video_platform.dart), [app_e2e_test.dart](../integration_test/app_e2e_test.dart).
+- Документация: [playback](specs/04_playback.md), [TV interaction](specs/06_tv_interaction.md), [motion](specs/08_motion.md), [development/testing](05_development_and_testing.md), этот отчёт. Graphify обновил локальные игнорируемые graphify-out outputs.
+- Логи: [исходные регрессии](../build/verification/player-hold-autohide/baseline-regressions.log), [40 player tests](../build/verification/player-hold-autohide/player-tests.log), [check](../build/verification/player-hold-autohide/check.log), [E2E](../build/verification/player-hold-autohide/e2e.log), [debug](../build/verification/player-hold-autohide/debug.log), [release](../build/verification/player-hold-autohide/release.log), [AOT freshness](../build/verification/player-hold-autohide/apk-freshness.log).
+
+Предыдущие локальные изменения сохранены. Исходные diff 10 файлов вне пересечения этой задачи сопоставлены побайтно, включая MainActivity/AppRouter, login/home/catalog и прежний E2E harness. PlaybackScreenAwake и PlayerRouteObserver не редактировались; прежние player-regрессии и фактический Android-флаг прошли повторно. Commit/push/merge/deploy не выполнялись, реальные аккаунты и внешние сервисы не использовались.
+
+Ограничения: ручная визуальная проверка окна эмулятора, Extended Controls/физический пульт, физический TV, реальный длительный AniStar HLS и его seek latency не проверялись. Полная кривая до минутных шагов проверена widget-тестом на 24-минутной fake duration; Android fixture длится 24 секунды и проверяет native механику/границу и idle совместно. Прежние ограничения ручной блокировки/Ambient Mode остаются. Ссылка AGENTS.md на ../.tessl/RULES.md отсутствует в checkout; доступные инструкции, ADR-0008 и связанные specs соблюдены. Блокеров нет.
+
+## 24. Общая проверка изменений из трёх чатов (2026-10-11)
+
+Повторно проверено совместное локальное состояние задач «Исправить фокус и меню Anistar», «Удерживать экран при воспроизведении» и «Исправить перемотку и автоскрытие». Результаты прежних прогонов не использовались как подтверждение этого прогона.
+
+- `bash scripts/check.sh check`: format/analyzer/DCM без замечаний; **232 unit/widget/architecture** и **28 golden** прошли, seed 20261010. Golden baselines не изменялись.
+- Python quality: **8 passed**; fixture/input: **11 passed**.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, API 36 ARM64, hardware D-pad preflight прошёл, seed 20261010. Использовался локальный HTTPS/HLS fixture и настоящий Android player. Проверены вход после отказов, сохранение меню/фокуса, удержание перемотки и отпускание, автоскрытие после Play/Back и pause/resume, выход во время удержания и фактический Android window flag.
+
+- После E2E пересобраны обычные dev debug (`main_dev.dart`, `env/dev.json`) и prod release (`main_prod.dart`) APK. `verify_android_apk.py` подтвердил соответствие текущим AOT-библиотекам для трёх ABI; SHA-256 release: `9ba104606cf843d6c64a7965ee84534796c55b20117a2d3d991f476f8df0a508`. Обе сборки успешны с прежним предупреждением KGP.
+- `git diff --check` прошёл.
+
+Новых дефектов не обнаружено; runtime и тесты не изменялись. Логи текущего прогона: `build/verification/combined-regression/` (`full-check.log`, `e2e.log`, `debug.log`, `release.log`, `apk-verification.log`). Реальные аккаунты и внешний AniStar/CDN не использовались. Ручная оценка физического TV/пульта, системный timeout сна и реальный длительный HLS в этот прогон не входят. Отсутствующая ссылка `../.tessl/RULES.md` остаётся ограничением доступных инструкций.

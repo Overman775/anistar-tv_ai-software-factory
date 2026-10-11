@@ -55,7 +55,7 @@ class CatalogScreen extends ConsumerStatefulWidget {
 }
 
 class _CatalogScreenState extends ConsumerState<CatalogScreen> {
-  late final CatalogBloc _bloc;
+  late CatalogBloc _bloc;
   FilteredCatalogRepository? _filteredRepository;
   final _sortFocus = FocusNode(debugLabel: 'Сортировка');
   CatalogSort get _sort => _filteredRepository?.sort ?? defaultCatalogSort;
@@ -78,6 +78,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   void initState() {
     super.initState();
+    _startCatalog();
+    _scrollController.addListener(_loadMoreNearEnd);
+  }
+
+  void _startCatalog() {
+    _filteredRepository = null;
     final filter = widget.filter;
     if (filter != null) {
       _filteredRepository = FilteredCatalogRepository(ref.read(catalogBrowseRepositoryProvider), filter);
@@ -88,7 +94,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           (widget.favoritesOnly ? ref.read(favoritesRepositoryProvider) : ref.read(catalogRepositoryProvider)),
       logger: ref.read(loggerProvider),
     )..add(const CatalogStarted());
-    _scrollController.addListener(_loadMoreNearEnd);
   }
 
   void _onRailFocusChanged(bool focused) {
@@ -444,6 +449,26 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant CatalogScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.favoritesOnly != widget.favoritesOnly || oldWidget.filter?.path != widget.filter?.path) {
+      unawaited(_bloc.close());
+      _selectedIndex = 0;
+      _lastCardFocus = null;
+      _initialFilteredLoad = true;
+      _sortInteracted = false;
+      _keepSortFocus = false;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+      _startCatalog();
+      if (widget.autofocusTab) {
+        _focusRail();
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _sortFocus.dispose();
     _contentFocus.dispose();
@@ -594,10 +619,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                           child: FocusScope(
                             node: _contentFocus,
                             onKeyEvent: _handleContentKey,
-                            child: BlocConsumer<CatalogBloc, CatalogState>(
-                              listener: _onCatalogStateChanged,
-                              buildWhen: (previous, current) => previous != current,
-                              builder: _buildState,
+                            child: TweenAnimationBuilder<double>(
+                              key: ValueKey((widget.favoritesOnly, widget.filter?.path)),
+                              tween: Tween(begin: 0, end: 1),
+                              duration: AppMotion.durationOf(context, AppMotion.fast),
+                              curve: AppMotion.enterCurve,
+                              builder: (context, value, child) => Opacity(opacity: value, child: child),
+                              child: BlocConsumer<CatalogBloc, CatalogState>(
+                                bloc: _bloc,
+                                listener: _onCatalogStateChanged,
+                                buildWhen: (previous, current) => previous != current,
+                                builder: _buildState,
+                              ),
                             ),
                           ),
                         ),

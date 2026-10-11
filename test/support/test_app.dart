@@ -1,3 +1,4 @@
+import 'package:anistar_tv/packages/features/player/presentation/player_route_observer.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +24,7 @@ Future<void> pumpTvApp(
       overrides: [loggerProvider.overrideWithValue(AppLogger.logger), ...overrides],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
+        navigatorObservers: [PlayerRouteObserver()],
         theme: AppTheme.darkTheme,
         home: wrapInScaffold ? Scaffold(body: child) : child,
       ),

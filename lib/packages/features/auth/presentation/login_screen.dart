@@ -22,9 +22,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameFocus = FocusNode(debugLabel: 'Логин');
   final _passwordFocus = FocusNode(debugLabel: 'Пароль');
   final _submitFocus = FocusNode(debugLabel: 'Войти');
+  final _retryFocus = FocusNode(debugLabel: 'Повторить проверку сессии');
   bool _obscurePassword = true;
 
-  KeyEventResult _moveFieldFocus(KeyEvent event, FocusNode down, [FocusNode? up]) {
+  KeyEventResult _moveFieldFocus(KeyEvent event, FocusNode down, FocusNode up) {
     final target = switch (event.logicalKey) {
       LogicalKeyboardKey.arrowDown => down,
       LogicalKeyboardKey.arrowUp => up,
@@ -33,7 +34,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (target == null) {
       return KeyEventResult.ignored;
     }
-    if (event is KeyDownEvent) {
+    if (event is KeyDownEvent || event is KeyRepeatEvent) {
       target.requestFocus();
     }
 
@@ -65,6 +66,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _usernameFocus.dispose();
     _passwordFocus.dispose();
     _submitFocus.dispose();
+    _retryFocus.dispose();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -118,7 +120,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: AppSpacing.lg),
                           Focus(
                             canRequestFocus: false,
-                            onKeyEvent: (_, event) => _moveFieldFocus(event, _passwordFocus),
+                            onKeyEvent: (_, event) => _moveFieldFocus(event, _passwordFocus, _usernameFocus),
                             child: TextFormField(
                               key: const ValueKey('login_username'),
                               controller: _username,
@@ -174,30 +176,42 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ],
                           const SizedBox(height: 24),
-                          FilledButton(
-                            key: const ValueKey('login_submit'),
-                            focusNode: _submitFocus,
-                            onPressed: auth.isLoading ? null : () => unawaited(_submit()),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (auth.isLoading) ...[
-                                  const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  ),
-                                  const SizedBox(width: AppSpacing.sm),
+                          Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) =>
+                                _moveFieldFocus(event, error == null ? _submitFocus : _retryFocus, _passwordFocus),
+                            child: FilledButton(
+                              key: const ValueKey('login_submit'),
+                              focusNode: _submitFocus,
+                              onPressed: auth.isLoading ? null : () => unawaited(_submit()),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (auth.isLoading) ...[
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    ),
+                                    const SizedBox(width: AppSpacing.sm),
+                                  ],
+                                  Text(auth.isLoading ? 'Проверяем вход…' : 'Войти'),
                                 ],
-                                Text(auth.isLoading ? 'Проверяем вход…' : 'Войти'),
-                              ],
+                              ),
                             ),
                           ),
                           if (error != null)
-                            TextButton(
-                              onPressed: ref.read(authControllerProvider.notifier).retryRestore,
-                              child: const Text('Повторить проверку сессии'),
+                            Focus(
+                              canRequestFocus: false,
+                              onKeyEvent: (_, event) => _moveFieldFocus(event, _retryFocus, _submitFocus),
+                              child: TextButton(
+                                focusNode: _retryFocus,
+                                onPressed: auth.isLoading
+                                    ? null
+                                    : ref.read(authControllerProvider.notifier).retryRestore,
+                                child: const Text('Повторить проверку сессии'),
+                              ),
                             ),
                         ],
                       ),

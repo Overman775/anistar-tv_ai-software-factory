@@ -13,6 +13,7 @@ class PlayerOverlay extends StatefulWidget {
     required this.value,
     required this.onPlayPause,
     required this.onSeek,
+    this.onSeekKeyEvent,
     this.onSelectQuality,
     this.onSelectEpisode,
     this.onPreviousEpisode,
@@ -32,6 +33,7 @@ class PlayerOverlay extends StatefulWidget {
     return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
   }
 
+  final bool Function(KeyEvent)? onSeekKeyEvent;
   final int episodeNumber;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
@@ -108,7 +110,9 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
     var returnToVideo = false;
     if (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight) {
       if (current == _timeline) {
-        if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        if (widget.onSeekKeyEvent != null) {
+          widget.onSeekKeyEvent?.call(event);
+        } else if (event is KeyDownEvent || event is KeyRepeatEvent) {
           _seekRelative(Duration(seconds: key == LogicalKeyboardKey.arrowRight ? 10 : -10));
         }
 

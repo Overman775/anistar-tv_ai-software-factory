@@ -27,15 +27,29 @@ void main() {
   late FakeVideoPlatform video;
   late platform.VideoPlayerPlatform previousPlatform;
   late FakePlaybackRepository repository;
+  final awakeCalls = <bool>[];
+  const awakeChannel = MethodChannel('anistar_tv/playback_screen_awake');
 
   setUp(() {
+    TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    awakeCalls.clear();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(awakeChannel, (
+      call,
+    ) async {
+      awakeCalls.add(call.arguments as bool);
+
+      return null;
+    });
     previousPlatform = platform.VideoPlayerPlatform.instance;
     video = FakeVideoPlatform();
     repository = FakePlaybackRepository();
     platform.VideoPlayerPlatform.instance = video;
   });
 
-  tearDown(() => platform.VideoPlayerPlatform.instance = previousPlatform);
+  tearDown(() {
+    platform.VideoPlayerPlatform.instance = previousPlatform;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(awakeChannel, null);
+  });
 
   Future<void> settle(WidgetTester tester) async {
     // Stream cancellation may complete on the real event loop, as native plugin
@@ -73,6 +87,465 @@ void main() {
     expect(find.text(episodes ? 'Выбор серии' : 'Качество видео'), findsOneWidget);
   }
 
+  bool controlsVisible(WidgetTester tester) => tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible;
+
+  Future<void> unmount(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+  }
+
+  testWidgets('short arrow press seeks once and release prevents any repeat', (tester) async {
+    await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 499));
+    expect(video.seeks, [const Duration(seconds: 10)]);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 2));
+    expect(video.seeks, [const Duration(seconds: 10)]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(video.seeks.last, Duration.zero);
+    await unmount(tester);
+  });
+
+  testWidgets('holding arrows accelerates predictably independent of key repeat frequency', (tester) async {
+    await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    var previous = 10;
+    for (var tick = 1; tick <= 18; tick++) {
+      for (var repeat = 0; repeat < 3; repeat++) {
+        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      }
+      await tester.pump();
+      expect(video.seeks.last.inSeconds, previous, reason: 'hardware repeat must not duplicate seek');
+      await tester.pump(const Duration(milliseconds: 500));
+      final step = switch (tick) {
+        < 4 => 10,
+        < 8 => 20,
+        < 12 => 30,
+        < 16 => 60,
+        _ => 120,
+      };
+      previous += step;
+      expect(video.seeks.last.inSeconds, previous, reason: 'tick $tick');
+      expect(controlsVisible(tester), isTrue);
+    }
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 3));
+    expect(controlsVisible(tester), isTrue);
+    expect(video.seeks.last.inSeconds, previous);
+    await tester.pump(const Duration(seconds: 1));
+    expect(controlsVisible(tester), isFalse);
+    await unmount(tester);
+  });
+
+  testWidgets('direction changes and a new hold reset acceleration; old key up cannot stop new direction', (
+    tester,
+  ) async {
+    await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    for (var tick = 0; tick < 12; tick++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    final position = video.seeks.last;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(video.seeks.last, position - const Duration(seconds: 10));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(video.seeks.last, position - const Duration(seconds: 20));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(video.seeks.last, position);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await unmount(tester);
+  });
+
+  testWidgets('seek hold clamps both boundaries without repeated native commands', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    for (var tick = 0; tick < 18; tick++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    expect(video.seeks, isEmpty);
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await controller.seekTo(controller.value.duration - const Duration(seconds: 5));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(video.seeks.last, controller.value.duration);
+    final requests = video.seekRequests.length;
+    await tester.pump(const Duration(seconds: 5));
+    expect(video.seekRequests, hasLength(requests));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await unmount(tester);
+  });
+
+  testWidgets('slow native seeks are serialized and pending targets accumulate then coalesce', (tester) async {
+    await mount(tester);
+    final gate = Completer<void>();
+    video.pendingSeek = gate;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(video.seekRequests, [const Duration(seconds: 10)]);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    video.pendingSeek = null;
+    gate.complete();
+    await tester.pump();
+    expect(video.seeks, [const Duration(seconds: 10), const Duration(seconds: 30)]);
+    expect(video.maxActiveSeeks, 1);
+    await unmount(tester);
+  });
+
+  testWidgets('timeline uses the same hold and leaving it cancels repeat without changing button navigation', (
+    tester,
+  ) async {
+    await mount(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Позиция видео');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    for (var tick = 0; tick < 4; tick++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    expect(video.seeks.last, const Duration(seconds: 60));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    final requests = video.seeks.length;
+    await tester.pump(const Duration(seconds: 1));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Назад на 10 секунд');
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Вперёд на 10 секунд');
+    expect(video.seeks, hasLength(requests));
+    await unmount(tester);
+  });
+
+  testWidgets('Back during hold cancels repeats before the player route finishes closing', (tester) async {
+    await pumpTvApp(
+      tester,
+      const Text('Список серий'),
+      overrides: [playbackRepositoryProvider.overrideWithValue(repository)],
+    );
+    unawaited(
+      Navigator.of(tester.element(find.text('Список серий'))).push(
+        MaterialPageRoute<void>(builder: (_) => const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме')),
+      ),
+    );
+    await settle(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    final requests = video.seekRequests.length;
+    Navigator.of(tester.element(find.byType(PlayerScreen))).pop();
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await settle(tester);
+    expect(video.seekRequests, hasLength(requests));
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(video.disposed, [1]);
+    expect(awakeCalls.last, isFalse);
+    await unmount(tester);
+  });
+
+  testWidgets('background and disposal while holding cancel repeat', (tester) async {
+    await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    final requests = video.seekRequests.length;
+    await tester.pump(const Duration(seconds: 2));
+    expect(video.seekRequests, hasLength(requests));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    final beforeDispose = video.seekRequests.length;
+    await unmount(tester);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    expect(video.seekRequests, hasLength(beforeDispose));
+  });
+
+  for (final key in [LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowUp]) {
+    testWidgets('controls hide after idle with focus on ${key == LogicalKeyboardKey.arrowUp ? 'Back' : 'Play'}', (
+      tester,
+    ) async {
+      await mount(tester);
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        key == LogicalKeyboardKey.arrowUp ? 'К сериям' : 'Пауза / воспроизведение',
+      );
+      await tester.pump(const Duration(seconds: 3));
+      expect(controlsVisible(tester), isTrue);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(controlsVisible(tester), isFalse);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+      await tester.sendKeyEvent(key);
+      await tester.pump();
+      await tester.pump();
+      expect(controlsVisible(tester), isTrue);
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        key == LogicalKeyboardKey.arrowUp ? 'К сериям' : 'Пауза / воспроизведение',
+      );
+      await unmount(tester);
+    });
+  }
+
+  testWidgets('button navigation repeat and boundary presses renew idle timer', (tester) async {
+    await mount(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(seconds: 3));
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(seconds: 3));
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump(const Duration(seconds: 4));
+    expect(controlsVisible(tester), isFalse);
+    expect(video.seeks, isEmpty);
+    await unmount(tester);
+  });
+
+  testWidgets('pause focus change and resume hide only after renewed playing inactivity', (tester) async {
+    await mount(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'К сериям');
+    await tester.pump(const Duration(seconds: 6));
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    expect(controlsVisible(tester), isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    expect(controlsVisible(tester), isFalse);
+    await unmount(tester);
+  });
+
+  testWidgets('episode reload during hold cancels repeats and does not seek the replacement controller', (
+    tester,
+  ) async {
+    await mount(tester);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const ValueKey('player-next-episode')));
+    await settle(tester);
+    final requests = video.seekRequests.length;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    expect(video.seekRequests, hasLength(requests));
+    expect(video.sources, hasLength(2));
+    expect(video.positions[2] ?? Duration.zero, Duration.zero);
+    await unmount(tester);
+  });
+
+  testWidgets('chooser focus cannot seek background video and restarts hide timer on return', (tester) async {
+    await mount(tester);
+    await openMenu(tester);
+    final requests = video.seekRequests.length;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    expect(video.seekRequests, hasLength(requests));
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await settle(tester);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+    await tester.pump(const Duration(seconds: 4));
+    expect(controlsVisible(tester), isFalse);
+    await unmount(tester);
+  });
+
+  testWidgets('a late native seek after disposal cannot drain pending hold targets', (tester) async {
+    await mount(tester);
+    final gate = Completer<void>();
+    video.pendingSeek = gate;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpWidget(const SizedBox());
+    video.pendingSeek = null;
+    gate.complete();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await settle(tester);
+    expect(video.seekRequests, [const Duration(seconds: 10)]);
+    expect(video.disposed, [1]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('screen flag follows play pause resume and native stop without position polling', (tester) async {
+    await mount(tester);
+    expect(awakeCalls, [false, true]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
+    await tester.pump();
+    expect(awakeCalls.last, isTrue);
+    video.events[1]!.add(
+      platform.VideoEvent(eventType: platform.VideoEventType.isPlayingStateUpdate, isPlaying: false),
+    );
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('buffering releases the flag and only playing bufferingEnd restores it', (tester) async {
+    await mount(tester);
+    video.events[1]!.add(platform.VideoEvent(eventType: platform.VideoEventType.bufferingStart));
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
+    video.events[1]!.add(platform.VideoEvent(eventType: platform.VideoEventType.bufferingEnd));
+    await tester.pump();
+    expect(awakeCalls.last, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pump();
+    video.events[1]!.add(platform.VideoEvent(eventType: platform.VideoEventType.bufferingEnd));
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('inactive hidden paused detached and resume never retain a stale flag', (tester) async {
+    await mount(tester);
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.detached,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+      await tester.pump();
+      expect(awakeCalls.last, isFalse, reason: state.name);
+    }
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settle(tester);
+    expect(awakeCalls.last, isTrue);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await settle(tester);
+    expect(awakeCalls.last, isFalse);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('late initialization in background cannot hold the screen before foreground playback', (tester) async {
+    video.delayInitialization = true;
+    await pumpTvApp(
+      tester,
+      const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме'),
+      overrides: [playbackRepositoryProvider.overrideWithValue(repository)],
+      wrapInScaffold: false,
+    );
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    expect(awakeCalls, [false]);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    video.events[1]!.add(
+      platform.VideoEvent(
+        eventType: platform.VideoEventType.initialized,
+        duration: const Duration(minutes: 24),
+        size: const Size(1280, 720),
+      ),
+    );
+    await settle(tester);
+    // Background initialization must still leave the initial flag disabled.
+    // ignore: avoid-duplicate-test-assertions
+    expect(awakeCalls, [false]);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(awakeCalls.last, isTrue);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    expect(awakeCalls.last, isFalse);
+  });
+
+  testWidgets('ordinary pages and pop transitions release immediately across repeated player entries', (tester) async {
+    await pumpTvApp(
+      tester,
+      const Text('Каталог'),
+      overrides: [playbackRepositoryProvider.overrideWithValue(repository)],
+    );
+    final navigator = Navigator.of(tester.element(find.text('Каталог')));
+    expect(awakeCalls, isEmpty);
+    for (var i = 0; i < 2; i++) {
+      unawaited(
+        navigator.push(
+          MaterialPageRoute<void>(builder: (_) => const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме')),
+        ),
+      );
+      await settle(tester);
+      expect(awakeCalls.last, isTrue);
+      unawaited(navigator.push(MaterialPageRoute<void>(builder: (_) => const Text('Обычный экран'))));
+      await tester.pump();
+      expect(awakeCalls.last, isFalse);
+      await settle(tester);
+      navigator.pop();
+      await settle(tester);
+      expect(awakeCalls.last, isTrue);
+      navigator.pop();
+      await tester.pump();
+      expect(awakeCalls.last, isFalse, reason: 'release before reverse transition disposes player');
+      await settle(tester);
+      expect(find.text('Каталог'), findsOneWidget);
+    }
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    expect(video.disposed, [1, 2]);
+  });
+
+  testWidgets('channel failure cannot fail playback or leave an unhandled async error', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(awakeChannel, (_) async {
+      throw PlatformException(code: 'ScreenFlagError');
+    });
+    await mount(tester);
+    expect(tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller.value.isPlaying, isTrue);
+    expect(repository.calls, 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('next and previous replace native playback at zero keeping quality and respecting edges', (tester) async {
     repository.episodeNumbers = [3, 1];
     await mount(tester);
@@ -80,9 +553,12 @@ void main() {
     await first.seekTo(const Duration(seconds: 40));
     expect(find.byKey(const ValueKey('player-previous-episode')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('player-next-episode')));
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
     await settle(tester);
     final second = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     expect(repository.episode, 3);
+    expect(awakeCalls.last, isTrue);
     expect(second, isNot(same(first)));
     expect(second.value.position, Duration.zero);
     expect(repository.quality, PlaybackQuality.high);
@@ -115,7 +591,9 @@ void main() {
     await settle(tester);
   });
 
-  testWidgets('hidden controls reveal focus, remain visible and never seek while navigating buttons', (tester) async {
+  testWidgets('hidden controls reveal focus and hide again after pause resume without navigation seeks', (
+    tester,
+  ) async {
     await mount(tester);
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     await tester.pump(const Duration(seconds: 5));
@@ -135,11 +613,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
     await settle(tester);
     await tester.pump(const Duration(seconds: 5));
-    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isTrue);
+    await tester.pump();
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isFalse);
     expect(controller.value.position, Duration.zero);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пауза / воспроизведение');
     await tester.pump(const Duration(seconds: 5));
     expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isFalse);
     await tester.pumpWidget(const SizedBox());
@@ -194,6 +675,7 @@ void main() {
     video.events[1]?.add(platform.VideoEvent(eventType: platform.VideoEventType.completed));
     await settle(tester);
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    expect(awakeCalls.last, isFalse);
     expect(controller.value.isCompleted, isTrue);
     expect(controller.value.isPlaying, isFalse);
     expect(tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible, isTrue);
@@ -259,6 +741,7 @@ void main() {
     );
     await settle(tester);
     expect(storage.writes, 0);
+    expect(awakeCalls.last, isFalse);
     expect(find.text('Видео не запустилось'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
@@ -346,6 +829,7 @@ void main() {
   testWidgets('OK retries a failed stream without searching for the retry button', (tester) async {
     video.failInitialization = true;
     await mount(tester);
+    expect(awakeCalls.last, isFalse);
     expect(find.text('Видео не запустилось'), findsOneWidget);
     video.failInitialization = false;
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -373,6 +857,7 @@ void main() {
     await tester.pump(const Duration(seconds: 36));
     await settle(tester);
     expect(native.disposed, [1]);
+    expect(awakeCalls, [false]);
     expect(native.sources, hasLength(1));
     expect(tester.takeException(), isNull);
   });
@@ -388,6 +873,8 @@ void main() {
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     await controller.seekTo(const Duration(seconds: 120));
     native.events[1]?.addError(PlatformException(code: 'VideoError', message: 'Expired URL'));
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
     await tester.pump(const Duration(milliseconds: 100));
     await settle(tester);
     expect(repo.calls, 2);
@@ -401,6 +888,7 @@ void main() {
     native.events[2]?.addError(PlatformException(code: 'VideoError', message: 'Persistent source error'));
     await settle(tester);
     expect(native.sources, hasLength(2));
+    expect(awakeCalls.last, isFalse);
     expect(find.text('Воспроизведение прервано'), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
@@ -412,6 +900,9 @@ void main() {
     expect(retried.value.isPlaying, isTrue);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
+    // Recheck after disposal, following the earlier runtime error.
+    // ignore: avoid-duplicate-test-assertions
+    expect(awakeCalls.last, isFalse);
     expect(native.disposed, [1, 2, 3]);
   });
 
@@ -421,6 +912,7 @@ void main() {
     native.failInitialization = true;
     await mount(tester);
     expect(repo.calls, 2);
+    expect(awakeCalls.last, isFalse);
     expect(find.text('Видео не запустилось'), findsOneWidget);
     expect(native.disposed, [1, 2]);
     native.failInitialization = false;
@@ -439,6 +931,8 @@ void main() {
     await controller.seekTo(const Duration(seconds: 120));
     await controller.pause();
     native.events[1]?.addError(PlatformException(code: 'VideoError', message: 'Expired URL'));
+    await tester.pump();
+    expect(awakeCalls.last, isFalse);
     await settle(tester);
     final replacement = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     expect(replacement.value.position, const Duration(seconds: 120));

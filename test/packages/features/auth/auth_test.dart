@@ -127,6 +127,63 @@ void main() {
     );
   });
 
+  testWidgets('arrows keep both populated fields editable through rejection and a second attempt', (tester) async {
+    repository.loginResult = const Result.failure(UnknownFailure());
+    await pumpTvApp(
+      tester,
+      const LoginScreen(),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    final username = find.byKey(const ValueKey('login_username'));
+    final password = find.byKey(const ValueKey('login_password'));
+    final submit = find.byKey(const ValueKey('login_submit'));
+    final usernameNode = tester
+        .widget<EditableText>(find.descendant(of: username, matching: find.byType(EditableText)))
+        .focusNode;
+    final passwordNode = tester
+        .widget<EditableText>(find.descendant(of: password, matching: find.byType(EditableText)))
+        .focusNode;
+    final submitNode = tester.widget<FilledButton>(submit).focusNode;
+    await tester.enterText(username, 'test');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(passwordNode));
+    await tester.enterText(password, 'wrong');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(submitNode));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    // Recheck the same target after the explicit reverse transition from submit.
+    // ignore: avoid-duplicate-test-assertions
+    expect(FocusManager.instance.primaryFocus, same(passwordNode));
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(usernameNode));
+    for (var attempt = 0; attempt < 2; attempt++) {
+      await tester.enterText(username, 'test$attempt');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.enterText(password, 'wrong$attempt');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(tester.widget<TextFormField>(password).controller?.selection.baseOffset, 5);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(repository.loginCalls, attempt + 1);
+      expect(FocusManager.instance.primaryFocus, same(passwordNode));
+      expect(tester.widget<TextFormField>(password).controller?.text, isEmpty);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(FocusManager.instance.primaryFocus, same(usernameNode));
+    }
+  });
+
   test('concurrent login is blocked; expiry prevents a late login result from unlocking the app', () async {
     repository.pendingLogin = Completer<Result<String, Failure>>();
     final container = ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repository)]);

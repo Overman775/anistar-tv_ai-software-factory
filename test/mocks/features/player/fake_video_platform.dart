@@ -13,6 +13,10 @@ final class FakeVideoPlatform extends VideoPlayerPlatform {
   bool failInitialization = false;
   bool failNextSeek = false;
   bool delayInitialization = false;
+  Completer<void>? pendingSeek;
+  int activeSeeks = 0;
+  int maxActiveSeeks = 0;
+  final List<Duration> seekRequests = [];
 
   @override
   Future<void> init() => Future<void>.value();
@@ -58,8 +62,18 @@ final class FakeVideoPlatform extends VideoPlayerPlatform {
       failNextSeek = false;
       throw PlatformException(code: 'SeekError', message: 'Native command failed');
     }
-    positions[playerId] = position;
-    seeks.add(position);
+    seekRequests.add(position);
+    activeSeeks++;
+    if (activeSeeks > maxActiveSeeks) {
+      maxActiveSeeks = activeSeeks;
+    }
+    try {
+      await pendingSeek?.future;
+      positions[playerId] = position;
+      seeks.add(position);
+    } finally {
+      activeSeeks--;
+    }
   }
 
   @override

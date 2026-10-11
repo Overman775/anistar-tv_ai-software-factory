@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:ui_kit/ui_kit.dart';
 
 import '../../../catalog/domain/models/anime_summary.dart';
 import '../../../catalog/presentation/screens/catalog_screen.dart';
@@ -41,21 +40,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
-    key: ValueKey(_favoritesOnly),
-    tween: Tween(begin: 0, end: 1),
-    duration: AppMotion.durationOf(context, AppMotion.fast),
-    curve: AppMotion.enterCurve,
-    builder: (context, value, child) => Opacity(opacity: value, child: child),
-    child: CatalogScreen(
-      accountName: widget.accountName,
-      favoritesOnly: _favoritesOnly,
-      autofocusTab: _autofocusTab,
-      onTabSelected: _selectTab,
-      onAnimeTap: widget.onAnimeTap,
-      onOpenLogs: widget.onOpenLogs,
-      onOpenGenres: widget.onOpenGenres,
-      onSignOut: widget.onSignOut,
-    ),
+  Widget build(BuildContext context) => CatalogScreen(
+    accountName: widget.accountName,
+    favoritesOnly: _favoritesOnly,
+    autofocusTab: _autofocusTab,
+    onTabSelected: _selectTab,
+    onAnimeTap: widget.onAnimeTap,
+    onOpenLogs: widget.onOpenLogs,
+    onOpenGenres: widget.onOpenGenres,
+    onSignOut: widget.onSignOut,
   );
 }

@@ -62,6 +62,9 @@ final class E2eHarness {
   }
 
   Future<void> launch(WidgetTester tester, {bool autoLogin = true, bool resetSession = true}) async {
+    // Flutter resets lifecycleState to null between tests while the same native
+    // Activity stays resumed. Restore the fixture's actual foreground state.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     if (resetSession) {
       final session = AnistarSession(origin, SecureStorage());
       await session.clear();
