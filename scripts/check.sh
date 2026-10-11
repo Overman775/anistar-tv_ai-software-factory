@@ -30,7 +30,7 @@ while IFS= read -r -d '' file; do
   dart_files+=("$file")
 done < <(find lib infrastructure test integration_test tool/quality \
   -type d \( -name build -o -name .dart_tool \) -prune -o \
-  -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.freezed.dart' \
+  -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' ! -name '*.freezed.dart' \
   ! -name generated_plugin_registrant.dart -print0)
 [[ ${#dart_files[@]} -gt 0 ]] || { echo "No maintained Dart sources found." >&2; exit 1; }
 

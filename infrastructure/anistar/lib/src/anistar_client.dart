@@ -12,7 +12,7 @@ import 'direct_episode.dart';
 abstract interface class AnistarClient {
   Stream<void> get expired;
 
-  Future<String?> restore();
+  Future<String?> restore({void Function()? onSessionCheck});
   Future<String> signIn(String username, String password);
   Future<void> signOut();
 

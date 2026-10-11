@@ -3,6 +3,7 @@
 
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/startup_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
@@ -140,7 +141,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('login rejection, encrypted restore, expiry and logout gate the catalog', (tester) async {
+  testWidgets('startup retry, login rejection, encrypted restore, expiry and logout gate the catalog', (tester) async {
     await fixture.configure();
     await fixture.launch(tester, autoLogin: false);
     expect(find.byType(CatalogScreen), findsNothing);
@@ -191,8 +192,18 @@ void main() {
     await E2eHarness.login(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'authenticated catalog');
     final postCount = _events(await fixture.state()).where((event) => event['method'] == 'POST').length;
+    await fixture.configure(catalogError: true, reset: false);
     await tester.pumpWidget(const SizedBox.shrink());
     await fixture.launch(tester, autoLogin: false, resetSession: false);
+    await E2eHarness.waitFor(
+      tester,
+      () => find.byKey(const ValueKey('startup_retry')).evaluate().isNotEmpty,
+      'startup session refusal',
+    );
+    expect(find.byType(StartupScreen), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
+    await fixture.configure(reset: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(
       tester,
       () => find.byType(AnimeCard).evaluate().isNotEmpty,

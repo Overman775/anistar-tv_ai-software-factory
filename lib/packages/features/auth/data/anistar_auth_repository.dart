@@ -13,7 +13,8 @@ final class AnistarAuthRepository extends BaseRepository implements AuthReposito
   AnistarAuthRepository(this._client, [super.logger]);
 
   @override
-  Future<Result<String?, Failure>> restore() => makeApiCall(_client.restore);
+  Future<Result<String?, Failure>> restore({void Function()? onSessionCheck}) =>
+      makeApiCall(() => _client.restore(onSessionCheck: onSessionCheck));
 
   @override
   Future<Result<String, Failure>> signIn(String username, String password) =>

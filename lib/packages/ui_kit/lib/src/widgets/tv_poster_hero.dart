@@ -24,7 +24,12 @@ class TvPosterHero extends StatelessWidget {
 
           return ClipRRect(borderRadius: AppRadii.large, child: hero.child);
         },
-        child: AppNetworkImage(imageUrl: imageUrl, semanticLabel: semanticLabel, animateLoading: false),
+        child: AppNetworkImage(
+          imageUrl: imageUrl,
+          semanticLabel: semanticLabel,
+          animateLoading: false,
+          resizeToLayout: false,
+        ),
       ),
     ),
   );

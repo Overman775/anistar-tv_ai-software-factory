@@ -22,13 +22,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _usernameFocus = FocusNode(debugLabel: 'Логин');
   final _passwordFocus = FocusNode(debugLabel: 'Пароль');
   final _submitFocus = FocusNode(debugLabel: 'Войти');
-  final _retryFocus = FocusNode(debugLabel: 'Повторить проверку сессии');
   bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    for (final node in [_usernameFocus, _passwordFocus, _submitFocus, _retryFocus]) {
+    for (final node in [_usernameFocus, _passwordFocus, _submitFocus]) {
       node.addListener(_revealFocus);
     }
   }
@@ -38,12 +37,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) {
         return;
       }
-      final target = [
-        _usernameFocus,
-        _passwordFocus,
-        _submitFocus,
-        _retryFocus,
-      ].where((node) => node.hasFocus).firstOrNull;
+      final target = [_usernameFocus, _passwordFocus, _submitFocus].where((node) => node.hasFocus).firstOrNull;
       final targetContext = target?.context;
       if (targetContext != null) {
         unawaited(
@@ -101,7 +95,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _usernameFocus.dispose();
     _passwordFocus.dispose();
     _submitFocus.dispose();
-    _retryFocus.dispose();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -142,7 +135,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.live_tv_rounded, color: AppPalette.primary, size: 32),
+                              const AnistarLogo(size: 32),
                               const SizedBox(width: AppSpacing.sm),
                               Flexible(
                                 child: Text(
@@ -216,7 +209,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               key: const ValueKey('login_error'),
                               liveRegion: true,
                               child: Text(
-                                error is Failure ? error.message : 'Не удалось проверить сессию. Повторите попытку.',
+                                error is Failure ? error.message : 'Не удалось выполнить вход. Повторите попытку.',
                                 style: TextStyle(color: Theme.of(context).colorScheme.error),
                               ),
                             ),
@@ -224,8 +217,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 24),
                           Focus(
                             canRequestFocus: false,
-                            onKeyEvent: (_, event) =>
-                                _moveFieldFocus(event, error == null ? _submitFocus : _retryFocus, _passwordFocus),
+                            onKeyEvent: (_, event) => _moveFieldFocus(event, _submitFocus, _passwordFocus),
                             child: FilledButton(
                               key: const ValueKey('login_submit'),
                               focusNode: _submitFocus,
@@ -252,18 +244,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ),
                             ),
                           ),
-                          if (error != null)
-                            Focus(
-                              canRequestFocus: false,
-                              onKeyEvent: (_, event) => _moveFieldFocus(event, _retryFocus, _submitFocus),
-                              child: TextButton(
-                                focusNode: _retryFocus,
-                                onPressed: auth.isLoading
-                                    ? null
-                                    : ref.read(authControllerProvider.notifier).retryRestore,
-                                child: const Text('Повторить проверку сессии'),
-                              ),
-                            ),
                         ],
                       ),
                     ),

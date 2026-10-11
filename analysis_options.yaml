@@ -7,6 +7,7 @@ analyzer:
     strict-raw-types: true
   exclude:
     - "**/*.g.dart"
+    - "**/*.gen.dart"
     - "**/*.freezed.dart"
     - "build/**"
     - lib/generated_plugin_registrant.dart

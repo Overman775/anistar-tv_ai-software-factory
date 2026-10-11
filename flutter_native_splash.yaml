@@ -1,12 +1,13 @@
 flutter_native_splash:
   color: "#080B14"
-  image: resources/logo.png
+  image: lib/packages/ui_kit/assets/images/anistar_tv_banner.png
   android: true
+  android_screen_orientation: landscape
   ios: false
   web: false
   fullscreen: true
 
   android_12:
     color: "#080B14"
-    image: resources/android_icon.png
+    image: lib/packages/ui_kit/assets/images/anistar_launcher.png
     icon_background_color: "#080B14"

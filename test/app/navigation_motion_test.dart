@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:anistar_tv/app/app_navigation_page.dart';
 import 'package:anistar_tv/app/app_router.dart';
@@ -7,9 +8,14 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_da
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_skeleton.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:app_logging/app_logging.dart';
+// These regressions seed the UI kit's real cached image provider.
+// ignore: depend_on_referenced_packages
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,6 +83,8 @@ void main() {
     });
   }
 
+  decodedPosterTests();
+
   testWidgets('rapid Back discards unfinished details without a stranded hero', (tester) async {
     final router = AppRouter(AppLogger.logger);
     addTearDown(router.dispose);
@@ -136,6 +144,90 @@ void main() {
         isTrue,
       );
       expect(tester.widget<HeroMode>(find.byType(HeroMode)).enabled, isFalse);
+    });
+  }
+}
+
+/// Shared with the native Android regression entry point.
+void decodedPosterTests() {
+  for (final earlyResponse in [true, false]) {
+    testWidgets('decoded poster stays visible through flight and skeleton; early=$earlyResponse', (tester) async {
+      const url = 'https://fixture.test/hero-poster.png';
+      final image =
+          await tester.runAsync(() async {
+            final bytes = await rootBundle.load(Assets.images.anistarLauncher.keyName);
+            final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+            final frame = await codec.getNextFrame();
+            codec.dispose();
+
+            return frame.image;
+          }) ??
+          (throw StateError('Poster decode did not complete'));
+      final settle = tester.pumpAndSettle;
+      final cache = PaintingBinding.instance.imageCache
+        ..putIfAbsent(
+          const CachedNetworkImageProvider(url),
+          () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: image))),
+        );
+      addTearDown(() {
+        cache
+          ..clear()
+          ..clearLiveImages();
+      });
+      final router = AppRouter(AppLogger.logger);
+      addTearDown(router.dispose);
+      final pending = Completer<Result<AnimeScreenData, Failure>>();
+      final result = await const FakeAnimeScreenRepository().getAnime(id: 1, slug: '1-anime');
+      final summary = AnimeSummary(id: 1, slug: '1-anime', title: 'Аниме', posterUri: Uri.parse(url));
+      await pumpTvApp(
+        tester,
+        MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
+        wrapInScaffold: false,
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(
+            FakeCatalogScreenRepository(
+              load: (_) async => Result.success(AnimePage(items: [summary], page: 1, hasNext: false)),
+            ),
+          ),
+          animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
+        ],
+      );
+      await settle();
+      void expectPoster() {
+        final visibleImages = tester.widgetList<RawImage>(find.byType(RawImage));
+        expect(visibleImages.any((raw) => raw.image?.isCloneOf(image) ?? false), isTrue);
+      }
+
+      expectPoster();
+      await tester.tap(find.byType(AnimeCard).first);
+      await tester.pump();
+      for (var frame = 0; frame < 20; frame++) {
+        if (earlyResponse && frame == 3) {
+          pending.complete(result);
+        }
+        await tester.pump(const Duration(milliseconds: 16));
+        expectPoster();
+      }
+      if (!earlyResponse) {
+        expect(find.byType(AnimeSkeleton), findsOneWidget);
+        pending.complete(result);
+      }
+      for (var frame = 0; frame < 3; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expectPoster();
+      }
+      await settle();
+      expect(find.byType(AnimeHero), findsOneWidget);
+      expectPoster();
+      router.router.pop();
+      await tester.pump();
+      for (var frame = 0; frame < 15; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expectPoster();
+      }
+      await settle();
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
     });
   }
 }

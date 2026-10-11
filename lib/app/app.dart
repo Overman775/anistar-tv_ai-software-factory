@@ -5,6 +5,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../packages/features/auth/auth_providers.dart';
 import '../packages/features/auth/presentation/login_screen.dart';
+import '../packages/features/auth/presentation/startup_screen.dart';
 import 'authenticated_app.dart';
 
 /// The protected router only exists while AniStar confirms an authenticated session.
@@ -24,7 +25,9 @@ class App extends ConsumerWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
-      home: const LoginScreen(),
+      home: ref.watch(authStartupStageProvider) == AuthStartupStage.complete
+          ? const LoginScreen()
+          : const StartupScreen(),
     );
   }
 }

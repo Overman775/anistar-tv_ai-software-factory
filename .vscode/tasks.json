@@ -2,6 +2,12 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Flutter: Generate Assets and Routes",
+            "type": "shell",
+            "command": "fvm dart run build_runner build --workspace",
+            "problemMatcher": []
+        },
+        {
             "label": "Flutter: Check",
             "type": "shell",
             "command": "bash scripts/check.sh",

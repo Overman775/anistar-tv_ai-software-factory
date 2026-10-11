@@ -30,6 +30,10 @@ Future<void> pumpTvApp(
       ),
     ),
   );
+  // Decode local branding outside the fake clock so first-frame goldens include it.
+  await tester.runAsync(
+    () => precacheImage(Assets.images.anistarLogo.provider(), tester.element(find.byType(MaterialApp).first)),
+  );
 }
 
 void setTvView(WidgetTester tester, {Size size = compactTvSize}) {

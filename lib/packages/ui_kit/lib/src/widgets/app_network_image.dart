@@ -16,10 +16,15 @@ class AppNetworkImage extends StatelessWidget {
     this.semanticLabel,
     this.width,
     this.animateLoading = true,
+    this.resizeToLayout = true,
   });
 
   final BorderRadiusGeometry borderRadius;
   final bool animateLoading;
+
+  /// Disable for shared posters: changing decode keys during a Hero flight
+  /// would replace an already decoded image with a loading placeholder.
+  final bool resizeToLayout;
   final Widget? errorWidget;
   final BoxFit fit;
   final double? height;
@@ -62,10 +67,11 @@ class AppNetworkImage extends StatelessWidget {
 
           // Resize on one axis to retain the source aspect ratio. Keep the
           // original disk cache so a detail/Hero surface can decode it larger.
-          final cacheWidth = decodeWidth != null && decodeWidth.isFinite && decodeWidth > 0
+          final cacheWidth = resizeToLayout && decodeWidth != null && decodeWidth.isFinite && decodeWidth > 0
               ? (decodeWidth * pixelRatio).ceil()
               : null;
-          final cacheHeight = cacheWidth == null && decodeHeight != null && decodeHeight.isFinite && decodeHeight > 0
+          final cacheHeight =
+              resizeToLayout && cacheWidth == null && decodeHeight != null && decodeHeight.isFinite && decodeHeight > 0
               ? (decodeHeight * pixelRatio).ceil()
               : null;
 

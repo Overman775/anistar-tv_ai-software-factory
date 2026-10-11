@@ -13,9 +13,9 @@ Future<void> runTestSuite(FutureOr<void> Function() testMain) async {
   TestWidgetsFlutterBinding.ensureInitialized();
   AppLogger.initForTest();
   final fontLoader = FontLoader(TvTypography.fontFamily)
-    ..addFont(rootBundle.load('packages/ui_kit/assets/fonts/Inter-Regular.otf'))
-    ..addFont(rootBundle.load('packages/ui_kit/assets/fonts/Inter-Medium.otf'))
-    ..addFont(rootBundle.load('packages/ui_kit/assets/fonts/Inter-Bold.otf'));
+    ..addFont(rootBundle.load(Assets.fonts.interRegular))
+    ..addFont(rootBundle.load(Assets.fonts.interMedium))
+    ..addFont(rootBundle.load(Assets.fonts.interBold));
   await fontLoader.load();
   final icons = FontLoader('MaterialIcons')..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'));
   await icons.load();

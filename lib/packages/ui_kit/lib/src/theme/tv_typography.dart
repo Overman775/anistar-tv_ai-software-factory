@@ -1,8 +1,10 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../assets.dart';
+
 /// Typography scale optimised for legibility at TV viewing distance.
 abstract final class TvTypography {
-  static const fontFamily = 'packages/ui_kit/Inter';
+  static const fontFamily = FontFamily.inter;
   static const proseMaxWidth = 720.0;
 
   static TextTheme apply(TextTheme base) => base

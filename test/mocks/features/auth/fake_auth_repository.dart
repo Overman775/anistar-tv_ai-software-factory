@@ -8,6 +8,10 @@ final class FakeAuthRepository implements AuthRepository {
   Result<String, Failure> loginResult = const Result.success('test');
   Result<void, Failure> logoutResult = const Result.success(null);
   Completer<Result<String, Failure>>? pendingLogin;
+  Completer<void>? pendingSiteCheck;
+  Completer<Result<String?, Failure>>? pendingRestore;
+  Failure? siteFailure;
+  int restoreCalls = 0;
   int loginCalls = 0;
   final StreamController<void> _expired = StreamController<void>.broadcast();
 
@@ -15,7 +19,16 @@ final class FakeAuthRepository implements AuthRepository {
   Stream<void> get expired => _expired.stream;
 
   @override
-  Future<Result<String?, Failure>> restore() => Future.value(restoreResult);
+  Future<Result<String?, Failure>> restore({void Function()? onSessionCheck}) async {
+    restoreCalls++;
+    await pendingSiteCheck?.future;
+    if (siteFailure case final failure?) {
+      return Result.failure(failure);
+    }
+    onSessionCheck?.call();
+
+    return pendingRestore?.future ?? Future.value(restoreResult);
+  }
 
   @override
   Future<Result<String, Failure>> signIn(String username, String password) {

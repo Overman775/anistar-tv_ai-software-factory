@@ -26,7 +26,8 @@ final class DioAnistarClient implements AnistarClient {
       _auth = AnistarAuthService(dio, session, ensureMirror: ensureMirror);
 
   @override
-  Future<String?> restore() => _safeAuth(_auth.restore);
+  Future<String?> restore({void Function()? onSessionCheck}) =>
+      _safeAuth(() => _auth.restore(onSessionCheck: onSessionCheck));
 
   @override
   Future<String> signIn(String username, String password) => _safeAuth(() => _auth.signIn(username, password));

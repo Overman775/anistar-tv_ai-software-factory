@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/packages/features/auth/data/anistar_auth_repository.dart';
 import 'package:dio/dio.dart';
@@ -22,6 +24,20 @@ void main() {
   tearDown(() async {
     dio.close(force: true);
     await session.close();
+  });
+
+  test('restore reports session checking only after the mirror is available', () async {
+    final available = Completer<void>();
+    var checks = 0;
+    final client = DioAnistarClient(dio, session, ensureMirror: () => available.future);
+    final pending = AnistarAuthRepository(client).restore(onSessionCheck: () => checks++);
+    await Future<void>.delayed(Duration.zero);
+    expect(checks, 0);
+    available.complete();
+    final restored = await pending;
+    expect(checks, 1);
+    expect(restored.successOrNull, isNull);
+    expect(adapter.requests, isEmpty);
   });
 
   test('failed mirror check sends no credentials; recovery permits one login POST', () async {

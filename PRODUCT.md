@@ -54,7 +54,7 @@ AniStar TV — неофициальный клиент для просмотра
 - [docs/specs/README.md](docs/specs/README.md): контракты функций и точки входа в тесты.
 - [docs/adr/0008-youtube-tv-interaction-reference.md](docs/adr/0008-youtube-tv-interaction-reference.md): принятый ориентир TV-взаимодействия.
 - [docs/06_verification.md](docs/06_verification.md): результаты проверок и их ограничения; не превращать отдельную live-проверку в обещание доступности из любой сети.
-- Ресурсы бренда: `resources/logo.png`, `resources/anistar_launcher.png`, `resources/anistar_tv_banner.png`.
+- Ресурсы бренда: прозрачный UI-знак `lib/packages/ui_kit/assets/images/anistar_logo.png`, launcher с фоном `lib/packages/ui_kit/assets/images/anistar_launcher.png`, `lib/packages/ui_kit/assets/images/anistar_tv_banner.png`.
 - Golden-снимки интерфейса находятся в `test/packages/features/`; они фиксируют AniStar TV, а не стороннее приложение. HTTP fixtures и Android E2E проверяют протоколы и отказы.
 - Отзывы пользователей, коммерческие показатели и официальная поддержка AniStar не подтверждены в рамках init; не создавать их как продуктовые факты.
 

@@ -47,7 +47,7 @@ class CatalogNavigationRail extends StatelessWidget {
                 child: Row(
                   children: [
                     const SizedBox(width: 16),
-                    const Icon(Icons.live_tv_rounded, color: AppPalette.primary),
+                    const AnistarLogo(),
                     SizedBox(width: progress * 16),
                     Expanded(
                       child: Opacity(

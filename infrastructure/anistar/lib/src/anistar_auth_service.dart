@@ -12,8 +12,9 @@ final class AnistarAuthService {
 
   AnistarAuthService(this._dio, this.session, {this.ensureMirror});
 
-  Future<String?> restore() async {
+  Future<String?> restore({void Function()? onSessionCheck}) async {
     await ensureMirror?.call();
+    onSessionCheck?.call();
     await session.initialize();
     final account = session.account;
     if (account == null) {

@@ -60,6 +60,9 @@ DCM нужен для полной локальной проверки; допу
 # E2E на запущенном Android emulator
 bash scripts/e2e.sh emulator-5554
 
+# Постер Hero покадрово на Android, без сети и аккаунта
+fvm flutter test integration_test/navigation_motion_test.dart -d emulator-5554 --flavor dev
+
 # Живой AniStar/CDN smoke
 bash scripts/e2e.sh emulator-5554 live
 
@@ -79,11 +82,13 @@ APK сравнивает текущие AOT libraries с отдельным JNI 
 Её регрессии запускаются через `python3 -m unittest discover -s tool/quality -p '*_test.py'`.
 Запускайте эту проверку локально после release-сборки.
 
-Изменение typed routes требует генерации:
+Изменение typed routes, ассетов или списка шрифтов UI Kit требует генерации из корня workspace:
 
 ```bash
-fvm dart run build_runner build
+fvm dart run build_runner build --workspace
 ```
+
+FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`, как в `rc-mobile-app/uikit`: создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт — `package:ui_kit/assets.dart` (также экспортируется через `ui_kit.dart`). Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.inter`; для ручного создания Image/AssetImage передавайте `package: Assets.package`. FontFamily.inter уже содержит пакетный префикс; TvTypography использует его напрямую. Generated-файлы сохраняются в Git, вручную их не редактируем.
 
 ---
 
@@ -223,9 +228,11 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 Локальный [anistar-flutter-update](../.agents/skills/anistar-flutter-update/SKILL.md) обновляет stable SDK через FVM и пакеты pub workspace, затем запускает проверки и Android-сборку. Melos, iOS и CI/CD в этот workflow не входят. Текущие версии, результаты и ограничения: [Состояние проверок](06_verification.md).
 
-## 8. Иконка и Android TV баннер
+## 8. Иконка, Android TV баннер и заставка
 
-Исходники: `resources/anistar_launcher.png` (1024×1024) и `resources/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `bash scripts/generate_branding.sh`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
+Исходники: `lib/packages/ui_kit/assets/images/anistar_launcher.png` (1024×1024) и `lib/packages/ui_kit/assets/images/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `bash scripts/generate_branding.sh`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
+
+Этот же скрипт обновляет нативную заставку через `flutter_native_splash.yaml`: баннер используется на Android до версии 12, квадратная иконка — на Android 12 и новее. Старые `logo.png` и `android_icon.png` больше не нужны.
 
 Изображения созданы встроенным imagegen. Промпт иконки: фиолетовая падающая звезда с голубым знаком play на тёмном фоне, без текста. Промпт баннера: та же эмблема слева, белая надпись `AniStar TV` справа, формат 16:9, цвета интерфейса, без персонажей и посторонних надписей. Старые splash-ресурсы не участвуют в экспорте launcher.
 

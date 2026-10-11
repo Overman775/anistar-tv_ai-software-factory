@@ -8,7 +8,7 @@
 
 ## 2. Проверка доступности
 
-Перед restore/первым входом выполняется anonymous GET `/anime/`. Dedicated Dio не использует session interceptor, cookies или credentials. Connect/receive/send timeout каждого probe — по 4 секунды; redirects выключены, TLS-проверка включена.
+На стартовом экране, перед проверкой сохранённой сессии, выполняется anonymous GET `/anime/`. Dedicated Dio не использует session interceptor, cookies или credentials. Connect/receive/send timeout каждого probe — по 4 секунды; redirects выключены, TLS-проверка включена.
 
 Зеркало подтверждено только при HTTP 200, отсутствии cf challenge и успешном парсинге непустого каталога. HTML с ошибкой, реклама без пригодных карточек, пустая HTML и redirect не подтверждают зеркало. После успеха ensureAvailable не выполняет HTTP на каждом обращении.
 
@@ -42,3 +42,5 @@ Cookies старого origin не копируются. Отдельная со
 - [Поиск и cache](../../test/infrastructure/anistar/anistar_mirror_manager_test.dart), [POST 503 / redirect 302 и session isolation](../../test/app/mirror_switch_test.dart).
 
 Отказы зеркал проверены Dio fixtures. Реальная блокировка и авторизованный live-переход на новое зеркало отдельно не воспроизводились. Android E2E использует фиксированный localhost, поэтому не считается end-to-end проверкой сканирования реальных зеркал.
+
+StartupScreen показывает этап проверки доступности и сохраняет ошибку поиска с ручным повтором. После успешного поиска переходит к проверке сессии; форма входа появляется только для гостя. При signIn сохраняется ensureAvailable как защита доступности; успешный startup probe не дублируется, пока менеджер считает зеркало проверенным.
