@@ -1,5 +1,6 @@
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
@@ -21,6 +22,43 @@ import '../../../../../support/test_app.dart';
 // ignore_for_file: prefer-moving-to-variable
 
 void main() {
+  testWidgets('a thousand catalog entries stay virtualized and the last row remains operable', (tester) async {
+    final items = List.generate(
+      1000,
+      (index) =>
+          AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}・🎬', posterUri: Uri()),
+    );
+    final requests = <int>[];
+    int? opened;
+    final repository = FakeCatalogScreenRepository(
+      load: (page) async {
+        requests.add(page);
+
+        return Result.success(AnimePage(items: items, page: 1, hasNext: false));
+      },
+    );
+    await pumpTvApp(
+      tester,
+      CatalogScreen(onAnimeTap: (anime) => opened = anime.id),
+      size: wideTvSize,
+      wrapInScaffold: false,
+      overrides: [catalogRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AnimeCard).evaluate().length, lessThan(50));
+    final scroll = tester.widget<CustomScrollView>(find.byType(CustomScrollView)).controller;
+    scroll?.jumpTo(scroll.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(1000)));
+    await tester.pumpAndSettle();
+    expect(opened, 1000);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(opened, 999);
+    expect(requests, [1]);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('rail expands from any first-column card and returns to the same card', (tester) async {
     await pumpTvApp(
       tester,

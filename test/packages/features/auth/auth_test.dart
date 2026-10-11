@@ -23,6 +23,62 @@ void main() {
   setUp(() => repository = FakeAuthRepository());
   tearDown(() => repository.close());
 
+  testWidgets('portrait login at 200% reveals remote fields and submit', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpTvApp(
+      tester,
+      const LoginScreen(),
+      size: const Size(390, 844),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+    final username = find.byKey(const ValueKey('login_username'));
+    final password = find.byKey(const ValueKey('login_password'));
+    await tester.enterText(username, List.filled(30, 'ユーザー🎬').join());
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(password.hitTestable(), findsOneWidget);
+    await tester.enterText(password, 'пароль🎬');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final submit = find.byKey(const ValueKey('login_submit'));
+    expect(submit.hitTestable(), findsOneWidget);
+    expect(tester.getRect(submit).bottom, lessThanOrEqualTo(564));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ten rapid submissions leave one pending login and clear password only after failure', (tester) async {
+    final pending = Completer<Result<String, Failure>>();
+    repository.pendingLogin = pending;
+    await pumpTvApp(
+      tester,
+      const LoginScreen(),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    final password = find.byKey(const ValueKey('login_password'));
+    await tester.enterText(find.byKey(const ValueKey('login_username')), 'test');
+    await tester.enterText(password, 'secret');
+    final submit = find.byKey(const ValueKey('login_submit'));
+    final send = tester.widget<FilledButton>(submit).onPressed;
+    for (var i = 0; i < 10; i++) {
+      send?.call();
+    }
+    await tester.pump();
+    expect(repository.loginCalls, 1);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    expect(tester.widget<TextFormField>(password).controller?.text, 'secret');
+    pending.complete(const Result.failure(UnknownFailure()));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextFormField>(password).controller?.text, isEmpty);
+    expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('anonymous launch is gated; login opens catalog; expiry destroys protected navigation', (tester) async {
     await pumpTvApp(
       tester,
@@ -96,6 +152,7 @@ void main() {
   });
 
   testWidgets('restore focuses username and rejected login returns focus to password for remote retry', (tester) async {
+    final semantics = tester.ensureSemantics();
     repository.loginResult = const Result.failure(UnknownFailure());
     await pumpTvApp(
       tester,
@@ -116,6 +173,9 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     expect(repository.loginCalls, 1);
+    final error = tester.getSemantics(find.byKey(const ValueKey('login_error'))).getSemanticsData();
+    expect(error.flagsCollection.isLiveRegion, isTrue);
+    expect(error.label, contains(const UnknownFailure().message));
     // Focus is checked again after a separate, rejected network operation.
     // ignore: avoid-duplicate-test-assertions
     expect(tester.widget<EditableText>(find.descendant(of: password, matching: field)).focusNode.hasFocus, isTrue);
@@ -125,6 +185,7 @@ void main() {
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
       const ValueKey('login_submit'),
     );
+    semantics.dispose();
   });
 
   testWidgets('arrows keep both populated fields editable through rejection and a second attempt', (tester) async {

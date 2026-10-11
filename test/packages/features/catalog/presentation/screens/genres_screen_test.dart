@@ -10,11 +10,44 @@ import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_browse_repository.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
+  testWidgets('fifty long multilingual genres at 200% fit two lines and stay reachable', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final items = List.generate(
+      50,
+      (index) => CatalogFilter(label: 'Повседневность・日本語・العربية・🎬 $index', path: '/genre-$index/'),
+    );
+    CatalogFilter? selected;
+    await pumpTvApp(
+      tester,
+      GenresScreen(onSelected: (item) => selected = item),
+      size: const Size(390, 844),
+      wrapInScaffold: false,
+      overrides: [
+        catalogBrowseRepositoryProvider.overrideWithValue(
+          FakeCatalogBrowseRepository(genres: () async => Result.success(items)),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final label = find.text(items.first.label);
+    final tile = find.ancestor(of: label, matching: find.byType(TvFocusable));
+    expect(tester.getSize(label).height, lessThanOrEqualTo(tester.getSize(tile).height));
+    for (var i = 0; i < items.length; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text(items.last.label).hitTestable(), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(selected, items.last);
+    expect(tester.takeException(), isNull);
+  });
   for (final size in [compactTvSize, wideTvSize, const Size(390, 844)]) {
     testWidgets('all genres are reachable by remote at $size and selection requires OK', (tester) async {
       final items = List.generate(25, (index) => CatalogFilter(label: 'Жанр $index', path: '/genre-$index/'));

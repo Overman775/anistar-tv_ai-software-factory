@@ -41,15 +41,26 @@ class CatalogTail extends StatelessWidget {
               children: [
                 const Icon(Icons.refresh_rounded, color: AppPalette.warning, size: 38),
                 const SizedBox(height: AppSpacing.sm),
-                Text(
-                  message,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppPalette.warning),
+                Flexible(
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      message,
+                      maxLines: 4,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppPalette.warning),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                const Text('Нажмите OK, чтобы повторить', style: TextStyle(color: AppPalette.textSecondary)),
+                const Text(
+                  'Нажмите OK, чтобы повторить',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppPalette.textSecondary),
+                ),
               ],
             ),
           ),

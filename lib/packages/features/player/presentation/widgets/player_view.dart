@@ -6,7 +6,7 @@ import '../../domain/models/playback_session.dart';
 import 'player_overlay.dart';
 import 'player_retry_view.dart';
 
-class PlayerView extends StatelessWidget {
+class PlayerView extends StatefulWidget {
   const PlayerView({
     required this.controller,
     required this.controlsVisible,
@@ -51,72 +51,116 @@ class PlayerView extends StatelessWidget {
   final String title;
 
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<VideoPlayerValue>(
-    valueListenable: controller,
-    builder: (context, value, child) {
-      if (value.hasError) {
-        return PlayerRetryView(
-          icon: Icons.play_disabled_rounded,
-          title: 'Воспроизведение прервано',
-          message: 'Не удалось продолжить поток. Повторите попытку или выберите другое качество.',
-          onRetry: onRetry,
-        );
-      }
-      final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;
+  State<PlayerView> createState() => _PlayerViewState();
+}
 
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onShowControls,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Center(
-              child: AspectRatio(aspectRatio: aspectRatio, child: VideoPlayer(controller)),
-            ),
-            AnimatedOpacity(
-              opacity: controlsVisible ? 1 : 0,
-              duration: AppMotion.durationOf(context, AppMotion.fast),
-              child: IgnorePointer(
-                ignoring: !controlsVisible,
-                child: ExcludeFocus(
-                  excluding: !controlsVisible,
-                  child: Focus(
-                    focusNode: controlsFocusNode,
-                    skipTraversal: true,
-                    child: PlayerOverlay(
-                      onPreviousEpisode: onPreviousEpisode,
-                      onNextEpisode: onNextEpisode,
-                      onBack: onBack,
-                      onReturnToVideo: onReturnToVideo,
-                      backFocusNode: backFocusNode,
-                      playFocusNode: playFocusNode,
-                      title: title,
-                      episodeNumber: episodeNumber,
-                      session: session,
-                      value: value,
-                      onPlayPause: onPlayPause,
-                      onSelectQuality: onSelectQuality,
-                      onSelectEpisode: onSelectEpisode,
-                      onSeek: onSeek,
-                      onSeekKeyEvent: onSeekKeyEvent,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (value.isBuffering)
-              const Center(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(color: Color(0xB8000000), shape: BoxShape.circle),
-                  child: Padding(
-                    padding: EdgeInsets.all(AppSpacing.md),
-                    child: SizedBox.square(dimension: 48, child: CircularProgressIndicator(strokeWidth: 4)),
-                  ),
-                ),
-              ),
-          ],
-        ),
+class _PlayerViewState extends State<PlayerView> {
+  late VideoPlayerValue _value;
+
+  @override
+  void initState() {
+    super.initState();
+    _value = widget.controller.value;
+    widget.controller.addListener(_onValueChanged);
+  }
+
+  void _onValueChanged() {
+    final next = widget.controller.value;
+    final rebuild =
+        widget.controlsVisible ||
+        next.isBuffering != _value.isBuffering ||
+        next.errorDescription != _value.errorDescription ||
+        next.isInitialized != _value.isInitialized ||
+        next.aspectRatio != _value.aspectRatio;
+    // Keep the latest timeline for reveal, without rebuilding invisible controls.
+    if (rebuild) {
+      setState(() => _value = next);
+    } else {
+      _value = next;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant PlayerView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onValueChanged);
+      widget.controller.addListener(_onValueChanged);
+    }
+    _value = widget.controller.value;
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onValueChanged);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _value;
+    if (value.hasError) {
+      return PlayerRetryView(
+        icon: Icons.play_disabled_rounded,
+        title: 'Воспроизведение прервано',
+        message: 'Не удалось продолжить поток. Повторите попытку или выберите другое качество.',
+        onRetry: widget.onRetry,
       );
-    },
-  );
+    }
+    final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onShowControls,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(
+            child: AspectRatio(aspectRatio: aspectRatio, child: VideoPlayer(widget.controller)),
+          ),
+          AnimatedOpacity(
+            opacity: widget.controlsVisible ? 1 : 0,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
+            child: IgnorePointer(
+              ignoring: !widget.controlsVisible,
+              child: ExcludeFocus(
+                excluding: !widget.controlsVisible,
+                child: Focus(
+                  focusNode: widget.controlsFocusNode,
+                  skipTraversal: true,
+                  child: PlayerOverlay(
+                    onPreviousEpisode: widget.onPreviousEpisode,
+                    onNextEpisode: widget.onNextEpisode,
+                    onBack: widget.onBack,
+                    onReturnToVideo: widget.onReturnToVideo,
+                    backFocusNode: widget.backFocusNode,
+                    playFocusNode: widget.playFocusNode,
+                    title: widget.title,
+                    episodeNumber: widget.episodeNumber,
+                    session: widget.session,
+                    value: value,
+                    onPlayPause: widget.onPlayPause,
+                    onSelectQuality: widget.onSelectQuality,
+                    onSelectEpisode: widget.onSelectEpisode,
+                    onSeek: widget.onSeek,
+                    onSeekKeyEvent: widget.onSeekKeyEvent,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (value.isBuffering)
+            const Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Color(0xB8000000), shape: BoxShape.circle),
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpacing.md),
+                  child: SizedBox.square(dimension: 48, child: CircularProgressIndicator(strokeWidth: 4)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

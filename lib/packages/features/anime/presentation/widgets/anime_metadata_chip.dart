@@ -22,7 +22,14 @@ class AnimeMetadataChip extends StatelessWidget {
               Icon(iconValue, size: 15, color: AppPalette.success),
               const SizedBox(width: AppSpacing.xs),
             ],
-            Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppPalette.textPrimary)),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(color: AppPalette.textPrimary),
+              ),
+            ),
           ],
         ),
       ),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -36,7 +38,12 @@ class CatalogNavigationRail extends StatelessWidget {
           child: Column(
             children: [
               SizedBox(
-                height: 88,
+                height: math.max(
+                  88,
+                  MediaQuery.textScalerOf(context).scale(22) * 1.2 +
+                      (accountName == null ? 0 : MediaQuery.textScalerOf(context).scale(14) * 1.4) +
+                      24,
+                ),
                 child: Row(
                   children: [
                     const SizedBox(width: 16),
@@ -49,18 +56,18 @@ class CatalogNavigationRail extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
+                            Text(
                               'AniStar TV',
                               maxLines: 1,
-                              overflow: TextOverflow.clip,
-                              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22, height: 1.2),
                             ),
                             if (accountName case final name?)
                               Text(
                                 name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13, color: AppPalette.textSecondary),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppPalette.textSecondary),
                               ),
                           ],
                         ),
@@ -97,7 +104,11 @@ class CatalogNavigationRail extends StatelessWidget {
                                     Expanded(
                                       child: Opacity(
                                         opacity: progress,
-                                        child: Text(item.label, maxLines: 1, overflow: TextOverflow.clip),
+                                        child: Text(
+                                          item.label,
+                                          maxLines: MediaQuery.textScalerOf(context).scale(16) > 16 ? 2 : 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ),
                                   ],

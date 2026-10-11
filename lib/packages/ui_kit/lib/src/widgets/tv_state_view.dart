@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
@@ -24,6 +26,19 @@ class TvStateView extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  void _revealAction(BuildContext context, bool focused) {
+    if (!focused) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        unawaited(
+          Scrollable.ensureVisible(context, alignment: 0.5, duration: AppMotion.durationOf(context, AppMotion.fast)),
+        );
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -31,51 +46,72 @@ class TvStateView extends StatelessWidget {
     final actionText = actionLabel;
     final messageText = message;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          decoration: BoxDecoration(
-            color: AppPalette.surface.withValues(alpha: 0.84),
-            borderRadius: AppRadii.large,
-            border: Border.all(color: AppPalette.outline.withValues(alpha: 0.8)),
-            boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 32, offset: Offset(0, 18))],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Container(
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: colorScheme.primary.withValues(alpha: 0.36)),
+                  color: AppPalette.surface.withValues(alpha: 0.84),
+                  borderRadius: AppRadii.large,
+                  border: Border.all(color: AppPalette.outline.withValues(alpha: 0.8)),
+                  boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 32, offset: Offset(0, 18))],
                 ),
-                child: Icon(icon, size: 34, color: colorScheme.primary),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colorScheme.primary.withValues(alpha: 0.36)),
+                      ),
+                      child: Icon(icon, size: 34, color: colorScheme.primary),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Semantics(
+                      liveRegion: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(title, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+                          if (messageText != null) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Text(
+                              messageText,
+                              style: theme.textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (actionText != null && onAction != null) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      Builder(
+                        builder: (actionContext) => Focus(
+                          canRequestFocus: false,
+                          onFocusChange: (focused) => _revealAction(actionContext, focused),
+                          child: FilledButton.icon(
+                            autofocus: autofocusAction,
+                            focusNode: actionFocusNode,
+                            onPressed: onAction,
+                            icon: Icon(actionIcon),
+                            label: Text(actionText),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(title, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
-              if (messageText != null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  messageText,
-                  style: theme.textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              if (actionText != null && onAction != null) ...[
-                const SizedBox(height: AppSpacing.lg),
-                FilledButton.icon(
-                  autofocus: autofocusAction,
-                  focusNode: actionFocusNode,
-                  onPressed: onAction,
-                  icon: Icon(actionIcon),
-                  label: Text(actionText),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),

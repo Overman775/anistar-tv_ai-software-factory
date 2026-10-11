@@ -20,7 +20,10 @@ class AnimeSkeleton extends StatelessWidget {
         slivers: [
           SliverToBoxAdapter(
             child: SizedBox(
-              height: AnimeLayout.heroHeight(constraints.maxWidth),
+              height: AnimeLayout.heroHeight(
+                constraints.maxWidth,
+                textScale: MediaQuery.textScalerOf(context).scale(18) / 18,
+              ),
               child: Padding(
                 padding: EdgeInsets.fromLTRB(
                   constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
@@ -32,18 +35,21 @@ class AnimeSkeleton extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (constraints.maxWidth >= 600)
-                      AspectRatio(
-                        aspectRatio: 2 / 3,
-                        child: animeId != null && posterUri != null
-                            ? ClipRRect(
-                                borderRadius: AppRadii.large,
-                                child: TvPosterHero(
-                                  tag: 'anime-poster-$animeId',
-                                  imageUrl: posterUri.toString(),
-                                  semanticLabel: title,
-                                ),
-                              )
-                            : const TvSkeletonBox(borderRadius: AppRadii.large),
+                      SizedBox(
+                        height: AnimeLayout.baseHeroHeight(constraints.maxWidth) - AppSpacing.lg - AppSpacing.xl,
+                        child: AspectRatio(
+                          aspectRatio: 2 / 3,
+                          child: animeId != null && posterUri != null
+                              ? ClipRRect(
+                                  borderRadius: AppRadii.large,
+                                  child: TvPosterHero(
+                                    tag: 'anime-poster-$animeId',
+                                    imageUrl: posterUri.toString(),
+                                    semanticLabel: title,
+                                  ),
+                                )
+                              : const TvSkeletonBox(borderRadius: AppRadii.large),
+                        ),
                       ),
                     if (constraints.maxWidth >= 600) const SizedBox(width: AppSpacing.xl),
                     const Expanded(

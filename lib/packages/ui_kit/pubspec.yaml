@@ -22,6 +22,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  licenses:
+    - assets/fonts/LICENSE.txt
   fonts:
     - family: Inter
       fonts:
@@ -29,3 +31,5 @@ flutter:
           weight: 400
         - asset: assets/fonts/Inter-Medium.otf
           weight: 500
+        - asset: assets/fonts/Inter-Bold.otf
+          weight: 700

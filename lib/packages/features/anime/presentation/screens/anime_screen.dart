@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
+import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -56,22 +57,49 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   late Future<AnimeScreenData> _future;
   Animation<double>? _routeAnimation;
   bool _entered = false;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
+    _playFocus.addListener(_revealFocusedAction);
+    _favoriteFocus.addListener(_revealFocusedAction);
     _load();
+  }
+
+  void _revealFocusedAction() {
+    if (!mounted || MediaQuery.textScalerOf(context).scale(18) <= 18) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final action = _playFocus.hasFocus ? _playFocus : _favoriteFocus;
+      final actionContext = action.hasFocus ? action.context : null;
+      if (actionContext != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            actionContext,
+            alignment: 0.5,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
+            curve: AppMotion.enterCurve,
+          ),
+        );
+      }
+    });
   }
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<AnimeScreenData> snapshot) {
     if (!_entered || snapshot.connectionState != ConnectionState.done) {
       return AnimeSkeleton(animeId: widget.animeId, posterUri: widget.fallbackPosterUri, title: widget.fallbackTitle);
     }
-    if (snapshot.hasError) {
+    final error = snapshot.error;
+    if (error != null) {
       return TvStateView(
         icon: Icons.cloud_off_rounded,
         title: 'Не удалось загрузить аниме',
-        message: snapshot.error?.toString() ?? 'Неизвестная ошибка',
+        message: error is Failure ? error.message : 'Не удалось загрузить данные аниме. Повторите попытку.',
         actionLabel: 'Повторить',
         onAction: _retry,
       );
@@ -127,12 +155,14 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
           ),
         ),
         if (episodes.isEmpty)
-          const SliverFillRemaining(
-            hasScrollBody: false,
+          SliverToBoxAdapter(
             child: TvStateView(
               icon: Icons.playlist_remove_rounded,
               title: 'Серии не найдены',
               message: 'Для этого аниме пока нет доступных выпусков.',
+              actionLabel: 'Обновить серии',
+              onAction: _retry,
+              autofocusAction: false,
             ),
           )
         else
@@ -176,6 +206,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   void _load() {
+    final generation = ++_loadGeneration;
     final logger = ref.read(loggerProvider);
     final revision = ref.read(favoritesControllerProvider).revision;
     _future = ref
@@ -187,7 +218,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
               throw failure;
             },
             success: (data) {
-              if (mounted && ref.read(favoritesControllerProvider).revision == revision) {
+              if (mounted &&
+                  generation == _loadGeneration &&
+                  ref.read(favoritesControllerProvider).revision == revision) {
                 ref.read(favoritesControllerProvider.notifier).observe(data.details.id, data.details.isFavorite);
               }
               logger.infoFor<AnimeScreen>('Anime loaded: ${data.episodes.length} episodes');
@@ -239,7 +272,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       target?.requestFocus();
-      if (target == _playFocus || target == _favoriteFocus) {
+      if ((target == _playFocus || target == _favoriteFocus) && MediaQuery.textScalerOf(context).scale(18) <= 18) {
         unawaited(
           _scrollController.animateTo(
             0,
@@ -311,6 +344,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   @override
   void dispose() {
     _routeAnimation?.removeStatusListener(_onRouteStatus);
+    _playFocus.removeListener(_revealFocusedAction);
+    _favoriteFocus.removeListener(_revealFocusedAction);
     _scrollController.dispose();
     _backFocus.dispose();
     _playFocus.dispose();

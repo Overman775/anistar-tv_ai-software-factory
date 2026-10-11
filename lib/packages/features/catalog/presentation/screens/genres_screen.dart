@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:core/data.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -130,7 +133,10 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
               .when(
                 skipLoadingOnRefresh: false,
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => _stateView('Жанры недоступны', error.toString()),
+                error: (error, _) => _stateView(
+                  'Жанры недоступны',
+                  error is Failure ? error.message : 'Не удалось загрузить жанры. Повторите попытку.',
+                ),
                 data: (items) {
                   _items = items;
                   if (!_focusedInitial && items.isNotEmpty) {
@@ -149,12 +155,17 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
-                      _columns = switch (constraints.maxWidth) {
+                      final textScale = MediaQuery.textScalerOf(context).scale(19) / 19;
+                      _columns = switch (constraints.maxWidth / textScale) {
+                        < 300 => 1,
                         < 600 => 2,
                         < 1100 => 3,
                         _ => 4,
                       };
                       final width = (constraints.maxWidth - 48 - (_columns - 1) * 16) / _columns;
+                      final style = Theme.of(context).textTheme.titleMedium;
+                      final lineHeight =
+                          MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 19) * (style?.height ?? 1.5);
 
                       return SingleChildScrollView(
                         padding: const EdgeInsets.all(24),
@@ -165,7 +176,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                             for (final item in items)
                               SizedBox(
                                 width: width,
-                                height: 72,
+                                height: math.max(72, lineHeight * 2 + 12),
                                 child: Builder(
                                   builder: (tileContext) => TvFocusable(
                                     focusNode: _nodes.putIfAbsent(item.path, () => FocusNode(debugLabel: item.label)),
@@ -185,7 +196,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                                             item.label,
                                             maxLines: 2,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(fontSize: 20, color: AppPalette.textPrimary),
+                                            style: style?.copyWith(color: AppPalette.textPrimary),
                                           ),
                                         ),
                                       ),

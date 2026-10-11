@@ -95,6 +95,30 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  testWidgets('unexpected source error stays safe and remote retry can initialize video', (tester) async {
+    final pending = Completer<Result<PlaybackSession, Failure>>();
+    repository.pending = pending;
+    await pumpTvApp(
+      tester,
+      const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме'),
+      overrides: [playbackRepositoryProvider.overrideWithValue(repository)],
+      wrapInScaffold: false,
+    );
+    await tester.pump();
+    pending.completeError(StateError('https://cdn.test/hls?signature=private-value'));
+    await settle(tester);
+    expect(find.text('Не удалось загрузить видео. Повторите попытку или вернитесь к сериалу.'), findsOneWidget);
+    expect(find.textContaining('private-value'), findsNothing);
+    expect(repository.calls, 2);
+    repository.pending = null;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expect(find.byType(PlayerView), findsOneWidget);
+    // The third request is the explicit recovery after the bounded refresh.
+    expect(repository.calls, 3);
+    await unmount(tester);
+  });
+
   testWidgets('short arrow press seeks once and release prevents any repeat', (tester) async {
     await mount(tester);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);

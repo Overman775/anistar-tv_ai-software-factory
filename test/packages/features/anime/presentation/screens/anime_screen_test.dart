@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
@@ -6,6 +8,7 @@ import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_sc
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
+import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
 import 'package:core/data.dart';
@@ -23,6 +26,165 @@ import '../../../../../support/test_app.dart';
 // ignore_for_file: prefer-moving-to-variable
 
 void main() {
+  testWidgets('empty episodes expose remote reload and can recover to playable data', (tester) async {
+    var calls = 0;
+    final repository = FakeAnimeScreenRepository(
+      load: (id, slug) async {
+        calls++;
+
+        return calls == 1
+            ? const Result.success(
+                AnimeScreenData(
+                  details: AnimeDetails(id: 1, slug: 'test', title: 'Тест', genres: [], isOngoing: false),
+                  episodes: [],
+                ),
+              )
+            : const FakeAnimeScreenRepository().getAnime(id: id, slug: slug);
+      },
+    );
+    await pumpTvApp(
+      tester,
+      AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode')),
+      wrapInScaffold: false,
+      overrides: [animeRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final reload = find.widgetWithText(FilledButton, 'Обновить серии');
+    expect(reload.hitTestable(), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(find.widgetWithText(FilledButton, 'Смотреть серию 1'), findsOneWidget);
+    expect(find.byType(EpisodeCard), findsAtLeastNWidgets(1));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('unexpected detail error stays safe and remote retry recovers', (tester) async {
+    var attempts = 0;
+    final repository = FakeAnimeScreenRepository(
+      load: (id, slug) {
+        attempts++;
+        if (attempts == 1) {
+          throw StateError('https://cdn.test/private?token=secret');
+        }
+
+        return const FakeAnimeScreenRepository().getAnime(id: id, slug: slug);
+      },
+    );
+    await pumpTvApp(
+      tester,
+      AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode')),
+      wrapInScaffold: false,
+      overrides: [animeRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Не удалось загрузить данные аниме. Повторите попытку.'), findsOneWidget);
+    expect(find.textContaining('secret'), findsNothing);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(attempts, 2);
+    expect(find.byType(AnimeHero), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('obsolete detail response cannot overwrite latest favorite state', (tester) async {
+    final pending = Completer<Result<AnimeScreenData, Failure>>();
+    AnimeScreenData data(bool favorite) => AnimeScreenData(
+      details: AnimeDetails(
+        id: 1,
+        slug: 'test',
+        title: 'Тест',
+        genres: const [],
+        isOngoing: false,
+        isFavorite: favorite,
+      ),
+      episodes: const [],
+    );
+    final repository = FakeAnimeScreenRepository(
+      load: (_, slug) => slug == 'old' ? pending.future : Future.value(Result.success(data(false))),
+    );
+    AnimeScreen screen(String slug) =>
+        AnimeScreen(animeId: 1, slug: slug, fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode'));
+    final overrides = [animeRepositoryProvider.overrideWithValue(repository)];
+    await pumpTvApp(tester, screen('old'), wrapInScaffold: false, overrides: overrides);
+    await tester.pump();
+    await pumpTvApp(tester, screen('new'), wrapInScaffold: false, overrides: overrides);
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(tester.element(find.byType(AnimeScreen)));
+    final latestKnown = container.read(favoritesControllerProvider).known;
+    expect(find.text('Добавить в избранное'), findsOneWidget);
+    pending.complete(Result.success(data(true)));
+    await tester.pumpAndSettle();
+    expect(container.read(favoritesControllerProvider).known, latestKnown);
+    expect(find.text('Серии не найдены'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  for (final size in [compactTvSize, wideTvSize, const Size(640, 360)]) {
+    for (final scale in [1.3, 2.0]) {
+      testWidgets('scaled text $scale keeps hero actions visible and remote navigation at $size', (tester) async {
+        int? opened;
+        final data = AnimeScreenData(
+          details: AnimeDetails(
+            id: 1,
+            slug: 'anime',
+            title: 'Пожалуйста, простите моих младших братьев / Please Forgive My Younger Brothers',
+            genres: const ['Комедия', 'Повседневность', 'Романтика'],
+            isOngoing: true,
+            posterUri: Uri(),
+            year: '2026',
+            seriesInfo: '14 серий',
+            voiceover: 'Озвучивание: AniStar',
+            description: List.filled(8, 'История о семье, дружбе и неожиданных приключениях.').join(' '),
+          ),
+          episodes: const [AnimeEpisode(number: 1, title: 'Серия 1')],
+        );
+        await pumpTvApp(
+          tester,
+          MediaQuery(
+            data: MediaQueryData(size: size, disableAnimations: true, textScaler: TextScaler.linear(scale)),
+            child: AnimeScreen(
+              animeId: 1,
+              slug: 'anime',
+              fallbackTitle: data.details.title,
+              onEpisodeTap: (episode) => opened = episode.number,
+            ),
+          ),
+          size: size,
+          wrapInScaffold: false,
+          overrides: [
+            animeRepositoryProvider.overrideWithValue(
+              FakeAnimeScreenRepository(load: (_, _) async => Result.success(data)),
+            ),
+          ],
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final play = find.widgetWithText(FilledButton, 'Смотреть серию 1');
+        expect(tester.getRect(play).bottom, lessThanOrEqualTo(size.height));
+        expect(tester.getRect(play).top, greaterThanOrEqualTo(0));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pumpAndSettle();
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное сериала');
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(find.byType(EpisodeCard), findsOneWidget);
+        expect(tester.getRect(find.byType(EpisodeCard)).bottom, lessThanOrEqualTo(size.height));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pumpAndSettle();
+        // Recheck visibility after returning Up from the episode grid.
+        // ignore: avoid-duplicate-test-assertions
+        expect(tester.getRect(play).bottom, lessThanOrEqualTo(size.height));
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        expect(opened, 1);
+        // Navigation must not introduce a new layout exception.
+        // ignore: avoid-duplicate-test-assertions
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('watch action follows confirmed history, skips gaps and restarts after all episodes', (tester) async {
     final history = FakeWatchedEpisodesRepository()..watched[1] = {1};
     int? opened;

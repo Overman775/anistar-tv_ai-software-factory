@@ -108,7 +108,7 @@ class EpisodeCard extends StatelessWidget {
                         'СЕРИЯ ${episode.number}',
                         style: textTheme.labelMedium?.copyWith(
                           color: focused ? Colors.white : AppPalette.textSecondary,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -138,7 +138,7 @@ class EpisodeCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.titleMedium?.copyWith(
                             color: AppPalette.textPrimary,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),

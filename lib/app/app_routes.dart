@@ -40,7 +40,10 @@ class LogViewerRoute extends GoRouteData with $LogViewerRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) => AppConfig.isDebugToolsEnabled
       ? const LogViewerScreen()
-      : const ErrorScreen(text: 'Просмотр логов доступен только в debug-сборке.');
+      : ErrorScreen(
+          text: 'Просмотр логов доступен только в debug-сборке.',
+          onReturnHome: () => const HomeRoute().go(context),
+        );
 }
 
 @TypedGoRoute<HomeRoute>(

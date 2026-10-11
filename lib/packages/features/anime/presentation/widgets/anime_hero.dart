@@ -36,30 +36,36 @@ class AnimeHero extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     return LayoutBuilder(
-      builder: (context, constraints) => SizedBox(
-        height: AnimeLayout.heroHeight(constraints.maxWidth),
-        child: Stack(
-          fit: StackFit.expand,
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(18) / 18;
+        final expandedText = textScale > 1;
+        final height = AnimeLayout.heroHeight(constraints.maxWidth, textScale: textScale);
+        final content = Stack(
+          fit: expandedText ? StackFit.loose : StackFit.expand,
           children: [
             if (posterUrl != null)
-              Align(
-                alignment: Alignment.centerRight,
-                child: FractionallySizedBox(
-                  widthFactor: 0.58,
-                  heightFactor: 1,
-                  child: Opacity(
-                    opacity: 0.24,
-                    child: AppNetworkImage(imageUrl: posterUrl, errorWidget: const SizedBox.shrink()),
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FractionallySizedBox(
+                    widthFactor: 0.58,
+                    heightFactor: 1,
+                    child: Opacity(
+                      opacity: 0.24,
+                      child: AppNetworkImage(imageUrl: posterUrl, errorWidget: const SizedBox.shrink()),
+                    ),
                   ),
                 ),
               ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerRight,
-                  end: Alignment.centerLeft,
-                  colors: [Color(0x18080B14), AppPalette.background],
-                  stops: [0, 0.7],
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerRight,
+                    end: Alignment.centerLeft,
+                    colors: [Color(0x18080B14), AppPalette.background],
+                    stops: [0, 0.7],
+                  ),
                 ),
               ),
             ),
@@ -74,19 +80,24 @@ class AnimeHero extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (posterUrl != null && constraints.maxWidth >= 600)
-                    AspectRatio(
-                      aspectRatio: 2 / 3,
-                      child: DecoratedBox(
-                        decoration: const BoxDecoration(
-                          borderRadius: AppRadii.large,
-                          boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 28, offset: Offset(0, 14))],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: AppRadii.large,
-                          child: TvPosterHero(
-                            tag: 'anime-poster-${details.id}',
-                            imageUrl: posterUrl,
-                            semanticLabel: details.title,
+                    SizedBox(
+                      height: expandedText
+                          ? AnimeLayout.baseHeroHeight(constraints.maxWidth) - AppSpacing.lg - AppSpacing.xl
+                          : null,
+                      child: AspectRatio(
+                        aspectRatio: 2 / 3,
+                        child: DecoratedBox(
+                          decoration: const BoxDecoration(
+                            borderRadius: AppRadii.large,
+                            boxShadow: [BoxShadow(color: Color(0x99000000), blurRadius: 28, offset: Offset(0, 14))],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: AppRadii.large,
+                            child: TvPosterHero(
+                              tag: 'anime-poster-${details.id}',
+                              imageUrl: posterUrl,
+                              semanticLabel: details.title,
+                            ),
                           ),
                         ),
                       ),
@@ -94,6 +105,7 @@ class AnimeHero extends StatelessWidget {
                   if (posterUrl != null && constraints.maxWidth >= 600) const SizedBox(width: AppSpacing.xl),
                   Expanded(
                     child: Column(
+                      mainAxisSize: expandedText ? MainAxisSize.min : MainAxisSize.max,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         filterActions ??
@@ -124,9 +136,12 @@ class AnimeHero extends StatelessWidget {
                           ),
                         ],
                         const SizedBox(height: AppSpacing.md),
-                        Expanded(
-                          child: AnimeDescription(description: details.description ?? 'Описание пока недоступно.'),
-                        ),
+                        if (expandedText)
+                          AnimeDescription(description: details.description ?? 'Описание пока недоступно.')
+                        else
+                          Expanded(
+                            child: AnimeDescription(description: details.description ?? 'Описание пока недоступно.'),
+                          ),
                         const SizedBox(height: AppSpacing.md),
                         Wrap(
                           spacing: AppSpacing.md,
@@ -150,8 +165,15 @@ class AnimeHero extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
+        );
+
+        return expandedText
+            ? ConstrainedBox(
+                constraints: BoxConstraints(minHeight: height),
+                child: content,
+              )
+            : SizedBox(height: height, child: content);
+      },
     );
   }
 }

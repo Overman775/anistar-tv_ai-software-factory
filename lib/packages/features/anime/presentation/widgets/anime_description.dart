@@ -13,11 +13,18 @@ class AnimeDescription extends StatelessWidget {
     final lineHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 18) * (style?.height ?? 1.45);
 
     return LayoutBuilder(
-      builder: (context, constraints) => Text(
-        description,
-        maxLines: (constraints.maxHeight / lineHeight).floor().clamp(1, 7),
-        overflow: TextOverflow.ellipsis,
-        style: style,
+      builder: (context, constraints) => Align(
+        alignment: Alignment.topLeft,
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: TvTypography.proseMaxWidth),
+          child: Text(
+            description,
+            maxLines: constraints.hasBoundedHeight ? (constraints.maxHeight / lineHeight).floor().clamp(1, 7) : 7,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
       ),
     );
   }

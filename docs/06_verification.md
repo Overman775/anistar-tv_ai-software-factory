@@ -410,3 +410,117 @@ Native seek выполняются последовательно для тек�
 - `git diff --check` прошёл.
 
 Новых дефектов не обнаружено; runtime и тесты не изменялись. Логи текущего прогона: `build/verification/combined-regression/` (`full-check.log`, `e2e.log`, `debug.log`, `release.log`, `apk-verification.log`). Реальные аккаунты и внешний AniStar/CDN не использовались. Ручная оценка физического TV/пульта, системный timeout сна и реальный длительный HLS в этот прогон не входят. Отсутствующая ссылка `../.tessl/RULES.md` остаётся ограничением доступных инструкций.
+
+## 25. Исправления четырёх замечаний Impeccable audit (2026-10-11)
+
+Исправлены один P1 и три P2 из технического аудита:
+
+- При увеличенном тексте hero имеет общую со skeleton минимальную высоту по масштабу и растёт по содержимому. Постер сохраняет базовые размеры. Focus на «Смотреть»/избранном прокручивает действие в видимую область при входе и возврате из серий; обычная геометрия и направления пульта сохранены.
+- TvTypography использует `packages/ui_kit/Inter`, совпадающий с FontManifest и именем в тестовом FontLoader. Регрессия проверяет присутствие семейства темы в реальном asset manifest тестового приложения.
+- AppNetworkImage задаёт memCacheWidth по ширине и DPR, либо memCacheHeight при отсутствии ограниченной ширины. Ограничивается одна ось для сохранения пропорций. Исходник дискового кеша сохраняется; при увеличении поверхности detail/Hero используется больший decode-размер. Проверка 200→400 logical pixels при DPR 2 подтверждает 400→800 pixels и отсутствие disk-resize.
+- Ошибка входа имеет Semantics liveRegion; регрессия проверяет сообщение и сохранение focus на пароле после отказа.
+
+Проверки:
+
+- Format, analyzer и DCM прошли без замечаний; **239 unit/widget/architecture** прошли, seed 20261010. Лог: `build/verification/impeccable-audit/check.log`. Первоначальный общий прогон дошёл до golden-проверок и остановился только на четырёх новых отсутствовавших baselines.
+- Добавлены **6** регрессий текста 130%/200% и D-pad на 960×540, 1280×720, 640×360. Проверены начальная видимость действий, Left/Right между ними, Down к серии, Up обратно и OK.
+- После создания и просмотра четырёх новых baselines 200% отдельный golden comparison прошёл: **32 passed**. Прежние **28** baselines не изменились. Логи: `scaled-goldens.log`, `goldens.log` в той же директории.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, локальный HTTPS/HLS fixture, настоящий Android player и hardware D-pad preflight. Лог: `e2e.log`. Просмотрен native screenshot `android.png`, 1920×1080, density 320 (960×540 logical pixels).
+- После E2E обычный dev debug APK успешно пересобран (`lib/main_dev.dart`, `env/dev.json`). Лог: `debug-build.log`. Прежнее предупреждение KGP не препятствовало сборке. Release в этой задаче не пересобирался.
+- Graphify обновлён AST-only: **2394 nodes / 3747 edges / 186 communities**, API tokens **0**. Для локального `.graphifyignore` исключена `tool/e2e/media/`: бинарные MPEG-TS файлы ошибочно распознавались как TypeScript и задерживали извлечение. Финальный лог: `graphify-final.log`; 18 файлов неподдерживаемых форматов, включая Android XML, пропущены. Предупреждение о старой Copilot-копии skill не относится к графу приложения; внешние skill-копии не обновлялись.
+- `git diff --check` прошёл.
+
+Ограничения: физический TV/пульт и ручной TalkBack не проверялись. Исправление объявления подтверждено semantics-тестом; скорость и память на физическом устройстве не профилировались. Увеличенный текст проверен Flutter widget/golden-тестами, native screenshot сделан при обычном масштабе. Реальные аккаунты и внешние AniStar/CDN не использовались. Ссылка `../.tessl/RULES.md` отсутствует; доступные инструкции, ADR-0008 и TV/motion specs соблюдены. Предшествующие изменения `.gitignore`, PRODUCT.md и `.impeccable/` сохранены. Commit/push не выполнялись.
+
+## 26. Impeccable typeset (2026-10-11)
+
+Сохранены Inter, палитра AniStar и существующая иерархия TV-интерфейса. Независимая оценка исходников и goldens выявила отсутствующие начертания 700/800, мелкие подписи 11–13 и слишком длинную строку описания в wide. Механический скан вернул `[]`, но его regex-проверки не распознают семантику Flutter TextTheme, поэтому веса, роли и ограничения проверены отдельно.
+
+Изменения и свидетельства:
+
+- Локальные Inter 400/500/700 одной версии 4.001, commit 9221beed3, из [официального архива 4.1](https://github.com/rsms/inter/releases/tag/v4.1). Regular и Medium побайтно совпадают с архивом и сохранены без изменений. Добавлен реальный Bold 700 (631880 bytes), карточки больше не запрашивают отсутствующий 800. FontTools подтверждает веса и всю русскую кириллицу, включая Ё. Лицензия SIL OFL 1.1 сохранена в `assets/fonts/LICENSE.txt` и включена через `flutter.licenses`; manifest-регрессия проверяет 400/500/700 под package-qualified именем.
+- Роли закреплены в TvTypography: заголовки 24–32/700, карточки 19, prose 18/1.45, обычный текст и управление 16/1.4, metadata 14. Фильтры, жанры и аккаунт используют TextTheme; бренд меню сохраняет 22 и журнал — monospace 13. Goldens каталога, входа, rail и anime показывают различимую иерархию. На обновлённых поверхностях контраст: textSecondary/background 9.62:1, textSecondary/backgroundElevated 9.14:1, textPrimary/surfaceElevated 14.62:1, textPrimary/focusSurface 12.99:1.
+- Описание ограничено 720 logical pixels в обычной и масштабированной ветках; `anime_ready_wide.png` показывает около 70 символов в первой строке вместо примерно 89. Title/actions сохраняют полную колонку, высота строки 1.45 и последний видимый ellipsis сохранены. Длинная жанровая плашка допускает перенос внутри доступной ширины.
+- Высоты фильтров, шапки rail и виртуализированных строк выбора учитывают реальный TextScaler. Длинные rail-подписи допускают две строки при увеличении; имя аккаунта и бренд используют ellipsis. Направления, OK, reveal и reduced motion сохранены. Player clock использует tabularFigures.
+- Доставка синхронная из локальных assets; новых сетевых запросов или web-font reflow нет. Добавлено только используемое начертание, семейство не заменялось. Масштаб не ограничивается и не отключается.
+
+Проверки:
+
+- `bash scripts/check.sh check`: format, analyzer и DCM без замечаний, **245 unit/widget/architecture + 34 golden passed**, seed 20261010. Лог `build/verification/typeset/check.log`. Дополнительно 4 теста фильтров/rail при 130%/200% на 640×360 и 2 варианта позднего выбора серии при 130%/200%; прежние 6 масштабированных anime-регрессий сохранены.
+- Baselines обновлены намеренно для настоящего Bold и новых текстовых ролей; добавлены 2 изображения панели выбора при 200%. Одна пакетная визуальная проверка: wide/compact anime, 200% hero и choices, portrait catalog, expanded rail, filters, player, login. Последующий comparison прошёл без различий. Лог генерации `goldens-update.log`.
+- Финальный `impeccable detect --json --scope type lib`: `[]`, сохранён в `build/verification/typeset/detect.json`. Нативный UI дополнительно проверен по исходникам и рендерам, без заявления о полноте regex-скана.
+- `graphify update .` с `GRAPHIFY_MAX_WORKERS=1`: **2399 nodes / 3759 edges / 175 communities**, AST-only, без API; `graphify-final.log`. Unsupported Android XML пропущены; 3 Gradle Kotlin scripts не дали символов.
+- `git diff --check` прошёл. TV/motion specs и UI Kit README обновлены вместе с поведением текста и регрессиями.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, local HTTPS/HLS fixtures, native playback и hardware D-pad preflight; `build/verification/typeset/e2e.log`.
+- Обычный dev debug APK пересобран после E2E: `build/app/outputs/flutter-apk/app-dev-debug.apk`, `debug-build.log`. Production FontManifest содержит 400/500/700 под `packages/ui_kit/Inter`; полный OFL с copyright присутствует в NOTICES.Z. Прежнее предупреждение KGP не препятствовало сборке. Release не пересобирался.
+
+Ограничения: масштаб 130%/200% проверен widget/golden-тестами, Android E2E — при штатном масштабе. Физический TV, оценка читаемости с дивана и ручной TalkBack не проверялись; память/скорость на реальном TV не профилировались. Отсутствующий `../.tessl/RULES.md` остаётся прежним ограничением окружения. Предшествующие изменения сохранены; commit/push не выполнялись.
+
+## 27. Impeccable harden (2026-10-11)
+
+Проверены ошибки, пустые состояния, длинный текст, увеличение до 200%, повторная отправка и поздние ответы. Изменения сохраняют TV-навигацию по ADR-0008 и учитывают reduced motion.
+
+- TvStateView прокручивает длинное содержимое, объявляет заголовок/сообщение через Semantics liveRegion и раскрывает кнопку при фокусе. Дозагрузка каталога оставляет карточки доступными и повтор по OK даже в узкой поверхности при 200%. Пустые серии предлагают «Обновить серии», доступное через Down с избранного.
+- Вход раскрывает сфокусированное поле или действие при увеличенном тексте и открытой клавиатуре. Повторная отправка игнорируется до валидации: десять быстрых вызовов создают один запрос, пароль очищается после завершения попытки; логин сохраняется. Бренд и текст загрузки допускают перенос.
+- Жанры учитывают масштаб в высоте и числе колонок; на portrait 390×844 при 200% используется одна колонка. Проверены 50 длинных меток, переход к последней и выбор по OK. Многоязычные строки RU/CJK/Arabic/emoji проверены как содержимое, без заявления о полной RTL-локализации приложения.
+- Anime/genres/player показывают message известного Failure и понятный текст восстановления для неожиданного исключения. Raw exception с секретным URL не попадает в эти сообщения. Обработчик ошибки маршрута не записывает URI/параметры и предлагает «На главную». Поздний ответ старого anime-запроса не перезаписывает актуальное избранное.
+- Проверен каталог из 1000 карточек: одновременно смонтировано меньше 50, последняя строка доступна, Left/OK выбирают соседнюю карточку без дополнительного запроса первой страницы. Это проверка виртуализации, а не замер памяти или FPS.
+
+Проверки:
+
+- `bash scripts/check.sh check`: format, analyzer и DCM без замечаний; **259 unit/widget/architecture + 38 golden passed**, seed 20261010. Лог: `build/verification/harden/check.log`.
+- Добавлены 14 поведенческих регрессий и 4 golden-сценария: длинная ошибка на compact/wide, portrait вход и 50 жанров при 200%. Новые PNG просмотрены одной пакетной проверкой; после исправления числа колонок выполнена одна подтверждающая проверка жанров. Финальный comparison прошёл, прежние baselines Typeset сохранены. При длинной ошибке кнопка раскрывается прокруткой; весь текст не обязан одновременно помещаться на экране, полное сообщение остаётся в semantics.
+- Graphify обновлён AST-only: **2411 nodes / 3813 edges / 172 communities**, без API. Лог: `build/verification/harden/graphify-final.log`. Unsupported Android XML пропущены; 3 Gradle Kotlin scripts не дали символов.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, локальные HTTPS/HLS fixtures, native playback и hardware D-pad preflight. Проверен предел автоматических повторов при отказе HLS и успешное ручное восстановление. Лог: `build/verification/harden/e2e.log`. Android E2E выполнен при штатном масштабе текста.
+- После E2E обычный dev debug APK успешно пересобран: `build/app/outputs/flutter-apk/app-dev-debug.apk`; лог `build/verification/harden/debug-build.log`. Прежнее предупреждение KGP не препятствовало сборке. Release не пересобирался.
+- TV/motion specs и UI Kit README обновлены вместе с поведением и регрессиями. `git diff --check` прошёл.
+
+Ограничения: физический TV, ручной TalkBack, мультитач и отмена жестов на физическом устройстве не проверялись. Существующие тесты удержания пульта и lifecycle используют синтезированные клавиши/Mock native; реальный пульт требует отдельного прогона. Новые языки, offline playback и обход CAPTCHA не добавлялись. Реальные аккаунты и внешний AniStar/CDN не использовались. Предшествующие изменения сохранены; commit/push не выполнялись.
+
+## 28. Impeccable optimize (2026-10-11)
+
+Измерено перестроение скрытого управления player. Исходный ValueListenableBuilder перестраивал PlayerView вместе с PlayerOverlay при каждом уведомлении native controller, хотя controls большую часть воспроизведения прозрачны и не принимают ввод. Подписка теперь сохраняет актуальное значение без setState для скрытых обновлений позиции/буферизованного диапазона. Буферизация, ошибка, инициализация и aspect ratio продолжают обновлять экран. Видимые controls обновляются как прежде; открытие читает текущее значение. Смена controller переносит подписку, dispose снимает её. Native VideoPlayer сохраняет собственную подписку и воспроизведение.
+
+До/после: один и тот же widget-сценарий с FakeVideoPlatform, 120 уведомлений позиции и диапазона буфера, pump по 16 ms, подсчёт через Flutter debugOnRebuildDirtyWidget после начального рендера:
+
+| Метрика | До | После |
+| --- | ---: | ---: |
+| Перестроения скрытого PlayerOverlay | 120 | 0 |
+
+Логи: `build/verification/optimize/before.log`, `after.log`. Это устранение 100% перестроений скрытого overlay в данном сценарии, не заявление о снижении общего CPU на 100% или росте FPS. VideoPlayer и обработка native событий продолжают работать. Изменение не снижает частоту обновлений видимой шкалы.
+
+Проверены существующие ограничения декодирования изображений по размеру/DPR, дисковый кеш исходника для Hero, ленивые сетки каталога/серий, виртуализированные варианты player и локальные используемые начертания Inter. Прежняя регрессия каталога из 1000 карточек защищает виртуализацию. Дополнительные изменения этих областей без измеренного узкого места не вносились.
+
+Добавлены пять регрессий: счётчик скрытых перестроений с актуальным временем при раскрытии; скрытые buffering/error; видимые время/Play/Pause; изменение размеров видео; замена и освобождение подписок. Motion spec обновлён, fade/focus/seek/idle и reduced motion сохранены. Просмотрены compact controls и wide focused timeline; новые визуальные baselines не создавались.
+
+Проверки:
+
+- `bash scripts/check.sh check`: format, analyzer и DCM без замечаний; **264 unit/widget/architecture + 38 golden passed**, seed 20261010. Comparison прошёл без изменения baselines. Лог: `build/verification/optimize/check.log`.
+- `graphify update .` с `GRAPHIFY_MAX_WORKERS=1`: AST-only, без API; финальный проход не обнаружил новых изменений топологии. Лог: `build/verification/optimize/graphify-final.log`.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, local HTTPS/HLS fixtures, native playback и hardware D-pad preflight. Проверены idle/focus, перемотка, pause/resume, смена качества/серии, возврат и восстановление после ошибки. Лог: `build/verification/optimize/e2e.log`.
+- Обычный dev debug APK пересобран после E2E: `build/app/outputs/flutter-apk/app-dev-debug.apk`; `build/verification/optimize/debug-build.log`. Прежнее предупреждение KGP не препятствовало сборке; release не пересобирался.
+- `git diff --check` прошёл.
+
+Ограничения: замер выполнен Flutter widget-тестом с Mock native, без сетевого видео. CPU, raster/UI frame timings, FPS, память и батарея на физическом TV не измерялись. Эмулятор и debug-сборка не заменяют профиль на слабом телевизоре. Реальные аккаунты и внешний AniStar/CDN не использовались. Предшествующие изменения сохранены; commit/push не выполнялись.
+
+## 29. Impeccable polish (2026-10-11)
+
+Финальный проход сохранил AniStar, Inter и принятые TV-паттерны. Проверены снимки каталога portrait, жанров compact, раскрытого меню, карточки аниме, входа и длинной ошибки при 200%, а также общие токены и состояния кнопок. DESIGN.md отсутствует; визуальной системой служат существующие UI Kit, PRODUCT.md и ADR-0008. Сохранённого critique snapshot в `.impeccable/` нет.
+
+Подтверждён локальный дефект общей темы: тёмный текст FilledButton на фирменном primary давал **3,32:1** (solid pixels `#3E2458` / `#A855F7` на исходном golden входа) при размере 16/700. Исправлен onPrimary тёмной темы на AppPalette.background; focus/pressed/hover используют светлый state layer, чтобы контраст не падал при взаимодействии. Рамка фокуса 3 pixels сохранена. Цвет primary, размеры, типографика и маршруты фокуса не менялись.
+
+Widget-регрессии проверяют реальные стили FilledButton с приоритетом темы над Material defaults и alphaBlend state layer. Контраст текста: dark normal **4,97:1**, focus/pressed **5,69:1**, hover **5,53:1**; light normal **5,70:1**, focus/pressed **4,77:1**, hover **4,97:1**. Лог: `build/verification/polish/contrast.log`. Disabled-компоненты не включены в порог контраста активного текста; их оформление не менялось.
+
+Обновлены только **13** PNG с затронутыми FilledButton — обычные и масштабированные anime, filters, login и recovery. Перечень зафиксирован сравнением SHA-256 с состоянием до Polish в `build/verification/polish/changed-baselines.json`; предшествующие изменения baselines не приписываются этому этапу. Генерация: `build/verification/polish/goldens-update.log`, **38 passed**. TV-interaction spec обновлён вместе с темой и регрессиями.
+
+Проверки:
+
+- `bash scripts/check.sh check`: format, analyzer и DCM без замечаний; **266 unit/widget/architecture + 38 golden passed**, seed 20261010. Лог: `build/verification/polish/check.log`.
+- Одна исходная пакетная инспекция и одна подтверждающая: вход compact/portrait 200%, wide anime, обычная/длинная recovery и нативный Android screenshot. После подтверждения дополнительных визуальных правок не вносилось.
+- Нативный снимок `build/verification/polish/android-tv.png` получен через `adb exec-out screencap -p` на emulator-5554, 1920×1080. Он захватил skeleton во время перехода к detail в Android E2E; это свидетельство состояния загрузки, а не замер контраста готовой кнопки. Test binding и fixture-каталог принадлежат тестовому запуску. Контраст готовых кнопок подтверждён widget/golden-проверками.
+- `graphify update .` с `GRAPHIFY_MAX_WORKERS=1`: AST-only, без API, **2428 nodes / 3846 edges / 182 communities**. Последний проход не изменил топологию. Лог: `build/verification/polish/graphify-final.log`.
+- `bash scripts/e2e.sh emulator-5554`: **13 passed**, local HTTPS/HLS fixtures, native playback и hardware D-pad preflight. Подтверждены вход, каталог/жанры/сортировка, избранное, focus/Back, перемотка, смена качества/серии, освобождение player и восстановление после ошибок. Лог: `build/verification/polish/e2e.log`.
+- Обычный dev debug APK успешно пересобран после E2E: `build/app/outputs/flutter-apk/app-dev-debug.apk`, лог `build/verification/polish/debug-build.log`. Прежнее предупреждение KGP не препятствовало сборке; release не пересобирался.
+- `git diff --check` прошёл.
+
+Ограничения: физический TV/пульт, ручной TalkBack, читаемость с дивана, FPS и память на реальном устройстве не проверялись. Portrait и масштаб 200% проверены Flutter рендерами; отдельного нативного phone-прогона не было. Реальные аккаунты и внешние AniStar/CDN не использовались. Предшествующие изменения сохранены; commit/push не выполнялись.

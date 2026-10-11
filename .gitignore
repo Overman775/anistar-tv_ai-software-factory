@@ -52,6 +52,9 @@ app.*.map.json
 /AGENTS.md
 /graphify-out/
 
+# Locally installed third-party design tooling.
+/.agents/skills/impeccable/
+
 # Machine-specific production endpoint for --dart-define-from-file.
 /env/prod.json
 

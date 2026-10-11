@@ -15,7 +15,7 @@ abstract final class AppTheme {
       primary: isDark ? AppPalette.primary : AppPalette.primarySoft,
       secondary: AppPalette.secondary,
       surface: isDark ? AppPalette.surface : const Color(0xFFF7F5FC),
-    );
+    ).copyWith(onPrimary: isDark ? AppPalette.background : null);
     final baseTextTheme = ThemeData(brightness: brightness).textTheme;
     final primaryColor = baseScheme.primary;
     final primaryHoverColor = primaryColor.withValues(alpha: 0.12);
@@ -77,12 +77,26 @@ abstract final class AppTheme {
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 56),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-          shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
-          textStyle: textTheme.labelLarge,
-        ).copyWith(side: filledButtonSide),
+        style:
+            FilledButton.styleFrom(
+              minimumSize: const Size(0, 56),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+              shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+              textStyle: textTheme.labelLarge,
+            ).copyWith(
+              side: filledButtonSide,
+              overlayColor: isDark
+                  ? WidgetStateProperty.resolveWith<Color?>((states) {
+                      if (states.contains(WidgetState.pressed) || states.contains(WidgetState.focused)) {
+                        return AppPalette.textPrimary.withValues(alpha: 0.1);
+                      }
+
+                      return states.contains(WidgetState.hovered)
+                          ? AppPalette.textPrimary.withValues(alpha: 0.08)
+                          : null;
+                    })
+                  : null,
+            ),
       ),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(

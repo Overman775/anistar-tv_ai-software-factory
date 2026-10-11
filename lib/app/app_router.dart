@@ -20,10 +20,13 @@ class AppRouter {
       initialLocation: AppRoutes.home,
       observers: [LoggingNavigatorObserver(_logger), PlayerRouteObserver()],
       routes: $appRoutes,
-      errorBuilder: (context, state) {
-        _logger.e('Routing error: ${state.error}', error: state.error);
+      errorBuilder: (context, _) {
+        _logger.e('Unable to open application route');
 
-        return ErrorScreen(text: state.error?.message ?? 'Router error');
+        return ErrorScreen(
+          text: 'Не удалось открыть страницу. Вернитесь на главную и выберите аниме заново.',
+          onReturnHome: () => context.go(AppRoutes.home),
+        );
       },
       navigatorKey: rootNavigatorKey,
     );

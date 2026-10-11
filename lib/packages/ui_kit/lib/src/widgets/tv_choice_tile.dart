@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
@@ -15,6 +16,14 @@ class TvChoiceTile extends StatelessWidget {
     this.autofocus = false,
     super.key,
   });
+
+  /// Includes the tile's vertical padding, keeping virtualized rows unclipped.
+  static double rowExtentOf(BuildContext context) {
+    final style = Theme.of(context).textTheme.bodyMedium;
+    final textHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.4);
+
+    return math.max(56, textHeight + 24) + 8;
+  }
 
   final FocusNode? focusNode;
   final String label;
@@ -53,7 +62,7 @@ class TvChoiceTile extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppPalette.textPrimary),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textPrimary),
                 ),
               ),
               if (selected) const Icon(Icons.check, color: AppPalette.textPrimary),

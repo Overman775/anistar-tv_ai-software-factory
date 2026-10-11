@@ -175,6 +175,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     final value = widget.value;
     final durationMs = value.duration.inMilliseconds;
     final positionMs = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
@@ -221,9 +222,12 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                           widget.title,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.headlineMedium?.copyWith(color: Colors.white),
+                          style: textTheme.headlineMedium?.copyWith(color: Colors.white),
                         ),
-                        Text('Серия ${widget.episodeNumber}', style: const TextStyle(color: Colors.white70)),
+                        Text(
+                          'Серия ${widget.episodeNumber}',
+                          style: textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                        ),
                       ],
                     ),
                   ),
@@ -303,7 +307,10 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                   const SizedBox(width: AppSpacing.md),
                   Text(
                     '${PlayerOverlay._format(value.position)} / ${PlayerOverlay._format(value.duration)}',
-                    style: const TextStyle(color: Colors.white),
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: Colors.white,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                   const Spacer(),
                   if (widget.onSelectEpisode != null)

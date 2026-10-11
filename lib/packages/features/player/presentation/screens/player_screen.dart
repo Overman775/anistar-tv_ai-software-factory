@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
+import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -84,11 +85,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     if (snapshot.connectionState != ConnectionState.done) {
       return const TvProgressView(label: 'Загружаем видео…');
     }
-    if (snapshot.hasError) {
+    final error = snapshot.error;
+    if (error != null) {
       return PlayerRetryView(
         icon: Icons.wifi_off_rounded,
         title: 'Видео не запустилось',
-        message: snapshot.error?.toString() ?? 'Неизвестная ошибка',
+        message: error is Failure
+            ? error.message
+            : 'Не удалось загрузить видео. Повторите попытку или вернитесь к сериалу.',
         onRetry: _retry,
       );
     }

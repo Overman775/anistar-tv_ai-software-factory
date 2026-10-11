@@ -20,14 +20,15 @@ class PlayerChoicesDialog<T> extends StatefulWidget {
 }
 
 class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
-  static const _rowHeight = 64.0;
-  late final ScrollController _scrollController;
+  double _rowHeight = 64;
+  ScrollController? _scrollController;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _rowHeight = TvChoiceTile.rowExtentOf(context);
     final selectedIndex = widget.choices.indexOf(widget.selected);
-    _scrollController = ScrollController(
+    _scrollController ??= ScrollController(
       initialScrollOffset: (selectedIndex * _rowHeight - _rowHeight * 2).clamp(
         0.0,
         (widget.choices.length * _rowHeight - 320).clamp(0.0, double.infinity),
@@ -37,7 +38,7 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
+    _scrollController?.dispose();
     super.dispose();
   }
 

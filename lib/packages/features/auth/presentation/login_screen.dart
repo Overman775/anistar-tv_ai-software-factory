@@ -25,6 +25,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _retryFocus = FocusNode(debugLabel: 'Повторить проверку сессии');
   bool _obscurePassword = true;
 
+  @override
+  void initState() {
+    super.initState();
+    for (final node in [_usernameFocus, _passwordFocus, _submitFocus, _retryFocus]) {
+      node.addListener(_revealFocus);
+    }
+  }
+
+  void _revealFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final target = [
+        _usernameFocus,
+        _passwordFocus,
+        _submitFocus,
+        _retryFocus,
+      ].where((node) => node.hasFocus).firstOrNull;
+      final targetContext = target?.context;
+      if (targetContext != null) {
+        unawaited(
+          Scrollable.ensureVisible(
+            targetContext,
+            alignment: 0.5,
+            duration: AppMotion.durationOf(context, AppMotion.fast),
+          ),
+        );
+      }
+    });
+  }
+
   KeyEventResult _moveFieldFocus(KeyEvent event, FocusNode down, FocusNode up) {
     final target = switch (event.logicalKey) {
       LogicalKeyboardKey.arrowDown => down,
@@ -51,6 +83,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (ref.read(authControllerProvider).isLoading) {
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
@@ -109,7 +144,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             children: [
                               const Icon(Icons.live_tv_rounded, color: AppPalette.primary, size: 32),
                               const SizedBox(width: AppSpacing.sm),
-                              Text('AniStar TV', style: textTheme.headlineMedium),
+                              Flexible(
+                                child: Text(
+                                  'AniStar TV',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textTheme.headlineMedium,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: AppSpacing.sm),
@@ -170,9 +212,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           if (error != null) ...[
                             const SizedBox(height: 16),
-                            Text(
-                              error is Failure ? error.message : 'Не удалось проверить сессию. Повторите попытку.',
-                              style: TextStyle(color: Theme.of(context).colorScheme.error),
+                            Semantics(
+                              key: const ValueKey('login_error'),
+                              liveRegion: true,
+                              child: Text(
+                                error is Failure ? error.message : 'Не удалось проверить сессию. Повторите попытку.',
+                                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                              ),
                             ),
                           ],
                           const SizedBox(height: 24),
@@ -196,7 +242,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                     const SizedBox(width: AppSpacing.sm),
                                   ],
-                                  Text(auth.isLoading ? 'Проверяем вход…' : 'Войти'),
+                                  Flexible(
+                                    child: Text(
+                                      auth.isLoading ? 'Проверяем вход…' : 'Войти',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),

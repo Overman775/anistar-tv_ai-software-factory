@@ -54,18 +54,37 @@ class AppNetworkImage extends StatelessWidget {
     return Semantics(
       label: semanticLabel,
       image: true,
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: CachedNetworkImage(
-          imageUrl: url,
-          width: width,
-          height: height,
-          fit: fit,
-          fadeInDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
-          fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
-          placeholder: (_, _) => TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
-          errorWidget: (_, _, _) => fallback,
-        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final pixelRatio = MediaQuery.devicePixelRatioOf(context);
+          final decodeWidth = width ?? (constraints.hasBoundedWidth ? constraints.maxWidth : null);
+          final decodeHeight = height ?? (constraints.hasBoundedHeight ? constraints.maxHeight : null);
+
+          // Resize on one axis to retain the source aspect ratio. Keep the
+          // original disk cache so a detail/Hero surface can decode it larger.
+          final cacheWidth = decodeWidth != null && decodeWidth.isFinite && decodeWidth > 0
+              ? (decodeWidth * pixelRatio).ceil()
+              : null;
+          final cacheHeight = cacheWidth == null && decodeHeight != null && decodeHeight.isFinite && decodeHeight > 0
+              ? (decodeHeight * pixelRatio).ceil()
+              : null;
+
+          return ClipRRect(
+            borderRadius: borderRadius,
+            child: CachedNetworkImage(
+              imageUrl: url,
+              width: width,
+              height: height,
+              fit: fit,
+              memCacheWidth: cacheWidth,
+              memCacheHeight: cacheHeight,
+              fadeInDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
+              fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
+              placeholder: (_, _) => TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
+              errorWidget: (_, _, _) => fallback,
+            ),
+          );
+        },
       ),
     );
   }
