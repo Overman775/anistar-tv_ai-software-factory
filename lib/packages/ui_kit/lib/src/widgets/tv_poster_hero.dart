@@ -6,11 +6,18 @@ import 'app_network_image.dart';
 
 /// The same clipped image participates in both ends of a poster flight.
 class TvPosterHero extends StatelessWidget {
-  const TvPosterHero({required this.tag, required this.imageUrl, required this.semanticLabel, super.key});
+  const TvPosterHero({
+    required this.tag,
+    required this.imageUrl,
+    required this.semanticLabel,
+    this.fallbackImageUrl,
+    super.key,
+  });
 
   final Object tag;
   final String? imageUrl;
   final String semanticLabel;
+  final String? fallbackImageUrl;
 
   @override
   Widget build(BuildContext context) => Skeleton.ignore(
@@ -27,7 +34,8 @@ class TvPosterHero extends StatelessWidget {
         child: AppNetworkImage(
           imageUrl: imageUrl,
           semanticLabel: semanticLabel,
-          animateLoading: false,
+          fallbackImageUrl: fallbackImageUrl,
+          animateLoading: fallbackImageUrl != null && fallbackImageUrl != imageUrl,
           resizeToLayout: false,
         ),
       ),

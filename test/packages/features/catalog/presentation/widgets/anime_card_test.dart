@@ -7,7 +7,14 @@ import 'package:material_ui/material_ui.dart';
 void main() {
   testWidgets('renders catalog metadata and opens the selected anime', (tester) async {
     var taps = 0;
-    final anime = AnimeSummary(id: 1, slug: '1-anime', title: 'Красивое аниме', year: '2026', posterUri: Uri());
+    final anime = AnimeSummary(
+      id: 1,
+      slug: '1-anime',
+      title: 'Красивое аниме',
+      year: '2026',
+      rating: 8.4,
+      posterUri: Uri(),
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -23,6 +30,8 @@ void main() {
 
     expect(find.text('Красивое аниме'), findsOneWidget);
     expect(find.text('2026'), findsOneWidget);
+    expect(find.text('8.4/10'), findsOneWidget);
+    expect(find.byIcon(Icons.grade_rounded), findsOneWidget);
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(taps, 1);

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:anistar_tv/app/app_navigation_page.dart';
 import 'package:anistar_tv/app/app_router.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
+import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_skeleton.dart';
@@ -178,6 +179,32 @@ void decodedPosterTests() {
       addTearDown(router.dispose);
       final pending = Completer<Result<AnimeScreenData, Failure>>();
       final result = await const FakeAnimeScreenRepository().getAnime(id: 1, slug: '1-anime');
+      const detailUrl = 'https://fixture.test/detail-poster.png';
+      final pendingImage = Completer<ImageInfo>();
+      if (!earlyResponse) {
+        cache.putIfAbsent(
+          const CachedNetworkImageProvider(detailUrl),
+          () => OneFrameImageStreamCompleter(pendingImage.future),
+        );
+      }
+      final detailResult = earlyResponse
+          ? result
+          : result.when(
+              failure: Result<AnimeScreenData, Failure>.failure,
+              success: (data) => Result<AnimeScreenData, Failure>.success(
+                AnimeScreenData(
+                  details: AnimeDetails(
+                    id: 1,
+                    slug: '1-anime',
+                    title: 'Аниме',
+                    genres: data.details.genres,
+                    isOngoing: data.details.isOngoing,
+                    posterUri: Uri.parse(detailUrl),
+                  ),
+                  episodes: data.episodes,
+                ),
+              ),
+            );
       final summary = AnimeSummary(id: 1, slug: '1-anime', title: 'Аниме', posterUri: Uri.parse(url));
       await pumpTvApp(
         tester,
@@ -203,14 +230,14 @@ void decodedPosterTests() {
       await tester.pump();
       for (var frame = 0; frame < 20; frame++) {
         if (earlyResponse && frame == 3) {
-          pending.complete(result);
+          pending.complete(detailResult);
         }
         await tester.pump(const Duration(milliseconds: 16));
         expectPoster();
       }
       if (!earlyResponse) {
         expect(find.byType(AnimeSkeleton), findsOneWidget);
-        pending.complete(result);
+        pending.complete(detailResult);
       }
       for (var frame = 0; frame < 3; frame++) {
         await tester.pump(const Duration(milliseconds: 16));

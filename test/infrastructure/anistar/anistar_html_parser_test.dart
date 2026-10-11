@@ -16,6 +16,25 @@ void main() {
     expect(parser.catalog(catalogHtml, 690).hasNext, isFalse);
   });
 
+  test('catalog ratings retain decimals and zero without inventing missing scores', () {
+    for (final (markup, expected) in <(String, double?)>[
+      ('<span>рейтинг 7.7/10</span>', 7.7),
+      ('<span>рейтинг 8,2/10</span>', 8.2),
+      ('<meta itemprop="ratingValue" content="9.1">', 9.1),
+      ('<span>рейтинг 0/10</span>', 0),
+      ('<span>рейтинг 10/10</span>', 10),
+      ('<span>12 серий</span>', null),
+      ('<span>рейтинг 12/10</span>', null),
+    ]) {
+      final page = parser.catalog(
+        '<div class="news"><div class="title_left"> '
+        '<a href="/10938-test.html">Название</a></div>$markup</div>',
+        1,
+      );
+      expect(page.items.single.rating, expected);
+    }
+  });
+
   test('mobile layout and duplicate cards retain one actual anime', () {
     const card =
         '<div class="plash"><a href="/10938-test.html"><span class="title-top">Название</span><div class="poster"><img src="/p.jpg"></div></a></div>';

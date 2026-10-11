@@ -4,6 +4,7 @@ final class DirectAnime {
   final String? description;
   final List<String> genres;
   final List<DirectCatalogFilter> filters;
+  final double? rating;
   final int id;
   final bool? isFavorite;
   final bool isOngoing;
@@ -20,6 +21,7 @@ final class DirectAnime {
     required this.title,
     this.posterUri,
     this.isFavorite,
+    this.rating,
     this.year,
     this.genres = const [],
     this.filters = const [],

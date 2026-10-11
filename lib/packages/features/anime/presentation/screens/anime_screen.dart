@@ -386,7 +386,6 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         ),
         body: SafeArea(
           top: false,
-          minimum: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),
         ),
       ),

@@ -26,6 +26,7 @@ final class AnistarFavoritesRepository extends BaseRepository implements Favorit
               title: item.title,
               posterUri: item.posterUri ?? Uri(),
               year: item.year,
+              rating: item.rating,
               isFavorite: true,
             ),
           )

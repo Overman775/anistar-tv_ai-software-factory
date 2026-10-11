@@ -31,6 +31,7 @@ void main() {
                 title: 'Аниме ${index + 1}',
                 posterUri: Uri(),
                 isFavorite: index == 0,
+                rating: index == 2 ? null : 8.4,
               ),
             ),
             page: 1,

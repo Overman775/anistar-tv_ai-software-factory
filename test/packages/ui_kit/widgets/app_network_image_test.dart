@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 // This regression inspects the UI kit's cached image implementation.
 // ignore: depend_on_referenced_packages
@@ -11,6 +13,90 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../support/test_app.dart';
 
 void main() {
+  for (final mode in ['success', 'error', 'reduced']) {
+    testWidgets('retains decoded Hero poster while replacement loads: $mode', (tester) async {
+      const sourceUrl = 'https://fixture.test/source.png';
+      const targetUrl = 'https://fixture.test/detail.png';
+      final source = await tester.runAsync(() async {
+        final bytes = await rootBundle.load(Assets.images.anistarLauncher.keyName);
+        final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+        final frame = await codec.getNextFrame();
+        codec.dispose();
+        return frame.image;
+      });
+      final target = await tester.runAsync(() async {
+        final bytes = await rootBundle.load(Assets.images.anistarLogo.keyName);
+        final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+        final frame = await codec.getNextFrame();
+        codec.dispose();
+        return frame.image;
+      });
+      final pending = Completer<ImageInfo>();
+      final cache = PaintingBinding.instance.imageCache
+        ..putIfAbsent(
+          const CachedNetworkImageProvider(sourceUrl),
+          () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: source!))),
+        )
+        ..putIfAbsent(const CachedNetworkImageProvider(targetUrl), () => OneFrameImageStreamCompleter(pending.future));
+      addTearDown(() {
+        cache
+          ..clear()
+          ..clearLiveImages();
+      });
+      await pumpTvApp(
+        tester,
+        MediaQuery(
+          data: MediaQueryData(disableAnimations: mode == 'reduced'),
+          child: const SizedBox(
+            width: 200,
+            height: 300,
+            child: TvPosterHero(
+              tag: 'test-poster',
+              imageUrl: targetUrl,
+              fallbackImageUrl: sourceUrl,
+              semanticLabel: 'Аниме',
+            ),
+          ),
+        ),
+      );
+      bool visible(ui.Image image) =>
+          tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(image) ?? false);
+      for (var frame = 0; frame < 12; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(visible(source!), isTrue);
+        expect(visible(target!), isFalse);
+        expect(find.byType(TvSkeletonBox), findsNothing);
+      }
+      if (mode == 'error') {
+        pending.completeError(StateError('Image unavailable'));
+      } else {
+        pending.complete(ImageInfo(image: target!));
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      await tester.pump(const Duration(milliseconds: 40));
+      if (mode != 'error') {
+        final targetImage = find.byWidgetPredicate(
+          (widget) => widget is RawImage && (widget.image?.isCloneOf(target!) ?? false),
+        );
+        expect(targetImage, findsOneWidget);
+        final fades = tester.widgetList<FadeTransition>(
+          find.ancestor(of: targetImage, matching: find.byType(FadeTransition)),
+        );
+        expect(fades.any((fade) => fade.opacity.value > 0 && fade.opacity.value < 1), mode == 'success');
+      }
+      for (var frame = 0; frame < 12; frame++) {
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(visible(source!), isTrue);
+      }
+      await tester.pumpAndSettle();
+      expect(visible(target!), mode != 'error');
+      expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('non-HTTP schemes render fallback without creating a network image', (tester) async {
     for (final url in ['file://localhost/p.jpg', 'ftp://cdn.test/p.jpg', 'https:///p.jpg']) {
       await pumpTvApp(tester, AppNetworkImage(imageUrl: url));

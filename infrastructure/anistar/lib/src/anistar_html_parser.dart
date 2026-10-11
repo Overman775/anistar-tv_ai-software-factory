@@ -169,10 +169,21 @@ final class AnistarHtmlParser {
     return DirectAnime(
       id: id,
       isFavorite: AnistarFavoritesHtml.status(card, id),
+      rating: _rating(card),
       slug: uri.pathSegments.last.replaceFirst(RegExp(r'\.html$'), ''),
       title: title,
       posterUri: _uri(card.querySelector('img[itemprop="image"], .poster img')?.attributes['src']),
     );
+  }
+
+  double? _rating(Element card) {
+    final value = card.querySelector('[itemprop="ratingValue"]');
+    final raw =
+        value?.attributes['content'] ??
+        value?.text ??
+        RegExp(r'(\d+(?:[.,]\d+)?)\s*/\s*10\b').firstMatch(card.text)?.group(1);
+    final rating = double.tryParse((raw ?? '').trim().replaceAll(',', '.'));
+    return rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null;
   }
 
   void _checkChallenge(String source) {

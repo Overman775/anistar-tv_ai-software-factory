@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,7 +40,29 @@ void main() {
         CatalogScreen(onAnimeTap: (anime) => expect(anime.id, isPositive)),
         size: size,
         wrapInScaffold: false,
-        overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+        overrides: [
+          catalogRepositoryProvider.overrideWithValue(
+            FakeCatalogScreenRepository(
+              load: (_) async => Result.success(
+                AnimePage(
+                  page: 1,
+                  hasNext: false,
+                  items: List.generate(
+                    12,
+                    (index) => AnimeSummary(
+                      id: index + 1,
+                      slug: '${index + 1}-anime',
+                      title: 'Аниме ${index + 1}',
+                      posterUri: Uri(),
+                      isFavorite: index == 0,
+                      rating: index == 2 ? null : 8.4,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       );
       await tester.pumpAndSettle();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_$name.png'));

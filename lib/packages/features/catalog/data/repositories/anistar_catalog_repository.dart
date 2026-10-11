@@ -58,6 +58,7 @@ final class AnistarCatalogRepository extends BaseRepository implements CatalogRe
               title: item.title,
               posterUri: item.posterUri ?? Uri(),
               year: item.year,
+              rating: item.rating,
             ),
           )
           .toList(growable: false),

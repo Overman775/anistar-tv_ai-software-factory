@@ -17,6 +17,7 @@ class AppNetworkImage extends StatelessWidget {
     this.width,
     this.animateLoading = true,
     this.resizeToLayout = true,
+    this.fallbackImageUrl,
   });
 
   final BorderRadiusGeometry borderRadius;
@@ -29,6 +30,9 @@ class AppNetworkImage extends StatelessWidget {
   final BoxFit fit;
   final double? height;
   final String? imageUrl;
+
+  /// Keep the source poster visible while a different detail image loads.
+  final String? fallbackImageUrl;
   final String? semanticLabel;
   final double? width;
 
@@ -41,6 +45,11 @@ class AppNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
+    final previousUrl = fallbackImageUrl;
+    final hasPrevious = previousUrl != url && _hasValidUrl(previousUrl);
+    final previous = hasPrevious
+        ? AppNetworkImage(imageUrl: previousUrl, fit: fit, animateLoading: false, resizeToLayout: false)
+        : null;
     final fallback = SizedBox(
       width: width,
       height: height,
@@ -53,7 +62,7 @@ class AppNetworkImage extends StatelessWidget {
     );
 
     if (url == null || !_hasValidUrl(url)) {
-      return Semantics(label: semanticLabel, image: true, child: fallback);
+      return Semantics(label: semanticLabel, image: true, child: previous ?? fallback);
     }
 
     return Semantics(
@@ -75,20 +84,31 @@ class AppNetworkImage extends StatelessWidget {
               ? (decodeHeight * pixelRatio).ceil()
               : null;
 
+          final image = CachedNetworkImage(
+            imageUrl: url,
+            width: width,
+            height: height,
+            fit: fit,
+            memCacheWidth: cacheWidth,
+            memCacheHeight: cacheHeight,
+            fadeInDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
+            fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
+            placeholder: (_, _) => previous != null
+                ? SizedBox(width: width, height: height)
+                : TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
+            errorWidget: (_, _, _) => previous != null ? SizedBox(width: width, height: height) : fallback,
+          );
           return ClipRRect(
             borderRadius: borderRadius,
-            child: CachedNetworkImage(
-              imageUrl: url,
-              width: width,
-              height: height,
-              fit: fit,
-              memCacheWidth: cacheWidth,
-              memCacheHeight: cacheHeight,
-              fadeInDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
-              fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
-              placeholder: (_, _) => TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
-              errorWidget: (_, _, _) => fallback,
-            ),
+            child: previous == null
+                ? image
+                : Stack(
+                    fit: StackFit.passthrough,
+                    children: [
+                      Positioned.fill(child: ExcludeSemantics(child: previous)),
+                      image,
+                    ],
+                  ),
           );
         },
       ),

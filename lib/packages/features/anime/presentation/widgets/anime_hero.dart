@@ -52,7 +52,11 @@ class AnimeHero extends StatelessWidget {
                     heightFactor: 1,
                     child: Opacity(
                       opacity: 0.24,
-                      child: AppNetworkImage(imageUrl: posterUrl, errorWidget: const SizedBox.shrink()),
+                      child: AppNetworkImage(
+                        imageUrl: posterUrl,
+                        fallbackImageUrl: fallbackPosterUri?.toString(),
+                        errorWidget: const SizedBox.shrink(),
+                      ),
                     ),
                   ),
                 ),
@@ -96,6 +100,7 @@ class AnimeHero extends StatelessWidget {
                             child: TvPosterHero(
                               tag: 'anime-poster-${details.id}',
                               imageUrl: posterUrl,
+                              fallbackImageUrl: fallbackPosterUri?.toString(),
                               semanticLabel: details.title,
                             ),
                           ),
