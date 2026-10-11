@@ -1,8 +1,6 @@
 import 'package:app_logging/app_logging.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:http_mock_adapter/http_mock_adapter.dart';
 import 'package:networking/networking.dart';
 
@@ -26,19 +24,45 @@ void main() {
     expect(dio.interceptors, contains(isA<DioLoggingInterceptor>()));
   });
 
-  test('HttpClient resolves a relative path against the configured endpoint', () async {
-    Uri? requestedUri;
-    final delegate = MockClient((request) async {
-      requestedUri = request.url;
+  test('DioClient installs session/header interceptors before logging', () async {
+    final headers = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        options.headers['Accept'] = 'text/html';
+        handler.next(options);
+      },
+    );
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+      interceptors: [headers],
+    );
+    addTearDown(() => dio.close(force: true));
+    expect(dio.interceptors.last, isA<DioLoggingInterceptor>());
+    final session = InterceptorsWrapper();
+    DioClient.addInterceptors(dio, [session]);
+    expect(dio.interceptors.indexOf(session), lessThan(dio.interceptors.length - 1));
+  });
 
-      return http.Response('', 200);
-    });
-    final client = HttpClient(config: config, client: delegate);
-    addTearDown(client.close);
-
-    await client.get('health');
-
-    expect(requestedUri, Uri.parse('https://site.test/base/health'));
+  test('mirror probes can disable retry and use the same logging factory', () async {
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+      enableRetry: false,
+    );
+    addTearDown(() => dio.close(force: true));
+    var requests = 0;
+    DioClient.addInterceptors(dio, [
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requests++;
+          handler.next(options);
+        },
+      ),
+    ]);
+    DioAdapter(dio: dio).onGet('/anime/', (server) => server.reply(503, 'Unavailable'));
+    await expectLater(dio.get<String>('/anime/'), throwsA(isA<DioException>()));
+    expect(requests, 1);
+    expect(dio.interceptors.last, isA<DioLoggingInterceptor>());
   });
 
   test('does not retry a non-idempotent playback request', () async {

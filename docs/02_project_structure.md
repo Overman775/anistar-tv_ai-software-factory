@@ -11,7 +11,7 @@
 │   ├── networking/       # HTTP, BaseRepository, network failures
 │   ├── storage/          # Preferences и secure storage
 │   ├── app_logging/      # Logger, file output и observers
-│   └── anistar/          # Зеркало, HTML/JSON5 и DTO сайта
+│   └── anistar/          # Единый клиент, cookies, зеркало, HTML/JSON5 и DTO
 ├── lib/
 │   ├── app/              # App, composition root и GoRouter
 │   ├── runner/           # Bootstrap Flutter и сервисов
@@ -40,7 +40,7 @@
 | networking | `package:networking/networking.dart` | HTTP и BaseRepository |
 | storage | `package:storage/storage.dart` | Preferences и secure storage |
 | app_logging | `package:app_logging/app_logging.dart` | Logger и observers |
-| anistar | `package:anistar/anistar.dart` | Source, зеркало и DTO |
+| anistar | `package:anistar/anistar.dart` | AnistarClient, зеркало и DTO |
 | anistar | `package:anistar/parsing.dart` | Чистые парсеры и декодирование |
 | ui_kit | `package:ui_kit/ui_kit.dart` | Тема и TV-компоненты |
 

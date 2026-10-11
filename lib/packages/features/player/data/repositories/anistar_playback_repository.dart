@@ -7,9 +7,9 @@ import '../../domain/models/playback_session.dart';
 import '../../domain/repositories/playback_repository.dart';
 
 final class AnistarPlaybackRepository extends BaseRepository implements PlaybackRepository {
-  final AnistarSource _source;
+  final AnistarClient _client;
 
-  AnistarPlaybackRepository(this._source, [super.logger]);
+  AnistarPlaybackRepository(this._client, [super.logger]);
 
   @override
   Future<Result<PlaybackSession, Failure>> createSession({
@@ -17,7 +17,7 @@ final class AnistarPlaybackRepository extends BaseRepository implements Playback
     required int episodeNumber,
     PlaybackQuality quality = PlaybackQuality.high,
   }) => makeApiCall(() async {
-    final episodes = await _source.episodes(animeId);
+    final episodes = await _client.episodes(animeId);
     final matches = episodes.where((episode) => episode.number == episodeNumber);
     if (matches.isEmpty) {
       throw const AnistarFailure(message: 'Эта серия пока недоступна.');
@@ -41,7 +41,7 @@ final class AnistarPlaybackRepository extends BaseRepository implements Playback
       availableQualities: available,
       episodeNumbers: episodes.map((episode) => episode.number).toList(growable: false),
       watchedEpisodes: episodes.where((episode) => episode.isWatched).map((episode) => episode.number).toSet(),
-      httpHeaders: {'Referer': _source.playerUri(animeId).toString()},
+      httpHeaders: {'Referer': _client.playerUri(animeId).toString()},
       // Expiry is optional metadata. An unsupported timestamp must not prevent
       // playback of an otherwise intact signed URL.
       expiresAt: expiresSeconds == null || expiresSeconds > 8640000000000

@@ -10,13 +10,13 @@ import '../../domain/repositories/catalog_browse_repository.dart';
 import '../../domain/repositories/catalog_repository.dart';
 
 final class AnistarCatalogRepository extends BaseRepository implements CatalogRepository, CatalogBrowseRepository {
-  final AnistarSource _source;
+  final AnistarClient _client;
 
-  AnistarCatalogRepository(this._source, [super.logger]);
+  AnistarCatalogRepository(this._client, [super.logger]);
 
   @override
   Future<Result<List<CatalogFilter>, Failure>> getGenres() => makeApiCall(
-    () async => (await _source.genres())
+    () async => (await _client.genres())
         .map((item) => CatalogFilter(label: item.label, path: item.path))
         .toList(growable: false),
   );
@@ -32,7 +32,7 @@ final class AnistarCatalogRepository extends BaseRepository implements CatalogRe
   Future<Result<AnimePage, Failure>> getPage(int page) => _page(page, null);
 
   Future<Result<AnimePage, Failure>> _page(int page, String? path, {CatalogSort? sort}) => makeApiCall(() async {
-    final result = await _source.catalog(
+    final result = await _client.catalog(
       page,
       filterPath: path,
       sort: sort == null

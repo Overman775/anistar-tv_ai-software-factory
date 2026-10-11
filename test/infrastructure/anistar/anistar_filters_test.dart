@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../mocks/anistar/anistar_fixtures.dart';
+import '../../mocks/anistar/test_anistar_client.dart';
 import '../../mocks/networking/html_fixture_adapter.dart';
 
 void main() {
@@ -27,7 +28,7 @@ void main() {
       ''',
     });
     dio.httpClientAdapter = adapter;
-    final genres = await AnistarSource(dio).genres();
+    final genres = await createTestAnistarClient(dio).genres();
     expect(genres.map((item) => item.label), ['Комедия', 'Сёнен']);
     expect(genres.map((item) => item.path), ['/comedy/', '/senen/']);
   });
@@ -44,7 +45,7 @@ void main() {
         </p>'''),
     });
     dio.httpClientAdapter = adapter;
-    final anime = await AnistarSource(dio).details('10938-test');
+    final anime = await createTestAnistarClient(dio).details('10938-test');
     expect(anime.filters.map((item) => item.path), [
       '/new/',
       '/anime/',
@@ -60,7 +61,7 @@ void main() {
       final html = catalogHtml.replaceAll('/anime/page/', '${navigationPath}page/');
       adapter = HtmlFixtureAdapter({path: html, '${path}page/2/': html});
       dio.httpClientAdapter = adapter;
-      final source = AnistarSource(dio);
+      final source = createTestAnistarClient(dio);
       final first = await source.catalog(1, filterPath: path);
       final second = await source.catalog(2, filterPath: path);
       expect(first.hasNext, isTrue);
@@ -81,13 +82,13 @@ void main() {
       '/filter/janrs/%2F/',
       '/filter/janrs/%2E%2E/',
     ]) {
-      await expectLater(AnistarSource(dio).catalog(1, filterPath: path), throwsA(isA<AnistarFailure>()));
+      await expectLater(createTestAnistarClient(dio).catalog(1, filterPath: path), throwsA(isA<AnistarFailure>()));
     }
     expect(adapter.requests, isEmpty);
   });
 
   test('missing genre markup is an error instead of an empty successful list', () async {
     dio.httpClientAdapter = HtmlFixtureAdapter({'/anime/': '<html>Changed site</html>'});
-    await expectLater(AnistarSource(dio).genres(), throwsA(isA<AnistarFailure>()));
+    await expectLater(createTestAnistarClient(dio).genres(), throwsA(isA<AnistarFailure>()));
   });
 }

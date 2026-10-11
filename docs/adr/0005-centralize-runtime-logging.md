@@ -10,9 +10,11 @@
 
 ## Решение
 
-Используем package `app_logging` с единой инициализацией `Logger`. Он подключает file output только вне release, фильтрует release до уровня error и предоставляет observers для BLoC и навигации. Dio interceptor принадлежит networking и использует тот же logger (уточнение ADR-0007). Тестовый bootstrap использует `AppLogger.initForTest()` без I/O.
+Используем package `app_logging` с единой инициализацией `Logger`. В debug/profile все уровни выводятся одновременно в консоль и file output для встроенного просмотрщика. В release в консоль выводятся только error и fatal, без записи в файл. Явный `ProductionFilter` обеспечивает фильтрацию по уровню независимо от assertions, включая profile/release. Package предоставляет observers для BLoC и навигации. Dio interceptor принадлежит networking и использует тот же logger (уточнение ADR-0007). Тестовый bootstrap использует `AppLogger.initForTest()` без I/O.
 
 ## Последствия
+
+Необработанные ошибки Flutter, PlatformDispatcher и guarded zone маркируются `[UNHANDLED]` на уровне fatal с исходным исключением и stack trace, по аналогии с critical в RC Mobile. Сетевые ошибки Dio остаются на уровне error. Все HTTP-запросы, включая проверку зеркал отдельным клиентом без cookies, используют фабрику DioClient и общий logger. Firebase и внешняя аналитика не подключаются.
 
 **Положительные:** единые форматы и уровни, безопасные транспортные логи, диагностический экран только в debug/profile, тихие тесты.
 

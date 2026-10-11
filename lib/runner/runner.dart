@@ -7,9 +7,11 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:networking/networking.dart';
 import 'package:storage/storage.dart';
 
 import '../app/app.dart';
+import '../app/app_config.dart';
 import '../app/app_container.dart';
 
 /// Application entry point that initializes services and runs the app.
@@ -24,6 +26,9 @@ Future<void> runApplication({Logger? logger, List<Override> overrides = const []
         WidgetsFlutterBinding.ensureInitialized();
         final appLogger = logger ?? AppLogger.init(isDevelopment: !const bool.fromEnvironment('dart.vm.product'));
         runtimeLogger = appLogger;
+        if (logger != null) {
+          AppLogger.installErrorHandlers(appLogger);
+        }
         Bloc.observer = AppBlocObserver(appLogger);
         appLogger.infoFor<Runner>('Starting application');
 
@@ -39,6 +44,17 @@ Future<void> runApplication({Logger? logger, List<Override> overrides = const []
         final mirrorManager = AnistarMirrorManager(
           initial: AnistarMirrorConfig.baseUri,
           storage: sharedPreferencesStorage,
+          probe: DioClient.create(
+            config: NetworkConfig(
+              baseUri: AnistarMirrorConfig.baseUri,
+              connectTimeout: const Duration(seconds: 4),
+              receiveTimeout: const Duration(seconds: 4),
+              sendTimeout: const Duration(seconds: 4),
+              loggablePaths: AppConfig.networkLoggablePaths,
+            ),
+            logger: appLogger,
+            enableRetry: false,
+          ),
         );
         await mirrorManager.initialize();
         final mirrorUri = mirrorManager.current;
@@ -63,12 +79,7 @@ Future<void> runApplication({Logger? logger, List<Override> overrides = const []
         started.complete();
       },
       (error, stackTrace) {
-        final appLogger = runtimeLogger;
-        if (appLogger != null) {
-          appLogger.e('Unhandled application exception', error: error, stackTrace: stackTrace);
-        } else {
-          AppLogger.reportUnhandled(error, stackTrace);
-        }
+        AppLogger.reportUnhandled(error, stackTrace, logger: runtimeLogger);
         if (!started.isCompleted) {
           started.completeError(error, stackTrace);
         }

@@ -17,14 +17,14 @@ Flutter 3.47.7 stable, Dart 3.13.5, DCM 1.39.2. Команды: [Разрабо�
 
 | Проверка | Результат |
 | --- | --- |
-| Формат, analyzer, DCM | Passed после ускорения seek и исправления idle controls; 241 Dart-файл |
-| Unit/widget/architecture | 232 passed; seed 20261010 |
-| Golden comparison | 28 passed; точное сравнение, 960×540, 1280×720 и каталог 412×915 |
+| Формат, analyzer, DCM | Passed после изменений клиента, Dio и логирования; 252 maintained Dart-файла |
+| Unit/widget/architecture | 278 passed; seed 20261010 |
+| Golden comparison | 38 passed; seed 20261010, baselines не обновлялись |
 | HTTPS fixture | 7 Python-тестов passed |
 | Emulator hardware input | 4 Python-теста passed; проверка текущего AVD passed |
 | APK freshness checker | 8 Python-тестов passed |
 | Release APK | Passed после ускорения seek и исправления idle controls; AOT libraries подтверждены для трёх ABI |
-| Debug APK | Passed; обычный `main_dev.dart` с `env/dev.json`, пересобрана после E2E ускорения seek и idle controls |
+| Debug APK | Passed; обычный `main_dev.dart` с `env/dev.json`, пересобрана, установлена и запущена после network smoke |
 
 Android E2E выполнен после обновления SDK: API 36 ARM64, TV profile, Chrome отключён. **Последний прогон: 13 сценариев passed после ускорения seek и исправления idle controls, seed 20261010.** Repository, parser, session storage и native player не подменялись; тест задавал localhost HTTPS origin, certificate trust и logger.
 
@@ -524,3 +524,26 @@ Widget-регрессии проверяют реальные стили FilledB
 - `git diff --check` прошёл.
 
 Ограничения: физический TV/пульт, ручной TalkBack, читаемость с дивана, FPS и память на реальном устройстве не проверялись. Portrait и масштаб 200% проверены Flutter рендерами; отдельного нативного phone-прогона не было. Реальные аккаунты и внешние AniStar/CDN не использовались. Предшествующие изменения сохранены; commit/push не выполнялись.
+
+
+## 30. AniStarClient, Dio, логирование и сбой проверки сайта (2026-10-11)
+
+Проверены изменения из этого чата: общий AnistarClient для всех сетевых репозиториев, Riverpod composition, общий Dio/session, консольные логи в debug/profile, error/fatal в release и UNHANDLED для framework/platform/zone. Решение и lifecycle: [ADR-0009](adr/0009-single-anistar-client-and-dio.md). Новое архитектурное решение для сетевого сбоя не добавлялось.
+
+Воспроизведён отказ DNS окружения Android Emulator: `v30.astar.bz` и `google.com` возвращали `unknown host`. На компьютере v30 отдавал HTTP 200 без challenge, а реальный Dart/Dio разбирал 9 карточек и успешно выполнял вход и restore тестового аккаунта. v31–v34 на момент проверки не разрешались через DNS. Признаков несовместимого изменения HTML или формы входа в этих проверках не обнаружено.
+
+Host resolver `100.64.0.1` не отвечал на прямой DNS-запрос, `8.8.4.4` отвечал. Переключение Wi-Fi эмулятора проблему не устранило. AVD `anistar_e2e` перезапущен с `-dns-server 8.8.4.4 -no-snapshot-load`, без стирания данных. После этого оба домена разрешались; неответ на ICMP не использовался как критерий доступности HTTPS. Настройки DNS приложения не менялись.
+
+| Проверка | Результат |
+| --- | --- |
+| `bash scripts/check.sh check` | Passed: формат 252 файлов, analyzer и DCM без замечаний, 278 unit/widget/architecture и 38 goldens; seed 20261010 |
+| `tool/diagnostics/anistar_network_test.dart` | Passed: реальный host Dio, зеркало, каталог, login и restore; in-memory preferences/session |
+| `integration_test/network_smoke_test.dart` | Passed на Android API 36 ARM64: реальный runner/Riverpod/Dio/SecureStorage, вход, каталог и восстановление encrypted session без второго POST |
+| Обычный debug APK | Passed: `main_dev.dart`, `env/dev.json`; установлен и запущен вместо тестового entry point |
+| Стартовые логи обычного APK | Подтверждены Starting application, Runtime dependencies ready и Application mounted |
+
+Добавлены регрессии: DNS/connection failure сохраняет исходное зеркало и допускает восстановление после cooldown; отказ проверки зеркала не отправляет credentials; после восстановления выполняется один login POST; неожиданная ошибка проверки скрывает секреты; expiry проходит через клиент к AuthRepository. Ранее добавленные проверки общего клиента/cookies, замены origin, безопасного Dio output и глобальных обработчиков также входят в полный прогон.
+
+Android smoke очистил локальную сессию выбранного зеркала, использовал credentials из игнорируемого локального JSON и выполнил локальный logout в конце. Пароль/cookies/HTML не сохранены в отчёте. Избранное и история аккаунта не изменялись. Полный live HLS/favorites сценарий и новый release APK в этом прогоне не запускались.
+
+Диагностические команды и повторный запуск AVD с рабочим DNS: [проверка только сети и входа](05_development_and_testing.md#проверка-только-сети-и-входа). Baselines сохранены; graphify обновлён через AST-only update.

@@ -15,4 +15,3 @@ dependencies:
   dio: ^5.11.1
   dio_smart_retry: ^7.0.1
   flutter_riverpod: ^3.4.3
-  http: ^1.6.0

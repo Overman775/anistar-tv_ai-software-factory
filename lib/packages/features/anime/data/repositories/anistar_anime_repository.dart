@@ -9,15 +9,15 @@ import '../../domain/models/anime_screen_data.dart';
 import '../../domain/repositories/anime_repository.dart';
 
 final class AnistarAnimeRepository extends BaseRepository implements AnimeRepository {
-  final AnistarSource _source;
+  final AnistarClient _client;
 
-  AnistarAnimeRepository(this._source, [super.logger]);
+  AnistarAnimeRepository(this._client, [super.logger]);
 
   @override
   Future<Result<AnimeScreenData, Failure>> getAnime({required int id, required String slug}) => makeApiCall(() async {
     // Future.wait preserves the first original failure for the repository
     // boundary; record.wait would wrap it in ParallelWaitError.
-    final results = await Future.wait<Object>([_source.details(slug), _source.episodes(id)]);
+    final results = await Future.wait<Object>([_client.details(slug), _client.episodes(id)]);
     final detail = results[0] as DirectAnime;
     final episodes = results[1] as List<DirectEpisode>;
     if (detail.id != id) {

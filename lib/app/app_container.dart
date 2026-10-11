@@ -21,6 +21,7 @@ import '../packages/features/player/player_providers.dart';
 import '../packages/features/watch_history/anistar_watched_episodes_repository.dart';
 import '../packages/features/watch_history/watched_episodes.dart';
 import '../packages/features/watch_history/watched_episodes_repository.dart';
+import 'app_config.dart';
 
 /// The application owns concrete bindings; features declare their interfaces.
 List<Override> createAppOverrides({
@@ -33,29 +34,36 @@ List<Override> createAppOverrides({
   loggerProvider.overrideWithValue(logger),
   anistarMirrorManagerProvider.overrideWithValue(mirrorManager),
   if (mirrorManager == null)
-    networkConfigProvider.overrideWithValue(NetworkConfig(baseUri: mirrorUri))
+    networkConfigProvider.overrideWithValue(
+      NetworkConfig(baseUri: mirrorUri, loggablePaths: AppConfig.networkLoggablePaths),
+    )
   else
-    networkConfigProvider.overrideWith((ref) => NetworkConfig(baseUri: ref.watch(anistarActiveMirrorProvider))),
+    networkConfigProvider.overrideWith(
+      (ref) =>
+          NetworkConfig(baseUri: ref.watch(anistarActiveMirrorProvider), loggablePaths: AppConfig.networkLoggablePaths),
+    ),
   sharedPreferencesStorageProvider.overrideWithValue(preferences),
   secureStorageProvider.overrideWithValue(secureStorage),
   watchHistoryAccountProvider.overrideWith((ref) => ref.watch(authControllerProvider).value),
   watchedEpisodesRepositoryProvider.overrideWith(
-    (ref) => AnistarWatchedEpisodesRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarWatchedEpisodesRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
-  authRepositoryProvider.overrideWith((ref) => AnistarAuthRepository(ref.watch(anistarAuthServiceProvider))),
+  authRepositoryProvider.overrideWith(
+    (ref) => AnistarAuthRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+  ),
   favoritesRepositoryProvider.overrideWith(
-    (ref) => AnistarFavoritesRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarFavoritesRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   catalogBrowseRepositoryProvider.overrideWith(
-    (ref) => AnistarCatalogRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarCatalogRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   catalogRepositoryProvider.overrideWith(
-    (ref) => AnistarCatalogRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarCatalogRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   animeRepositoryProvider.overrideWith(
-    (ref) => AnistarAnimeRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarAnimeRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   playbackRepositoryProvider.overrideWith(
-    (ref) => AnistarPlaybackRepository(ref.watch(anistarSourceProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarPlaybackRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
 ];

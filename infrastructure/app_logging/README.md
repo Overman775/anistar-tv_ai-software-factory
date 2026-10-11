@@ -17,7 +17,9 @@
 
 Runner инициализирует AppLogger и передаёт Logger в overrides. Прикладные классы получают его конструктором; typed-методы добавляют владельца записи.
 
-Debug/profile использует FileLogOutput и dev viewer. Release использует ConsoleOutput уровня error. AppLogger.initForTest отключает I/O. Dio interceptor принадлежит networking.
+Debug/profile выводит все уровни в консоль и FileLogOutput для dev viewer. Release выводит в консоль только error и fatal. ProductionFilter применяется во всех runtime-режимах, чтобы profile/release не зависели от включённых assertions. AppLogger.initForTest отключает I/O. Dio interceptor принадлежит networking.
+
+FlutterError.onError, PlatformDispatcher.onError и runZonedGuarded в runner используют AppLogger.reportUnhandled: уровень fatal, пометка [UNHANDLED], источник, исходное исключение и stack trace. Обработчики устанавливаются также при передаче logger в runner. Внешние crash/analytics SDK не подключены.
 
 FileLogOutput владеет отдельным worker isolate. Записи выполняются последовательно;
 destroy ждёт завершения init и подтверждения записи оставшегося буфера. До готовности

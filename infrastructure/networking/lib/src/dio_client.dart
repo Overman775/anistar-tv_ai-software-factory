@@ -16,6 +16,7 @@ abstract final class DioClient {
     required NetworkConfig config,
     required Logger logger,
     List<Interceptor> interceptors = const [],
+    bool enableRetry = true,
   }) {
     final dio = Dio(
       BaseOptions(
@@ -26,12 +27,20 @@ abstract final class DioClient {
       ),
     );
 
+    if (enableRetry) {
+      dio.interceptors.add(_RetryInterceptor(dio: dio));
+    }
     dio.interceptors
-      ..add(_RetryInterceptor(dio: dio))
-      ..add(DioLoggingInterceptor(logger))
-      ..addAll(interceptors);
+      ..addAll(interceptors)
+      ..add(DioLoggingInterceptor(logger, publicPaths: config.loggablePaths));
 
     return dio;
+  }
+
+  /// Keeps diagnostics after session/header interceptors, as in RC Mobile.
+  static void addInterceptors(Dio dio, List<Interceptor> interceptors) {
+    final loggingIndex = dio.interceptors.indexWhere((interceptor) => interceptor is DioLoggingInterceptor);
+    dio.interceptors.insertAll(loggingIndex < 0 ? dio.interceptors.length : loggingIndex, interceptors);
   }
 }
 

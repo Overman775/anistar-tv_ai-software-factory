@@ -32,22 +32,12 @@ final class AnistarMirrorManager {
   AnistarMirrorManager({
     required Uri initial,
     required this.storage,
-    Dio? probe,
+    required this._probe,
     this.maxNextVersions = 4,
     DateTime Function()? now,
   }) : _baseline = initial,
        _current = initial,
-       _now = now ?? DateTime.now,
-       _probe =
-           probe ??
-           Dio(
-             BaseOptions(
-               connectTimeout: const Duration(seconds: 4),
-               receiveTimeout: const Duration(seconds: 4),
-               sendTimeout: const Duration(seconds: 4),
-               followRedirects: false,
-             ),
-           ) {
+       _now = now ?? DateTime.now {
     if (maxNextVersions < 1 || maxNextVersions > 10) {
       throw ArgumentError.value(maxNextVersions, 'maxNextVersions');
     }

@@ -38,7 +38,7 @@ flowchart TD
   UI --> Domain["Feature Domain: контракты"]
   Repos --> Domain
   Domain --> Core["Core: Result / Failure"]
-  Repos --> Anistar["AniStar: HTML / JSON5"]
+  Repos --> Anistar["AnistarClient: Dio / HTML / cookies"]
   Repos --> Network["Networking: BaseRepository"]
   Anistar --> Network
   Anistar --> Core
@@ -53,12 +53,12 @@ flowchart TD
 
 ## 3. Dependency Injection и состояние
 
-**Riverpod** связывает зависимости. Репозитории, сервисы и BLoC получают их через конструктор.
+**Riverpod** связывает зависимости. Один `anistarClientProvider` в корневом `ProviderScope` служит общей точкой доступа к данным сайта для всех сетевых репозиториев. `DioAnistarClient` координирует HTTP, парсинг и общую cookie-сессию; репозитории зависят от контракта `AnistarClient`. Репозитории, сервисы и BLoC получают их через конструктор.
 
 ```dart
 catalogRepositoryProvider.overrideWith(
   (ref) => AnistarCatalogRepository(
-    ref.watch(anistarSourceProvider),
+    ref.watch(anistarClientProvider),
     ref.watch(loggerProvider),
   ),
 );
@@ -68,13 +68,16 @@ catalogRepositoryProvider.overrideWith(
 
 **BLoC** управляет состоянием каталога и логов. Карточка и плеер управляют локальным async lifecycle в State. BLoC не получает BuildContext и не выполняет навигацию.
 
+Клиент получает Dio и сессию через конструктор, не читает Ref и не использует статический singleton. При смене origin контейнер пересоздаёт клиент и его зависимости; cookies остаются привязаны к зеркалу. Правила транспорта и исключения: [ADR-0009](adr/0009-single-anistar-client-and-dio.md).
+
 ### Владение lifecycle
 
 | Объект | Владелец |
 | --- | --- |
 | Инициализация logger и preferences | Runner |
 | Корневой ProviderScope и overrides | App composition |
-| Dio и HTTP-клиент | Networking, закрытие через `ref.onDispose` |
+| Общий Dio | Networking, закрытие через `ref.onDispose` |
+| AnistarClient и cookie-сессия | Riverpod infrastructure providers; клиент не закрывает общий Dio повторно |
 | CatalogBloc | State каталога, явный close при dispose |
 | LogViewerBloc | BlocProvider, автоматический close |
 | Native video controller, focus и timer | State плеера, освобождение при замене/уходе |

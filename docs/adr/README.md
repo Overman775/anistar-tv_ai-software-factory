@@ -11,6 +11,7 @@ ADR фиксируют принятые системные решения, их 
 | 2026-10-10 | [0006: Прямой AniStar на Android](0006-android-direct-anistar.md) | Accepted |
 | 2026-10-10 | [0007: Нейтральный Core и инфраструктура](0007-neutral-core-and-infrastructure.md) | Accepted |
 | 2026-10-11 | [0008: YouTube для телевизоров как ориентир взаимодействия](0008-youtube-tv-interaction-reference.md) | Accepted |
+| 2026-10-11 | [0009: Единый AniStarClient и Dio](0009-single-anistar-client-and-dio.md) | Accepted |
 
 Заменённые решения о parser-сервере и старом Core удалены при очистке проекта. Номера оставшихся ADR сохранены.
 

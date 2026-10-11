@@ -231,6 +231,26 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 ## 9. Проверка с живым аккаунтом
 
+### Проверка только сети и входа
+
+Для диагностики проверки зеркала без изменения избранного и истории:
+
+```bash
+# Реальный Dio на компьютере; отдельные in-memory preferences/cookies:
+fvm flutter test tool/diagnostics/anistar_network_test.dart --reporter=expanded
+# Android: реальный runner, Riverpod, Dio и encrypted session storage:
+fvm flutter test integration_test/network_smoke_test.dart -d emulator-5554 --flavor dev \
+  --dart-define-from-file=env/live-test.local.json
+```
+
+Host-проверка читает локальный JSON без вывода credentials и проверяет зеркало, каталог, вход и restore. Другой путь передаётся через `--dart-define=ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/credentials.json`. Она расположена вне offline unit suite и запускается только явно. Android smoke очищает локальную сессию выбранного зеркала, входит тестовым аккаунтом, читает каталог, пересоздаёт приложение и подтверждает restore без второго POST, затем выходит. Избранное и история на сайте не меняются.
+
+Если host-проверка проходит, а Android сообщает недоступность зеркала, сначала проверьте DNS эмулятора: `adb -s emulator-5554 shell ping -c 1 v30.astar.bz` и аналогично `google.com`. `unknown host` для обоих означает сбой DNS окружения; потеря ICMP-пакетов после строки `PING host (IP)` сама по себе не означает недоступность HTTPS. Перезапустите AVD с доступным DNS, например `emulator -avd anistar_e2e -dns-server 8.8.4.4 -no-snapshot-load`. Это настройка эмулятора, не клиента; данные AVD не стираются. [Настройка DNS Android Emulator](https://developer.android.com/studio/run/emulator-networking-dns).
+
+После Android integration test соберите и установите обычный dev APK с `main_dev.dart`, чтобы заменить тестовый entry point.
+
+### Полный live-сценарий
+
 Credentials тестового аккаунта на этом рабочем месте находятся в `env/live-test.local.json` (права `0600`, файл исключён из Git). Поля — `ANISTAR_TEST_USERNAME` и `ANISTAR_TEST_PASSWORD`. Пароль не копировать в исходники, fixtures, вывод тестов или CHANGELOG. На другом компьютере скопируйте [шаблон](../env/live-test.example.json), получите логин и пароль у владельца и заполните оба строковых поля локально. Все `env/*.local.json` исключены из Git.
 
 ```bash

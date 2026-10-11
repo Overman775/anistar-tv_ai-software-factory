@@ -4,7 +4,7 @@
 
 App должен открывать protected router только после подтверждения аккаунта. Состояния: проверка → гость / подтверждённый аккаунт / ошибка. При ошибке восстановления запись сохраняется для ручного retry, но каталог не открывается. Пароль не сохраняется; сохранённая сессия проверяется без повторного POST.
 
-Владельцы: AuthController / AuthRepository — feature Auth; AnistarAuthService, AnistarAuthHtml, AnistarSession и interceptor — infrastructure/anistar; SecureStorage — infrastructure/storage. Нейтральный networking не знает DLE.
+Владельцы: AuthController / AuthRepository — feature Auth; AnistarClient, внутренний AnistarAuthService, AnistarAuthHtml, AnistarSession и interceptor — infrastructure/anistar; SecureStorage — infrastructure/storage. Нейтральный networking не знает DLE.
 
 ## 2. Вход
 

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../mocks/anistar/anistar_fixtures.dart';
+import '../../mocks/anistar/test_anistar_client.dart';
 import '../../mocks/networking/html_fixture_adapter.dart';
 
 void main() {
@@ -20,7 +21,7 @@ void main() {
       );
       dio.httpClientAdapter = adapter;
       addTearDown(() => dio.close(force: true));
-      await expectLater(AnistarSource(dio).catalog(1), throwsA(isA<AnistarFailure>()));
+      await expectLater(createTestAnistarClient(dio).catalog(1), throwsA(isA<AnistarFailure>()));
       final headers = adapter.requests.single.headers;
       expect(headers['Accept'], 'text/html');
       expect(headers['User-Agent'], 'AniStarTV/1.0');
@@ -32,6 +33,6 @@ void main() {
     final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'))
       ..httpClientAdapter = HtmlFixtureAdapter({'/anime/': 'Unavailable'}, statusCode: 503);
     addTearDown(() => dio.close(force: true));
-    await expectLater(AnistarSource(dio).catalog(1), throwsA(isA<DioException>()));
+    await expectLater(createTestAnistarClient(dio).catalog(1), throwsA(isA<DioException>()));
   });
 }

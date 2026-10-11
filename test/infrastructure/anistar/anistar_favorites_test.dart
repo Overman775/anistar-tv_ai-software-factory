@@ -8,6 +8,7 @@ import 'package:networking/networking.dart';
 
 import '../../mocks/anistar/anistar_fixtures.dart';
 import '../../mocks/anistar/favorites_fixture_adapter.dart';
+import '../../mocks/anistar/test_anistar_client.dart';
 
 void main() {
   const id = 10938;
@@ -81,14 +82,14 @@ void main() {
   });
 
   late FavoritesFixtureAdapter adapter;
-  late AnistarSource source;
+  late AnistarClient source;
   setUp(() {
     adapter = FavoritesFixtureAdapter();
     final dio = DioClient.create(
       config: NetworkConfig(baseUri: origin),
       logger: AppLogger.logger,
     )..httpClientAdapter = adapter;
-    source = AnistarSource(dio);
+    source = createTestAnistarClient(dio);
     addTearDown(() => dio.close(force: true));
   });
 

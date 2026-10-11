@@ -1,5 +1,8 @@
+import 'package:anistar/anistar.dart';
+import 'package:anistar/providers.dart';
 import 'package:anistar_tv/app/app_container.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
 import 'package:app_logging/app_logging.dart';
@@ -11,10 +14,43 @@ import 'package:storage/providers.dart';
 import 'package:storage/storage.dart';
 
 import '../mocks/anistar/anistar_fixtures.dart';
+import '../mocks/anistar/auth_fixture_adapter.dart';
 import '../mocks/networking/html_fixture_adapter.dart';
 import '../mocks/storage/memory_secure_storage.dart';
 
 void main() {
+  test('auth and catalog share one client, transport and cookie session; logout clears both', () async {
+    final container = ProviderContainer(
+      overrides: createAppOverrides(
+        logger: Logger(level: Level.off),
+        mirrorUri: Uri.parse('https://v30.astar.bz/'),
+        preferences: SharedPreferencesStorage(),
+        secureStorage: MemorySecureStorage(),
+      ),
+    );
+    addTearDown(container.dispose);
+    final adapter = AuthFixtureAdapter()..authenticatedBody = '$memberAuthHtml$catalogHtml';
+    final dio = container.read(dioProvider)..httpClientAdapter = adapter;
+    final client = container.read(anistarClientProvider);
+    final auth = container.read(authRepositoryProvider);
+    expect((await auth.signIn('test', 'private-password')).successOrNull, 'test');
+    final page = await container.read(catalogRepositoryProvider).getPage(1);
+    expect(page.successOrNull?.items.single.id, 10938);
+    // Capture different requests before and after logout, never reuse a snapshot.
+    // ignore: prefer-moving-to-variable
+    final authenticatedHeaders = adapter.requests.last.headers;
+    expect(authenticatedHeaders['Cookie'], contains('dle_password=session-secret'));
+    expect(container.read(anistarClientProvider), same(client));
+    expect(container.read(anistarDioProvider), same(dio));
+
+    expect((await auth.signOut()).isSuccess, isTrue);
+    expect(await client.restore(), isNull);
+    await expectLater(client.catalog(1), throwsA(isA<AnistarFailure>()));
+    // ignore: prefer-moving-to-variable
+    final guestHeaders = adapter.requests.last.headers;
+    expect(guestHeaders.containsKey('Cookie'), isFalse);
+  });
+
   test('composition binds all repositories and owns one disposable HTTP transport', () async {
     final logger = Logger(level: Level.off);
     final preferences = SharedPreferencesStorage(logger: logger);

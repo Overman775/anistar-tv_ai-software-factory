@@ -7,13 +7,13 @@ import '../../catalog/domain/models/anime_summary.dart';
 import '../domain/favorites_repository.dart';
 
 final class AnistarFavoritesRepository extends BaseRepository implements FavoritesRepository {
-  final AnistarSource _source;
+  final AnistarClient _client;
 
-  AnistarFavoritesRepository(this._source, [super.logger]);
+  AnistarFavoritesRepository(this._client, [super.logger]);
 
   @override
   Future<Result<AnimePage, Failure>> getPage(int page) => makeApiCall(() async {
-    final result = await _source.favorites(page);
+    final result = await _client.favorites(page);
 
     return AnimePage(
       page: result.page,
@@ -35,9 +35,9 @@ final class AnistarFavoritesRepository extends BaseRepository implements Favorit
 
   @override
   Future<Result<bool, Failure>> getStatus({required int animeId, required String slug}) =>
-      makeApiCall(() => _source.favoriteStatus(animeId: animeId, slug: slug));
+      makeApiCall(() => _client.favoriteStatus(animeId: animeId, slug: slug));
 
   @override
   Future<Result<bool, Failure>> setFavorite({required int animeId, required String slug, required bool favorite}) =>
-      makeApiCall(() => _source.setFavorite(animeId: animeId, slug: slug, favorite: favorite));
+      makeApiCall(() => _client.setFavorite(animeId: animeId, slug: slug, favorite: favorite));
 }

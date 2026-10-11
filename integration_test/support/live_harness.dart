@@ -25,7 +25,15 @@ final class LiveHarness {
     if (username.isEmpty || password.isEmpty) {
       fail('Live credentials are required; see docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом.');
     }
-    final mirrors = AnistarMirrorManager(initial: AnistarMirrorConfig.baseUri, storage: SharedPreferencesStorage());
+    final mirrors = AnistarMirrorManager(
+      initial: AnistarMirrorConfig.baseUri,
+      storage: SharedPreferencesStorage(),
+      probe: DioClient.create(
+        config: NetworkConfig(baseUri: AnistarMirrorConfig.baseUri),
+        logger: AppLogger.logger,
+        enableRetry: false,
+      ),
+    );
     await mirrors.initialize();
     final session = AnistarSession(mirrors.current, SecureStorage());
     try {

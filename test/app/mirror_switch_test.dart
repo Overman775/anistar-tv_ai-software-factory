@@ -51,6 +51,7 @@ void main() {
       addTearDown(subscription.close);
       await container.pump();
       final previous = container.read(anistarSessionProvider);
+      final previousClient = container.read(anistarClientProvider);
       await previous.initialize();
       final previousOrigin = previous.origin;
       final generation = previous.generation;
@@ -72,12 +73,13 @@ void main() {
       expect(manager.current.host, 'v31.astar.bz');
       expect(origins.single.host, 'v31.astar.bz');
       final next = container.read(anistarSessionProvider);
+      expect(container.read(anistarClientProvider), isNot(same(previousClient)));
       expect(next, isNot(same(previous)));
       expect(next.origin.host, 'v31.astar.bz');
       final nextOrigin = next.origin;
       final cookies = await next.cookieHeader(nextOrigin);
       expect(cookies, isNull);
-      final restored = await container.read(anistarAuthServiceProvider).restore();
+      final restored = await container.read(anistarClientProvider).restore();
       expect(restored, isNull);
       expect(
         probeAdapter.requests.every((request) => !request.headers.containsKey('Cookie') && request.data == null),

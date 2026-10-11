@@ -12,6 +12,10 @@ abstract final class AppLogger {
   static Logger init({required bool isDevelopment}) {
     Logger.level = isDevelopment ? Level.all : Level.error;
     final logger = Logger(
+      // DevelopmentFilter suppresses everything when assertions are disabled,
+      // including profile diagnostics and release errors.
+      filter: ProductionFilter(),
+      level: isDevelopment ? Level.all : Level.error,
       printer: PrettyPrinter(
         methodCount: isDevelopment ? 1 : 0,
         errorMethodCount: 5,
@@ -20,11 +24,11 @@ abstract final class AppLogger {
         printEmojis: isDevelopment,
         dateTimeFormat: DateTimeFormat.onlyTimeAndSinceStart,
       ),
-      output: isDevelopment ? FileLogOutput() : ConsoleOutput(),
+      output: isDevelopment ? MultiOutput([ConsoleOutput(), FileLogOutput()]) : ConsoleOutput(),
     );
     _logger = logger;
 
-    _installFrameworkErrorHandlers(logger);
+    installErrorHandlers(logger);
 
     return logger;
   }
@@ -39,16 +43,22 @@ abstract final class AppLogger {
     return logger;
   }
 
-  static void reportUnhandled(Object error, StackTrace stackTrace) {
-    logger.e('Unhandled application exception', error: error, stackTrace: stackTrace);
+  static void reportUnhandled(
+    Object error,
+    StackTrace? stackTrace, {
+    String source = 'Uncaught app exception',
+    Logger? logger,
+  }) {
+    (logger ?? AppLogger.logger).f('[UNHANDLED] $source', error: error, stackTrace: stackTrace);
   }
 
-  static void _installFrameworkErrorHandlers(Logger logger) {
+  /// Routes framework and platform failures through the application's logger.
+  static void installErrorHandlers(Logger logger) {
     FlutterError.onError = (details) {
-      logger.e('Flutter framework error', error: details.exception, stackTrace: details.stack);
+      reportUnhandled(details.exception, details.stack, source: 'FlutterError.onError', logger: logger);
     };
     PlatformDispatcher.instance.onError = (error, stackTrace) {
-      logger.e('Platform dispatcher error', error: error, stackTrace: stackTrace);
+      reportUnhandled(error, stackTrace, source: 'PlatformDispatcher.onError', logger: logger);
 
       return true;
     };

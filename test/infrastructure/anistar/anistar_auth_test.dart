@@ -17,7 +17,7 @@ void main() {
   late AnistarSession session;
   late AuthFixtureAdapter adapter;
   late Dio dio;
-  late AnistarAuthService service;
+  late AnistarClient service;
 
   setUp(() {
     storage = MemorySecureStorage();
@@ -26,7 +26,7 @@ void main() {
     dio = Dio(BaseOptions(baseUrl: origin.toString()))
       ..httpClientAdapter = adapter
       ..interceptors.add(AnistarSessionInterceptor(session));
-    service = AnistarAuthService(dio, session);
+    service = DioAnistarClient(dio, session);
   });
   tearDown(() async {
     dio.close(force: true);
@@ -43,7 +43,7 @@ void main() {
     addTearDown(restored.close);
     dio.interceptors.clear();
     dio.interceptors.add(AnistarSessionInterceptor(restored));
-    expect(await AnistarAuthService(dio, restored).restore(), 'test');
+    expect(await DioAnistarClient(dio, restored).restore(), 'test');
     expect(adapter.requests.last.headers['Cookie'], contains('dle_password=session-secret'));
     expect(await restored.cookieHeader(Uri.parse('https://sfv.an-media.org/video')), isNull);
     expect(await restored.cookieHeader(Uri.parse('https://v31.astar.bz/')), isNull);

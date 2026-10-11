@@ -119,4 +119,21 @@ void main() {
     expect(adapter.requests, isEmpty);
     expect(value.current.toString(), 'https://localhost:8443/');
   });
+
+  test('DNS/connection failures preserve the mirror and recover after the cooldown', () async {
+    var now = DateTime(2026, 10, 11);
+    final adapter = MirrorFixtureAdapter({'v30.astar.bz': 200})..failureType = DioExceptionType.connectionError;
+    final value = manager(adapter, now: () => now);
+    await value.initialize();
+    await expectLater(value.ensureAvailable(), throwsA(isA<AnistarFailure>()));
+    expect(value.current.host, 'v30.astar.bz');
+    expect(adapter.requests, hasLength(5));
+    expect(await SharedPreferencesStorage().containsKey(AnistarMirrorManager.storageKey), isFalse);
+
+    adapter.failureType = null;
+    now = now.add(const Duration(minutes: 1));
+    await value.ensureAvailable();
+    expect(adapter.requests.last.uri.host, 'v30.astar.bz');
+    expect(await SharedPreferencesStorage().get<int>(AnistarMirrorManager.storageKey, 0), 30);
+  });
 }

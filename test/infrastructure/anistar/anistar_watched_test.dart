@@ -7,18 +7,19 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:networking/networking.dart';
 
+import '../../mocks/anistar/test_anistar_client.dart';
 import '../../mocks/anistar/watched_fixture_adapter.dart';
 
 void main() {
   late WatchedFixtureAdapter adapter;
-  late AnistarSource source;
+  late AnistarClient source;
   setUp(() {
     adapter = WatchedFixtureAdapter();
     final dio = DioClient.create(
       config: NetworkConfig(baseUri: Uri.parse('https://v30.astar.bz/')),
       logger: AppLogger.logger,
     )..httpClientAdapter = adapter;
-    source = AnistarSource(dio);
+    source = createTestAnistarClient(dio);
     addTearDown(() => dio.close(force: true));
   });
 

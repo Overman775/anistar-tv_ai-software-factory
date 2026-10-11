@@ -15,6 +15,7 @@ final class AuthFixtureAdapter implements HttpClientAdapter {
   bool expired = false;
   String? redirect;
   String? formAction;
+  String? authenticatedBody;
 
   @override
   Future<ResponseBody> fetch(
@@ -43,7 +44,7 @@ final class AuthFixtureAdapter implements HttpClientAdapter {
     final authenticated = !expired && options.headers['Cookie']?.toString().contains('dle_user_id=42') == true;
     final form = formAction == null ? guestAuthHtml : guestAuthHtml.replaceFirst('action=""', 'action="$formAction"');
 
-    return _body(authenticated ? memberAuthHtml : form, status: getStatus);
+    return _body(authenticated ? authenticatedBody ?? memberAuthHtml : form, status: getStatus);
   }
 
   @override

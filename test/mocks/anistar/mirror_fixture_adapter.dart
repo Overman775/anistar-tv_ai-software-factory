@@ -11,6 +11,7 @@ final class MirrorFixtureAdapter implements HttpClientAdapter {
   String html = catalogHtml;
   bool challenge = false;
   String? location;
+  DioExceptionType? failureType;
   bool _closed = false;
 
   MirrorFixtureAdapter(this.statuses);
@@ -25,6 +26,9 @@ final class MirrorFixtureAdapter implements HttpClientAdapter {
       throw StateError('Mirror fixture adapter closed');
     }
     requests.add(options);
+    if (failureType case final type?) {
+      throw DioException(requestOptions: options, type: type);
+    }
 
     return ResponseBody.fromBytes(
       utf8.encode(html),

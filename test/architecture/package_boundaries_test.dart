@@ -9,6 +9,22 @@ void main() {
   final workspace = _manifest(File('pubspec.yaml'))['workspace'] as YamlList;
   final packages = workspace.cast<String>().map(Directory.new).toList(growable: false);
 
+  test('feature data uses client contracts without HTML, direct transport or DI imports', () {
+    for (final file in _dartFiles(Directory('lib/packages/features'))) {
+      if (!file.path.contains('/data/')) {
+        continue;
+      }
+      for (final uri in _imports(file)) {
+        expect(uri.startsWith('package:dio/'), isFalse, reason: '${file.path}: $uri');
+        expect(uri.startsWith('package:http/'), isFalse, reason: '${file.path}: $uri');
+        expect(uri.startsWith('package:html/'), isFalse, reason: '${file.path}: $uri');
+        expect(uri, isNot('package:anistar/parsing.dart'), reason: file.path);
+        expect(uri.startsWith('package:flutter_riverpod/'), isFalse, reason: '${file.path}: $uri');
+        expect(uri.endsWith('/providers.dart'), isFalse, reason: '${file.path}: $uri');
+      }
+    }
+  });
+
   test('workspace owns package resolution and a single lockfile', () {
     final manifest = _manifest(File('pubspec.yaml'));
     final workspace = manifest['workspace'];

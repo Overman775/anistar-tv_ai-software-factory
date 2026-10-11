@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../mocks/anistar/anistar_fixtures.dart';
+import '../../mocks/anistar/test_anistar_client.dart';
 import '../../mocks/networking/html_fixture_adapter.dart';
 import '../../mocks/storage/memory_secure_storage.dart';
 
@@ -24,7 +25,7 @@ void main() {
           final html = _html(sort);
           final adapter = HtmlFixtureAdapter({path: html, '${path}page/2/': html});
           dio.httpClientAdapter = adapter;
-          final source = AnistarSource(dio);
+          final source = createTestAnistarClient(dio);
           await source.catalog(1, filterPath: path, sort: sort);
           await source.catalog(2, filterPath: path, sort: sort);
           expect(adapter.requests.map((request) => request.uri.path), [path, '${path}page/2/']);
@@ -64,14 +65,15 @@ void main() {
       },
     );
     dio.httpClientAdapter = adapter;
-    await AnistarSource(dio).catalog(1, filterPath: '/comedy/', sort: sort);
+    final client = createTestAnistarClient(dio, session: session);
+    await client.catalog(1, filterPath: '/comedy/', sort: sort);
     final sent = adapter.requests.single.headers['Cookie'] as String;
     expect(sent, contains('dle_user_id=42'));
     expect(sent, contains('dle_sort_cat=title'));
     expect(sent, isNot(contains('dle_sort_cat=rating')));
     // ignore: prefer-moving-to-variable
     expect(await session.cookieHeader(origin), before);
-    await AnistarSource(dio).catalog(1);
+    await client.catalog(1);
     expect(adapter.requests.last.headers['Cookie'], before);
   });
 
@@ -86,7 +88,7 @@ void main() {
     ]) {
       dio.httpClientAdapter = HtmlFixtureAdapter({'/comedy/': html});
       await expectLater(
-        AnistarSource(dio).catalog(1, filterPath: '/comedy/', sort: requested),
+        createTestAnistarClient(dio).catalog(1, filterPath: '/comedy/', sort: requested),
         throwsA(isA<AnistarFailure>()),
       );
     }

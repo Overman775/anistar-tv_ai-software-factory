@@ -1,10 +1,10 @@
-import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/packages/features/anime/data/repositories/anistar_anime_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:networking/networking.dart';
 
 import '../../../../../mocks/anistar/anistar_fixtures.dart';
+import '../../../../../mocks/anistar/test_anistar_client.dart';
 import '../../../../../mocks/networking/html_fixture_adapter.dart';
 
 void main() {
@@ -15,7 +15,7 @@ void main() {
         '/test/player2/videoas_p2p_new.php': playerHtml,
       });
     addTearDown(() => dio.close(force: true));
-    final repository = AnistarAnimeRepository(AnistarSource(dio));
+    final repository = AnistarAnimeRepository(createTestAnistarClient(dio));
     final data = (await repository.getAnime(
       id: 10938,
       slug: '10938-test',
