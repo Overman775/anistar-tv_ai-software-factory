@@ -598,3 +598,151 @@ AppNetworkImage раньше выбирал новый memory-cache key по ш�
 Полный `bash scripts/check.sh` прошёл: формат 260 файлов, analyzer/DCM без замечаний, 290 unit/widget/architecture и 47 golden-проверок. Проверка брендового ассета подтверждает прозрачный alpha первого пикселя декодированного изображения; инспекция PNG — alpha=0 во всех углах. Обновлённые снимки StartupScreen, входа и раскрытого меню просмотрены: квадратной фоновой плашки нет.
 
 Обычный dev debug APK из `main_dev.dart` / `env/dev.json` собран, установлен и запущен на emulator-5554. Снимок Android формы входа подтверждает прозрачный знак на поверхности карточки. Управление и маршруты фокуса не менялись.
+
+## 35. Мобильная компоновка (2026-10-11)
+
+Добавлен отдельный профиль Android-телефона. Он определяется нативным `UiModeManager`, а не шириной экрана: поворот не переводит телефон в TV-компоновку. Вход приложения обёрнут в Sizer; TV продолжает фиксировать landscape и полноэкранные системные панели, телефон допускает portrait/landscape и использует edge-to-edge вне плеера.
+
+Телефон получил нижнюю навигацию каталога, избранного и жанров, нижние панели действий, отдельные карточку сериала и строки серий, а также touch-controls native player: play/pause, ±10 секунд, шкалу, качество, серию, Back и поворот. TV rail, правые панели, фокус и player overlay сохранены отдельными ветками. Контракт: [мобильное взаимодействие](specs/10_mobile_interaction.md).
+
+Проверки текущего изменения: `fvm flutter analyze --no-pub` и `dart format --set-exit-if-changed` прошли; unit/widget-набор — **314 passed**, отдельный mobile-набор (экран входа, каталог, карточка и плеер) — **39 passed**. Прошли новые golden-снимки 320/390 portrait, узкого/широкого экрана и 200% текста, а также целевые TV golden-проверки каталога, избранного, карточки и player overlay.
+
+`bash scripts/e2e.sh emulator-5554 fixtures-mobile` прошёл на API 36 Android-эмуляторе: нативный mobile profile, touch-вход, вкладки, избранное, HLS 720p/360p с сохранением позиции, поворот без замены controller, смена серии, Back и выход. Локальный fixture-сервер перед запуском прошёл 11 Python-проверок.
+
+Полный `bash scripts/check.sh ci` останавливается только на четырёх TV-golden сценариях `catalog_filters_golden_test.dart`: `anime filter focus` и `genre picker and filtered catalog` в wide/compact. Они воспроизводятся на чистом `HEAD` `88415b8` с тем же Flutter 3.47.7, а шесть файлов failure PNG байт-в-байт совпадают с текущими. Эталоны и TV-layout не обновлялись этим изменением. Физический телефон и телевизор для этой мобильной доработки отдельно не проверялись.
+
+## 36. Системный профиль E2E-эмулятора (2026-10-11)
+
+AVD `anistar_e2e` имел `tv_1080p`, 1920×1080 и D-pad, но загружал `android-36/google_apis_playstore/arm64-v8a`. Android сообщал normal UI mode (`mCurUiMode=0x11`), features television/leanback отсутствовали. Автоматический resolver приложения правильно выбирал mobile. Прежние TV fixtures задавали профиль явно и поэтому не проверяли соответствие самой ОС телевизору; mobile fixture из раздела 35 выполнялся на этом non-TV образе.
+
+Установлен `system-images;android-36;android-tv;arm64-v8a`, создан отдельный AVD `anistar_tv_e2e` с keyboard/D-pad и landscape. Прежний AVD и его данные сохранены. Новое устройство сообщает `mCurUiMode=0x24` и features `android.hardware.type.television`, `android.software.leanback`, `android.software.leanback_only`.
+
+`scripts/e2e.sh` теперь до сборки сверяет текущий Android UI mode с выбранным сценарием: fixtures/live требуют TV, fixtures-mobile требует non-TV и не проверяет D-pad. TV fixture дополнительно вызывает настоящий `AppDeviceProfileResolver` в setUpAll. Runtime-выбор профиля по ширине не добавлялся.
+
+Проверки: **16 Python-тестов fixture/input/profile passed**, полный analyzer без замечаний, `bash -n` и `git diff --check` чистые. `bash scripts/e2e.sh emulator-5556 fixtures` — **13/13 passed** на настоящем Android TV API 36 ARM64, включая нативный resolver, фокус/пульт, HLS 720/360, качество/серии, историю, lifecycle и Back. Кодовый граф обновлён AST-командой `graphify update .`. Физический TV не проверялся.
+
+После E2E собрана обычная dev debug APK (`main_dev.dart`, `env/dev.json`), установлена и запущена на `anistar_tv_e2e` / emulator-5556. Снимок экрана подтверждает TV-тему, landscape и форму входа с TV-клавиатурой; integration entry point заменён обычным приложением.
+
+## 37. Мобильная шапка при прокрутке и удаление обновления (2026-10-11)
+
+Шапка корневых мобильных вкладок освобождает 56dp при прокрутке вниз, возвращается при движении вверх и переключении вкладки. Каталог сохраняет позицию и controller. Короткие списки не прячут шапку от overscroll; accessibleNavigation сохраняет доступность целей, reduced motion отключает переход. Скрытая кнопка аккаунта исключена из касаний, фокуса и semantics.
+
+Нижняя навигация остаётся на месте: ClipRect ограничивает BackdropFilter sigma 10, градиент и разделитель используют цвета TVHeaderSurface. Списки проходят под полупрозрачной панелью; дополнительный нижний inset оставляет последний ряд, меню карточки и кнопку повтора доступными. Кнопка «Обновить каталог» удалена из mobile и TV вместе с пустым мобильным рядом и TV FocusNode; обновление свайпом и действия повтора ошибок сохранены. TV-порядок фокуса и сценарий истечения сессии обновлены.
+
+| Проверка | Результат |
+| --- | --- |
+| `bash scripts/check.sh ci` | Формат 276 файлов и analyzer чистые; **319 unit/widget/architecture passed**, **62 golden passed**; остаются только 4 известных сценария `catalog_filters_golden_test.dart` из раздела 35 |
+| Целевые мобильные проверки | **13/13 passed**; hide/show и сохранение offset, короткий список, конец каталога, accessibleNavigation, 200% landscape/reduced motion и пять golden-снимков |
+| TV catalog/favorites goldens | **12/12 passed** после целевого обновления 14 PNG: удалён пункт обновления, порядок остальных пунктов сохранён |
+| DCM изменённых файлов этой доработки | **8 файлов, no issues**; общий DCM всего проекта этим прогоном не проверялся |
+| `bash scripts/e2e.sh emulator-5554 fixtures-mobile` | Passed на новом AVD `anistar_mobile_e2e` / Pixel 6 / API 36: настоящий mobile resolver, scroll hide/show и неподвижная navigation, touch/вкладки/избранное, native HLS, качество, поворот, Back и logout |
+| `bash scripts/e2e.sh emulator-5556 fixtures` | **13/13 passed** на Android TV API 36, включая обновлённый сценарий session expiry без refresh-кнопки |
+| Python fixture/input/profile | **16 passed** перед каждым Android E2E |
+| `graphify update .` | AST-only, **2807 nodes / 4541 edges / 212 communities** |
+| Обычный dev debug APK | Собран из `main_dev.dart` / `env/dev.json`, установлен и запущен на phone/TV вместо integration entry point |
+
+Логи сохранены в `build/verification/mobile-chrome/`. Нативный снимок `android-phone-catalog.png` показывает каталог с вернувшейся шапкой и новой нижней панелью; скрытая шапка отдельно проверена Android assertions и `mobile_home_scrolled_390.png`. Пять мобильных снимков и обновлённая TV-навигация просмотрены. Независимое ревью не обнаружило новых дефектов взаимодействия. Четыре старых filter-golden сценария и их шесть эталонов не обновлялись; полный CI поэтому остаётся красным. Физические устройства и FPS blur не проверялись.
+
+## 38. Отдельные интеграционные наборы TV и Mobile (2026-10-11)
+
+Добавлены отдельные команды `scripts/e2e-tv.sh`, `scripts/e2e-mobile.sh` и последовательный `scripts/e2e-all.sh`, а также соответствующие VS Code tasks. Использованы существующие `anistar_tv_e2e` / emulator-5556 (1920×1080, Android TV API 36) и `anistar_mobile_e2e` / emulator-5554 (Pixel 6, 1080×2400, Android API 36); новых AVD не создавали. Выбор делается по имени запущенного AVD с проверкой boot и UI mode, при явном ID эти проверки сохраняются. Один эмулятор для обеих платформ отклоняется до сборки.
+
+Fixture harness перестал принуждать профиль и размер: настоящий runner определяет их нативно. TV-набор сохранил 13 самостоятельных remote/focus/player сценариев, mobile монолит разделён на семь: touch/IME и сессия, скролл/вкладки/Back/pull refresh/пагинация, фильтр/сортировка, избранное и ошибки, native player/качество/seek/поворот/lifecycle, ошибка каталога, ошибка видео. Общие fixture/transport/storage остались в harness, touch helpers вынесены отдельно. Live TV также проверяет нативный TV profile; shared network smoke больше не принуждает TV.
+
+Первый мобильный прогон выявил ошибку тестовой очистки: обычный tearDown пытался вызвать pump после `inTest=false` и срывал следующий случай. Очистка перенесена в try/finally внутри каждого testWidgets; системная ориентация/панели восстанавливаются при ошибке. Повторный прогон прошёл все случаи с прежними assertions. Реальный landscape/portrait проверяется по MediaQuery после системной команды; подмены surface size нет, controller/позиция/пауза сохраняются.
+
+У каждой платформы собственные logs, Flutter JSON events, `summary.json` и `junit.xml`. Общий запуск продолжает mobile после отказа TV и агрегирует оба результата. Непустая папка запуска не переиспользуется; ноль native cases, оборванные/error events и сбой report helper не дают зелёного exit. Build lock защищает общий Flutter/Gradle output. Cleanup снимает своё reverse, завершает fixture server, освобождает lock и восстанавливает immersive confirmation setting.
+
+| Проверка | Результат |
+| --- | --- |
+| `bash scripts/e2e-tv.sh` | **13/13 passed**, native TV profile/реальный viewport, пульт и HLS; `build/e2e/tv-fixtures-seed-20261010-anistar_tv_e2e.8mifNG/` |
+| `bash scripts/e2e-mobile.sh` | **7/7 passed**, native phone profile/viewport, touch/IME и настоящий поворот; `build/e2e/mobile-fixtures-mobile-seed-20261010-anistar_mobile_e2e.x6KFZM/` |
+| Python fixture/selection/reports/scripts | **38/38 passed**, включая настоящие bash subprocess в изолированном проекте с fake SDK/adb: TV fail → mobile pass, same-device/boot/ambiguous/profile rejection, stale directory, missing events, reporter failure и lock cleanup |
+| Реальные отрицательные CLI | Phone для TV и TV для mobile отклонены до Flutter-сборки |
+| Агрегация настоящих native reports | **20 cases, 0 errors/failures**; `build/verification/e2e-platforms/combined/` |
+| Flutter analyzer / DCM | No issues; DCM всего `integration_test/` — 10 файлов |
+| Формат / shell / JSON / diff | Dart format чистый, четыре scripts проходят `bash -n`, tasks JSON валиден, `git diff --check` чистый |
+| `graphify update .` | AST-only, **2889 nodes / 4705 edges / 214 communities** |
+| Обычный dev debug APK | Собран из `main_dev.dart` / `env/dev.json`, установлен и запущен на обоих AVD вместо integration entry point; Application mounted подтверждён |
+
+Общий native workflow проверен отдельными реальными прогонами каждой платформы и агрегацией их отчётов; для all-wrapper дополнительно выполнены изолированные subprocess-регрессии. Повторный native TV для проверки только bash-оркестрации не запускался. Логи этого изменения — `build/verification/e2e-platforms/`. Production UI и golden baselines не менялись; старые четыре TV-filter golden остаются отдельной задачей. Live аккаунт, физические устройства и другие phone AVD в этом прогоне не использовались.
+
+Команды и матрица: [integration_test README](../integration_test/README.md), [руководство](05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона), [fixtures и отчёты](../tool/e2e/README.md).
+
+## 39. Аудит и стандартизация интеграционных тестов (2026-10-11)
+
+Подход сверен с официальными Flutter testing/integration_test/pumpAndSettle recommendations. В [integration_test README](../integration_test/README.md#стратегия-и-покрытие) добавлены матрица TV/mobile/unit/widget, правила изоляции, ввода, ожиданий, очистки и критерии добавления нового E2E. Количество fixture journeys сохранено: 13 TV и 7 mobile; совпадающие области проверяют разные способы управления и настоящие native/transport/storage компоненты.
+
+Все fixture journeys и live/network smoke используют общий body/finally cleanup: unmount приложения, ожидание отключённого Android screen flag, восстановление lifecycle/orientation/system UI. Lifecycle возвращается в resumed до pumping disposal. Bounded waitFor сразу обнаруживает framework exception, выводит focus/native diagnostics и запрещает pump при отключённых кадрах. Три unit-регрессии проверяют paused guard, раннее обнаружение build error и timeout diagnostics.
+
+В TV fixtures touch заменён на D-pad/Select и удержание Select; helpers проверяют готовность текущей route и точный target focus до активации. Player menu больше не активирует чужой control после исчерпания шагов. Expired HLS требует ровно один HTML refresh между отказом и первым fresh manifest; дополнительные HTML для watched sync не влияют на этот счётчик.
+
+Mobile player journey дополнен настоящим timeline drag, отменой quality sheet через Back с сохранением controller/quality/pause/seek и последующим touch transport, а также playing → paused → resumed с настоящим Android screen flag. Первый all-прогон выявил зависание теста: paused отключает Flutter frames, поэтому pump не завершается. Исправлено bounded polling native controller/channel без кадров и обязательным resumed в finally; повторный all-прогон прошёл обе платформы. Отрицательные артефакты первого запуска сохранены, автоматический retry не применяется.
+
+Live исправления: реальный TV viewport вместо 1280×720, remote episode chooser вместо устаревшего Dialog finder, независимый authenticated cleanup transport для восстановления исходного избранного при unmount/relaunch failure, сохранение исходной ошибки, lifecycle/observer restoration и TV login пультом. Live account не запускался; эти entry points проверены анализатором/DCM.
+
+| Проверка | Результат |
+| --- | --- |
+| `ANISTAR_TEST_SEED=20261011 bash scripts/e2e-all.sh` | **TV 13/13, mobile 7/7 passed**, sequential native запуск на существующих AVD emulator-5556 / emulator-5554 |
+| Итоговый native summary/JUnit | **20 cases, 0 failures/errors, оба exit=0**; `build/e2e/all-seed-20261011-tv-anistar_tv_e2e-mobile-anistar_mobile_e2e.kFWTWN/` |
+| Harness regressions | **3/3 passed**; `test/integration_support/e2e_harness_test.dart` |
+| Python fixture/selection/reports/scripts | **38/38 passed** в preflight каждой платформы |
+| Analyzer / DCM | No issues; DCM всех 10 integration файлов и нового unit test |
+| Dart format / diff | Все 11 проверенных файлов чистые; `git diff --check` чистый |
+| `graphify update .` | AST-only, **2907 nodes / 4738 edges / 207 communities** |
+| Обычный dev APK | `main_dev.dart` / `env/dev.json` собран, установлен и запущен на обоих AVD; новые process IDs и Application mounted подтверждены в `dev-launch.log` |
+
+Логи аудита — `build/verification/e2e-audit/`; первый остановленный mobile run — `build/e2e/all-seed-20261011-tv-anistar_tv_e2e-mobile-anistar_mobile_e2e.HAUG2W/` (exit=1), итоговый положительный run указан выше. Production UI и golden baselines в этом аудите не менялись. Четыре ранее известные TV filter-golden failures остаются отдельной задачей; полный CI в этом аудите не запускался. Lifecycle подаётся через Flutter binding: системный Home/process death/native keyboard и физические устройства этим прогоном не проверяются.
+
+## 40. Нативная заставка Android (2026-10-11)
+
+На phone AVD воспроизведено обрезание launcher-иконки круглой маской Android 12+: хвосты и правый луч звезды исчезали на границе диска. Native splash теперь использует существующий прозрачный знак и `InsetDrawable` с отступами 26%, фон `#080B14`. Ресурсы launcher и заставки до Android 12 сохранены. Канонический branding script после генерации восстанавливает wrapper в дневной и ночной LaunchTheme; из YAML удалён устаревший landscape override, чтобы генератор не возвращал принудительную ориентацию телефона.
+
+| Проверка | Результат |
+| --- | --- |
+| Brand assets test | **3/3 passed**, включая геометрию полного alpha-силуэта относительно круглой safe area во всех 10 PNG и ссылки обеих native launch themes |
+| Повторная генерация | Все 10 bitmap и две LaunchTheme воспроизводятся с одинаковыми SHA-256; принудительная ориентация не добавляется |
+| Dev debug APK | Собран из `main_dev.dart` / `env/dev.json`, установлен на обоих существующих AVD |
+| Phone cold launch | Android 36, emulator-5554: на нативном кадре до Flutter знак целиком виден, обрезания и непрозрачного диска нет |
+| TV cold launch | Android TV 36, emulator-5556: Application mounted и TV StartupScreen подтверждены; круглый native splash в записи этого AVD не отображается, его визуальное поведение на TV этим прогоном не подтверждено |
+| Analyzer / DCM / format / shell / diff | No issues, Dart format и `bash -n` чистые, `git diff --check` чистый |
+
+Артефакты: `build/verification/android-splash/` — исходный phone screenshot, native phone frame, записи холодного запуска, генерация, hashes и проверочные логи. Требования safe area сверены с [официальной документацией Android](https://developer.android.com/develop/ui/views/launch/splash-screen). Изменение проверялось в debug APK на эмуляторах; физические устройства и Android до версии 12 не запускались. Ранее завершённый E2E-прогон 20/20 в этом исправлении повторно не запускался: Flutter-навигация, player и focus behavior не менялись.
+
+## 41. Мобильный pull to refresh (2026-10-11)
+
+Главная, избранное и отфильтрованный каталог используют Flutter RefreshIndicator с новым запросом первой страницы через существующий CatalogBloc. Прежние карточки сохраняются до ответа; ошибка не очищает выдачу и не сбрасывает номер последней страницы. Повторные жесты не дублируют загрузку, ответ прежней пагинации отбрасывается и не завершает индикатор. Короткие/пустые списки и error view допускают overscroll. Шапка при жесте остаётся видимой, нижняя навигация доступна.
+
+Карточка аниме также обновляет детали и список серий: для онгоингов могут появляться новые выпуски, а метаданные и статус избранного меняются на сайте. Содержимое, раскрытие описания и controller остаются смонтированными; ошибка показывает безопасное сообщение. Уход со страницы завершает ожидание индикатора и исключает применение позднего ответа. В плеере и TV RefreshIndicator отсутствует. Кнопка «Обновить контент» не возвращена; предыдущие незакоммиченные изменения мобильной адаптации сохранены.
+
+| Проверка | Результат |
+| --- | --- |
+| Выбранные widget/unit/golden | **159/159 passed**; mobile catalog/anime gestures, ошибки, ожидание/повтор, гонка пагинации, cancellation, header/navigation, TV catalog/favorites/detail/focus/Hero и оба player UI. Лог: `build/pull-refresh-widget-tests-final.log` |
+| Analyzer | **No issues**, `--fatal-infos`; `build/pull-refresh-analyze-final.log` |
+| DCM | **No issues** в 11 изменённых Dart-файлах; `build/pull-refresh-dcm-final.log` |
+| Graphify | `graphify update .`, AST-only: **2929 nodes / 4790 edges / 202 communities** |
+| Mobile native fixture | **8/8 passed**, `bash scripts/e2e-mobile.sh emulator-5554`; главная/error/retry, пустое/заполненное избранное и detail/episodes обновлены жестом с подтверждёнными GET; также весь touch/player journey. `build/e2e/mobile-fixtures-mobile-seed-20261010-anistar_mobile_e2e.ZBmZ3N/` |
+| TV native fixture | **13/13 passed**, `bash scripts/e2e-tv.sh emulator-5556`; D-pad, focus/Back, панели, пагинация, session, native HLS и lifecycle. `build/e2e/tv-fixtures-seed-20261010-anistar_tv_e2e.9hxLcD/` |
+
+Устройства предварительно проверены через adb: `anistar_mobile_e2e` — emulator-5554, `anistar_tv_e2e` — emulator-5556. Первый mobile native прогон остановлен после ошибки нового сценария: пустой query-параметр favorites был проигнорирован fixture server; очистка заменена непустым маркером без цифр. Отрицательный запуск сохранён в `build/e2e/mobile-fixtures-mobile-seed-20261010-anistar_mobile_e2e.oXteQV/`.
+
+Это синтезированные Flutter drag-жесты и Android fixture проверки, без обращения к живому AniStar и без физических устройств. Полный CI не запускался; четыре ранее известные TV filter golden failures остаются отложенными, их baselines не изменялись. Внешняя ссылка AGENTS.md на `../.tessl/RULES.md` в этом checkout отсутствует; доступные инструкции AGENTS.md, graphify и UI skill применены.
+
+## 42. Подготовка версии 1.1.0 (2026-10-11)
+
+В `pubspec.yaml` установлена версия `1.1.0+3`; CHANGELOG описывает мобильную адаптацию, touch player, pull to refresh, нативный профиль TV и исправление Android splash. README обновлён под обе платформы. Все накопленные изменения входят в один коммит версии.
+
+Полная проверка обнаружила 80 DCM замечаний в мобильных и ранее существовавших файлах. Они устранены без изменения компоновки и команд: профиль устройства и layout scope вынесены в отдельные файлы, обновлены импорты, кнопка мобильного плеера стала отдельным widget, убраны повторные преобразования и неявные null assertions. Повторные проверки состояния после поворота/перехода сохранены с локальными пояснениями; callbacks golden fixtures дополнительно проверяют нажатия и seek.
+
+| Проверка | Результат |
+| --- | --- |
+| `bash scripts/check.sh check` | Format **282 файла**, Flutter analyzer и полный DCM **без замечаний**; unit/widget/architecture **335/335 passed** |
+| Golden suite | **62 passed, 4 failed**: прежние `catalog_filters_golden_test.dart` — genre picker/filtered catalog и anime filter focus, compact/wide; их baselines не менялись |
+| Итог полного check | **exit=1** из-за этих четырёх отложенных golden failures; общий check не объявляется зелёным |
+| Python tooling | E2E helpers **38/38**, APK verifier **8/8 passed** |
+| Native E2E | Последний завершённый прогон pull to refresh: mobile **8/8**, TV **13/13 passed**, отчёты проверены; после lint cleanup не повторялся |
+| Dev debug APK | Собран; manifest подтверждает `versionName=1.1.0-dev`, `versionCode=3` |
+| Shell / diff | Шесть scripts проходят `bash -n`; `git diff --check` чистый |
+| Graphify | AST-only: **2943 nodes / 4811 edges / 205 communities** |
+
+Логи: `build/verification/release-1.1/`. Результаты относятся к локальному SDK/fixture окружению. Production release APK, физические устройства и живой аккаунт в этой подготовке не проверялись. Старые четыре golden-сценария оставлены отдельной задачей по предыдущему решению пользователя.

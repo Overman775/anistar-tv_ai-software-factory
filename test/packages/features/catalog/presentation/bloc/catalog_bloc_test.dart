@@ -1,14 +1,61 @@
+import 'dart:async';
+
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_event.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_state.dart';
 import 'package:app_logging/app_logging.dart';
+import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_repository.dart';
+import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
 
 void main() {
+  test('failed pull keeps the loaded pages and next page number, without duplicate refreshes', () async {
+    final refresh = Completer<Result<AnimePage, Failure>>();
+    final requests = <int>[];
+    final bloc = CatalogBloc(
+      logger: Logger(),
+      repository: FakeCatalogScreenRepository(
+        load: (number) {
+          requests.add(number);
+          if (number == 1 && requests.length > 1) {
+            return refresh.future;
+          }
+
+          return Future.value(Result.success(_page(id: number, page: number, hasNext: true)));
+        },
+      ),
+    );
+    addTearDown(bloc.close);
+    bloc.add(const CatalogStarted());
+    await _flushEvents();
+    bloc.add(const CatalogMoreRequested());
+    await _flushEvents();
+    bloc.add(const CatalogStarted(preserveContent: true));
+    await _flushEvents();
+    final refreshingState = bloc.state;
+    expect(refreshingState, isA<CatalogRefreshing>());
+    expect(refreshingState.items.map((item) => item.id), [1, 2]);
+    bloc
+      ..add(const CatalogStarted(preserveContent: true))
+      ..add(const CatalogMoreRequested());
+    await _flushEvents();
+    expect(requests, [1, 2, 1]);
+    refresh.complete(const Result.failure(UnknownFailure()));
+    await _flushEvents();
+    final failureState = bloc.state;
+    expect(failureState, isA<CatalogFailure>());
+    expect(failureState.items.map((item) => item.id), [1, 2]);
+    bloc.add(const CatalogMoreRequested());
+    await _flushEvents();
+    expect(requests.last, 3);
+    final finalState = bloc.state;
+    expect(finalState.items.map((item) => item.id), [1, 2, 3]);
+  });
+
   test('loads the first page and appends the next one', () async {
     final repository = FakeCatalogRepository();
     final bloc = CatalogBloc(repository: repository, logger: Logger());

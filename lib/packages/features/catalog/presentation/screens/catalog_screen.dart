@@ -17,6 +17,7 @@ import '../../domain/repositories/filtered_catalog_repository.dart';
 import '../bloc/catalog_bloc.dart';
 import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
+import '../mobile/mobile_anime_card.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/catalog_layout.dart';
 import '../widgets/catalog_navigation_rail.dart';
@@ -36,6 +37,7 @@ class CatalogScreen extends ConsumerStatefulWidget {
     this.onTabSelected,
     this.favoritesOnly = false,
     this.autofocusTab = false,
+    this.embedded = false,
     super.key,
   });
 
@@ -45,6 +47,7 @@ class CatalogScreen extends ConsumerStatefulWidget {
   final CatalogFilter? filter;
   final bool favoritesOnly;
   final bool autofocusTab;
+  final bool embedded;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onSignOut;
@@ -56,6 +59,8 @@ class CatalogScreen extends ConsumerStatefulWidget {
 
 class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   late CatalogBloc _bloc;
+  final _disposed = Completer<void>();
+  Future<void>? _mobileRefresh;
   FilteredCatalogRepository? _filteredRepository;
   final _sortFocus = FocusNode(debugLabel: 'Сортировка');
   CatalogSort get _sort => _filteredRepository?.sort ?? defaultCatalogSort;
@@ -65,7 +70,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   final _backFocus = FocusNode(debugLabel: 'Назад');
   final _favoritesTabFocus = FocusNode(debugLabel: 'Избранное');
   final _signOutFocus = FocusNode(debugLabel: 'Выйти из аккаунта');
-  final _refreshFocus = FocusNode(debugLabel: 'Обновить каталог');
   final _logsFocus = FocusNode(debugLabel: 'Открыть логи');
   final _contentFocus = FocusScopeNode(debugLabel: 'Каталог');
   bool _railExpanded = false;
@@ -116,7 +120,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   void _focusRail() {
     _keepSortFocus = false;
     if (widget.onTabSelected == null) {
-      (widget.onBack != null ? _backFocus : _refreshFocus).requestFocus();
+      if (widget.onBack != null) {
+        _backFocus.requestFocus();
+      } else if (widget.onOpenGenres != null) {
+        _genresFocus.requestFocus();
+      } else if (widget.onSignOut != null) {
+        _signOutFocus.requestFocus();
+      } else if (widget.onOpenLogs != null) {
+        _logsFocus.requestFocus();
+      } else {
+        _focusContent();
+      }
     } else {
       (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
     }
@@ -134,7 +148,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       if (widget.onBack != null) _backFocus,
       if (widget.onOpenGenres != null) _genresFocus,
       if (widget.onSignOut != null) _signOutFocus,
-      _refreshFocus,
       if (widget.onOpenLogs != null) _logsFocus,
     ];
     final index = nodes.indexOf(FocusManager.instance.primaryFocus ?? node);
@@ -189,6 +202,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       );
     }
 
+    if (!AppLayoutScope.isTvOf(context)) {
+      // The platform branch shares this State's bloc and scroll controller.
+      // ignore: avoid-returning-widgets
+      return _mobileGrid(state);
+    }
+
     final showTail = state is CatalogReady && state.isLoadingMore || state is CatalogFailure;
 
     return LayoutBuilder(
@@ -234,6 +253,152 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       ),
     );
   }
+
+  Future<void> _refreshMobile() => _mobileRefresh ??= _performMobileRefresh().whenComplete(() => _mobileRefresh = null);
+
+  Future<void> _performMobileRefresh() async {
+    final bloc = _bloc;
+    // Revision must be sampled again after the asynchronous refresh.
+    // ignore: prefer-moving-to-variable
+    final revision = ref.read(favoritesControllerProvider).revision;
+    // Logout can dispose the catalog while the refresh request is pending.
+    // Wait for the refresh's terminal state, never a preceding pagination result.
+    final completion = bloc.stream
+        .skipWhile((state) => state is! CatalogRefreshing)
+        .skip(1)
+        .firstWhere((state) => state is CatalogReady || state is CatalogFailure, orElse: () => bloc.state);
+    bloc.add(const CatalogStarted(preserveContent: true));
+    await Future.any<void>([completion.then<void>((_) => null), _disposed.future]);
+    if (!mounted || !identical(bloc, _bloc)) {
+      return;
+    }
+    final state = bloc.state;
+    // The current revision protects writes confirmed while the request was pending.
+    // ignore: prefer-moving-to-variable
+    if (state is CatalogReady && ref.read(favoritesControllerProvider).revision == revision) {
+      final favorites = ref.read(favoritesControllerProvider.notifier)..invalidate();
+      for (final anime in state.items) {
+        favorites.observe(anime.id, anime.isFavorite);
+      }
+    } else if (state is CatalogFailure && state.items.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось обновить. ${state.message}')));
+    }
+  }
+
+  Widget _mobileGrid(CatalogState state) => LayoutBuilder(
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final columns = (constraints.maxWidth / (scale > 1.5 ? 220 : 160)).floor().clamp(1, 6);
+      final horizontalPadding = AppLayoutScope.horizontalPaddingOf(context);
+      final width = (constraints.maxWidth - horizontalPadding * 2 - (columns - 1) * 12) / columns;
+      final titleHeight = MediaQuery.textScalerOf(context).scale(14) * 2.6;
+      final metadataHeight = MediaQuery.textScalerOf(context).scale(12) * 1.6;
+      final tail = state is CatalogFailure && !state.isRefreshFailure || state is CatalogReady && state.isLoadingMore;
+
+      return CustomScrollView(
+        key: PageStorageKey(('mobile-catalog', widget.favoritesOnly, widget.filter?.path)),
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
+            sliver: SliverGrid.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisExtent: width / 0.68 + titleHeight + metadataHeight + 18,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 20,
+              ),
+              itemCount: state.items.length,
+              itemBuilder: (context, index) {
+                final anime = state.items[index];
+
+                return MobileAnimeCard(
+                  key: ValueKey(anime.id),
+                  anime: anime,
+                  isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                  onTap: () => _selectAndOpen(anime, index),
+                  onActions: () => unawaited(_favoriteActions(anime)),
+                );
+              },
+            ),
+          ),
+          if (tail)
+            SliverToBoxAdapter(
+              child: CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore),
+            ),
+          if (widget.embedded) SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)),
+        ],
+      );
+    },
+  );
+
+  Widget _mobileScreen(BuildContext context) => BlocProvider.value(
+    value: _bloc,
+    child: Scaffold(
+      backgroundColor: Colors.transparent,
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: Text(widget.filter?.label ?? (widget.favoritesOnly ? 'Избранное' : 'Главная')),
+              leading: widget.onBack == null
+                  ? null
+                  : IconButton(tooltip: 'Назад', onPressed: widget.onBack, icon: const Icon(Icons.arrow_back)),
+            ),
+      body: SafeArea(
+        top: !widget.embedded,
+        bottom: !widget.embedded,
+        child: Column(
+          children: [
+            if (widget.filter != null)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: AppLayoutScope.horizontalPaddingOf(context)),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => unawaited(_chooseSort()),
+                    icon: const Icon(Icons.sort),
+                    label: Text(catalogSortLabel(_sort), maxLines: 2),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refreshMobile,
+                child: BlocBuilder<CatalogBloc, CatalogState>(
+                  bloc: _bloc,
+                  buildWhen: (previous, current) => previous != current,
+                  builder: (context, state) {
+                    if (state.items.isNotEmpty) {
+                      return _mobileGrid(state);
+                    }
+                    if (state is CatalogLoading || state is CatalogInitial) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    return LayoutBuilder(
+                      builder: (context, constraints) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: widget.embedded ? MediaQuery.paddingOf(context).bottom : 0),
+                          child: SizedBox(
+                            height:
+                                (constraints.maxHeight - (widget.embedded ? MediaQuery.paddingOf(context).bottom : 0))
+                                    .clamp(0.0, double.infinity),
+                            child: _buildState(context, state),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   KeyEventResult _handleCatalogKey(KeyEvent event, int columns) {
     final fromCard = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>() != null;
@@ -285,12 +450,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   Future<void> _favoriteActions(AnimeSummary anime) async {
     await showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title);
-    if (mounted && _lastCardFocus?.context == null) {
+    if (mounted && AppLayoutScope.isTvOf(context) && _lastCardFocus?.context == null) {
       _focusRail();
     }
   }
 
   void _onCatalogStateChanged(BuildContext context, CatalogState state) {
+    if (!AppLayoutScope.isTvOf(context)) {
+      return;
+    }
     if (_keepSortFocus && state is CatalogReady && state.items.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _keepSortFocus && ModalRoute.of(context)?.isCurrent == true) {
@@ -321,7 +489,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
   }
 
-  bool get _canPreload => _bloc.state is CatalogReady && _bloc.state.hasMore;
+  bool get _canPreload {
+    final state = _bloc.state;
+
+    return state.hasMore && (state is CatalogReady || state is CatalogFailure && state.isRefreshFailure);
+  }
 
   void _onCardFocusChanged(BuildContext cardContext, int index, bool focused, int columns) {
     if (!focused) {
@@ -356,14 +528,16 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   Future<void> _chooseSort() async {
     _sortInteracted = true;
-    final selected = await showTvSideSheet<CatalogSort>(
+    final selected = await showAppActionSheet<CatalogSort>(
       context: context,
       builder: (_) => CatalogSortSheet(selected: _sort),
     );
     if (!mounted) {
       return;
     }
-    _sortFocus.requestFocus();
+    if (AppLayoutScope.isTvOf(context)) {
+      _sortFocus.requestFocus();
+    }
     if (selected == null || selected == _sort) {
       return;
     }
@@ -470,6 +644,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   @override
   void dispose() {
+    _disposed.complete();
     _sortFocus.dispose();
     _contentFocus.dispose();
     _homeTabFocus.dispose();
@@ -477,7 +652,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     _backFocus.dispose();
     _favoritesTabFocus.dispose();
     _signOutFocus.dispose();
-    _refreshFocus.dispose();
     _logsFocus.dispose();
     _scrollController
       ..removeListener(_loadMoreNearEnd)
@@ -498,6 +672,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           _bloc.add(const CatalogStarted());
         }
       });
+
+    if (!AppLayoutScope.isTvOf(context)) {
+      // Both layouts retain the same catalog State, bloc and navigation handlers.
+      // ignore: avoid-returning-widgets
+      return _mobileScreen(context);
+    }
 
     final items = <CatalogNavigationItem>[
       if (widget.onTabSelected != null) ...[
@@ -550,15 +730,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           selected: false,
           autofocus: false,
         ),
-      (
-        key: const ValueKey('catalog-refresh'),
-        icon: Icons.refresh_rounded,
-        label: 'Обновить каталог',
-        focusNode: _refreshFocus,
-        onPressed: _reload,
-        selected: false,
-        autofocus: false,
-      ),
       if (widget.onOpenLogs case final onOpenLogs?)
         (
           key: const ValueKey('catalog-logs'),

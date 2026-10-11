@@ -32,6 +32,7 @@ class AnimeHero extends StatelessWidget {
     final details = data.details;
     final posterUri = details.posterUri ?? fallbackPosterUri;
     final posterUrl = posterUri?.toString();
+    final fallbackPosterUrl = fallbackPosterUri?.toString();
     final metadata = [details.year, details.seriesInfo, details.voiceover].whereType<String>().join(' • ');
     final textTheme = Theme.of(context).textTheme;
 
@@ -54,7 +55,7 @@ class AnimeHero extends StatelessWidget {
                       opacity: 0.24,
                       child: AppNetworkImage(
                         imageUrl: posterUrl,
-                        fallbackImageUrl: fallbackPosterUri?.toString(),
+                        fallbackImageUrl: fallbackPosterUrl,
                         errorWidget: const SizedBox.shrink(),
                       ),
                     ),
@@ -100,7 +101,7 @@ class AnimeHero extends StatelessWidget {
                             child: TvPosterHero(
                               tag: 'anime-poster-${details.id}',
                               imageUrl: posterUrl,
-                              fallbackImageUrl: fallbackPosterUri?.toString(),
+                              fallbackImageUrl: fallbackPosterUrl,
                               semanticLabel: details.title,
                             ),
                           ),

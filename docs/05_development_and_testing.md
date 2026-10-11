@@ -145,9 +145,21 @@ expect(tester.takeException(), isNull);
 
 ---
 
-## 5. E2E и smoke на Android TV
+## 5. Интеграционные тесты Android TV и телефона
 
-Запустите Android emulator через Device Manager или `fvm flutter emulators --launch <avd>`. Узнайте ID через `fvm flutter devices`, затем выполните `bash scripts/e2e.sh <emulator-id>`. Команда принимает только emulator, проверяет SDK/lockfile и запускает dev flavor.
+Используются два отдельных существующих AVD. Запустите их через Device Manager или `fvm flutter emulators --launch <avd>`. Команды находят запущенный экземпляр по имени AVD, проверяют системный профиль и используют dev flavor с закреплённым SDK/lockfile. Первый попавшийся эмулятор не выбирается; широкое окно телефона не считается TV.
+
+| Платформа | AVD по умолчанию | Набор | Запуск |
+| --- | --- | --- | --- |
+| TV | `anistar_tv_e2e` — Android TV API 36 | `integration_test/app_e2e_test.dart` | `bash scripts/e2e-tv.sh` |
+| Телефон | `anistar_mobile_e2e` — Pixel 6, Android API 36 | `integration_test/mobile_e2e_test.dart` | `bash scripts/e2e-mobile.sh` |
+| Обе платформы | Два разных устройства | TV, затем mobile, с отдельным результатом каждого | `bash scripts/e2e-all.sh` |
+
+Если нужны другие существующие AVD, задайте `ANISTAR_TV_AVD` / `ANISTAR_MOBILE_AVD`; для конкретного запущенного экземпляра передайте `emulator-<port>` аргументом соответствующему скрипту. Скрипты не создают и не стирают AVD. При отсутствии нужного устройства выводятся доступные экземпляры и команда запуска. В VS Code есть отдельные задачи **Flutter: TV E2E**, **Flutter: Mobile E2E**, **Flutter: TV and Mobile E2E**.
+
+Оба набора запускают настоящий runner с нативным определением профиля и реальным viewport эмулятора. UI не принуждается к TV/mobile и условному размеру: так тест обнаруживает ошибку выбора интерфейса или системного поворота. TV проверяет D-pad/focus и правые панели; телефон использует touch, нижние панели и фактический поворот Android. Unit/widget/golden проверки искусственных размеров и 200% текста остаются отдельным уровнем.
+
+### TV-сценарии
 
 | Сценарий | Проверка |
 | --- | --- |
@@ -165,9 +177,26 @@ Fixtures в `tool/e2e/` обслуживает loopback HTTPS server. `adb rever
 
 Native Android доверяет этому certificate через debug resources только для `localhost`. Тестовый private key публичный и используется лишь fixture server. В release этого доверия нет; media fixtures не включены в assets приложения.
 
-Порядок E2E задаёт seed 20261010; для другого порядка используйте `ANISTAR_TEST_SEED=1337 bash scripts/e2e.sh <emulator-id>`. Каждое ожидание имеет deadline. Команда завершает fixture server, снимает своё reverse-соединение и восстанавливает immersive confirmation setting. Логи Flutter, Android и HTTP находятся в `build/e2e/run.*/`.
+Порядок E2E задаёт seed 20261010; для другого порядка используйте `ANISTAR_TEST_SEED=1337 bash scripts/e2e-all.sh`. Каждое ожидание имеет deadline. Каждый запуск получает собственный fixture server, HTTP/state, reverse-соединение и каталог отчётов. Команда завершает server, снимает своё reverse-соединение и восстанавливает immersive confirmation setting. Общий запуск выполняет наборы последовательно: это исключает конфликты Flutter/Gradle и общего APK output; сбой TV не скрывает результат mobile.
 
-Для воспроизводимого прогона используйте API 36 emulator с TV hardware profile; на Apple Silicon — ARM64. Live smoke запускается явно и зависит от сети. Физический пульт и аппаратный декодер TV проверяются отдельно.
+Логи и отчёты сохраняются в `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`, общий запуск — в `all-seed-…/tv/` и `mobile/`. `summary.json` содержит устройство, AVD, seed, этап и exit code; `junit.xml` содержит отдельные native cases. Отказ preflight тоже даёт ошибку в отчёте. Flutter JSON events сохраняются рядом для диагностики; общий запуск объединяет summary и JUnit обеих платформ.
+
+Для TV-прогона нужны **TV hardware profile и TV system image** (`android-tv` или `google-tv`); на Apple Silicon — ARM64. Один профиль `tv_1080p` и широкое разрешение не превращают обычный Google Play image в Android TV. Приложение определяет роль через Android UiModeManager. `scripts/e2e.sh` проверяет текущий системный режим до сборки; TV fixture дополнительно проверяет нативный resolver. Live smoke запускается явно и зависит от сети. Физический пульт и аппаратный декодер TV проверяются отдельно.
+
+Локальный TV AVD — `anistar_tv_e2e`, API 36 `android-tv/arm64-v8a`; телефонный — существующий `anistar_mobile_e2e`, Pixel 6, `google_apis_playstore/arm64-v8a`. Ранее созданный `anistar_e2e` имеет обычный phone image и сообщает mobile, несмотря на TV hardware skin; его данные сохранены. D-pad для mobile не требуется.
+
+Пример запуска TV AVD:
+
+```bash
+"$ANDROID_HOME/emulator/emulator" -avd anistar_tv_e2e -no-snapshot-load
+bash scripts/e2e.sh <emulator-id> fixtures
+```
+
+### Мобильные сценарии
+
+Отдельные тесты покрывают сенсорный вход и зашифрованное восстановление сессии, её истечение, прокрутку/скрытие шапки, нижние вкладки и Back, пагинацию/обновление свайпом, жанры и сортировку, панели избранного и пустой список, ошибки и ручной повтор, native HLS/качество/паузы, поворот и освобождение плеера. Набор использует реальные размеры выбранного phone AVD; изменение ориентации не должно переводить телефон в TV-профиль.
+
+Низкоуровневые команды сохранены для совместимости: `bash scripts/e2e.sh <tv-emulator> fixtures`, `bash scripts/e2e.sh <phone-emulator> fixtures-mobile`. Live-прогон с реальным аккаунтом остаётся отдельным TV-запуском: `bash scripts/e2e-tv.sh live`; общий offline-прогон его не включает.
 
 ### Directional Pad эмулятора
 
@@ -183,7 +212,7 @@ hw.keyboard=yes
 `scripts/e2e.sh` до запуска Flutter проверяет наличие четырёх стрелок на одном hardware input device через `getevent -pl`. Отдельный запуск проверки:
 
 ```bash
-python3 tool/e2e/emulator_input.py --adb "$ANDROID_HOME/platform-tools/adb" --device emulator-5554
+python3 tool/e2e/emulator_input.py --adb "$ANDROID_HOME/platform-tools/adb" --device emulator-5556
 ```
 
 Проверка устройства не заменяет ручное нажатие стрелок и OK в самой панели. Синтетические Flutter-события проверяют focus приложения, но обходят эту часть эмулятора. [Документация Extended Controls](https://developer.android.com/studio/run/emulator-extended-controls).
@@ -232,7 +261,7 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 Исходники: `lib/packages/ui_kit/assets/images/anistar_launcher.png` (1024×1024) и `lib/packages/ui_kit/assets/images/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `bash scripts/generate_branding.sh`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
-Этот же скрипт обновляет нативную заставку через `flutter_native_splash.yaml`: баннер используется на Android до версии 12, квадратная иконка — на Android 12 и новее. Старые `logo.png` и `android_icon.png` больше не нужны.
+Этот же скрипт обновляет нативную заставку через `flutter_native_splash.yaml`: баннер используется на Android до версии 12, прозрачный `anistar_logo.png` с нативным отступом под круглую маску — на Android 12 и новее. Скрипт сохраняет drawable wrapper в дневной и ночной теме. Подробнее: [ресурсы бренда](branding-assets.md). Старые `logo.png` и `android_icon.png` больше не нужны.
 
 Изображения созданы встроенным imagegen. Промпт иконки: фиолетовая падающая звезда с голубым знаком play на тёмном фоне, без текста. Промпт баннера: та же эмблема слева, белая надпись `AniStar TV` справа, формат 16:9, цвета интерфейса, без персонажей и посторонних надписей. Старые splash-ресурсы не участвуют в экспорте launcher.
 
@@ -267,17 +296,17 @@ chmod 600 env/live-test.local.json
 # Заполните ANISTAR_TEST_USERNAME и ANISTAR_TEST_PASSWORD в локальном JSON.
 
 # Последующие запуски автоматически подставляют credentials:
-bash scripts/e2e.sh emulator-5554 live
+bash scripts/e2e-tv.sh live
 # Или credentials в отдельном локальном файле:
-ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json bash scripts/e2e.sh emulator-5554 live
+ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json bash scripts/e2e-tv.sh live
 ```
 
-В VS Code: **Terminal → Run Task → Flutter: Live Android E2E**; укажите ID запущенного эмулятора. Задача вызывает тот же скрипт и автоматически использует локальный JSON. Дополнительный `.env`-загрузчик не нужен: как в RC Mobile, Flutter передаёт JSON через `--dart-define-from-file`, а live harness читает `String.fromEnvironment` и заполняет форму входа.
+В VS Code: **Terminal → Run Task → Flutter: Live Android E2E**; выбирается запущенный `ANISTAR_TV_AVD` / `anistar_tv_e2e`. Задача вызывает тот же скрипт и автоматически использует локальный JSON. Дополнительный `.env`-загрузчик не нужен: как в RC Mobile, Flutter передаёт JSON через `--dart-define-from-file`, а live harness читает `String.fromEnvironment` и заполняет форму входа.
 
 Прямой запуск без скрипта, если окружение уже подготовлено:
 
 ```bash
-fvm flutter test integration_test/direct_android_test.dart -d emulator-5554 --flavor dev \
+fvm flutter test integration_test/direct_android_test.dart -d emulator-5556 --flavor dev \
   --dart-define-from-file=env/live-test.local.json
 ```
 

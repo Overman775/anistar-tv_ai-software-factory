@@ -42,3 +42,42 @@ void setTvView(WidgetTester tester, {Size size = compactTvSize}) {
     ..devicePixelRatio = 1;
   addTearDown(view.reset);
 }
+
+/// Uses the production responsive root and touch theme with logical dimensions.
+Future<void> pumpMobileApp(
+  WidgetTester tester,
+  Widget child, {
+  Size size = const Size(390, 844),
+  double devicePixelRatio = 1,
+  double textScale = 1,
+  bool disableAnimations = false,
+  List<Override> overrides = const [],
+  bool wrapInScaffold = true,
+}) async {
+  tester.view
+    ..physicalSize = size * devicePixelRatio
+    ..devicePixelRatio = devicePixelRatio;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [loggerProvider.overrideWithValue(AppLogger.logger), ...overrides],
+      child: AppResponsiveRoot(
+        profile: AppDeviceProfile.mobile,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          navigatorObservers: [PlayerRouteObserver()],
+          theme: AppTheme.mobileDarkTheme,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: disableAnimations),
+            child: child ?? (throw StateError('MaterialApp did not provide a navigator')),
+          ),
+          home: wrapInScaffold ? Scaffold(body: child) : child,
+        ),
+      ),
+    ),
+  );
+  await tester.runAsync(
+    () => precacheImage(Assets.images.anistarLogo.provider(), tester.element(find.byType(MaterialApp).first)),
+  );
+}

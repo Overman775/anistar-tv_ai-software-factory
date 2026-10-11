@@ -68,7 +68,7 @@ class _CatalogSortSheetState extends State<CatalogSortSheet> {
   }
 
   @override
-  Widget build(BuildContext context) => TvSideSheet(
+  Widget build(BuildContext context) => AppActionSheet(
     title: 'Сортировка',
     child: Focus(
       canRequestFocus: false,

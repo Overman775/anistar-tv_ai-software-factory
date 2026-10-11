@@ -7,13 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
+import 'support/e2e_harness.dart';
 import 'support/live_harness.dart';
 
 /// Live Android read/login smoke; never mutates favorites or watched episodes.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('real mirror check, login, catalog and encrypted session restoration', (tester) async {
+  E2eHarness.testCase('real mirror check, login, catalog and encrypted session restoration', (tester) async {
     final live = LiveHarness();
     await live.resetSession();
     await live.launch(tester);
@@ -36,5 +37,5 @@ void main() {
     expect(restoredContainer.read(authControllerProvider).value == LiveHarness.username, isTrue);
     await restoredContainer.read(authControllerProvider.notifier).signOut();
     await tester.pumpWidget(const SizedBox.shrink());
-  });
+  }, profile: null);
 }

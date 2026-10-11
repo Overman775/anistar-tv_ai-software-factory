@@ -1,0 +1,1 @@
+enum AppDeviceProfile { tv, mobile }

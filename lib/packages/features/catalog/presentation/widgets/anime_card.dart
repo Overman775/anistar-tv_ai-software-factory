@@ -25,6 +25,7 @@ class AnimeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final posterUri = anime.posterUri;
     final posterUrl = posterUri.toString();
+    final ratingLabel = anime.rating?.toStringAsFixed(1) ?? '';
 
     return TvFocusable(
       autofocus: autofocus,
@@ -109,7 +110,7 @@ class AnimeCard extends StatelessWidget {
                         top: AppSpacing.sm,
                         right: AppSpacing.sm,
                         child: Semantics(
-                          label: 'Рейтинг ${rating.toStringAsFixed(1)} из 10',
+                          label: 'Рейтинг $ratingLabel из 10',
                           excludeSemantics: true,
                           child: DecoratedBox(
                             decoration: const BoxDecoration(color: Color(0xEE080B14), borderRadius: AppRadii.small),
@@ -121,9 +122,7 @@ class AnimeCard extends StatelessWidget {
                                   const Icon(Icons.grade_rounded, color: AppPalette.secondary, size: 18),
                                   const SizedBox(width: AppSpacing.xs),
                                   Text(
-                                    constraints.maxWidth < 160
-                                        ? rating.toStringAsFixed(1)
-                                        : '${rating.toStringAsFixed(1)}/10',
+                                    constraints.maxWidth < 160 ? ratingLabel : '$ratingLabel/10',
                                     style: textTheme.labelMedium?.copyWith(
                                       color: AppPalette.textPrimary,
                                       fontWeight: FontWeight.w700,

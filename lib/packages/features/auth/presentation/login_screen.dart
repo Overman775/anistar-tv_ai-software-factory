@@ -110,13 +110,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final auth = ref.watch(authControllerProvider);
     final error = auth.error;
     final textTheme = Theme.of(context).textTheme;
+    final isTv = AppLayoutScope.isTvOf(context);
 
     return Scaffold(
       body: TvBackdrop(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.xl),
+              padding: EdgeInsets.all(isTv ? AppSpacing.xl : AppLayoutScope.horizontalPaddingOf(context)),
               child: SizedBox(
                 width: 520,
                 child: DecoratedBox(
@@ -126,7 +127,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     border: Border.fromBorderSide(BorderSide(color: AppPalette.outline)),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    padding: EdgeInsets.all(isTv ? AppSpacing.xl : 20),
                     child: Form(
                       key: _formKey,
                       child: Column(
@@ -161,7 +162,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               controller: _username,
                               focusNode: _usernameFocus,
                               onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-                              autofocus: true,
+                              autofocus: isTv,
                               enabled: !auth.isLoading,
                               autocorrect: false,
                               enableSuggestions: false,

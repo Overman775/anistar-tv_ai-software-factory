@@ -12,9 +12,10 @@ import '../../catalog_providers.dart';
 import '../../domain/models/catalog_filter.dart';
 
 class GenresScreen extends ConsumerStatefulWidget {
-  const GenresScreen({required this.onSelected, super.key});
+  const GenresScreen({required this.onSelected, this.embedded = false, super.key});
 
   final ValueChanged<CatalogFilter> onSelected;
+  final bool embedded;
 
   @override
   ConsumerState<GenresScreen> createState() => _GenresScreenState();
@@ -68,7 +69,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
   Widget _stateView(String title, String message) {
     _items = [];
     _focusedInitial = false;
-    if (!_stateActionFocused) {
+    if (AppLayoutScope.isTvOf(context) && !_stateActionFocused) {
       _stateActionFocused = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -77,19 +78,33 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
       });
     }
 
-    return TvStateView(
-      icon: Icons.category_outlined,
-      title: title,
-      message: message,
-      actionLabel: 'Повторить',
-      actionFocusNode: _retry,
-      onAction: _reload,
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: widget.embedded && !AppLayoutScope.isTvOf(context) ? MediaQuery.paddingOf(context).bottom : 0,
+      ),
+      child: TvStateView(
+        icon: Icons.category_outlined,
+        title: title,
+        message: message,
+        actionLabel: 'Повторить',
+        actionFocusNode: _retry,
+        onAction: _reload,
+      ),
     );
   }
 
   void _reload() {
     _stateActionFocused = false;
     ref.invalidate(genresProvider);
+  }
+
+  Future<void> _refreshMobile() async {
+    ref.invalidate(genresProvider);
+    try {
+      await ref.read(genresProvider.future);
+    } on Object {
+      // Provider's error state keeps the recovery action visible.
+    }
   }
 
   void _onTileFocus(BuildContext context, bool focused) {
@@ -117,17 +132,21 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
     child: TvBackdrop(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('Аниме по жанрам'),
-          leading: IconButton(
-            focusNode: _back,
-            autofocus: true,
-            tooltip: 'Назад',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back),
-          ),
-        ),
+        appBar: widget.embedded
+            ? null
+            : AppBar(
+                title: const Text('Аниме по жанрам'),
+                leading: IconButton(
+                  focusNode: _back,
+                  autofocus: AppLayoutScope.isTvOf(context),
+                  tooltip: 'Назад',
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+              ),
         body: SafeArea(
+          top: !widget.embedded,
+          bottom: !widget.embedded,
           child: ref
               .watch(genresProvider)
               .when(
@@ -139,7 +158,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                 ),
                 data: (items) {
                   _items = items;
-                  if (!_focusedInitial && items.isNotEmpty) {
+                  if (AppLayoutScope.isTvOf(context) && !_focusedInitial && items.isNotEmpty) {
                     _focusedInitial = true;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted && ModalRoute.of(context)?.isCurrent == true) {
@@ -155,6 +174,28 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
+                      if (!AppLayoutScope.isTvOf(context)) {
+                        return RefreshIndicator(
+                          onRefresh: _refreshMobile,
+                          child: ListView.separated(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.fromLTRB(
+                              AppLayoutScope.horizontalPaddingOf(context),
+                              8,
+                              AppLayoutScope.horizontalPaddingOf(context),
+                              (widget.embedded ? MediaQuery.paddingOf(context).bottom : 0) + 8,
+                            ),
+                            itemCount: items.length,
+                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            itemBuilder: (context, index) => ListTile(
+                              contentPadding: const EdgeInsets.all(8),
+                              title: Text(items[index].label),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => widget.onSelected(items[index]),
+                            ),
+                          ),
+                        );
+                      }
                       final textScale = MediaQuery.textScalerOf(context).scale(19) / 19;
                       _columns = switch (constraints.maxWidth / textScale) {
                         < 300 => 1,

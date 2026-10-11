@@ -3,6 +3,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../domain/models/playback_session.dart';
+import 'mobile_player_controls.dart';
 import 'player_overlay.dart';
 import 'player_retry_view.dart';
 
@@ -20,6 +21,10 @@ class PlayerView extends StatefulWidget {
     required this.session,
     required this.title,
     this.onSeekKeyEvent,
+    this.onSeekRelative,
+    this.onRotate,
+    this.onInteractionStart,
+    this.onInteractionEnd,
     this.onPreviousEpisode,
     this.onNextEpisode,
     this.onBack,
@@ -31,6 +36,9 @@ class PlayerView extends StatefulWidget {
   });
 
   final bool Function(KeyEvent)? onSeekKeyEvent;
+  final VoidCallback? onRotate;
+  final VoidCallback? onInteractionStart;
+  final VoidCallback? onInteractionEnd;
   final VideoPlayerController controller;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
@@ -46,6 +54,7 @@ class PlayerView extends StatefulWidget {
   final VoidCallback onSelectEpisode;
   final VoidCallback onRetry;
   final ValueChanged<Duration> onSeek;
+  final ValueChanged<Duration>? onSeekRelative;
   final VoidCallback onShowControls;
   final PlaybackSession session;
   final String title;
@@ -105,6 +114,7 @@ class _PlayerViewState extends State<PlayerView> {
         title: 'Воспроизведение прервано',
         message: 'Не удалось продолжить поток. Повторите попытку или выберите другое качество.',
         onRetry: widget.onRetry,
+        onBack: widget.onBack,
       );
     }
     final aspectRatio = value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio;
@@ -123,27 +133,48 @@ class _PlayerViewState extends State<PlayerView> {
             duration: AppMotion.durationOf(context, AppMotion.fast),
             child: IgnorePointer(
               ignoring: !widget.controlsVisible,
-              child: ExcludeFocus(
+              child: ExcludeSemantics(
                 excluding: !widget.controlsVisible,
-                child: Focus(
-                  focusNode: widget.controlsFocusNode,
-                  skipTraversal: true,
-                  child: PlayerOverlay(
-                    onPreviousEpisode: widget.onPreviousEpisode,
-                    onNextEpisode: widget.onNextEpisode,
-                    onBack: widget.onBack,
-                    onReturnToVideo: widget.onReturnToVideo,
-                    backFocusNode: widget.backFocusNode,
-                    playFocusNode: widget.playFocusNode,
-                    title: widget.title,
-                    episodeNumber: widget.episodeNumber,
-                    session: widget.session,
-                    value: value,
-                    onPlayPause: widget.onPlayPause,
-                    onSelectQuality: widget.onSelectQuality,
-                    onSelectEpisode: widget.onSelectEpisode,
-                    onSeek: widget.onSeek,
-                    onSeekKeyEvent: widget.onSeekKeyEvent,
+                child: ExcludeFocus(
+                  excluding: !widget.controlsVisible,
+                  child: Focus(
+                    focusNode: widget.controlsFocusNode,
+                    skipTraversal: true,
+                    child: !AppLayoutScope.isTvOf(context)
+                        ? MobilePlayerControls(
+                            title: widget.title,
+                            episodeNumber: widget.episodeNumber,
+                            session: widget.session,
+                            value: value,
+                            onPlayPause: widget.onPlayPause,
+                            onSeek: widget.onSeek,
+                            onSeekRelative: widget.onSeekRelative,
+                            onBack: widget.onBack,
+                            onRotate: widget.onRotate,
+                            onInteractionStart: widget.onInteractionStart,
+                            onInteractionEnd: widget.onInteractionEnd,
+                            onSelectEpisode: widget.onSelectEpisode,
+                            onSelectQuality: widget.onSelectQuality,
+                            onPreviousEpisode: widget.onPreviousEpisode,
+                            onNextEpisode: widget.onNextEpisode,
+                          )
+                        : PlayerOverlay(
+                            onPreviousEpisode: widget.onPreviousEpisode,
+                            onNextEpisode: widget.onNextEpisode,
+                            onBack: widget.onBack,
+                            onReturnToVideo: widget.onReturnToVideo,
+                            backFocusNode: widget.backFocusNode,
+                            playFocusNode: widget.playFocusNode,
+                            title: widget.title,
+                            episodeNumber: widget.episodeNumber,
+                            session: widget.session,
+                            value: value,
+                            onPlayPause: widget.onPlayPause,
+                            onSelectQuality: widget.onSelectQuality,
+                            onSelectEpisode: widget.onSelectEpisode,
+                            onSeek: widget.onSeek,
+                            onSeekKeyEvent: widget.onSeekKeyEvent,
+                          ),
                   ),
                 ),
               ),

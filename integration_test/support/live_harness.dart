@@ -1,4 +1,5 @@
 import 'package:anistar/anistar.dart';
+import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_bloc.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_state.dart';
@@ -7,6 +8,7 @@ import 'package:anistar_tv/runner/runner.dart';
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +16,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:networking/networking.dart';
 import 'package:networking/providers.dart';
 import 'package:storage/storage.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 /// Real site transport; the observer counts methods without retaining request data.
 final class LiveHarness {
@@ -45,6 +48,9 @@ final class LiveHarness {
   }
 
   Future<void> launch(WidgetTester tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final previousObserver = Bloc.observer;
+    addTearDown(() => Bloc.observer = previousObserver);
     final logger = AppLogger.initForTest();
     await runApplication(
       logger: logger,
@@ -79,13 +85,28 @@ final class LiveHarness {
     );
     await tester.enterText(find.byKey(const ValueKey('login_username')), username);
     await tester.enterText(find.byKey(const ValueKey('login_password')), password);
-    await tester.tap(submit);
+    if (await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile) {
+      FocusManager.instance.primaryFocus?.unfocus();
+      await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+      await tester.tap(submit.hitTestable());
+    } else {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+        const ValueKey('login_submit'),
+        reason: 'TV login must reach Submit through remote focus',
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    }
+    await tester.pump();
   }
 
   static Future<void> wait(WidgetTester tester, bool Function() condition, String step) async {
     debugPrint('Live E2E: $step');
     for (var attempt = 0; attempt < 100; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull, reason: 'Live E2E: $step');
       if (condition()) {
         return;
       }

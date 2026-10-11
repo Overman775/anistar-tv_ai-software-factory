@@ -84,12 +84,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getSize(rail).width, 264);
     final labels = <String?>[FocusManager.instance.primaryFocus?.debugLabel];
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       labels.add(FocusManager.instance.primaryFocus?.debugLabel);
     }
-    expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Обновить каталог', 'Открыть логи']);
+    expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Открыть логи']);
+    expect(find.byKey(const ValueKey('catalog-refresh')), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Открыть логи');
@@ -120,7 +121,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
     }
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить каталог');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Выйти из аккаунта');
     expect(find.byKey(const ValueKey('catalog-logs')), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();

@@ -17,7 +17,7 @@ import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dar
 import '../../../../../support/test_app.dart';
 
 void main() {
-  testWidgets('filtered catalog retries the same page and retains its filter on refresh', (tester) async {
+  testWidgets('filtered catalog retries the same page and retains its filter', (tester) async {
     var attempts = 0;
     final repository = FakeCatalogBrowseRepository(
       load: (_, page) {
@@ -43,9 +43,8 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(find.byType(AnimeCard), findsWidgets);
-    await tester.tap(find.byKey(const ValueKey('catalog-refresh')));
-    await tester.pumpAndSettle();
-    expect(repository.requests, List.filled(3, ('/anime/comedy/', 1)));
+    expect(find.byKey(const ValueKey('catalog-refresh')), findsNothing);
+    expect(repository.requests, List.filled(2, ('/anime/comedy/', 1)));
   });
 
   testWidgets('empty filter and loading keep the back action reachable', (tester) async {

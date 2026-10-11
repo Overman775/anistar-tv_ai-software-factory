@@ -8,6 +8,7 @@ class PlayerRetryView extends StatefulWidget {
     required this.title,
     required this.message,
     required this.onRetry,
+    this.onBack,
     super.key,
   });
 
@@ -15,6 +16,7 @@ class PlayerRetryView extends StatefulWidget {
   final String title;
   final String message;
   final VoidCallback onRetry;
+  final VoidCallback? onBack;
 
   @override
   State<PlayerRetryView> createState() => _PlayerRetryViewState();
@@ -40,12 +42,36 @@ class _PlayerRetryViewState extends State<PlayerRetryView> {
   }
 
   @override
-  Widget build(BuildContext context) => TvStateView(
-    icon: widget.icon,
-    title: widget.title,
-    message: widget.message,
-    actionLabel: 'Повторить',
-    actionFocusNode: _focusNode,
-    onAction: widget.onRetry,
-  );
+  Widget build(BuildContext context) {
+    final state = TvStateView(
+      icon: widget.icon,
+      title: widget.title,
+      message: widget.message,
+      actionLabel: 'Повторить',
+      actionFocusNode: _focusNode,
+      onAction: widget.onRetry,
+    );
+    if (AppLayoutScope.isTvOf(context) || widget.onBack == null) {
+      return state;
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        state,
+        Positioned(
+          top: 8,
+          left: 8,
+          child: SafeArea(
+            child: IconButton(
+              key: const ValueKey('player-back'),
+              tooltip: 'К сериям',
+              onPressed: widget.onBack,
+              icon: const Icon(Icons.arrow_back_rounded),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

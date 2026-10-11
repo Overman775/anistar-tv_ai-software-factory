@@ -183,6 +183,7 @@ final class AnistarHtmlParser {
         value?.text ??
         RegExp(r'(\d+(?:[.,]\d+)?)\s*/\s*10\b').firstMatch(card.text)?.group(1);
     final rating = double.tryParse((raw ?? '').trim().replaceAll(',', '.'));
+
     return rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null;
   }
 

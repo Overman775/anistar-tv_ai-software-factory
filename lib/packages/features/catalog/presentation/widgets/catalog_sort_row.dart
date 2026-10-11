@@ -18,6 +18,18 @@ class CatalogSortRow extends StatelessWidget {
   final bool autofocus;
 
   @override
-  Widget build(BuildContext context) =>
-      TvChoiceTile(focusNode: focusNode, label: label, onPressed: onPressed, selected: selected, autofocus: autofocus);
+  Widget build(BuildContext context) => !AppLayoutScope.isTvOf(context)
+      ? ListTile(
+          title: Text(label),
+          selected: selected,
+          trailing: selected ? const Icon(Icons.check) : null,
+          onTap: onPressed,
+        )
+      : TvChoiceTile(
+          focusNode: focusNode,
+          label: label,
+          onPressed: onPressed,
+          selected: selected,
+          autofocus: autofocus,
+        );
 }

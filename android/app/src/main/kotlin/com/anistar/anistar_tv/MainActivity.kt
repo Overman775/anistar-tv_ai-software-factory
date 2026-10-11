@@ -1,17 +1,33 @@
 package com.anistar.anistar_tv
 
 import android.view.WindowManager
+import android.app.UiModeManager
+import android.content.res.Configuration
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private var screenAwakeChannel: MethodChannel? = null
+    private var deviceProfileChannel: MethodChannel? = null
     private var resumed = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         setScreenAwake(false)
+        deviceProfileChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "anistar_tv/device_profile"
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "isTelevision") {
+                    val uiMode = getSystemService(UI_MODE_SERVICE) as UiModeManager
+                    result.success(uiMode.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
         screenAwakeChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "anistar_tv/playback_screen_awake"
@@ -48,6 +64,8 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        deviceProfileChannel?.setMethodCallHandler(null)
+        deviceProfileChannel = null
         screenAwakeChannel?.setMethodCallHandler(null)
         screenAwakeChannel = null
         setScreenAwake(false)

@@ -98,6 +98,7 @@ class AppNetworkImage extends StatelessWidget {
                 : TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
             errorWidget: (_, _, _) => previous != null ? SizedBox(width: width, height: height) : fallback,
           );
+
           return ClipRRect(
             borderRadius: borderRadius,
             child: previous == null

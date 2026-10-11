@@ -93,8 +93,9 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
   Widget build(BuildContext context) {
     ref.watch(favoritesControllerProvider);
 
-    return TvSideSheet(
+    return AppActionSheet(
       title: widget.title,
+      mobileHeightFactor: MediaQuery.sizeOf(context).height < 500 ? 0.8 : 0.4,
       child: ListView(
         children: [
           FutureBuilder<Result<bool, Failure>>(future: _future, builder: _content),
@@ -115,7 +116,7 @@ Future<bool?> showFavoriteActions(
   required int animeId,
   required String slug,
   required String title,
-}) => showTvSideSheet<bool>(
+}) => showAppActionSheet<bool>(
   context: context,
   builder: (_) => FavoriteActionsSheet(animeId: animeId, slug: slug, title: title),
 );

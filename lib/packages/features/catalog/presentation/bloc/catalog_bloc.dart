@@ -22,9 +22,10 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
   Future<void> _onMoreRequested(CatalogMoreRequested event, Emitter<CatalogState> emit) async {
     final current = state;
     if (!current.hasMore ||
+        current is CatalogRefreshing ||
         current.items.isEmpty ||
         current is CatalogReady && current.isLoadingMore ||
-        current is CatalogFailure && !event.retry) {
+        current is CatalogFailure && !current.isRefreshFailure && !event.retry) {
       return;
     }
     final generation = _loadGeneration;
@@ -57,17 +58,34 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
   }
 
   Future<void> _onStarted(CatalogStarted event, Emitter<CatalogState> emit) async {
+    if (event.preserveContent && state is CatalogRefreshing) {
+      return;
+    }
+    final previous = state;
     final generation = ++_loadGeneration;
-    emit(const CatalogLoading());
-    _page = 1;
+    if (!event.preserveContent) {
+      _page = 1;
+    }
+    emit(
+      event.preserveContent
+          ? CatalogRefreshing(items: previous.items, hasMore: previous.hasMore)
+          : const CatalogLoading(),
+    );
 
-    final result = await _repository.getPage(_page);
+    final result = await _repository.getPage(1);
     if (isClosed || emit.isDone || generation != _loadGeneration) {
       return;
     }
     result.when(
       failure: (failure) {
-        emit(CatalogFailure(message: failure.message));
+        emit(
+          CatalogFailure(
+            message: failure.message,
+            items: event.preserveContent ? previous.items : const [],
+            hasMore: event.preserveContent && previous.hasMore,
+            isRefreshFailure: event.preserveContent,
+          ),
+        );
       },
       success: (page) {
         _page = page.page;

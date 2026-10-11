@@ -55,6 +55,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   VideoPlayerController? _controller;
   bool _controlsVisible = true;
   bool _disposed = false;
+  bool _isTv = true;
+  bool _scrubbing = false;
   int _initializationId = 0;
   late int _episodeNumber;
   PlaybackQuality _quality = PlaybackQuality.high;
@@ -83,7 +85,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<_PlayerData> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
-      return const TvProgressView(label: 'Загружаем видео…');
+      const progress = TvProgressView(label: 'Загружаем видео…');
+      if (_isTv) {
+        return progress;
+      }
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          progress,
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: IconButton(
+                key: const ValueKey('player-back'),
+                tooltip: 'К сериям',
+                onPressed: _backToEpisodes,
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+            ),
+          ),
+        ],
+      );
     }
     final error = snapshot.error;
     if (error != null) {
@@ -94,6 +118,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
             ? error.message
             : 'Не удалось загрузить видео. Повторите попытку или вернитесь к сериалу.',
         onRetry: _retry,
+        onBack: _backToEpisodes,
       );
     }
 
@@ -115,8 +140,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       onPlayPause: _togglePlayback,
       onRetry: _retry,
       onSeek: _seek,
+      onSeekRelative: _seekRelative,
       onSeekKeyEvent: _handleSeekKey,
-      onShowControls: _showControls,
+      onShowControls: _onVideoTap,
+      onRotate: _isTv ? null : _rotateScreen,
+      onInteractionStart: _startScrubbing,
+      onInteractionEnd: _endScrubbing,
       session: data.session,
       title: widget.title,
     );
@@ -366,7 +395,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     if (!mounted || !_appResumed || !(_route?.isCurrent ?? true) || !(_controller?.value.isPlaying ?? false)) {
       return;
     }
-    if (_seekHold.isActive) {
+    if (_seekHold.isActive || _scrubbing) {
       _scheduleControlsHide();
 
       return;
@@ -385,6 +414,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       return;
     }
     _controlsTimer?.cancel();
+    _scrubbing = false;
     _seekHold.stop();
     _pendingSeek = null;
     _seekTarget = null;
@@ -420,7 +450,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       return;
     }
     _seekHold.stop();
-    final choice = await showTvSideSheet<PlaybackQuality>(
+    final choice = await showAppActionSheet<PlaybackQuality>(
       context: context,
       builder: (context) => PlayerChoicesDialog<PlaybackQuality>(
         title: 'Качество видео',
@@ -462,7 +492,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final episodes = session.episodeNumbers.toList()..sort((a, b) => b.compareTo(a));
     _seekHold.stop();
-    final choice = await showTvSideSheet<int>(
+    final choice = await showAppActionSheet<int>(
       context: context,
       builder: (context) => PlayerChoicesDialog<int>(
         title: 'Выбор серии',
@@ -540,7 +570,43 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   void _onPointerDown(PointerDownEvent event) {
     _seekHold.stop();
+    if (_isTv) {
+      _showControls();
+    } else {
+      _scheduleControlsHide();
+    }
+  }
+
+  void _rotateScreen() {
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+    unawaited(
+      SystemChrome.setPreferredOrientations(
+        landscape
+            ? [DeviceOrientation.portraitUp]
+            : [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight],
+      ),
+    );
     _showControls();
+  }
+
+  void _startScrubbing() {
+    _scrubbing = true;
+    _controlsTimer?.cancel();
+  }
+
+  void _endScrubbing() {
+    _scrubbing = false;
+    _showControls();
+  }
+
+  void _onVideoTap() {
+    if (!_isTv && _controlsVisible && (_controller?.value.isPlaying ?? false)) {
+      _controlsTimer?.cancel();
+      setState(() => _controlsVisible = false);
+      _focusNode.requestFocus();
+    } else {
+      _showControls();
+    }
   }
 
   void _showControls() {
@@ -616,6 +682,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _isTv = AppLayoutScope.isTvOf(context);
     final route = ModalRoute.of(context);
     final observer = Navigator.of(context).widget.observers.whereType<PlayerRouteObserver>().firstOrNull;
     if (route is PageRoute<Object?> && (!identical(_route, route) || !identical(_routeObserver, observer))) {
@@ -634,6 +701,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     if (_appResumed && !resumed) {
       _lifecycleResumePlaying = _controller?.value.isPlaying ?? _resumePlaying;
       _appResumed = false;
+      _scrubbing = false;
       _seekHold.stop();
       _controlsTimer?.cancel();
       _updateScreenAwake();
@@ -705,7 +773,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     _controlsFocus.dispose();
     _backFocus.dispose();
     _playFocus.dispose();
-    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
+    if (_isTv) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []));
+    } else {
+      unawaited(SystemChrome.setPreferredOrientations([]));
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
+    }
     super.dispose();
   }
 

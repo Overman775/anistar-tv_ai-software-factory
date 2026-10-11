@@ -6,6 +6,36 @@ import 'tv_typography.dart';
 abstract final class AppTheme {
   static final ThemeData lightTheme = _createTheme(Brightness.light);
   static final ThemeData darkTheme = _createTheme(Brightness.dark);
+  static final ThemeData mobileDarkTheme = _mobileTheme(darkTheme);
+  static final ThemeData mobileLightTheme = _mobileTheme(lightTheme);
+
+  static ThemeData _mobileTheme(ThemeData base) {
+    final text = base.textTheme.copyWith(
+      headlineLarge: base.textTheme.headlineLarge?.copyWith(fontSize: 28, height: 1.2),
+      headlineMedium: base.textTheme.headlineMedium?.copyWith(fontSize: 24, height: 1.25),
+      headlineSmall: base.textTheme.headlineSmall?.copyWith(fontSize: 22, height: 1.25),
+      titleLarge: base.textTheme.titleLarge?.copyWith(fontSize: 20, height: 1.3),
+      titleMedium: base.textTheme.titleMedium?.copyWith(fontSize: 16, height: 1.35),
+      bodyLarge: base.textTheme.bodyLarge?.copyWith(fontSize: 16),
+      bodyMedium: base.textTheme.bodyMedium?.copyWith(fontSize: 14),
+      labelLarge: base.textTheme.labelLarge?.copyWith(fontSize: 14),
+    );
+
+    return base.copyWith(
+      textTheme: text,
+      appBarTheme: base.appBarTheme.copyWith(
+        titleTextStyle: text.titleLarge?.copyWith(color: base.colorScheme.onSurface),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: base.iconButtonTheme.style?.copyWith(minimumSize: const WidgetStatePropertyAll(Size.square(48))),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: AppPalette.backgroundElevated,
+        indicatorColor: AppPalette.focusSurface,
+        labelTextStyle: WidgetStatePropertyAll(text.labelMedium?.copyWith(fontWeight: FontWeight.w500)),
+      ),
+    );
+  }
 
   static ThemeData _createTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;

@@ -62,9 +62,21 @@
             "problemMatcher": []
         },
         {
-            "label": "Flutter: Android E2E",
+            "label": "Flutter: TV E2E",
             "type": "shell",
-            "command": "bash scripts/e2e.sh ${input:androidEmulator}",
+            "command": "bash scripts/e2e-tv.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Mobile E2E",
+            "type": "shell",
+            "command": "bash scripts/e2e-mobile.sh",
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: TV and Mobile E2E",
+            "type": "shell",
+            "command": "bash scripts/e2e-all.sh",
             "problemMatcher": []
         },
         {
@@ -72,22 +84,13 @@
             "type": "process",
             "command": "bash",
             "args": [
-                "scripts/e2e.sh",
-                "${input:androidEmulator}",
+                "scripts/e2e-tv.sh",
                 "live"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": []
-        }
-    ],
-    "inputs": [
-        {
-            "id": "androidEmulator",
-            "type": "promptString",
-            "description": "Running Android emulator ID",
-            "default": "emulator-5554"
         }
     ]
 }

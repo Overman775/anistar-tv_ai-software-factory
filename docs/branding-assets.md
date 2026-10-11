@@ -2,7 +2,11 @@
 
 `lib/packages/ui_kit/assets/images/anistar_logo.png` — прозрачный знак для AnistarLogo: стартовый экран, вход и меню. PNG RGBA, 1254×1254; фон и промежутки между лучами имеют alpha=0. Тёмная рамка вокруг кнопки play принадлежит самому знаку.
 
-`anistar_launcher.png` и `anistar_tv_banner.png` — отдельные ресурсы с фоном для Android launcher, Android TV banner и нативной заставки. FlutterGen генерирует доступ к изображениям из UI Kit.
+`anistar_launcher.png` и `anistar_tv_banner.png` — отдельные ресурсы с фоном для Android launcher, Android TV banner и заставки до Android 12. FlutterGen генерирует доступ к изображениям из UI Kit.
+
+Android 12+ native splash использует прозрачный `anistar_logo.png` и drawable `android12splash_safe.xml` с отступом 26% с каждой стороны. Отступы учитывают круглую маску системного splash и форму знака; фон совпадает с `#080B14`. Launcher icon и Flutter-логотип имеют собственные размеры.
+
+Ресурсы пересоздаются командой `bash scripts/generate_branding.sh`: после стандартных Flutter generators скрипт сохраняет ссылку на safe drawable в light/night LaunchTheme и экспортирует TV icons/banner. Конфигурация splash не принуждает landscape: телефон запускается в своей ориентации, TV-профиль задаётся нативно и runner. [Требования Android к splash](https://developer.android.com/develop/ui/views/launch/splash-screen).
 
 Прозрачный знак создан встроенным imagegen из существующего `anistar_launcher.png`. Промпт:
 

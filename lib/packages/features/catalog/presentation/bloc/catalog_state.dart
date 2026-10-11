@@ -21,6 +21,11 @@ final class CatalogLoading extends CatalogState {
 }
 
 @immutable
+final class CatalogRefreshing extends CatalogState {
+  const CatalogRefreshing({required super.items, required super.hasMore});
+}
+
+@immutable
 final class CatalogReady extends CatalogState {
   final bool isLoadingMore;
 
@@ -30,6 +35,7 @@ final class CatalogReady extends CatalogState {
 @immutable
 final class CatalogFailure extends CatalogState {
   final String message;
+  final bool isRefreshFailure;
 
-  const CatalogFailure({required this.message, super.items, super.hasMore});
+  const CatalogFailure({required this.message, super.items, super.hasMore, this.isRefreshFailure = false});
 }

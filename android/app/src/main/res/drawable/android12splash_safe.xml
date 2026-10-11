@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep the transparent logo within Android's circular splash safe area.
+     Insets affect only the native Android 12+ splash. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/android12splash"
+    android:inset="26%" />

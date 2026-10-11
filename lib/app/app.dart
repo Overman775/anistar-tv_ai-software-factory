@@ -22,8 +22,8 @@ class App extends ConsumerWidget {
     return MaterialApp(
       title: 'Anistar TV',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
+      theme: AppLayoutScope.isTvOf(context) ? AppTheme.lightTheme : AppTheme.mobileLightTheme,
+      darkTheme: AppLayoutScope.isTvOf(context) ? AppTheme.darkTheme : AppTheme.mobileDarkTheme,
       themeMode: ThemeMode.dark,
       home: ref.watch(authStartupStageProvider) == AuthStartupStage.complete
           ? const LoginScreen()

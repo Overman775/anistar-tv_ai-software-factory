@@ -17,25 +17,31 @@ void main() {
     testWidgets('retains decoded Hero poster while replacement loads: $mode', (tester) async {
       const sourceUrl = 'https://fixture.test/source.png';
       const targetUrl = 'https://fixture.test/detail.png';
-      final source = await tester.runAsync(() async {
-        final bytes = await rootBundle.load(Assets.images.anistarLauncher.keyName);
-        final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
-        final frame = await codec.getNextFrame();
-        codec.dispose();
-        return frame.image;
-      });
-      final target = await tester.runAsync(() async {
-        final bytes = await rootBundle.load(Assets.images.anistarLogo.keyName);
-        final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
-        final frame = await codec.getNextFrame();
-        codec.dispose();
-        return frame.image;
-      });
+      final source =
+          await tester.runAsync(() async {
+            final bytes = await rootBundle.load(Assets.images.anistarLauncher.keyName);
+            final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+            final frame = await codec.getNextFrame();
+            codec.dispose();
+
+            return frame.image;
+          }) ??
+          (throw StateError('Source image did not decode'));
+      final target =
+          await tester.runAsync(() async {
+            final bytes = await rootBundle.load(Assets.images.anistarLogo.keyName);
+            final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+            final frame = await codec.getNextFrame();
+            codec.dispose();
+
+            return frame.image;
+          }) ??
+          (throw StateError('Target image did not decode'));
       final pending = Completer<ImageInfo>();
       final cache = PaintingBinding.instance.imageCache
         ..putIfAbsent(
           const CachedNetworkImageProvider(sourceUrl),
-          () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: source!))),
+          () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: source))),
         )
         ..putIfAbsent(const CachedNetworkImageProvider(targetUrl), () => OneFrameImageStreamCompleter(pending.future));
       addTearDown(() {
@@ -63,34 +69,41 @@ void main() {
           tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(image) ?? false);
       for (var frame = 0; frame < 12; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
-        expect(visible(source!), isTrue);
-        expect(visible(target!), isFalse);
+        expect(visible(source), isTrue);
+        expect(visible(target), isFalse);
         expect(find.byType(TvSkeletonBox), findsNothing);
       }
       if (mode == 'error') {
         pending.completeError(StateError('Image unavailable'));
       } else {
-        pending.complete(ImageInfo(image: target!));
+        pending.complete(ImageInfo(image: target));
       }
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 80));
       await tester.pump(const Duration(milliseconds: 40));
       if (mode != 'error') {
         final targetImage = find.byWidgetPredicate(
-          (widget) => widget is RawImage && (widget.image?.isCloneOf(target!) ?? false),
+          (widget) => widget is RawImage && (widget.image?.isCloneOf(target) ?? false),
         );
         expect(targetImage, findsOneWidget);
         final fades = tester.widgetList<FadeTransition>(
           find.ancestor(of: targetImage, matching: find.byType(FadeTransition)),
         );
-        expect(fades.any((fade) => fade.opacity.value > 0 && fade.opacity.value < 1), mode == 'success');
+        expect(
+          fades.any((fade) {
+            final opacity = fade.opacity.value;
+
+            return opacity > 0 && opacity < 1;
+          }),
+          mode == 'success',
+        );
       }
       for (var frame = 0; frame < 12; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
-        expect(visible(source!), isTrue);
+        expect(visible(source), isTrue);
       }
       await tester.pumpAndSettle();
-      expect(visible(target!), mode != 'error');
+      expect(visible(target), mode != 'error');
       expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -131,7 +144,8 @@ void main() {
     final families = manifest.whereType<Map<String, Object?>>();
     expect(families.map((entry) => entry['family']), contains(style?.fontFamily));
     final inter = families.singleWhere((entry) => entry['family'] == style?.fontFamily);
-    final faces = inter['fonts']! as List<Object?>;
+    final fonts = inter['fonts'] ?? (throw StateError('Font manifest entry has no faces'));
+    final faces = fonts as List<Object?>;
     expect(faces.whereType<Map<String, Object?>>().map((face) => face['weight']), containsAll([400, 500, 700]));
   });
 

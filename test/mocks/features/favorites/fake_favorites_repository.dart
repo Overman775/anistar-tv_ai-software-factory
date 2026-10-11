@@ -9,10 +9,15 @@ final class FakeFavoritesRepository implements FavoritesRepository {
   final List<int> pages = [];
   Future<Result<bool, Failure>> Function(bool desired)? change;
   Failure? statusFailure;
+  Future<Result<AnimePage, Failure>> Function(int)? load;
 
   @override
   Future<Result<AnimePage, Failure>> getPage(int page) async {
     pages.add(page);
+    final loader = load;
+    if (loader != null) {
+      return loader(page);
+    }
 
     return Result.success(
       AnimePage(

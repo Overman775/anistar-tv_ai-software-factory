@@ -9,13 +9,19 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:networking/networking.dart';
 import 'package:storage/storage.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../app/app.dart';
 import '../app/app_config.dart';
 import '../app/app_container.dart';
+import '../app/app_device_profile_resolver.dart';
 
 /// Application entry point that initializes services and runs the app.
-Future<void> runApplication({Logger? logger, List<Override> overrides = const []}) async {
+Future<void> runApplication({
+  Logger? logger,
+  List<Override> overrides = const [],
+  AppDeviceProfile? deviceProfile,
+}) async {
   final started = Completer<void>();
   var runtimeLogger = logger;
   // A Future failing inside a guarded error zone cannot forward its error to
@@ -32,10 +38,14 @@ Future<void> runApplication({Logger? logger, List<Override> overrides = const []
         Bloc.observer = AppBlocObserver(appLogger);
         appLogger.infoFor<Runner>('Starting application');
 
-        await SystemChrome.setPreferredOrientations([
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
-        ]);
+        final profile = deviceProfile ?? await AppDeviceProfileResolver.resolve();
+        await SystemChrome.setPreferredOrientations(
+          profile == AppDeviceProfile.tv ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight] : [],
+        );
+        await SystemChrome.setEnabledSystemUIMode(
+          profile == AppDeviceProfile.tv ? SystemUiMode.manual : SystemUiMode.edgeToEdge,
+          overlays: profile == AppDeviceProfile.tv ? [] : null,
+        );
 
         final sharedPreferencesStorage = SharedPreferencesStorage(logger: appLogger);
         await sharedPreferencesStorage.init();
@@ -72,7 +82,7 @@ Future<void> runApplication({Logger? logger, List<Override> overrides = const []
               ),
               ...overrides,
             ],
-            child: const App(),
+            child: AppResponsiveRoot(profile: profile, child: const App()),
           ),
         );
         appLogger.infoFor<Runner>('Application mounted');

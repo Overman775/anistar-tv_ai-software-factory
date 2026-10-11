@@ -63,6 +63,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
     builder: (context, ref, _) => HomeScreen(
       accountName: ref.watch(authControllerProvider).value,
       onOpenGenres: () => const GenresRoute().push<void>(context),
+      onGenreSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
       onSignOut: () => unawaited(_signOut(context, ref)),
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) {

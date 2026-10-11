@@ -2,7 +2,9 @@
 // must be repeated rather than cached across those transitions.
 // ignore_for_file: prefer-moving-to-variable
 
+import 'package:anistar/anistar.dart';
 import 'package:anistar_tv/app/app.dart';
+import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
@@ -12,14 +14,19 @@ import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
 import 'package:anistar_tv/packages/features/watch_history/watched_episodes_repository.dart';
+import 'package:app_logging/app_logging.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:networking/networking.dart';
+import 'package:networking/providers.dart';
 import 'package:storage/storage.dart';
+import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
+import 'support/e2e_harness.dart';
 import 'support/live_harness.dart';
 import 'support/remote_controls.dart';
 
@@ -28,9 +35,15 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   WidgetController.hitTestWarningShouldBeFatal = true;
 
-  testWidgets('Android direct catalog → anime → HLS → quality → episode → back', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(1280, 720));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  setUpAll(() async {
+    expect(
+      await AppDeviceProfileResolver.resolve(),
+      AppDeviceProfile.tv,
+      reason: 'Live remote-control E2E requires an Android TV system image.',
+    );
+  });
+
+  E2eHarness.testCase('Android direct catalog → anime → HLS → quality → episode → back', (tester) async {
     final live = LiveHarness();
     await live.resetSession();
     await SharedPreferencesStorage().remove('anistar.watched.v1.${Uri.encodeComponent(LiveHarness.username)}.10938');
@@ -89,14 +102,7 @@ void main() {
     expect(player.value.size.height, 360);
     await RemoteControls.openEpisodes(tester);
     await _wait(tester, () => find.text('Выбор серии').evaluate().isNotEmpty, 'episode dialog');
-    final nextSeries = find.textContaining(RegExp('^Серия $secondEpisode(?: —|\$)'));
-    await tester.scrollUntilVisible(
-      nextSeries,
-      -160,
-      scrollable: find.descendant(of: find.byType(Dialog), matching: find.byType(Scrollable)).first,
-    );
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(nextSeries);
+    await RemoteControls.chooseEpisode(tester, secondEpisode);
     final firstEpisode = player;
     await _wait(
       tester,
@@ -125,7 +131,7 @@ void main() {
     await _wait(tester, () => find.byKey(const ValueKey('login_submit')).evaluate().isNotEmpty, 'logout gate');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
-  });
+  }, profile: AppDeviceProfile.tv);
 }
 
 VideoPlayerController? _player(WidgetTester tester) {
@@ -144,13 +150,24 @@ Future<void> _verifyFavorites(WidgetTester tester, LiveHarness live, String slug
   const animeId = 10938;
   final favoriteButton = find.byKey(const ValueKey('favorite-button-10938'));
   final card = find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == animeId);
-  final initialRepository = ProviderScope.containerOf(tester.element(find.byType(App)))
-      .read(favoritesRepositoryProvider);
-  final original = (await initialRepository.getStatus(
-    animeId: animeId,
-    slug: slug,
-  )).when(success: (value) => value, failure: (failure) => throw failure);
+  // An independent cookie snapshot survives app unmount/relaunch, including a
+  // failure while no ProviderScope is mounted. Keep transport until restoration.
+  final origin = ProviderScope.containerOf(tester.element(find.byType(App))).read(networkConfigProvider).baseUri;
+  final session = AnistarSession(origin, SecureStorage());
+  final dio = DioClient.create(
+    config: NetworkConfig(baseUri: origin),
+    logger: AppLogger.logger,
+    enableRetry: false,
+  );
+  dio.interceptors.add(AnistarSessionInterceptor(session));
+  final client = DioAnistarClient(dio, session);
+  bool? original;
+  var bodyFailed = false;
   try {
+    await session.initialize();
+    original = await client.favoriteStatus(animeId: animeId, slug: slug);
+    // Touch locates a known live title among a changing catalog. The native
+    // player journey verifies the remote-control UX separately.
     if (original) {
       await tester.tap(favoriteButton);
       await _wait(tester, () => find.text('Добавить в избранное').evaluate().isNotEmpty, 'remove initial favorite');
@@ -205,10 +222,28 @@ Future<void> _verifyFavorites(WidgetTester tester, LiveHarness live, String slug
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(card);
     await _wait(tester, () => favoriteButton.evaluate().isNotEmpty, 'return to anime');
+  } on Object {
+    bodyFailed = true;
+    rethrow;
   } finally {
-    final repository = ProviderScope.containerOf(tester.element(find.byType(App))).read(favoritesRepositoryProvider);
-    final restored = await repository.setFavorite(animeId: animeId, slug: slug, favorite: original);
-    expect(restored.successOrNull, original, reason: 'restore the original website favorite');
+    try {
+      if (original != null) {
+        try {
+          final restored = await client.setFavorite(animeId: animeId, slug: slug, favorite: original);
+          expect(restored, original, reason: 'restore the original website favorite');
+        } on Object catch (error) {
+          if (!bodyFailed) {
+            rethrow;
+          }
+          // Preserve the original failure without printing request objects that
+          // could contain live-account credentials.
+          debugPrint('Favorite cleanup also failed: ${error.runtimeType}');
+        }
+      }
+    } finally {
+      dio.close(force: true);
+      await session.close();
+    }
   }
 }
 

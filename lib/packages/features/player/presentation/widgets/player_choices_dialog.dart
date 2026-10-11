@@ -43,7 +43,7 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
   }
 
   @override
-  Widget build(BuildContext context) => TvSideSheet(
+  Widget build(BuildContext context) => AppActionSheet(
     title: widget.title,
     child: ListView(
       controller: _scrollController,

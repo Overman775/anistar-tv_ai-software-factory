@@ -20,6 +20,8 @@ import '../widgets/anime_hero.dart';
 import '../widgets/anime_layout.dart';
 import '../widgets/anime_skeleton.dart';
 import '../widgets/episode_card.dart';
+import '../widgets/mobile_anime_content.dart';
+import '../widgets/mobile_anime_skeleton.dart';
 
 class AnimeScreen extends ConsumerStatefulWidget {
   const AnimeScreen({
@@ -58,6 +60,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   Animation<double>? _routeAnimation;
   bool _entered = false;
   int _loadGeneration = 0;
+  Future<void>? _mobileRefresh;
+  final _disposed = Completer<void>();
 
   @override
   void initState() {
@@ -91,20 +95,41 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<AnimeScreenData> snapshot) {
-    if (!_entered || snapshot.connectionState != ConnectionState.done) {
-      return AnimeSkeleton(animeId: widget.animeId, posterUri: widget.fallbackPosterUri, title: widget.fallbackTitle);
+    final retainingMobileContent = !AppLayoutScope.isTvOf(context) && snapshot.data?.details.id == widget.animeId;
+    if (!_entered || snapshot.connectionState != ConnectionState.done && !retainingMobileContent) {
+      return AppLayoutScope.isTvOf(context)
+          ? AnimeSkeleton(animeId: widget.animeId, posterUri: widget.fallbackPosterUri, title: widget.fallbackTitle)
+          : MobileAnimeSkeleton(
+              animeId: widget.animeId,
+              posterUri: widget.fallbackPosterUri,
+              title: widget.fallbackTitle,
+            );
     }
     final error = snapshot.error;
     if (error != null) {
-      return TvStateView(
+      final errorView = TvStateView(
         icon: Icons.cloud_off_rounded,
         title: 'Не удалось загрузить аниме',
         message: error is Failure ? error.message : 'Не удалось загрузить данные аниме. Повторите попытку.',
         actionLabel: 'Повторить',
         onAction: _retry,
       );
+      if (AppLayoutScope.isTvOf(context)) {
+        return errorView;
+      }
+
+      return RefreshIndicator(
+        onRefresh: _refreshMobile,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(height: constraints.maxHeight, child: errorView),
+          ),
+        ),
+      );
     }
     final data = snapshot.requireData;
+    final animeId = data.details.id;
     _filters = widget.onFilterTap == null ? [] : data.details.filters;
     final watched = ref.watch(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final ascending = data.episodes.toList()..sort((a, b) => a.number.compareTo(b.number));
@@ -113,6 +138,28 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         ascending.firstOrNull;
     final episodes = ascending.reversed.toList();
     _episodeNumbers = episodes.map((episode) => episode.number).toList(growable: false);
+
+    if (!AppLayoutScope.isTvOf(context)) {
+      return MobileAnimeContent(
+        key: ValueKey(animeId),
+        data: data,
+        episodes: episodes,
+        watched: watched,
+        playEpisode: playEpisode,
+        fallbackPosterUri: widget.fallbackPosterUri,
+        controller: _scrollController,
+        onEpisodeTap: _openEpisode,
+        onRetry: _retry,
+        onRefresh: _refreshMobile,
+        onFilterTap: widget.onFilterTap,
+        favoriteAction: FavoriteButton(
+          animeId: animeId,
+          slug: data.details.slug,
+          title: data.details.title,
+          initialFavorite: data.details.isFavorite,
+        ),
+      );
+    }
 
     return CustomScrollView(
       controller: _scrollController,
@@ -133,7 +180,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
             favoriteAction: FavoriteButton(
               focusNode: _favoriteFocus,
               autofocus: episodes.isEmpty,
-              animeId: data.details.id,
+              animeId: animeId,
               slug: data.details.slug,
               title: data.details.title,
               initialFavorite: data.details.isFavorite,
@@ -206,10 +253,14 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   }
 
   void _load() {
-    final generation = ++_loadGeneration;
+    _future = _fetchData(++_loadGeneration);
+  }
+
+  Future<AnimeScreenData> _fetchData(int generation) {
     final logger = ref.read(loggerProvider);
     final revision = ref.read(favoritesControllerProvider).revision;
-    _future = ref
+
+    return ref
         .read(animeRepositoryProvider)
         .getAnime(id: widget.animeId, slug: widget.slug)
         .then(
@@ -229,6 +280,28 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
             },
           ),
         );
+  }
+
+  Future<void> _refreshMobile() => _mobileRefresh ??= _performMobileRefresh().whenComplete(() => _mobileRefresh = null);
+
+  Future<void> _performMobileRefresh() async {
+    final generation = ++_loadGeneration;
+    try {
+      final data = await Future.any<AnimeScreenData?>([
+        _fetchData(generation),
+        _disposed.future.then<AnimeScreenData?>((_) => null),
+      ]);
+      if (mounted && generation == _loadGeneration && data != null) {
+        setState(() {
+          _future = Future.value(data);
+        });
+      }
+    } on Object catch (error) {
+      if (mounted && generation == _loadGeneration) {
+        final message = error is Failure ? error.message : 'Проверьте подключение и повторите жест.';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Не удалось обновить аниме. $message')));
+      }
+    }
   }
 
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
@@ -302,6 +375,11 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
 
   void _retry() {
     ref.read(loggerProvider).infoFor<AnimeScreen>('Retrying anime ${widget.animeId} loading');
+    if (!AppLayoutScope.isTvOf(context)) {
+      unawaited(_refreshMobile());
+
+      return;
+    }
     setState(_load);
   }
 
@@ -343,6 +421,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
 
   @override
   void dispose() {
+    _disposed.complete();
     _routeAnimation?.removeStatusListener(_onRouteStatus);
     _playFocus.removeListener(_revealFocusedAction);
     _favoriteFocus.removeListener(_revealFocusedAction);
@@ -362,7 +441,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   @override
   Widget build(BuildContext context) => Focus(
     canRequestFocus: false,
-    onKeyEvent: _handleNavigation,
+    onKeyEvent: AppLayoutScope.isTvOf(context) ? _handleNavigation : null,
     child: TvBackdrop(
       child: Scaffold(
         backgroundColor: Colors.transparent,
@@ -380,7 +459,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           flexibleSpace: const TvHeaderSurface(),
-          toolbarHeight: 80,
+          toolbarHeight: AppLayoutScope.isTvOf(context) ? 80 : 56,
           titleSpacing: AppSpacing.lg,
           title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
