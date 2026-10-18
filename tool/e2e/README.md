@@ -1,59 +1,79 @@
 # Android TV и Mobile E2E Fixtures | AniStar TV
 
-Локальный HTTPS server имитирует AniStar HTML и HLS. Настоящие repositories, parser и native video работают с его ответами.
+Инструменты E2E запускают Android integration tests против локальных HTTPS fixtures. Fixture server имитирует AniStar HTML и HLS; настоящие repositories, parser и native video работают с его ответами. Сценарии и правила их написания описаны в [`integration_test/README.md`](../../integration_test/README.md).
 
-## Запуск
+## Окружение
 
-```bash
-bash scripts/e2e-tv.sh
-bash scripts/e2e-mobile.sh
-# Последовательно, два разных эмулятора, отдельные результаты:
-bash scripts/e2e-all.sh
-```
+Запускайте команды из корня проекта. Нужны закреплённый Flutter SDK через FVM, Android SDK, Python 3.10 или новее и запущенный существующий AVD. По умолчанию используются `anistar_tv_e2e` (Android TV API 36) и `anistar_mobile_e2e` (Pixel 6 / API 36). FFmpeg нужен только для пересоздания media fixtures.
 
-Нужны существующие запущенные AVD: `anistar_tv_e2e` (Android TV API 36) и `anistar_mobile_e2e` (Pixel 6 / API 36), закреплённый Flutter SDK, Python 3.10+ и Android SDK. Они выбираются по имени AVD, а не номеру первого устройства в adb. Имена можно переопределить через `ANISTAR_TV_AVD` / `ANISTAR_MOBILE_AVD`; явный `emulator-<port>` передаётся первым аргументом платформенного скрипта. AVD не создаются и не стираются; отсутствующее устройство вызывает ошибку с командой его запуска. FFmpeg нужен только для пересоздания media.
+Скрипты не создают и не стирают AVD. Если нужного устройства нет, скрипт показывает доступные экземпляры и команду запуска. TV hardware skin и широкое разрешение на phone image недостаточны: до сборки проверяются boot readiness и настоящий Android UI mode. TV также требует hardware D-pad. Ранее созданный `anistar_e2e` использует phone image, поэтому TV-скрипт не выбирает его по умолчанию.
 
-TV hardware skin и широкое разрешение на phone image недостаточны. До сборки проверяются boot readiness и настоящий Android UI mode; TV дополнительно требует hardware D-pad. Прежний `anistar_e2e` имеет phone image и не выбран TV-скриптом по умолчанию.
+Melos выбирает доступный совместимый Python interpreter автоматически. Для другого interpreter задайте `ANISTAR_PYTHON`. При прямом запуске Python scripts настройте `PATH` на Python 3.10 или новее: tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
 
-TV-набор находится в `integration_test/app_e2e_test.dart`, mobile — в `integration_test/mobile_e2e_test.dart`. Общие fixtures/transport/storage используют один harness; touch helpers отделены от remote helpers. Runner определяет профиль нативно и использует фактические размеры экрана. TV покрывает крестовину, удержание OK/seek, фокус и правые панели. Mobile отдельно покрывает touch/IME, сессию, скролл и обновление, вкладки/Back, фильтр/сортировку, нижние панели избранного, native HLS и настоящий поворот Android, ошибки/ручной повтор.
+## Запуск runners
 
-Общий запуск выполняет оба набора последовательно и сохраняет оба результата, включая случай отказа первого. Flutter/Gradle и APK output общие, поэтому параллельные E2E runners отклоняются build lock. Старый CLI совместим: `bash scripts/e2e.sh <tv-emulator> fixtures`, `bash scripts/e2e.sh <phone-emulator> fixtures-mobile`.
+| Набор | Команда |
+| :--- | :--- |
+| Только TV | `bash scripts/e2e-tv.sh` |
+| Только mobile | `bash scripts/e2e-mobile.sh` |
+| Обе платформы последовательно на двух разных эмуляторах | `bash scripts/e2e-all.sh` |
 
-## Отчёты
+Скрипты выбирают AVD по имени, а не первый emulator в adb. Имена можно переопределить через `ANISTAR_TV_AVD` и `ANISTAR_MOBILE_AVD`. Чтобы указать запущенный экземпляр явно, передайте `emulator-<port>` первым аргументом платформенного скрипта. Например: `bash scripts/e2e-mobile.sh emulator-5554`. Старый CLI остаётся совместимым: `bash scripts/e2e.sh <tv-emulator> fixtures` и `bash scripts/e2e.sh <phone-emulator> fixtures-mobile`.
 
-У каждой платформы собственный каталог `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`: `runner.log`, `flutter.log`, `flutter-events.jsonl`, `logcat.log`, fixture `requests.jsonl`, `selection.json`, `summary.json` и `junit.xml`. При отказе preflight отчёт записывает причину этапа без успешных native-тестов. Общий запуск создаёт отдельные `tv/` и `mobile/` и агрегирует summary/JUnit в корне своего каталога.
+Общий runner выполняет TV и mobile последовательно, сохраняет результат каждого и после ошибки TV запускает mobile. Flutter/Gradle и APK output общие, поэтому одновременные E2E runners блокируются build lock.
 
-Для другого порядка: `ANISTAR_TEST_SEED=1337 bash scripts/e2e-all.sh`. Изменение seed не меняет выбранные устройства. Cleanup убирает fixture server и его adb reverse, восстанавливает настройку immersive confirmation и освобождает lock.
+## Побочные эффекты и очистка
 
-## Контракты
+Runner запускает локальный fixture server, настраивает `adb reverse` и временно меняет immersive confirmation на устройстве. Cleanup останавливает server, снимает созданный `adb reverse`, восстанавливает настройку и освобождает build lock. Каждый запуск получает собственный server и состояние fixtures.
 
-- Каталог/карточка: windows-1251; player HTML: UTF-8 и JavaScript playlist.
-- Вход с вымышленными credentials, Secure Storage restore и session expiry.
-- Избранное хранится в fixture server: session cookie, AJAX plus/minus, список и control в HTML; режим favorite_error возвращает HTTP 200 с error.
-- Рекламный ID 9493, две страницы и серии в обратном порядке.
-- URL `720.mp4` возвращает HLS master; вложенный playlist содержит relative/absolute TS.
-- Media требует Referer; Range возвращает 206 и Content-Range.
-- `refresh_once` отклоняет первый playback URL; `always_expired` отклоняет все.
-- Только loopback; ни одного запроса к AniStar или CDN.
+## Проверка Python-инструментов
 
-Certificate находится в Android debug resources и повторён в Dart test helper. Private key в `tls/` публичный, предназначен для localhost fixtures. При замене certificate обновляйте обе копии; release resources его не содержат.
-
-## Media
-
-Синтетические 24-секундные H.264/AAC fixtures находятся в `media/`; они не входят в pubspec assets. Пересоздание:
-
-```bash
-bash scripts/regenerate_e2e_media.sh
-```
-
-После обновления выполните Python-тесты и E2E. Тесты fixture server отдельно:
+Fixture-команды выше запускают Android runner. Чтобы отдельно проверить Python-инструменты fixture server, выполните из корня проекта:
 
 ```bash
 python3 -m unittest discover -s tool/e2e -p '*_test.py'
 ```
 
+Эта команда не запускает Android E2E.
+
+<a id="e2e-reports"></a>
+## Отчёты
+
+Каждая платформа сохраняет отчёт в отдельном каталоге вида `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`. Каталог содержит `runner.log`, `flutter.log`, `flutter-events.jsonl`, `logcat.log`, fixture `requests.jsonl`, `selection.json`, `summary.json` и `junit.xml`. При отказе preflight отчёт указывает этап и причину, не представляя native tests как успешно завершённые.
+
+Общий запуск создаёт отдельные `tv/` и `mobile/` каталоги и объединяет summary/JUnit в корне своего каталога. Отсутствующие или оборванные native events не дают успешный отчёт.
+
+Порядок тестов задаёт seed `20261010`. Чтобы изменить порядок, задайте, например, `ANISTAR_TEST_SEED=1337 bash scripts/e2e-all.sh` или `ANISTAR_TEST_SEED=20261011 bash scripts/e2e-all.sh`. Изменение seed не меняет выбранные устройства.
+
+## Протокол fixtures
+
+- Каталог и карточка используют windows-1251. Player HTML использует UTF-8 и JavaScript playlist.
+- Вход использует вымышленные credentials; наборы проверяют Secure Storage restore и session expiry.
+- Избранное хранится в fixture server: session cookie, AJAX plus/minus, список и control в HTML. Режим `favorite_error` возвращает HTTP 200 с error.
+- Fixture содержит рекламный ID 9493, две страницы и серии в обратном порядке.
+- URL `720.mp4` возвращает HLS master. Вложенный playlist содержит relative/absolute TS.
+- Server проверяет Referer на HLS master, вложенном playlist и TS. Range-запрос возвращает 206 и Content-Range.
+- `refresh_once` отклоняет первый playback URL. `always_expired` отклоняет все playback URL.
+- Server использует только loopback. Запросы к AniStar или CDN не выполняются.
+
+Certificate находится в Android debug resources и повторён в Dart test helper. Private key в `tls/` публичный и предназначен для localhost fixtures. При замене certificate обновляйте обе копии. Release resources этот certificate не содержат.
+
+## Media fixtures
+
+Синтетические 24-секундные H.264/AAC fixtures находятся в `media/`. Они не входят в pubspec assets. Для пересоздания нужен FFmpeg:
+
+```bash
+bash scripts/regenerate_e2e_media.sh
+```
+
+После обновления выполните Python-тесты и E2E. Для отдельной проверки fixture server используйте команду из раздела «Проверка Python-инструментов».
+
 ## Живой сайт
 
-`bash scripts/e2e-tv.sh live` использует `env/live-test.local.json` автоматически; в VS Code есть задача **Flutter: Live Android E2E**. Live не входит в общий offline-прогон. Локальный файл исключён из Git, шаблон без credentials — `env/live-test.example.json`. Форму входа заполняет live harness через Dart define. Настройка и ограничения: [Проверка с живым аккаунтом](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+Live не входит в offline-прогон. Запускайте его только явно командой `bash scripts/e2e-tv.sh live`; она автоматически использует локальный `env/live-test.local.json`. В VS Code доступна задача **Flutter: Live Android E2E**. Git исключает локальный файл; шаблон без credentials находится в `env/live-test.example.json`. Live harness передаёт credentials через Dart define и заполняет форму входа.
 
-Все команды и сценарии: [Разработка и тестирование](../../docs/05_development_and_testing.md).
+Live требует отдельного тестового аккаунта и может менять серверную историю просмотренных серий. Не запускайте изменение реального избранного как скрытый повтор offline-теста. Ограничения и полный протокол приведены в [проверке с живым аккаунтом](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+
+## Навигация
+
+[Сценарии, покрытие и правила изоляции](../../integration_test/README.md), [команды и контекст Android E2E](../../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона), [полная live-процедура](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).

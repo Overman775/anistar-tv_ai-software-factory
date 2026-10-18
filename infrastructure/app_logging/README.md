@@ -1,41 +1,40 @@
 # 📝 App Logging Package | AniStar TV
 
-Единая конфигурация Logger, typed diagnostics, file output и observers.
+`app_logging` настраивает Logger приложения, typed diagnostics, file output и observers для runner и потребителей.
 
-## 1. Публичные библиотеки
+## Использование
+
+Используйте публичные библиотеки:
 
 | Импорт | API |
 | --- | --- |
-| `package:app_logging/app_logging.dart` | AppLogger, Logger, typed-методы, file output и observers |
-| `package:app_logging/providers.dart` | Контракт loggerProvider |
+| `package:app_logging/app_logging.dart` | `AppLogger`, `Logger`, typed-методы, file output и observers |
+| `package:app_logging/providers.dart` | Контракт `loggerProvider` |
 
-Внешний код не импортирует src/**. Зависимости разрешаются корневой pub workspace.
+Runner инициализирует `AppLogger` и передаёт `Logger` в overrides. Прикладные классы получают его конструктором. Typed-методы добавляют владельца записи.
 
----
+## Границы и условия использования
 
-## 2. Ответственность и lifecycle
+Не импортируйте `src/**`. Зависимости разрешаются корневым pub workspace. `DioLoggingInterceptor` принадлежит `networking`.
 
-Runner инициализирует AppLogger и передаёт Logger в overrides. Прикладные классы получают его конструктором; typed-методы добавляют владельца записи.
+Debug/profile выводит все уровни в консоль и `FileLogOutput` для dev viewer. Release выводит в консоль только error и fatal. `ProductionFilter` применяется во всех runtime-режимах, чтобы profile/release не зависели от включённых assertions. `AppLogger.initForTest` отключает I/O.
 
-Debug/profile выводит все уровни в консоль и FileLogOutput для dev viewer. Release выводит в консоль только error и fatal. ProductionFilter применяется во всех runtime-режимах, чтобы profile/release не зависели от включённых assertions. AppLogger.initForTest отключает I/O. Dio interceptor принадлежит networking.
+`FlutterError.onError`, `PlatformDispatcher.onError` и `runZonedGuarded` в runner используют `AppLogger.reportUnhandled`: уровень fatal, пометка `[UNHANDLED]`, источник, исходное исключение и stack trace. Обработчики устанавливаются также при передаче logger в runner. Внешние crash/analytics SDK не подключены.
 
-FlutterError.onError, PlatformDispatcher.onError и runZonedGuarded в runner используют AppLogger.reportUnhandled: уровень fatal, пометка [UNHANDLED], источник, исходное исключение и stack trace. Обработчики устанавливаются также при передаче logger в runner. Внешние crash/analytics SDK не подключены.
-
-FileLogOutput владеет отдельным worker isolate. Записи выполняются последовательно;
-destroy ждёт завершения init и подтверждения записи оставшегося буфера. До готовности
-worker сохраняются последние 1000 сообщений. Для проверки файлового output можно
-передать directory в конструктор. Viewer читает только имена файлов внутри logs.
+`FileLogOutput` владеет отдельным worker isolate. Записи выполняются последовательно. `destroy` ждёт завершения init и подтверждения записи оставшегося буфера. До готовности worker сохраняются последние 1000 сообщений. Для проверки файлового output можно передать `directory` в конструктор. Viewer читает только имена файлов внутри `logs`.
 
 Не добавляйте HTML, cookies, токены, значения secure storage и подписанные CDN URL в сообщения.
 
----
+## Как проверить
 
-## 3. Проверки
-
-Тесты запускаются из корня:
+Из корня workspace запустите тесты пакета:
 
 ```bash
 fvm flutter test test/infrastructure/app_logging
 ```
 
-Границы пакетов: [Структура проекта](../../docs/02_project_structure.md).
+## Навигация
+
+- [Структура проекта](../../docs/02_project_structure.md) — границы пакетов и обязанности runner.
+- [Сеть и HLS](../../docs/04_network_and_playback.md) — граница сетевых логов и чувствительных данных.
+- [Networking](../networking/README.md) — HTTP interceptor и transport.

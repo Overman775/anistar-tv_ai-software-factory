@@ -104,7 +104,7 @@ context is unavailable, return `NOT_RUN` with reason; never guess `PASS`.
 - `verification-quality`: read `docs/05_development_and_testing.md`, acceptance
   specifications, related tests and helpers in root `test/`; Android E2E reads
   `integration_test/README.md` and `tool/e2e/README.md`. Commands come from
-  `docs/melos_tooling.md`; `docs/06_verification.md` is historical context. Check oracle
+  `docs/melos_tooling.md`; use fresh run evidence supplied with the task. Check oracle
   strength and regressions for behavior, rather than implementation mirroring.
   Assess UI, accessibility and localization evidence for the affected behavior
   under `VER-CHANGE-SAFETY`, using existing AniStar contracts and capabilities.

@@ -1,34 +1,40 @@
 # 🌐 Networking Package | AniStar TV
 
-HTTP transport, общий маппинг ошибок и lifecycle клиентов.
+`networking` предоставляет Dart HTTP transport, общий маппинг ошибок и lifecycle клиентов для инфраструктурных адаптеров.
 
-## 1. Публичные библиотеки
+## Использование
+
+Подключайте API через публичные библиотеки:
 
 | Импорт | API |
 | --- | --- |
-| `package:networking/networking.dart` | DioClient, NetworkConfig, BaseRepository и NetworkFailure |
+| `package:networking/networking.dart` | `DioClient`, `NetworkConfig`, `BaseRepository` и `NetworkFailure` |
 | `package:networking/providers.dart` | Провайдеры транспорта и конфигурации |
 
-Внешний код не импортирует src/**. Зависимости разрешаются корневой pub workspace.
+App передаёт `NetworkConfig` и logger. Все HTTP-запросы Dart-кода приложения используют `DioClient`. Пакет закрывает общий клиент через `ref.onDispose`. Добавляйте interceptors через `DioClient.addInterceptors`.
 
----
+`BaseRepository.makeApiCall` переводит исключения в `Result` / `Failure`. Таймауты и transport retry принадлежат этому пакету.
 
-## 2. Ответственность и lifecycle
+## Границы и условия использования
 
-App передаёт NetworkConfig и logger. Все HTTP-запросы Dart-кода приложения используют DioClient; networking закрывает общий клиент через ref.onDispose. Проверка зеркал использует отдельный Dio из той же фабрики, без cookies и retry; его закрывает AnistarMirrorManager. HTML-парсер получает байты страниц через общий Dio. Видеопоток загружает нативный video_player своим транспортом.
+Не импортируйте `src/**`. Зависимости разрешаются корневым pub workspace.
 
-BaseRepository.makeApiCall переводит исключения в Result / Failure. Таймауты и transport retry принадлежат этому пакету; зеркало, HTML-заголовки и правила отказа AniStar принадлежат anistar. DioLoggingInterceptor использует Logger из app_logging и стоит после session/header interceptors. Для добавления interceptors используется DioClient.addInterceptors.
+Проверка зеркал использует отдельный Dio из той же фабрики без cookies и retry. `AnistarMirrorManager` закрывает этот клиент. HTML-парсер получает байты страниц через общий Dio. Нативный `video_player` загружает видеопоток своим транспортом.
 
-В dev видны запросы, ответы, ошибки, номера запросов, длительность, HTTP-статусы и тип/размер ответа. URL показывает только origin и известные публичные endpoints AniStar; остальные paths, query, credentials и тела не выводятся. Cookies и неизвестные headers скрываются. Отмена запроса имеет уровень debug, транспортные ошибки — error; в release проходят только ошибки.
+Зеркало, HTML-заголовки и правила отказа AniStar принадлежат `anistar`. `DioLoggingInterceptor` использует Logger из `app_logging` и стоит после session/header interceptors.
 
----
+В dev видны запросы, ответы, ошибки, номера запросов, длительность, HTTP-статусы и тип/размер ответа. URL показывает только origin и известные публичные endpoints AniStar. Остальные paths, query, credentials и тела не выводятся. Cookies и неизвестные headers скрываются. Отмена запроса имеет уровень debug, транспортные ошибки — error, а в release проходят только ошибки.
 
-## 3. Проверки
+## Как проверить
 
-Тесты запускаются из корня:
+Из корня workspace запустите тесты пакета:
 
 ```bash
 fvm flutter test test/infrastructure/networking
 ```
 
-Границы пакетов: [Структура проекта](../../docs/02_project_structure.md).
+## Навигация
+
+- [Сеть и HLS](../../docs/04_network_and_playback.md) — transport, сайт, сессия и native playback.
+- [Структура проекта](../../docs/02_project_structure.md) — границы пакетов.
+- [App Logging](../app_logging/README.md) — уровни логирования и file output.

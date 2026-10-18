@@ -16,17 +16,19 @@
 
 ## Основания и найденные зависимости
 
-Текущая схема DTO → data repository → domain в основном соблюдена и соответствует [ADR 0007](../adr/0007-neutral-core-and-infrastructure.md) и [ADR 0009](../adr/0009-single-anistar-client-and-dio.md). DTO не нужно перемещать в domain или Core. Проблема — детали HTML и транспорта, которые пересекают границу клиента.
+Текущая схема DTO → data repository → domain в основном соблюдена. Она соответствует [ADR 0007](../adr/0007-neutral-core-and-infrastructure.md) и [ADR 0009](../adr/0009-single-anistar-client-and-dio.md). DTO не нужно перемещать в domain или Core. Проблему создают детали HTML и транспорта, которые пересекают границу клиента.
+
+Таблица описывает код до рефакторинга. Некоторые перечисленные файлы удалены или перемещены, поэтому их прежние пути больше не существуют. Их названия показаны как код, а не как ссылки.
 
 | Код | Наблюдение и необходимое изменение |
 | --- | --- |
-| [DirectCatalogSort](../../infrastructure/anistar/lib/src/direct_catalog_sort.dart), [DirectCatalogFilter](../../infrastructure/anistar/lib/src/direct_catalog_filter.dart) | Публичные типы знают DOM, DLE cookies и допустимые пути сайта. Перенести это поведение в HTML-адаптер |
-| [DirectAnime](../../infrastructure/anistar/lib/src/direct_anime.dart), [DirectEpisode](../../infrastructure/anistar/lib/src/direct_episode.dart) | Summary и details используют один класс; episode раскрывает внутренний mediaId. Разделить проекции и скрыть идентификатор HTML-мутации |
+| `DirectCatalogSort`, `DirectCatalogFilter` | Публичные типы знают DOM, DLE cookies и допустимые пути сайта. Перенести это поведение в HTML-адаптер |
+| `DirectAnime`, `DirectEpisode` | Summary и details используют один класс; episode раскрывает внутренний mediaId. Разделить проекции и скрыть идентификатор HTML-мутации |
 | [AnistarPlaybackRepository](../../lib/packages/features/player/data/repositories/anistar_playback_repository.dart) | Репозиторий собирает Referer и извлекает end из URL. Получать готовые headers/expiry от клиента |
 | [anistar.dart](../../infrastructure/anistar/lib/anistar.dart), [BaseRepository](../../infrastructure/networking/lib/src/base_repository.dart) | Общий экспорт раскрывает реализацию; ожидаемые исключения частично зависят от Dio. Разделить библиотеки и нормализовать ожидаемые ошибки |
 | [AnimeSummary](../../lib/packages/features/catalog/domain/models/anime_summary.dart) и модели с коллекциями | Отсутствующий постер заменяется Uri(); final и toList(growable: false) не защищают содержимое коллекций. Использовать nullable poster и неизменяемые копии |
 | [FilteredCatalogRepository](../../lib/packages/features/catalog/domain/repositories/filtered_catalog_repository.dart) | UI меняет sort у репозитория отдельно от события загрузки. Сделать конфигурацию делегата неизменяемой. Это упрощение контракта, а не доказательство существующей гонки |
-| [WatchedEpisodesRepository](../../lib/packages/features/watch_history/watched_episodes_repository.dart) | Domain-интерфейс и Riverpod provider находятся в одном файле. Разделить их |
+| `WatchedEpisodesRepository` | Domain-интерфейс и Riverpod provider находятся в одном файле. Разделить их |
 | [LogViewerScreen](../../lib/packages/features/log_viewer/presentation/screens/log_viewer_screen.dart), [FileLogOutput](../../infrastructure/app_logging/lib/src/file_log_output.dart) | Экран создаёт data-реализацию; reader уже превращает часть отказов в строки/пустые списки. Нужны DI и различение успешного чтения и ошибки на самом read boundary |
 
 ## Целевые границы
@@ -46,7 +48,9 @@ REST → будущий клиент ────┘
 - `providers.dart`: Riverpod composition.
 - `parsing.dart`: явный вход для тестов парсинга.
 
-Общие типы удобно разместить в `src/contract/`. Остальные файлы перемещать только при необходимости. Feature data импортирует общий контракт; composition — библиотеки создания реализаций. Domain не импортирует data, presentation, providers или AniStar. Presentation получает domain-контракты через feature providers, что является допустимой зависимостью.
+Общие типы удобно разместить в `src/contract/`. Перемещать остальные файлы нужно только при необходимости.
+
+Feature data импортирует общий контракт. Composition импортирует библиотеки, которые создают реализации. Domain не импортирует data, presentation, providers или AniStar. Presentation получает domain-контракты через feature providers. Такая зависимость допустима.
 
 ## 1 Общие DTO и HTML-параметры
 
@@ -63,15 +67,17 @@ REST → будущий клиент ────┘
 
 Summary и details — отдельные конечные классы, без общего базового Anime. Сохранить смысл текущих полей: null favorite означает неизвестное состояние, нулевой рейтинг не означает отсутствие рейтинга, ongoing определяется текущим правилом HTML-парсинга. Не добавлять неподтверждённую семантику и новые поля ради будущего API.
 
-DTO создают неизменяемые копии переданных collections. Вложенные элементы также должны быть неизменяемыми. Const-конструкторы с коллекциями можно заменить обычными; equality/copyWith/code generation не нужны без конкретного потребителя. В DTO нет toDomain(), fromJson(), DOM, cookies/session state или запросов.
+DTO создают неизменяемые копии переданных collections. Вложенные элементы также должны быть неизменяемыми. Const-конструкторы с коллекциями можно заменить обычными. Equality/copyWith/code generation не нужны без конкретного потребителя. В DTO нет toDomain(), fromJson(), DOM, cookies/session state или запросов.
 
-Вынести формирование DLE cookies, перевод критерия в поле сайта и проверку подтверждённой сортировки во внутренний HTML-компонент. Критерии клиента: date, rating, views, comments, title; news_read остаётся в адаптере. Сохранить соответствие продуктового popularity рейтингу. Проверки допустимых путей и origin остаются внутри HTML-адаптера, выполняются при парсинге и перед запросом. Percent encoding и локальность cookies сортировки сохраняются.
+Вынести формирование DLE cookies, перевод критерия в поле сайта и проверку подтверждённой сортировки во внутренний HTML-компонент. Критерии клиента: date, rating, views, comments, title. news_read остаётся в адаптере. Сохранить соответствие продуктового popularity рейтингу.
+
+Проверки допустимых путей и origin остаются внутри HTML-адаптера. Выполнять их при парсинге и перед запросом. Сохранить percent encoding и локальность cookies сортировки.
 
 ## 2 Источники воспроизведения
 
 HTML-адаптер выдаёт готовые источники с URI, headers и optional expiry. Headers и expiry принадлежат конкретному источнику: их нельзя вычислять один раз для всех качеств. Исходная подписанная ссылка сохраняется без пересборки, которая могла бы изменить подпись. Отсутствующий либо неподдерживаемый expiry даёт null, сохраняя исправный поток.
 
-Удалить playerUri() из общего AnistarClient. Внутренний helper адреса HTML-плеера остаётся для Referer и отметок просмотра. MediaId хранится только во внутреннем результате парсинга; markWatched(animeId, episodeNumber) получает его сам, выполняет запись и подтверждает результат. Не добавлять лишний HTTP-запрос только из-за разделения внутренней и публичной моделей. Сохранить отсутствие повторной записи уже просмотренного и автоматического retry изменяющего запроса.
+Удалить playerUri() из общего AnistarClient. Внутренний helper адреса HTML-плеера остаётся для Referer и отметок просмотра. MediaId хранится только во внутреннем результате парсинга. Метод markWatched(animeId, episodeNumber) сам получает MediaId, выполняет запись и подтверждает результат. Не добавлять лишний HTTP-запрос только из-за разделения внутренней и публичной моделей. Сохранить отсутствие повторной записи уже просмотренного и автоматического retry изменяющего запроса.
 
 Playback repository выбирает качество и собирает PlaybackSession. Он не разбирает end, не строит Referer и не знает HTML endpoint. PlaybackQuality получает числовой height вместо apiValue; текст 360p/720p остаётся прежним. Неподдерживаемое качество источника игнорируется, а отсутствие любого поддерживаемого потока возвращает PlaybackFailure. Сохранить текущий fallback к наибольшему доступному поддерживаемому качеству.
 
@@ -79,7 +85,9 @@ Playback repository выбирает качество и собирает Playba
 
 Сохранить имена и размещение AnimeSummary, AnimeDetails, AnimeEpisode, AnimePage, AnimeScreenData, CatalogFilter, CatalogSort и PlaybackSession. Summary/details — проекции аниме; page и screen data — результаты запросов; filter/sort — значения выбора; session — данные для запуска воспроизведения. Ни одной из этих ролей не нужен обязательный суффикс Entity.
 
-AnimeEpisode.number уникален в рамках конкретного аниме. Не считать его глобальным ID. Существующий account String? достаточен; новая сущность из одного поля не требуется. CatalogSort уже сравнивается по значению как record. Не вводить equality только по ID для аниме, скрывающий изменение содержимого. FavoritesState, CatalogState и состояния controllers остаются за пределами domain.
+AnimeEpisode.number уникален в рамках конкретного аниме. Не считать его глобальным ID.
+
+Существующий account String? достаточен; новая сущность из одного поля не требуется. CatalogSort уже сравнивается по значению как record. Не вводить equality только по ID для аниме, скрывающий изменение содержимого. FavoritesState, CatalogState и состояния controllers остаются за пределами domain.
 
 Обязательные изменения:
 
@@ -114,17 +122,21 @@ AnimeEpisode.number уникален в рамках конкретного ан
 | Отклонённый запрос, авторизация, недоступный ресурс или неподдерживаемый ответ сайта | RequestFailure с безопасным сообщением; различать причины внутри клиента только там, где этого требует поведение |
 | Неожиданная ошибка | Существующий UnknownFailure и безопасная диагностика |
 
-Матрицу уточнить по существующим error tests до изменения кода: сохранить пользовательские сообщения и ветвления, включая 403/challenge и восстановление зеркала. Событие expired остаётся отдельным сигналом; одного Failure недостаточно для выхода из сессии. Не превращать отсутствие сессии при restore в ошибку: success(null) остаётся успешным результатом.
+До изменения кода уточнить матрицу по существующим error tests. Сохранить пользовательские сообщения и ветвления, включая 403/challenge и восстановление зеркала. Событие expired остаётся отдельным сигналом. Одного Failure недостаточно для выхода из сессии. Не превращать отсутствие сессии при restore в ошибку. success(null) остаётся успешным результатом.
 
-Все асинхронные операции HtmlAnistarClient нормализуют ожидаемые transport/parser/session отказы через общий helper. AnistarFailure может остаться внутренней ошибкой HTML-кода, но не экспортируется общим контрактом. Неожиданные программные ошибки обрабатываются отдельно на repository boundary, без подмены их ожидаемым сетевым отказом. Сохранить действующее скрытие чувствительных данных при ошибках авторизации; исходный текст исключения не должен автоматически попадать в сообщение или лог.
+Все асинхронные операции HtmlAnistarClient нормализуют ожидаемые transport/parser/session отказы через общий helper. AnistarFailure может остаться внутренней ошибкой HTML-кода. Общий контракт её не экспортирует. Неожиданные программные ошибки обрабатываются отдельно на repository boundary и не подменяются ожидаемым сетевым отказом. Сохранить действующее скрытие чувствительных данных при ошибках авторизации. Исходный текст исключения не должен автоматически попадать в сообщение или лог.
 
-Один небольшой mapper в data переводит AnistarClientException в Failure. Result создаётся один раз. Существующий BaseRepository можно использовать для обёртки Result и unknown failures; ожидаемые ошибки AniStar должны быть преобразованы до его Dio-specific ветки. Не создавать новый универсальный BaseRepository и не переносить все ошибки networking в Core. PlaybackFailure/FavoritesFailure используются для соответствующих прикладных отказов. Внешние domain/presentation потребители не распознают исключения клиента или Dio.
+Один небольшой mapper в data переводит AnistarClientException в Failure. Result создаётся один раз. Существующий BaseRepository можно использовать для обёртки Result и unknown failures. Ожидаемые ошибки AniStar нужно преобразовать до Dio-specific ветки BaseRepository. Не создавать новый универсальный BaseRepository и не переносить все ошибки networking в Core.
+
+PlaybackFailure/FavoritesFailure используются для соответствующих прикладных отказов. Внешние domain/presentation потребители не распознают исключения клиента или Dio.
 
 ## 5 Репозитории и выбор каталога
 
 Сохранить узкие CatalogRepository, CatalogBrowseRepository, FavoritesRepository, AnimeRepository, PlaybackRepository и AuthRepository. Общий CRUD-интерфейс и единый репозиторий всех features не нужны. Репозитории координируют операции и mapping; они не владеют экраном, native controller, cookie session или вторым кешем favorites/history.
 
-FilteredCatalogRepository оставить чистым делегатом с final filter и sort, задаваемыми при создании. Это неизменяемая конфигурация, а не изменяемое состояние выбора UI. При смене сортировки экран создаёт новый делегат. Передать его через минимальное расширение существующего события CatalogStarted; отдельная система событий/источников не нужна. При замене делегата BLoC одновременно меняет активный repository, увеличивает generation и начинает первую страницу. Замена источника всегда сбрасывает данные; preserveContent относится только к refresh того же источника.
+FilteredCatalogRepository оставить чистым делегатом с final filter и sort, задаваемыми при создании. Это неизменяемая конфигурация, а не изменяемое состояние выбора UI. При смене сортировки экран создаёт новый делегат. Передать его через минимальное расширение существующего события CatalogStarted. Отдельная система событий/источников не нужна.
+
+При замене делегата BLoC одновременно меняет активный repository, увеличивает generation и начинает первую страницу. Замена источника всегда сбрасывает данные. preserveContent относится только к refresh того же источника.
 
 Каждая загрузка захватывает repository, page и generation до await. Поздний результат старой сортировки не меняет новый список. Выбранная сортировка в UI согласована с активным запросом. Обычный refresh при отказе сохраняет загруженные страницы; retry повторяет нужную страницу. Межстраничная дедупликация остаётся в CatalogBloc. Изменение сортировки не создаёт новый AnistarClient или сессию.
 
@@ -136,7 +148,9 @@ Watch history разделить на domain/repositories/watched_episodes_repos
 
 LogRepository не использует AnistarClient. Его методы возвращают Future<Result<List<String>, Failure>> и Future<Result<String, Failure>>. Подключить FileLogRepository через feature provider и app composition; убрать импорт data из LogViewerScreen. Отдельный framework файловых репозиториев не нужен.
 
-Важно: сейчас FileLogOutput.getLogFiles() скрывает FileSystemException за пустым списком, а getLogContent() возвращает ошибки как содержимое файла. Обёртка этих значений в Result.success оставит дефект. Точечно скорректировать чтение в app_logging, чтобы repository мог различать данные и отказ; проверить всех потребителей методов. Пустой доступный каталог — success([]); некорректное имя, исчезнувший выбранный файл и отказ чтения — Failure. Отсутствие ещё не созданного каталога логов может оставаться успешным пустым списком, как сейчас.
+Важно: сейчас FileLogOutput.getLogFiles() скрывает FileSystemException за пустым списком. Метод getLogContent() возвращает ошибки как содержимое файла. Обёртка этих значений в Result.success оставит дефект. Точечно скорректировать чтение в app_logging, чтобы repository мог различать данные и отказ. Проверить всех потребителей методов.
+
+Пустой доступный каталог — success([]). Некорректное имя, исчезнувший выбранный файл и отказ чтения — Failure. Отсутствие ещё не созданного каталога логов может оставаться успешным пустым списком, как сейчас.
 
 FileLogRepository преобразует ожидаемые файловые отказы в LogFailure с безопасным сообщением. Не распознавать ошибку поиском фразы в возвращённой строке: файл может содержать тот же текст. Небольшие передаваемые функции чтения допустимы для тестов; не создавать для этого новую файловую архитектуру и не менять запись, isolate, rotation или жизненный цикл logger.
 

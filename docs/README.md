@@ -1,41 +1,51 @@
 # 📚 Документация | AniStar TV
 
-## Руководства
+Выберите документ по вопросу, с которым работаете. Описание приложения и быстрый запуск находятся в [главном README](../README.md).
 
-| Документ | Содержание |
-| --- | --- |
-| [🏛️ Архитектура](01_architecture_principles.md) | Принципы, границы слоёв, DI и навигация |
-| [📂 Структура проекта](02_project_structure.md) | Workspace, пакеты, features и runner |
-| [📏 Code Style](03_codestyle_and_rules.md) | Именование, Dart, асинхронность и TV UI |
-| [🌐 Сеть и HLS](04_network_and_playback.md) | HTTP, HTML/JSON5, ошибки и native playback |
-| [🧪 Разработка и тестирование](05_development_and_testing.md) | Окружения, команды, тесты и диагностика |
+## Руководства для разработки
 
-- [AI-инструменты](07_ai_tooling.md): выбор Factory-скиллов, этапы, артефакты и восстановление процесса.
-- [Melos tooling](melos_tooling.md): локальные запуск, генерация, обслуживание, тесты и сборки.
-- [Git и версии](vcs_guidelines.md): Conventional Commits и явная подготовка версии.
+| Что нужно выяснить | Документ |
+| :--- | :--- |
+| Как разделены слои, зависимости и DI | [Архитектурные принципы](01_architecture_principles.md) |
+| Где разместить код и как связаны пакеты | [Структура проекта](02_project_structure.md) |
+| Какие правила соблюдать в Dart, асинхронном коде и TV UI | [Code Style](03_codestyle_and_rules.md) |
+| Как взаимодействуют transport, сайт, сессия и native playback | [Сеть и HLS](04_network_and_playback.md) |
+| Как выбрать проверки, собрать приложение и разобраться в сбое | [Разработка и тестирование](05_development_and_testing.md) |
+| Как поручить работу агентам и проверить их результат | [AI Software Factory](07_ai_tooling.md) |
+| Какую команду использовать для запуска, генерации или обслуживания | [Melos tooling](melos_tooling.md) |
+| Как работать с ветками, коммитами и версией приложения | [Git и версии](vcs_guidelines.md) |
 
-## Спецификации
+## Продукт, контракты и решения
 
-[📋 Контракты функций](specs/README.md): вход/сессия, избранное, страницы/пагинация, native playback, зеркала, TV-взаимодействие, просмотренные серии и анимации. Здесь инварианты, ошибки, границы реализации и связанные тесты для дальнейшей разработки.
+| Вопрос | Источник |
+| :--- | :--- |
+| Для кого приложение, какие у него возможности и ограничения | [Описание продукта](../PRODUCT.md) |
+| Как должна работать конкретная функция | [Спецификации](specs/README.md) |
+| Почему выбрана архитектура и какие ограничения приняты | [Реестр ADR](adr/README.md) |
 
-Направление UI для новых изменений: [ADR-0008 — YouTube для телевизоров как ориентир взаимодействия](adr/0008-youtube-tv-interaction-reference.md).
+Для изменений интерфейса отправная точка — [ADR-0008](adr/0008-youtube-tv-interaction-reference.md) и связанные с ним TV- и мобильные контракты.
 
-## Пакеты и решения
+## Пакеты
 
-- [⚙️ Core](../infrastructure/core/README.md)
-- [🌐 Networking](../infrastructure/networking/README.md)
-- [💾 Storage](../infrastructure/storage/README.md)
-- [📝 App Logging](../infrastructure/app_logging/README.md)
-- [📺 AniStar](../infrastructure/anistar/README.md)
-- [🎨 UI Kit](../lib/packages/ui_kit/README.md)
-- [🧭 Architecture Decision Records](adr/README.md)
+README пакетов описывают публичные входы, условия использования и проверки в пределах своего пакета.
 
-## История изменений
+| Пакет | Что искать в README |
+| :--- | :--- |
+| [Core](../infrastructure/core/README.md) | Нейтральные Result и Failure, границы зависимостей |
+| [Networking](../infrastructure/networking/README.md) | HTTP transport, BaseRepository, interceptors и lifecycle |
+| [Storage](../infrastructure/storage/README.md) | Preferences, secure storage и передача runtime-экземпляров |
+| [App Logging](../infrastructure/app_logging/README.md) | Инициализация логирования, уровни, observers и файловый output |
+| [AniStar](../infrastructure/anistar/README.md) | AnistarClient, публичные библиотеки и нормализованный контракт данных |
+| [UI Kit](../lib/packages/ui_kit/README.md) | Тема, компоненты, focus, анимации и ресурсы приложения |
 
-[CHANGELOG](../CHANGELOG.md): изменения по выпускам; текущая разработка — в разделе «Не выпущено».
+## Тестовые наборы и инструменты
 
-## Проверки
+| Материал | Назначение |
+| :--- | :--- |
+| [Android integration tests](../integration_test/README.md) | Сценарии TV/mobile, правила написания тестов и границы покрытия |
+| [E2E tooling](../tool/e2e/README.md) | Запуск Android runners, окружение, fixtures, media и отчёты |
+| [Graphify tooling](../tool/graphify/README.md) | Локальный патч извлечения, его применение и проверка |
 
-- [Состояние проверок](06_verification.md): критерии готовности, результаты и пределы live-проверки.
+## Написание документации
 
-Быстрый старт: [README](../README.md).
+[Указатель шаблонов](templates/README.md) помогает выбрать формат руководства, ADR, спецификации, intent или README. Подробные инструкции и заготовки находятся там же. Ссылайтесь на документ, который описывает правило, вместо копирования его в соседние README.

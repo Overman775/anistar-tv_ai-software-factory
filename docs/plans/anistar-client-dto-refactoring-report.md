@@ -48,7 +48,9 @@
 Реального REST-клиента и REST specification нет. Fake/DI подтверждают подмену dependency, но не
 совместимость с сервером, его identifier/pagination соглашениями или отсутствующими операциями.
 Details parser выводит ID из переданного slug: mapping не доказывает identity HTML-документа.
+
 По дополнительному запросу пользователя live account и Android native smoke выполнены на TV-эмуляторе API 36 ARM64; результат приведён ниже. Физический TV, аппаратный декодер реального устройства, физический пульт и mobile live smoke не проверялись. Они не входят в приёмку исходного плана.
+
 Обязательные проверки плана доступны и выполнены; открытых пунктов DoD нет. Обновление baselines — согласованное отклонение от первоначального запрета, без изменений UI-кода при актуализации снимков.
 
 ## Сопоставление исходных golden failures
@@ -69,17 +71,22 @@ Details parser выводит ID из переданного slug: mapping не 
 
 ## Итоговая проверка diff
 
-Проверены common exports и contract dependencies; producer/parser/source/client цепочка, готовые
-playback источники; общий error mapper и safety diagnostics; immutable domain и nullable poster;
-каталог с generation; watch history imports/bindings; log read boundary/Result/BLoC/composition;
-fixtures, independent fake, tests и документация. `git diff --check` не обнаружил whitespace ошибок.
-Routes, generated files, pubspec/lock и FVM pin не изменены; старые API имена отсутствуют
-в активном Dart-коде. Из PNG изменены только шесть согласованных baselines. Все D1–D12 отмечены
-в плане; исключение по baselines записано явно, остальные требования сохранены.
+Итоговая проверка diff охватила:
+
+- common exports и contract dependencies.
+- producer/parser/source/client цепочку и готовые playback источники.
+- общий error mapper и safety diagnostics.
+- immutable domain и nullable poster.
+- каталог с generation.
+- watch history imports/bindings.
+- log read boundary/Result/BLoC/composition.
+- fixtures, independent fake, tests и документацию.
+
+`git diff --check` не обнаружил whitespace ошибок. Routes, generated files, pubspec/lock и FVM pin не изменились. Старые API имена отсутствуют в активном Dart-коде. Из PNG изменены только шесть согласованных baselines. В плане отмечены все D1–D12. Исключение по baselines записано явно, остальные требования сохранены.
 
 Промежуточные analyzer/DCM ошибки исправлены. Изменены только необходимая обработка данных,
-границы зависимостей и соответствующие tests/docs. Рутинные решения: Future.wait сохранён, AnimeScreenData
-не переименован; новый BaseEntity/Repository/cache/REST adapter не введён.
+границы зависимостей и соответствующие tests/docs. Future.wait сохранён. AnimeScreenData
+не переименован. Новый BaseEntity/Repository/cache/REST adapter не введён.
 
 ## Согласованное обновление baselines и финальный аудит
 
@@ -93,8 +100,8 @@ Routes, generated files, pubspec/lock и FVM pin не изменены; стар
 совпадают с проверенными failure images. Итоговая сверка не обнаружила изменений SDK, зависимостей,
 routes или generated files; `git diff --check` завершился с exit 0.
 
-После актуализации выполнен полный gate без пропусков и режима обновления снимков,
-затем повторно выполнен `graphify update .`. D11 закрыт по результату exit 0; D1–D12 выполнены
+После актуализации выполнен полный gate без пропусков и режима обновления снимков.
+Затем повторно выполнен `graphify update .`. D11 закрыт по результату exit 0. D1–D12 выполнены
 с указанным согласованным исключением и ограничениями graphify/будущего REST.
 
 ## Дополнительный live/native smoke (12 октября 2026 года)
@@ -169,7 +176,9 @@ Raw extraction и итоговый graph.json имеют **0 пустых endpoi
 В post-build также **0 dangling endpoints**. Raw audit отдельно показывает внешние
 Python/Android imports до создания external stubs и объединение отношений/позиций
 между одной парой узлов в simple undirected Graph. Исходные рёбра и позиции сохранены
-в `extraction.json`; эти ограничения не объявляются устранёнными. Три Gradle Kotlin DSL
+в `extraction.json`; эти ограничения не объявляются устранёнными.
+
+Три Gradle Kotlin DSL
 файла не дают symbols; исключения `.graphifyignore` сохранены. Dart extractor остаётся
 regex-based. Семантика внешних веб-страниц не проверялась: извлечены только citations.
 

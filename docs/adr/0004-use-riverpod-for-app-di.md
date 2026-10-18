@@ -2,36 +2,22 @@
 
 - **Статус:** Accepted
 - **Дата:** 2026-07-19
-- **Уточнено:** [0007](0007-neutral-core-and-infrastructure.md): владельцы провайдеров и app binding.
+- **Связи:** Уточнён в [ADR-0007](0007-neutral-core-and-infrastructure.md): владельцы провайдеров и app binding.
 
 ## Контекст
 
-Приложение использует общие runtime-сервисы, HTTP-клиенты и реализации
-репозиториев. Ранее они передавались через `provider`, тогда как для будущего
-роста проекта нужна единая, типизированная точка композиции и простые overrides
-в widget-тестах.
+Приложение использует общие runtime-сервисы, HTTP-клиенты и реализации репозиториев. Ранее зависимости передавались через `provider`. Для роста проекта нужна единая типизированная точка композиции и простые overrides в widget-тестах.
 
 ## Решение
 
 - Использовать `flutter_riverpod` как единственный DI-контейнер приложения.
-- Создавать `ProviderScope` в `runner.dart`; logger, storage и `NetworkConfig`
-  передавать через overrides.
-- Провайдеры клиентов принадлежат infrastructure-пакетам; binding repository
-  implementations находится в `app/app_container.dart` (уточнение ADR-0007).
-- Оставить `flutter_bloc` для feature state, но не использовать его как DI.
-- Сохранять constructor injection для repository, service и BLoC; domain/data
-  не импортируют Riverpod.
+- Создавать `ProviderScope` в `runner.dart`. Передавать logger, storage и `NetworkConfig` через overrides.
+- Владельцами провайдеров клиентов являются infrastructure-пакеты. Binding реализаций репозиториев находится в `app/app_container.dart` (уточнение ADR-0007).
+- Оставить `flutter_bloc` для feature state. Не использовать его как DI.
+- Сохранять constructor injection для repository, service и BLoC. Domain и data не импортируют Riverpod.
 
 ## Последствия
 
-Положительные: один способ собирать зависимости, безопасная замена provider в
-тестах, явный composition root и отсутствие поиска сервисов через
-`BuildContext`.
+Зависимости собираются одним способом. Тесты могут безопасно заменять их через overrides. Composition root остаётся явным, а сервисы не ищутся через `BuildContext`.
 
-Ограничения: Riverpod используется только на app/presentation границе; не
-следует переносить в него бизнес-логику или создавать feature-wide state без
-реальной необходимости.
-
-## Связанные решения
-
-- [ADR-0007](0007-neutral-core-and-infrastructure.md): границы пакетов и владельцы провайдеров.
+Riverpod используется только на границе app/presentation. Бизнес-логика не переносится в Riverpod. Feature-wide state не создаётся без реальной необходимости.

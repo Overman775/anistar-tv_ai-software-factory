@@ -1,12 +1,16 @@
 # 🎨 UI Kit Package | AniStar TV
 
-UI Kit содержит тему и общие TV-компоненты. Публичный импорт: `package:ui_kit/ui_kit.dart`.
+UI Kit содержит тему, TV-компоненты и ресурсы для разработчиков feature, которым нужны единые стили и управление с пульта. Публичный импорт: `package:ui_kit/ui_kit.dart`.
 
-Ассеты доступны через `package:ui_kit/assets.dart`: `Assets` для картинок и файлов, `FontFamily` для шрифтов. FlutterGen генерирует их командой `fvm dart run melos run generate` из корня workspace. Исходники бренда находятся в `assets/images/`, шрифты — в `assets/fonts/`. `AnistarLogo` использует прозрачный `anistar_logo.png`; Android launcher и заставка Android 12 используют отдельный `anistar_launcher.png` с фоном; экран входа и меню не рисуют отдельный логотип. Нативные ресурсы обновляются командой `fvm dart run melos run generate:branding`.
+```dart
+import 'package:ui_kit/ui_kit.dart';
+```
+
+Ассеты и назначение изображений описаны в разделе [Ресурсы](#4-ресурсы).
 
 Ориентир взаимодействия и границы адаптации: [ADR-0008](../../../docs/adr/0008-youtube-tv-interaction-reference.md).
 
-## 1. Тема и токены
+## 1. Использование, тема и токены
 
 | API | Назначение |
 | --- | --- |
@@ -17,15 +21,17 @@ UI Kit содержит тему и общие TV-компоненты. Публ
 | AppRadii | Радиусы |
 | AppMotion | Длительности, кривые и reduced motion |
 
-Анимации описаны в [контракте](../../../docs/specs/08_motion.md). Feature не задаёт собственные duration/curve для этих эффектов; durationOf отключает их по настройкам доступности.
+Анимации описаны в [контракте](../../../docs/specs/08_motion.md). Feature не задаёт собственные duration/curve для этих эффектов. durationOf отключает их по настройкам доступности.
 
-AppNetworkImage ограничивает размер декодирования в памяти по одной оси, сохраняя пропорции; оригинал остаётся в дисковом кеше для detail и Hero.
+AppNetworkImage ограничивает размер декодирования в памяти по одной оси и сохраняет пропорции. Оригинал остаётся в дисковом кеше для detail и Hero.
 
-Текстовые стили доступны через Theme.of(context).textTheme. Цвета Material через colorScheme; общие TV-токены через публичные классы пакета.
+Текстовые стили доступны через Theme.of(context).textTheme. Цвета Material доступны через colorScheme. Общие TV-токены доступны через публичные классы пакета.
 
-Inter поставляется локально в начертаниях 400, 500 и 700; заголовки и акценты используют реальный Bold, без запросов к отсутствующему 800. Файлы из [официального Inter 4.1](https://github.com/rsms/inter/releases/tag/v4.1), внутренняя версия 4.001, commit 9221beed3; Regular/Medium сохранены без изменений. SIL OFL 1.1 находится в assets/fonts/LICENSE.txt.
+Inter поставляется локально в начертаниях 400, 500 и 700. Заголовки и акценты используют реальный Bold. Запросов к отсутствующему 800 нет.
 
-Шкала ролей: заголовки 24–32, названия карточек 19, основной текст 18 с высотой строки 1.45, обычный текст и управление 16, вторичные подписи 14. Логотип меню сохраняет 22; диагностический журнал использует monospace. Описание ограничено TvTypography.proseMaxWidth = 720 logical pixels. TvChoiceTile.rowExtentOf учитывает системный масштаб текста и отступы виртуализированной строки.
+Файлы взяты из [официального Inter 4.1](https://github.com/rsms/inter/releases/tag/v4.1). Внутренняя версия: 4.001, commit 9221beed3. Regular/Medium сохранены без изменений. SIL OFL 1.1 находится в assets/fonts/LICENSE.txt.
+
+Шкала ролей: заголовки 24–32, названия карточек 19, основной текст 18 с высотой строки 1.45, обычный текст и управление 16, вторичные подписи 14. Логотип меню сохраняет размер 22. Диагностический журнал использует monospace. Описание ограничено TvTypography.proseMaxWidth = 720 logical pixels. TvChoiceTile.rowExtentOf учитывает системный масштаб текста и отступы виртуализированной строки.
 
 ---
 
@@ -38,16 +44,18 @@ Inter поставляется локально в начертаниях 400, 5
 | TvSideSheet / showTvSideSheet | Правая модальная панель, переход, контрастный focus и замкнутая навигация |
 | TvPosterHero | Одинаковый скруглённый постер для обоих концов Hero |
 | TvSkeleton / TvSkeletonBox | Примитивы загрузки |
-| TvStateView / TvProgressView | Empty/error/retry и прогресс; StateView прокручивает длинный текст, объявляет сообщение и раскрывает focus действия |
+| TvStateView / TvProgressView | Показывает Empty/error/retry и прогресс. StateView прокручивает длинный текст, объявляет сообщение и раскрывает focus действия. |
 | TvBackdrop / TvSectionHeader | Фон и заголовок секции |
 
-TvFocusable передаёт builder состояние focused. Feature рисует заметный focus-state. Без onLongPressed OK вызывает onPressed при KeyDown; с onLongPressed короткое OK срабатывает при отпускании, удержание от 600 мс вызывает onLongPressed после отпускания. KeyRepeat не вызывает действий. Потеря фокуса и dispose отменяют таймер. Долгое касание использует то же действие; вложенное меню не получает повторы удерживаемой клавиши.
+TvFocusable передаёт builder состояние focused. Feature рисует заметный focus-state. Без onLongPressed OK вызывает onPressed при KeyDown. С onLongPressed короткое OK срабатывает при KeyUp той же клавиши, если удержание ещё не распознано. Первый системный KeyRepeat вызывает onLongPressed до отпускания кнопки. Фиксированного таймера удержания нет.
 
-> **Граница пакета:** UI Kit не импортирует features и не выполняет запросы AniStar. Сетка, anime hero и player controls принадлежат feature; общий компонент добавляется после повторного использования.
+Потеря фокуса и dispose отменяют ещё не распознанное удержание. После распознанного удержания повторы и отпускание исходной клавиши поглощаются до передачи фокусу вложенного меню. Долгое касание использует то же действие. Правила активации: [TV-взаимодействие](../../../docs/specs/06_tv_interaction.md#1-focus-и-активация).
+
+> **Граница пакета:** UI Kit не импортирует features и не выполняет запросы AniStar. Сетка, anime hero и player controls принадлежат feature. Общий компонент добавляется после повторного использования.
 
 ---
 
-## 3. Тестирование
+## 3. Как проверить
 
 Тесты находятся в `test/packages/ui_kit/` и запускаются из корня:
 
@@ -56,3 +64,30 @@ fvm flutter test test/packages/ui_kit
 ```
 
 Проверяем typography, image fallback, skeleton, состояния и клавиатурный focus. TV viewport: 960×540 и 1280×720 logical pixels.
+
+---
+
+## 4. Ресурсы
+
+Публичный импорт: `package:ui_kit/assets.dart`, где `Assets` отвечает за изображения и файлы, а `FontFamily` за шрифты. FlutterGen создаёт эти exports из `assets/images/` и `assets/fonts/`. Из корня workspace типизированные exports генерируются командой `fvm dart run melos run generate`, а нативные ресурсы на macOS — `fvm dart run melos run generate:branding`. Использование package assets и команды генерации описаны в [разработке и тестировании](../../../docs/05_development_and_testing.md#2-проверки-и-сборка) и [Melos tooling](../../../docs/melos_tooling.md#4-генерация-и-обслуживание).
+
+| Исходник в `assets/images/` | Назначение |
+| --- | --- |
+| `anistar_logo.png` | Прозрачный RGBA-знак 1254×1254 для `AnistarLogo` на стартовом экране, входе и в TV-меню. Также используется для Android 12+ splash. |
+| `anistar_launcher.png` | Изображение с фоном 1024×1024 для launcher и adaptive icon |
+| `anistar_tv_banner.png` | Баннер с фоном 1280×720 для Android TV launcher и splash до Android 12 |
+
+В UI-знаке фон и промежутки между лучами прозрачны. Тёмная рамка кнопки play принадлежит самому знаку. Не заменяйте UI-знак launcher-изображением с фоном.
+
+Android 12+ splash использует `android12splash_safe.xml`. Отступ 26% с каждой стороны помещает знак в круглую системную маску. Фон: `#080B14`. Общий скрипт экспорта после генерации сохраняет ссылку на этот drawable в дневной и ночной LaunchTheme.
+
+Конфигурация splash не фиксирует ориентацию. Runner выбирает профиль TV/mobile. Настройка нативных ресурсов: [иконка, баннер и заставка](../../../docs/05_development_and_testing.md#8-иконка-android-tv-баннер-и-заставка).
+
+[brand_assets_test.dart](../../../test/packages/ui_kit/brand_assets_test.dart) проверяет доступность package assets, прозрачность знака и размещение splash внутри маски во всех плотностях и обеих темах. Golden-снимки стартового экрана, входа и меню фиксируют знак на поверхностях приложения.
+
+## 5. Навигация
+
+- [TV-взаимодействие](../../../docs/specs/06_tv_interaction.md) — focus, активация и управление с пульта.
+- [Анимации](../../../docs/specs/08_motion.md) — длительности, кривые и reduced motion.
+- [ADR-0008](../../../docs/adr/0008-youtube-tv-interaction-reference.md) — ориентир поведения и границы адаптации.
+- [Разработка и тестирование](../../../docs/05_development_and_testing.md) — использование package assets, генерация и настройка Android ресурсов.

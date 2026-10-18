@@ -122,7 +122,7 @@ that any command has run or passed.
 | `fvm dart run melos run test:goldens` | Central golden comparison, concurrency 1; no baseline updates. |
 | `fvm dart run melos run test:tooling` | Python quality/APK verifier, E2E runner, version and Factory regressions; graphify regressions only when its local interpreter is configured. |
 | `fvm dart run melos run get` | Workspace resolution with `--enforce-lockfile`; no dependency upgrade or vulnerability verdict. |
-| `fvm dart run melos run version:check` | Current app version and README agreement; no version bump. |
+| `fvm dart run melos run version:check` | Stable X.Y.Z+N in the root pubspec; no version bump. |
 | `fvm dart run melos run test:e2e` | TV then mobile Android fixture suites on prepared separate emulators. |
 | `fvm dart run melos run build:android:prod:apk` | Production release APK with AOT freshness verification; local build, no publication. |
 

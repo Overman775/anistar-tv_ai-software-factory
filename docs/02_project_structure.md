@@ -1,51 +1,49 @@
 # 📂 Структура проекта и модулей | AniStar TV
 
-Проект использует Dart pub workspace. App и features находятся в корневом Flutter-приложении; инфраструктура и UI Kit оформлены отдельными пакетами.
+AniStar TV построен как Flutter-приложение с Dart pub workspace. Корневой пакет остаётся приложением. Шесть локальных workspace-пакетов включают инфраструктуру и UI Kit. Ниже описаны точки входа и базовые правила размещения кода. Рабочие команды приведены в [Melos tooling](melos_tooling.md).
 
-## 1. Глобальная структура
+## 1. Структура workspace
 
 ```text
 .
 ├── infrastructure/
-│   ├── core/             # Нейтральные Result и Failure
-│   ├── networking/       # HTTP, BaseRepository, network failures
+│   ├── core/             # Result, Failure
+│   ├── networking/       # Dio, BaseRepository, network failures
 │   ├── storage/          # Preferences и secure storage
-│   ├── app_logging/      # Logger, file output и observers
-│   └── anistar/          # Единый клиент, cookies, зеркало, HTML/JSON5 и DTO
+│   ├── app_logging/      # Logger и observers
+│   └── anistar/          # HTTP-адаптер сайта, cookie session и DTO
 ├── lib/
-│   ├── app/              # App, composition root и GoRouter
-│   ├── runner/           # Bootstrap Flutter и сервисов
+│   ├── app/              # Composition root, router и приложение
+│   ├── runner/           # Bootstrap платформы и runtime-сервисов
 │   ├── packages/
-│   │   ├── features/     # auth, catalog, favorites, anime, player, watch_history, home, log_viewer, common
-│   │   └── ui_kit/       # Тема и TV-компоненты
+│   │   ├── features/     # Функциональные области приложения
+│   │   └── ui_kit/       # Тема, токены и общие виджеты
 │   ├── main_dev.dart
 │   └── main_prod.dart
-├── test/                 # Unit, widget и architecture-тесты
-├── integration_test/     # Emulator E2E и live smoke
-├── android/              # TV manifest, flavors и Gradle
-├── env/                  # Dart defines зеркала
-├── docs/                 # Руководства, ADR и исследования
-└── pubspec.yaml          # App и workspace, один pubspec.lock
+├── test/                 # Unit, widget, golden и architecture tests
+├── integration_test/     # Android fixture и явные live scenarios
+├── android/              # Android и Android TV конфигурация
+├── env/                  # Dart define JSON и шаблоны
+├── docs/                 # Руководства, спецификации и ADR
+└── pubspec.yaml          # Корневое приложение, workspace и Melos
 ```
 
-Все infrastructure-пакеты и ui_kit используют `resolution: workspace`. Один `fvm flutter pub get` из корня разрешает зависимости. Тесты также запускаются из корня.
+Workspace пакеты перечислены в `pubspec.yaml` и используют общий `pubspec.lock`. App и features остаются в корневом Flutter-пакете. Не создавайте для них отдельные package boundaries без архитектурного решения.
 
 ---
 
-## 2. Публичные библиотеки
+## 2. Владельцы пакетов
 
-| Пакет | Импорт | Назначение |
-| --- | --- | --- |
-| core | `package:core/data.dart` | Result и Failure |
-| networking | `package:networking/networking.dart` | HTTP и BaseRepository |
-| storage | `package:storage/storage.dart` | Preferences и secure storage |
-| app_logging | `package:app_logging/app_logging.dart` | Logger и observers |
-| anistar | `package:anistar/anistar.dart` | AnistarClient, DTO, параметры и ожидаемые ошибки |
-| anistar | `package:anistar/html.dart` | HTML-клиент, сессия и зеркало для composition |
-| anistar | `package:anistar/parsing.dart` | Чистые парсеры и декодирование |
-| ui_kit | `package:ui_kit/ui_kit.dart` | Тема и TV-компоненты |
+| Пакет | Публичный API | Ответственность |
+| :--- | :--- | :--- |
+| `core` | `package:core/data.dart` | `Result`, `Failure`, нейтральная ошибка |
+| `networking` | `package:networking/networking.dart`, `providers.dart` | Dio factory, transport, `BaseRepository` |
+| `storage` | `package:storage/storage.dart`, `providers.dart` | Preferences и защищённое локальное хранилище |
+| `app_logging` | `package:app_logging/app_logging.dart`, `providers.dart` | Инициализация `Logger`, output и observers |
+| `anistar` | `package:anistar/anistar.dart`, `html.dart`, `parsing.dart`, `providers.dart` | Site contract, HTML адаптер, парсинг и mirror session |
+| `ui_kit` | `package:ui_kit/ui_kit.dart`, `assets.dart` | Тема, TV/mobile профиль и повторно используемые UI-компоненты |
 
-Провайдеры сервисов доступны через `package:<owner>/providers.dart`. Реализации `lib/src/**` закрыты для внешних импортов.
+Infrastructure пакет не импортирует app или feature. Код извне обращается только к экспортированным библиотекам. `lib/src/**` остаётся внутренней реализацией пакета. Границы проверяет `test/architecture/package_boundaries_test.dart`.
 
 ---
 
@@ -53,34 +51,64 @@
 
 ```text
 lib/packages/features/catalog/
-├── catalog_providers.dart   # Repository provider-контракт
+├── catalog_providers.dart        # контрактные providers и async state
 ├── domain/
-│   ├── models/              # Domain-модели
-│   └── repositories/        # Интерфейсы
+│   ├── models/                    # модели приложения
+│   └── repositories/              # interfaces и domain decorators
 ├── data/
-│   └── repositories/        # Реализации и DTO → domain
+│   ├── repositories/              # реализация контрактов
+│   └── mapping/                   # DTO сайта → domain
 └── presentation/
-    ├── bloc/                # События и состояния
-    ├── screens/             # Экраны
-    └── widgets/             # Локальные компоненты
+    ├── bloc/                      # BLoC, events и states
+    ├── screens/
+    └── widgets/                   # компоненты только этой feature
 ```
 
-Domain не импортирует Flutter, transport и парсер. Presentation использует domain и feature provider; конкретная реализация назначается в app.
+Набор папок соответствует ответственности, а не обязательному шаблону для каждой feature. Не создавайте пустые слои. Domain не импортирует Flutter, Dio или адаптер сайта. Data зависит от публичных контрактов. Presentation не обращается к реализации repository напрямую.
+
+В `lib/packages/features/` сейчас находятся `auth`, `catalog`, `favorites`, `anime`, `player`, `watch_history`, `home`, `log_viewer` и `common`. Это функциональные области корневого приложения, а не отдельные workspace packages.
+
+```dart
+final catalogRepositoryProvider = Provider<CatalogRepository>(
+  (ref) => throw StateError('CatalogRepository must be supplied by the application.'),
+);
+```
+
+Feature объявляет интерфейс и provider-контракт. Конкретный binding расположен в [app composition root](../lib/app/app_container.dart): это сохраняет возможность подмены реализации в тестах и не заставляет feature знать transport.
 
 ---
 
-## 4. Инициализация приложения
+## 4. Запуск и composition root
 
-`main_dev.dart` и `main_prod.dart` вызывают `runApplication()` из `lib/runner/runner.dart`.
+`lib/main_dev.dart` и `lib/main_prod.dart` вызывают `runApplication()` из `lib/runner/runner.dart`. Runner инициализирует Flutter, error handlers, logger, platform profile, storage и mirror manager, затем создаёт корневой `ProviderScope` и запускает `App`.
 
-1. Runner создаёт Flutter binding и устанавливает обработчики ошибок.
-2. Инициализирует logger, Bloc observer и landscape orientation.
-3. Создаёт и инициализирует SharedPreferencesStorage; создаёт SecureStorage.
-4. Читает baseline из `ANISTAR_MIRROR_URL` и сохранённую версию стандартного зеркала; DI отслеживает смену origin.
-5. Передаёт runtime-объекты в `createAppOverrides` и запускает App внутри ProviderScope.
-6. Feature Auth восстанавливает и проверяет защищённую сессию. App создаёт router только после входа; при выходе или истечении сессии router освобождается.
+`lib/app/app_container.dart` собирает repository implementations и infrastructure providers через Riverpod overrides. `lib/app/app_router.dart` и `app_routes.dart` владеют typed routes. Feature widgets сообщают о пользовательском действии через callback. App выбирает маршрут.
 
-Зависимости и lifecycle: [Архитектура](01_architecture_principles.md). Команды запуска: [Разработка и тестирование](05_development_and_testing.md).
+Auth controller восстанавливает и проверяет защищённую сессию на старте. App открывает защищённый router только после успешной проверки. Выход или истечение сессии освобождает protected router вместе с плеером. Поэтому Auth владеет операциями сессии, а App отвечает за границу защищённой навигации.
 
-Watch history разделён на domain/repositories, data/repositories и watch_history_providers.dart.
-Log viewer использует log_viewer_providers.dart; app связывает FileLogRepository. Общий DTO API находится в anistar/src/contract.
+Платформенный профиль определяется до компоновки. TV получает landscape и скрытые системные панели. Телефон использует edge-to-edge системные панели. Ориентация телефона не переключает профиль. Поведение описано в [TV](specs/06_tv_interaction.md) и [mobile](specs/10_mobile_interaction.md) контрактах.
+
+---
+
+## 5. Где размещать изменение
+
+| Если изменение… | Размещайте в… |
+| :--- | :--- |
+| Добавляет нейтральный тип результата или ошибки | `infrastructure/core` |
+| Меняет HTTP transport или общую обработку Dio | `infrastructure/networking` |
+| Меняет правила HTML, cookies, mirror или DTO AniStar | `infrastructure/anistar` |
+| Меняет domain operation одной области | `lib/packages/features/<feature>/domain` |
+| Преобразует данные сайта в модели feature | `lib/packages/features/<feature>/data` |
+| Меняет экран или локальное UI-состояние | `lib/packages/features/<feature>/presentation` |
+| Нужен общий визуальный token/widget | `lib/packages/ui_kit` |
+| Меняет bindings, bootstrap или маршруты приложения | `lib/app` или `lib/runner` |
+
+При повторении UI в нескольких областях сначала проверьте UI Kit. Не переносите сетевую логику в виджет, общий DTO сайта в feature, а app-specific binding в infrastructure.
+
+---
+
+## 6. Тесты и спецификации
+
+Тесты находятся в корневом `test/`. Соответствующая область отражается в пути `test/app`, `test/infrastructure` или `test/packages/features`. Integration scenarios находятся в `integration_test/`. Dart fakes и mock adapters расположены в `test/mocks/`. Android fixture tooling и assets находятся в `tool/e2e/`.
+
+Пользовательские инварианты и критерии приёмки приведены в [specs](specs/README.md). Зафиксированные архитектурные решения находятся в [ADR](adr/README.md). Руководства объясняют границы и рабочие правила. Они не дублируют подробные сценарии.

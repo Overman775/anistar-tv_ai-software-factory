@@ -1,31 +1,32 @@
 # ⚙️ Core Package | AniStar TV
 
-Нейтральное Pure Dart ядро без package-зависимостей.
+`core` содержит нейтральные типы Pure Dart для репозиториев и их потребителей. Используйте его для передачи результата или ошибки без зависимости от Flutter и инфраструктуры.
 
-## 1. Публичные библиотеки
+## Использование
 
-| Импорт | API |
-| --- | --- |
-| `package:core/data.dart` | Result, Failure, UnknownFailure |
+Подключайте публичный API через `package:core/data.dart`:
 
-Внешний код не импортирует src/**. Зависимости разрешаются корневой pub workspace.
+```dart
+import 'package:core/data.dart';
+```
 
----
+`Result<S, F extends Failure>` представляет успех или ошибку репозитория. Используйте `when` для обработки обеих ветвей, а `successOrNull` и `failureOrNull` — для необязательного чтения.
 
-## 2. Ответственность и lifecycle
+## Границы и условия использования
 
-`Result<S, F extends Failure>` представляет успех или ошибку репозитория. Используйте `when` для обработки двух ветвей; `successOrNull` / `failureOrNull` для необязательного чтения.
+Core не имеет package-зависимостей. Публичный barrel экспортирует `Result`, `Failure` и `UnknownFailure`. Не импортируйте `src/**`. Пакет разрешается корневым pub workspace.
 
-Сетевые ошибки принадлежат networking, ошибки сайта anistar, ошибки native playback feature player. В Core нет Flutter, Dio, storage, логирования и типов AniStar.
+Сетевые ошибки принадлежат `networking`, ошибки сайта — `anistar`, а ошибки native playback — feature `player`. В Core нет Flutter, Dio, storage, логирования и типов AniStar.
 
----
+## Как проверить
 
-## 3. Проверки
-
-Тесты запускаются из корня:
+Из корня workspace запустите тесты пакета:
 
 ```bash
 fvm flutter test test/infrastructure/core
 ```
 
-Границы пакетов: [Структура проекта](../../docs/02_project_structure.md).
+## Навигация
+
+- [Структура проекта](../../docs/02_project_structure.md) — границы workspace, пакетов, features и runner.
+- [Архитектура](../../docs/01_architecture_principles.md) — слои, зависимости и DI.

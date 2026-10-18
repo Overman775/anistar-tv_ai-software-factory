@@ -1,96 +1,113 @@
-# 📏 Code Style & TV UI | AniStar TV
+# 📏 Code Style и TV UI | AniStar TV
 
-Настройки Dart и DCM находятся в `analysis_options.yaml`; версия DCM задана в `dcm_global.yaml`. Базовый стиль: Effective Dart, строки до 120 символов и formatter SDK.
+Стиль задают `analysis_options.yaml`, package-level analyzer configuration и закреплённая версия DCM в `dcm_global.yaml`. Форматируйте код SDK formatter и выполняйте строгие проверки из [Melos tooling](melos_tooling.md).
 
-## 1. Строгость и линтер
+## 1. Обязательные правила
 
-Включены `strict-casts`, `strict-inference`, `strict-raw-types`. Каждый workspace-пакет включает корневую конфигурацию Dart/DCM. Analyzer и DCM в полной проверке не допускают замечаний.
-
-- Используйте **Object? и проверки типов** вместо dynamic в прикладном коде.
-- Используйте **Logger**, а не print.
-- Проверяйте nullable-значения вместо необоснованного `!`.
-- Локальный ignore должен объяснять ограничение; ошибки из `cannot-ignore` подавлять нельзя.
-- Generated-файлы не исправляются вручную.
+Включены `strict-casts`, `strict-inference` и `strict-raw-types`. Ошибки Analyzer и замечания DCM должны быть исправлены, а не подавлены без причины.
 
 ---
 
-## 2. Именование
-
-| Элемент | Стиль | Пример |
-| --- | --- | --- |
-| Класс, enum, extension | UpperCamelCase | `PlaybackSession` |
-| Файл, папка | snake_case | `playback_repository.dart` |
-| Метод, переменная, константа | lowerCamelCase | `createSession`, `maxRetries` |
-| Boolean | is / has / can / should | `hasNext` |
-| Callback | on + событие | `onEpisodeTap` |
-
-Приватные поля начинаются с `_`. Неиспользуемый аргумент обозначается `_`.
+| Правило | Причина |
+| :--- | :--- |
+| При неизвестном типе используйте `Object?` и явные проверки | Сохраняет проверку типов и понятную обработку входных данных |
+| Логируйте через `Logger`, не через `print` | Уровни и вывод централизованы; чувствительные данные можно исключить |
+| Репозитории наследуют `BaseRepository` и возвращают `Result`/`Failure` | Ошибки получают единый контракт на границе Data и UI |
+| Не импортируйте чужой private `src/` | Публичные API сохраняют границы пакета |
+| Не редактируйте generated files вручную | Следующая генерация перезапишет такое изменение |
+| Не добавляйте ignore без объяснения и необходимости | Исключение скрывает сигнал анализатора для следующих изменений |
 
 ---
 
-## 3. Организация кода
+## 2. Имена и структура
 
-- Модели и state сохраняют immutable-контракт; изменение создаёт новый state.
-- Зависимости репозитория, BLoC и сервиса видны в конструкторе.
-- Повторяемые размеры, длительности и значения логики вынесены в const.
-- Самостоятельный UI-блок оформлен отдельным Widget, а не `_buildHeader()`.
-- Порядок членов классов и lifecycle-методов виджетов проверяет DCM.
-- Future без ожидания отмечен через `unawaited()`; его ошибки имеют явный обработчик или выходят в общий error handler.
+| Элемент | Формат | Пример |
+| :--- | :--- | :--- |
+| Типы, enum, extension | `UpperCamelCase` | `PlaybackSession` |
+| Файлы и каталоги | `snake_case` | `playback_repository.dart` |
+| Переменные, методы, константы | `lowerCamelCase` | `createSession`, `maxRetries` |
+| Boolean | вопрос с `is`, `has`, `can`, `should` | `hasNext`, `isLoading` |
+| Callback | `on` + действие | `onEpisodeTap` |
+| Private member | `_` префикс | `_controller` |
 
-### ❌ Логика в build
+Называйте тип по пользовательской области и операции, которую он выполняет. Не создавайте общий utility или generic abstraction, пока вторая реальная потребность не показала общий контракт.
+
+---
+
+## 3. Слои и обработка ошибок
+
+Domain определяет модели и repository interfaces. Data реализует интерфейс, преобразует данные AniStar и вызывает `BaseRepository.makeApiCall`. Presentation переводит `Result` в видимое состояние.
+
+```dart
+final result = await repository.getPage(1);
+result.when(
+  success: (page) => emit(CatalogReady(items: page.items, hasMore: page.hasNext)),
+  failure: (failure) => emit(CatalogFailure(message: failure.message, items: const [], hasMore: false)),
+);
+```
+
+Не дублируйте transport mapping локальным `try/catch` в каждом repository. Перехват допустим, когда feature должна выполнить явное восстановление или преобразовать специальный контракт. Ожидаемый отказ сайта отображается в соответствующую `Failure` на границе repository.
+
+**Не скрывайте сбой значением по умолчанию:** пустой каталог не должен маскировать нераспознанную HTML-разметку, а неудачная запись избранного не должна отображаться как успех. Fallback допустим только если он определён пользовательским контрактом.
+
+> **Почему:** единый `Result` сохраняет причину отказа до UI, где можно показать безопасное сообщение и явное действие повтора.
+
+---
+
+## 4. Async и состояние виджета
+
+Не запускайте запросы и побочные эффекты из `build()`: Flutter может вызывать его повторно. Загрузку запускает событие BLoC, provider/notifier или lifecycle метода экрана согласно текущей модели feature.
 
 ```dart
 @override
 Widget build(BuildContext context) {
-  repository.getPage(1); // Повторный запрос при каждой перестройке.
+  repository.getPage(1); // Неверно: запрос повторится при перестроении.
   return const CatalogGrid();
 }
 ```
 
-### ✅ Загрузка через состояние
+После `await` проверьте `mounted` или `context.mounted`, прежде чем обновлять widget state или использовать его `BuildContext`. Fire-and-forget Future оформляйте `unawaited(...)` только при явной обработке ошибок или известном общем error handler. Закрывайте stream subscriptions, timers, focus nodes и native controllers в lifecycle владельца.
 
-Запрос запускается событием BLoC или lifecycle экрана; build только отображает состояние.
-
-После await проверяйте `mounted`/`context.mounted`, если дальше меняется widget state или используется context. Поздний запрос не должен обновить уже закрытый экран.
+Для визуально самостоятельного блока предпочитайте отдельный `Widget`, когда это упрощает rebuild и тестирование. Не извлекайте каждый короткий участок в метод только ради разбиения `build()`.
 
 ---
 
-## 4. Ошибки и логирование
+## 5. Логи и чувствительные данные
 
-BaseRepository выполняет общий маппинг исключений. Не дублируйте его try/catch в каждом репозитории. Site-specific отказ распознаётся в anistar; native playback обрабатывается плеером.
-
-Используйте typed-методы Logger:
+Используйте типизированные методы `Logger`, чтобы указать источник события:
 
 ```dart
 logger.infoFor<CatalogBloc>('Catalog loading started');
 ```
 
-Логируйте запуск, команду, результат async-операции и retry. HTML, значения secure storage, cookies, токены и подписанные CDN URL не добавляются в сообщения. Native errorDescription не выводится пользователю.
+Не записывайте credentials, Cookie/Set-Cookie, пароли, raw HTML, POST body, signed CDN URI или `native errorDescription`. Для сетевой диагностики оставляйте только разрешённые публичные paths и безопасные метаданные. Правила подробнее изложены в [руководстве сети и playback](04_network_and_playback.md).
 
 ---
 
-## 5. TV UI
+## 6. TV и mobile интерфейсы
 
-Основной UX-ориентир — YouTube для телевизоров по [ADR-0008](adr/0008-youtube-tv-interaction-reference.md). При изменении layout одновременно пересмотрите начальный фокус, стрелки, OK/удержание, Back и возврат после закрытия панели. Контракты: [TV-взаимодействие](specs/06_tv_interaction.md) и [анимации](specs/08_motion.md).
+TV-профиль должен полностью управляться пультом. До реализации layout или controls прочитайте [ADR-0008](adr/0008-youtube-tv-interaction-reference.md) и [TV interaction contract](specs/06_tv_interaction.md). Для phone действует отдельный [mobile interaction contract](specs/10_mobile_interaction.md).
 
-### Focus и пульт
+При изменении экрана проверьте:
 
-1. После открытия экрана есть понятный начальный focus target.
-2. Focus виден с расстояния: контраст, рамка и масштаб.
-3. Стрелки перемещают focus в ожидаемом направлении; элемент остаётся видимым при прокрутке.
-4. OK выполняет одно действие; родитель и дочерняя кнопка не обрабатывают его дважды.
+1. начальную и видимую цель фокуса;
+2. ожидаемые переходы стрелок, OK, удержания и Back;
+3. возврат фокуса после панели, dialog, ошибки или загрузки;
+4. viewport TV **960×540** и **1280×720** logical pixels, а для mobile используйте compact и wide портретные размеры из существующих тестов;
+5. системное уменьшение анимаций и асинхронную загрузку содержимого.
 
-Для карточек используйте **TvFocusable**. Material-кнопки подходят для локальных действий с заметным focus-state.
+Цвета берите из `Theme.of(context).colorScheme` и общих значений `AppPalette`. Typography берите из `Theme.of(context).textTheme` и `TvTypography`. Spacing, radii и motion берите из `AppSpacing`, `AppRadii` и `AppMotion` в [UI Kit](../lib/packages/ui_kit/README.md). Экранный компонент и раскладка сетки принадлежат feature, пока у них нет повторного общего контракта.
 
-### Layout и тема
+---
 
-- Проверяйте viewport **960×540** и **1280×720** logical pixels.
-- Учитывайте safe area, overscan и читаемость текста с расстояния.
-- Длинные подписи ограничивайте maxLines и ellipsis.
-- Число колонок определяется доступной шириной.
-- Цвета, typography, spacing, radii и motion берите из [UI Kit](../lib/packages/ui_kit/README.md).
-- Удалённые изображения: AppNetworkImage; загрузка: TvSkeleton / TvSkeletonBox.
+## 7. UI Kit и ресурсы
 
-Форма сетки, карточек, skeleton layout и player controls принадлежит feature. Общий компонент переносится в UI Kit после повторного использования.
+Корневые темы предоставляет `AppTheme`. `AppPalette`, `AppSpacing`, `AppRadii`, `AppMotion`, `TvTypography` и `AppFocusStyle` владеют общими токенами. `AppNetworkImage` загружает изображения. `TvSkeleton` предоставляет состояние ожидания. Feature не добавляет в UI Kit правила AniStar или запросы.
 
-Проверки перед завершением изменения: [Разработка и тестирование](05_development_and_testing.md).
+Assets берите через сгенерированные FlutterGen exports из `ui_kit`. Не редактируйте generated-файлы вручную. После изменения исходных ресурсов запустите согласованную команду генерации из [Melos tooling](melos_tooling.md) и проверьте diff.
+
+---
+
+## 8. Изменение правил
+
+Для локального изменения достаточно следовать конфигурации Analyzer/DCM. Меняйте общий lint, архитектурную границу, UI контракт или публичный API только с обновлением соответствующего правила/ADR/спецификации. Не копируйте в каждую feature собственную версию общего правила.
