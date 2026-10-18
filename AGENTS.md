@@ -42,6 +42,7 @@ factory-code-review / factory-code-simplify / factory-github → focused workflo
 - **Arch/DI:** `docs/01_architecture_principles.md`
 - **Decisions:** `docs/adr/README.md`
 - **Specifications:** `docs/specs/README.md`
+- **Doc templates:** `docs/templates/README.md` — guides, ADR, specifications, intent, README; read the matching template before creating a document.
 - **Structure:** `docs/02_project_structure.md`
 - **Rules:** `docs/03_codestyle_and_rules.md`
 - **Network/playback:** `docs/04_network_and_playback.md`

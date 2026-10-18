@@ -73,7 +73,10 @@ app.*.map.json
 # External skill bundles are installed locally; Factory skills remain shared.
 /.agents/skills/graphify
 /.agents/skills/impeccable
+/.agents/skills/asd-ste100
 /.codex/skills/graphify
 /.codex/skills/impeccable
+/.codex/skills/asd-ste100
 /.claude/skills/graphify
 /.claude/skills/impeccable
+/.claude/skills/asd-ste100
