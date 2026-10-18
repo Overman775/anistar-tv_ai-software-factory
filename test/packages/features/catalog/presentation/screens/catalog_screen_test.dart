@@ -392,7 +392,7 @@ void main() {
     await settle();
     await key(LogicalKeyboardKey.arrowUp);
     await settle();
-    final card = find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(Material));
+    final card = find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(AnimatedContainer));
     const bodyTop = 32.0;
     expect(tester.getTopLeft(card).dy, greaterThanOrEqualTo(bodyTop));
     expect(tester.getBottomRight(card).dy, lessThanOrEqualTo(compactTvSize.height));

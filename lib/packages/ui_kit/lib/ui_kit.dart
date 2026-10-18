@@ -10,6 +10,7 @@ export './src/widgets/app_network_image.dart';
 export './src/widgets/app_responsive_root.dart';
 export './src/widgets/tv_backdrop.dart';
 export './src/widgets/tv_choice_tile.dart';
+export './src/widgets/tv_focus_tile.dart';
 export './src/widgets/tv_focusable.dart';
 export './src/widgets/tv_header_surface.dart';
 export './src/widgets/tv_poster_hero.dart';

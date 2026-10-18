@@ -25,7 +25,7 @@ class EpisodeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final preview = episode.previewUri;
 
-    return TvFocusable(
+    return TvFocusTile(
       autofocus: autofocus,
       focusNode: focusNode,
       onFocusChanged: onFocusChanged,
@@ -36,118 +36,96 @@ class EpisodeCard extends StatelessWidget {
         final primary = theme.colorScheme.primary;
         final textTheme = theme.textTheme;
 
-        return AnimatedScale(
-          duration: AppMotion.durationOf(context, AppMotion.fast),
-          scale: focused ? 1.045 : 1,
-          curve: AppMotion.enterCurve,
-          child: AnimatedContainer(
-            duration: AppMotion.durationOf(context, AppMotion.fast),
-            decoration: BoxDecoration(
-              border: Border.fromBorderSide(
-                BorderSide(color: focused ? primary : AppPalette.outline, width: focused ? 4 : 1),
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            if (preview != null)
+              AppNetworkImage(imageUrl: preview.toString(), semanticLabel: episode.title)
+            else
+              const ColoredBox(
+                color: AppPalette.surfaceElevated,
+                child: Center(child: Icon(Icons.movie_outlined, size: 44, color: AppPalette.textSecondary)),
               ),
-              borderRadius: AppRadii.large,
-              boxShadow: [
-                BoxShadow(
-                  blurRadius: focused ? 28 : 10,
-                  color: focused ? primary.withValues(alpha: 0.4) : const Color(0x55000000),
-                  offset: const Offset(0, 10),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0x22000000), Color(0xEE080B14)],
                 ),
-              ],
+              ),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (preview != null)
-                  AppNetworkImage(imageUrl: preview.toString(), semanticLabel: episode.title)
-                else
-                  const ColoredBox(
-                    color: AppPalette.surfaceElevated,
-                    child: Center(child: Icon(Icons.movie_outlined, size: 44, color: AppPalette.textSecondary)),
-                  ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x22000000), Color(0xEE080B14)],
+            if (isWatched || episode.isWatched)
+              const Positioned(
+                top: AppSpacing.sm,
+                right: AppSpacing.sm,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: Color(0xD9080B14), shape: BoxShape.circle),
+                  child: Padding(
+                    padding: EdgeInsets.all(AppSpacing.xs),
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      color: AppPalette.textPrimary,
+                      semanticLabel: 'Просмотрена',
                     ),
                   ),
                 ),
-                if (isWatched || episode.isWatched)
-                  const Positioned(
-                    top: AppSpacing.sm,
-                    right: AppSpacing.sm,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(color: Color(0xD9080B14), shape: BoxShape.circle),
-                      child: Padding(
-                        padding: EdgeInsets.all(AppSpacing.xs),
-                        child: Icon(
-                          Icons.check_circle_rounded,
-                          color: AppPalette.textPrimary,
-                          semanticLabel: 'Просмотрена',
-                        ),
-                      ),
+              ),
+            Positioned(
+              top: AppSpacing.sm,
+              left: AppSpacing.sm,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xD9080B14),
+                  borderRadius: AppRadii.pill,
+                  border: Border.fromBorderSide(
+                    BorderSide(color: focused ? primary : AppPalette.outline, width: focused ? 2 : 1),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                  child: Text(
+                    'СЕРИЯ ${episode.number}',
+                    style: textTheme.labelMedium?.copyWith(
+                      color: focused ? Colors.white : AppPalette.textSecondary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                Positioned(
-                  top: AppSpacing.sm,
-                  left: AppSpacing.sm,
-                  child: DecoratedBox(
+                ),
+              ),
+            ),
+            Positioned(
+              left: AppSpacing.md,
+              right: AppSpacing.md,
+              bottom: AppSpacing.md,
+              child: Row(
+                children: [
+                  DecoratedBox(
                     decoration: BoxDecoration(
-                      color: const Color(0xD9080B14),
-                      borderRadius: AppRadii.pill,
-                      border: Border.fromBorderSide(
-                        BorderSide(color: focused ? primary : AppPalette.outline, width: focused ? 2 : 1),
-                      ),
+                      color: focused ? primary : AppPalette.surfaceElevated.withValues(alpha: 0.88),
+                      shape: BoxShape.circle,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-                      child: Text(
-                        'СЕРИЯ ${episode.number}',
-                        style: textTheme.labelMedium?.copyWith(
-                          color: focused ? Colors.white : AppPalette.textSecondary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(AppSpacing.xs),
+                      child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      episode.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: textTheme.titleMedium?.copyWith(
+                        color: AppPalette.textPrimary,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: AppSpacing.md,
-                  right: AppSpacing.md,
-                  bottom: AppSpacing.md,
-                  child: Row(
-                    children: [
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: focused ? primary : AppPalette.surfaceElevated.withValues(alpha: 0.88),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.all(AppSpacing.xs),
-                          child: Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          episode.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.titleMedium?.copyWith(
-                            color: AppPalette.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         );
       },
     );

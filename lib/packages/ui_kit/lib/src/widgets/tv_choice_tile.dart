@@ -3,9 +3,8 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../theme/app_focus_style.dart';
 import '../theme/app_palette.dart';
-import 'tv_focusable.dart';
+import 'tv_focus_tile.dart';
 
 class TvChoiceTile extends StatelessWidget {
   const TvChoiceTile({
@@ -22,7 +21,7 @@ class TvChoiceTile extends StatelessWidget {
     final style = Theme.of(context).textTheme.bodyMedium;
     final textHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.4);
 
-    return math.max(56, textHeight + 24) + 8;
+    return math.max(56, textHeight + 28) + 8;
   }
 
   final FocusNode? focusNode;
@@ -44,17 +43,17 @@ class TvChoiceTile extends StatelessWidget {
     selected: selected,
     child: Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: TvFocusable(
+      child: TvFocusTile(
+        variant: TvFocusTileVariant.row,
+        selected: selected,
         focusNode: focusNode,
         autofocus: autofocus,
         semanticLabel: label,
         onPressed: onPressed,
         onFocusChanged: (focused) => _reveal(context, focused),
-        builder: (context, focused) => AnimatedContainer(
-          duration: AppMotion.durationOf(context, AppMotion.fast),
+        builder: (context, focused) => Container(
           constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: AppFocusStyle.decoration(focused: focused, selected: selected),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           child: Row(
             children: [
               Expanded(

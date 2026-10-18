@@ -18,36 +18,48 @@ class MobileAnimeCard extends StatelessWidget {
   final VoidCallback onActions;
   final bool? isFavorite;
 
+  void _activate(BuildContext context, VoidCallback action) {
+    Focus.of(context).requestFocus();
+    action();
+  }
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Expanded(
-        child: Material(
-          color: AppPalette.surfaceElevated,
-          clipBehavior: Clip.antiAlias,
-          borderRadius: AppRadii.large,
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onActions,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                TvPosterHero(
-                  tag: 'anime-poster-${anime.id}',
-                  imageUrl: anime.posterUri?.hasScheme == true ? anime.posterUri?.toString() : null,
-                  semanticLabel: anime.title,
-                ),
-                if (isFavorite ?? anime.isFavorite ?? false)
-                  const Positioned(
-                    left: 8,
-                    top: 8,
-                    child: Tooltip(
-                      message: 'В избранном',
-                      child: Icon(Icons.star_rounded, color: AppPalette.secondary),
-                    ),
+        child: TvFocusTile(
+          onPressed: onTap,
+          onLongPressed: onActions,
+          semanticLabel: anime.title,
+          builder: (context, focused) => Material(
+            color: AppPalette.surfaceElevated,
+            clipBehavior: Clip.antiAlias,
+            borderRadius: AppRadii.large,
+            child: InkWell(
+              canRequestFocus: false,
+              excludeFromSemantics: true,
+              onTap: () => _activate(context, onTap),
+              onLongPress: () => _activate(context, onActions),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  TvPosterHero(
+                    tag: 'anime-poster-${anime.id}',
+                    imageUrl: anime.posterUri?.hasScheme == true ? anime.posterUri?.toString() : null,
+                    semanticLabel: anime.title,
                   ),
-              ],
+                  if (isFavorite ?? anime.isFavorite ?? false)
+                    const Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Tooltip(
+                        message: 'В избранном',
+                        child: Icon(Icons.star_rounded, color: AppPalette.secondary),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
