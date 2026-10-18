@@ -6,6 +6,7 @@ export './src/widgets/anistar_logo.dart';
 export './src/widgets/app_action_sheet.dart';
 export './src/widgets/app_device_profile.dart';
 export './src/widgets/app_layout_scope.dart';
+export './src/widgets/app_metadata_badge.dart';
 export './src/widgets/app_network_image.dart';
 export './src/widgets/app_responsive_root.dart';
 export './src/widgets/tv_backdrop.dart';

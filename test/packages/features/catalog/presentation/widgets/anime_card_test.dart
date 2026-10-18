@@ -124,7 +124,7 @@ void main() {
 
     expect(find.text('Красивое аниме'), findsOneWidget);
     expect(find.text('2026'), findsOneWidget);
-    expect(find.text('8.4/10'), findsOneWidget);
+    expect(find.text('8,4'), findsOneWidget);
     expect(find.byIcon(Icons.grade_rounded), findsOneWidget);
     expect(find.byIcon(Icons.play_arrow_rounded), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
