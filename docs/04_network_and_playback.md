@@ -118,7 +118,7 @@ AnistarSession использует cookie_jar для domain/path policy и до
 
 Гостевая форма вместо авторизованной HTML-страницы завершает сессию и удаляет protected router вместе с плеером. HTTP 403 сам по себе не завершает сессию: он может означать блокировку зеркала. Player HTML без формы/ссылки выхода не используется для определения статуса аккаунта.
 
-SecureStorage использует Android backend flutter_secure_storage по аналогии с RC Mobile App. Ошибки чтения/записи не скрываются; каталог открывается только после успешного сохранения. Android backup отключён, чтобы cookies не восстанавливались отдельно от ключа шифрования. Пароль, cookies, HTML и печатные клавиши не попадают в логи. Cookies AniStar не передаются native HLS; CDN использует подписанный URL и Referer.
+SecureStorage использует Android backend flutter_secure_storage. Ошибки чтения/записи не скрываются; каталог открывается только после успешного сохранения. Android backup отключён, чтобы cookies не восстанавливались отдельно от ключа шифрования. Пароль, cookies, HTML и печатные клавиши не попадают в логи. Cookies AniStar не передаются native HLS; CDN использует подписанный URL и Referer.
 
 
 ---

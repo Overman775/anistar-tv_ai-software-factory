@@ -25,4 +25,4 @@ Domain отделён от transport и сайта. Правила AniStar ме�
 
 Melos и дополнительные API Core не требуются при текущем размере проекта. Инфраструктурные тесты находятся в корневом test/infrastructure и запускаются одним flutter test.
 
-Основание: подход Core/infrastructure из rc-mobile-app. Структура: [руководство](../02_project_structure.md). Проверки: [результаты](../06_verification.md).
+Структура: [руководство](../02_project_structure.md). Проверки: [результаты](../06_verification.md).

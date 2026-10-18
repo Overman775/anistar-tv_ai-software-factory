@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "dart-fvm": {
+      "command": "fvm",
+      "args": ["dart", "mcp-server"]
+    },
+    "dcm": {
+      "command": "dcm",
+      "args": ["start-mcp-server", "--client=claude-code"]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}

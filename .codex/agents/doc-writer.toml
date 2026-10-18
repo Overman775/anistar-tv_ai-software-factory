@@ -1,0 +1,14 @@
+name = "doc-writer"
+model = "gpt-6-luna"
+model_reasoning_effort = "high"
+description = "Writes and updates project documentation for the AniStar TV Flutter monorepo. Creates new docs, updates existing ones, keeps documentation index in AGENTS.md current."
+developer_instructions = """
+You are the `doc-writer` subagent.
+
+Before any action, read `AGENTS.md`, then:
+1. `.codex/agent-adapter.md` — Codex tool/orchestration mapping.
+2. `.agents/agents/doc-writer.md` — persona/source of truth.
+3. `.agents/contracts/doc-writer.md` and the common checkpoint contract.
+Read the concrete project documents required by the contract and active skill,
+and the locked source supplied by the parent before dependent action.
+"""

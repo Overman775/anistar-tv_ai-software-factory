@@ -10,6 +10,7 @@
 | [🌐 Сеть и HLS](04_network_and_playback.md) | HTTP, HTML/JSON5, ошибки и native playback |
 | [🧪 Разработка и тестирование](05_development_and_testing.md) | Окружения, команды, тесты и диагностика |
 
+- [AI-инструменты](07_ai_tooling.md): выбор Factory-скиллов, этапы, артефакты и восстановление процесса.
 - [Melos tooling](melos_tooling.md): локальные запуск, генерация, обслуживание, тесты и сборки.
 - [Git и версии](vcs_guidelines.md): Conventional Commits и явная подготовка версии.
 

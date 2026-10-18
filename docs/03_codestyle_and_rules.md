@@ -4,7 +4,7 @@
 
 ## 1. Строгость и линтер
 
-Включены `strict-casts`, `strict-inference`, `strict-raw-types`. Dart/DCM правила перенесены из RC Mobile App; каждый workspace-пакет включает корневую конфигурацию. Analyzer и DCM в полной проверке не допускают замечаний.
+Включены `strict-casts`, `strict-inference`, `strict-raw-types`. Каждый workspace-пакет включает корневую конфигурацию Dart/DCM. Analyzer и DCM в полной проверке не допускают замечаний.
 
 - Используйте **Object? и проверки типов** вместо dynamic в прикладном коде.
 - Используйте **Logger**, а не print.

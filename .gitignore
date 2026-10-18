@@ -46,14 +46,9 @@ app.*.map.json
 # FVM Version Cache
 .fvm/
 
-# Graphify is local developer tooling and must not be committed.
-/.codex/
+# Generated Graphify state is local; agent instructions and configs are shared.
 /.graphifyignore
-/AGENTS.md
 /graphify-out/
-
-# Locally installed third-party design tooling.
-/.agents/skills/impeccable/
 
 # Machine-specific production endpoint for --dart-define-from-file.
 /env/prod.json
@@ -67,3 +62,18 @@ app.*.map.json
 
 # Local live-test credentials, never committed.
 /env/*.local.json
+
+# Factory runtime artifacts; shared roles, skills and configuration remain tracked.
+/.ai-pipeline/state/
+/.ai-pipeline/staging/
+
+# Personal Claude project overrides; shared settings remain tracked.
+/.claude/settings.local.json
+
+# External skill bundles are installed locally; Factory skills remain shared.
+/.agents/skills/graphify
+/.agents/skills/impeccable
+/.codex/skills/graphify
+/.codex/skills/impeccable
+/.claude/skills/graphify
+/.claude/skills/impeccable

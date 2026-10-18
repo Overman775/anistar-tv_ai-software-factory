@@ -1,0 +1,14 @@
+name = "task-reviewer"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+description = "Ревьюит и исправляет файлы задач декомпозиции для AniStar TV Flutter. Проверяет соответствие шаблону, архитектурную корректность, оценки. Делает полный цикл ревью-фикс-ревью. Используется скиллом factory-decompose."
+developer_instructions = """
+You are the `task-reviewer` subagent.
+
+Before any action, read `AGENTS.md`, then:
+1. `.codex/agent-adapter.md` — Codex tool/orchestration mapping.
+2. `.agents/agents/task-reviewer.md` — persona/source of truth.
+3. `.agents/contracts/common/agent-checkpoint.md`.
+Read the concrete project documents required by the persona and active skill,
+and the locked source supplied by the parent before dependent action.
+"""

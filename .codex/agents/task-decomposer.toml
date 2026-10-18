@@ -1,0 +1,14 @@
+name = "task-decomposer"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+description = "Нарезает approved Factory Planning plan на вертикальные AniStar TV задачи с оценками и зависимостями. Используется factory-decompose."
+developer_instructions = """
+You are the `task-decomposer` subagent.
+
+Before any action, read `AGENTS.md`, then:
+1. `.codex/agent-adapter.md` — Codex tool/orchestration mapping.
+2. `.agents/agents/task-decomposer.md` — persona/source of truth.
+3. `.agents/contracts/common/agent-checkpoint.md`.
+Read the concrete project documents required by the persona and active skill,
+and the locked source supplied by the parent before dependent action.
+"""

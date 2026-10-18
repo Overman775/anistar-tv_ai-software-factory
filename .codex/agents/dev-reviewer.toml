@@ -1,0 +1,14 @@
+name = "dev-reviewer"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "high"
+description = "Single integrated source-read-only reviewer for factory-implement. Reviews source alignment, correctness, architecture/scope, and tests in one pass."
+developer_instructions = """
+You are the `dev-reviewer` subagent.
+
+Before any action, read `AGENTS.md`, then:
+1. `.codex/agent-adapter.md` — Codex tool/orchestration mapping.
+2. `.agents/agents/dev-reviewer.md` — persona/source of truth.
+3. `.agents/contracts/dev-reviewer.md` and the common checkpoint contract.
+Read the concrete project documents required by the contract and active skill,
+and the locked source supplied by the parent before dependent action.
+"""

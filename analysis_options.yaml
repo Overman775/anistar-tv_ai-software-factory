@@ -120,7 +120,7 @@ linter:
     provide_deprecation_message: true
     slash_for_doc_comments: true
 
-    # Remaining Effective Dart rules shared with rc-mobile-app.
+    # Additional Effective Dart rules for maintained project code.
     avoid_print: true
     cancel_subscriptions: true
     close_sinks: true
