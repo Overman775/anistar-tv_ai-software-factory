@@ -74,6 +74,7 @@ void main() {
 
     for (final scale in [1.0, 1.3, 2.0]) {
       testWidgets('long title and both badges fit mobile=$mobile text=$scale', (tester) async {
+        final semantics = tester.ensureSemantics();
         const anime = AnimeSummary(
           id: 1,
           slug: 'anime',
@@ -94,11 +95,17 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.text(anime.title), findsOneWidget);
+        final title = tester.widget<Text>(find.text(anime.title));
+        expect(title.style?.fontSize, 15);
+        expect(tester.widget<Text>(find.text('2026')).style?.fontSize, mobile ? 14 : 15);
+        expect(MediaQuery.textScalerOf(tester.element(find.text(anime.title))).scale(15), closeTo(scale * 15, 0.001));
+        expect(find.bySemanticsLabel(RegExp(anime.title)), findsWidgets);
         expect(find.text('10,0'), findsOneWidget);
         final favoriteRect = tester.getRect(find.byIcon(Icons.star_rounded));
         final ratingRect = tester.getRect(find.byType(AnimeRatingBadge));
         expect(favoriteRect.overlaps(ratingRect), isFalse);
         expect(tester.getRect(find.byKey(const ValueKey('card-bounds'))).contains(ratingRect.center), isTrue);
+        semantics.dispose();
       });
     }
   }

@@ -87,7 +87,7 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (wide) ...[
-                Semantics(header: true, child: Text(details.title, style: theme.headlineSmall)),
+                Semantics(header: true, child: Text(details.title, style: AppContentTypography.detailTitleOf(context))),
                 const SizedBox(height: 12),
               ],
               if (details.isOngoing) ...[
@@ -100,7 +100,7 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
         ),
         if (!wide) ...[
           const SizedBox(height: 20),
-          Semantics(header: true, child: Text(details.title, style: theme.headlineSmall)),
+          Semantics(header: true, child: Text(details.title, style: AppContentTypography.detailTitleOf(context))),
         ],
         const SizedBox(height: 16),
         if (!pinWatch && watchAction != null) ...[watchAction, const SizedBox(height: 8)],
@@ -120,13 +120,13 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
           Text(details.genres.join(' • '), style: theme.bodyMedium?.copyWith(color: AppPalette.textSecondary)),
         ],
         const SizedBox(height: 24),
-        Semantics(header: true, child: Text('О сериале', style: theme.titleLarge)),
+        Semantics(header: true, child: Text('О сериале', style: AppContentTypography.sectionTitleOf(context))),
         const SizedBox(height: 8),
         Text(
           hasDescription ? description : 'Описание пока недоступно.',
           maxLines: _expanded ? null : 4,
           overflow: _expanded ? TextOverflow.clip : TextOverflow.ellipsis,
-          style: theme.bodyMedium,
+          style: AppContentTypography.descriptionOf(context),
         ),
         if (hasDescription)
           Align(
@@ -137,7 +137,10 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
             ),
           ),
         const SizedBox(height: 24),
-        Semantics(header: true, child: Text('Серии · ${widget.episodes.length}', style: theme.titleLarge)),
+        Semantics(
+          header: true,
+          child: Text('Серии · ${widget.episodes.length}', style: AppContentTypography.sectionTitleOf(context)),
+        ),
         const SizedBox(height: 12),
         if (widget.episodes.isEmpty) ...[
           const Text('Серии не найдены. Для этого аниме пока нет доступных выпусков.'),

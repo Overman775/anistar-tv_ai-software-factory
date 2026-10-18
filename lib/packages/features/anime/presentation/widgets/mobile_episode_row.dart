@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_episode.dart';
 import 'episode_caption.dart';
@@ -14,11 +15,13 @@ class MobileEpisodeRow extends StatelessWidget {
     final caption = EpisodeCaption(number: episode.number, title: episode.title);
     final watched = isWatched || episode.isWatched;
     final description = caption.descriptiveTitle;
+    final captionStyle = AppContentTypography.episodeCaptionOf(context)
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
     Widget? subtitle;
     if (description != null) {
-      subtitle = Text('${caption.numberLabel}${watched ? ' · Просмотрена' : ''}');
+      subtitle = Text('${caption.numberLabel}${watched ? ' · Просмотрена' : ''}', style: captionStyle);
     } else if (watched) {
-      subtitle = const Text('Просмотрена');
+      subtitle = Text('Просмотрена', style: captionStyle);
     }
 
     return Semantics(
@@ -29,7 +32,7 @@ class MobileEpisodeRow extends StatelessWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(vertical: 8),
         leading: Icon(watched ? Icons.check_circle_outline_rounded : Icons.play_circle_outline_rounded),
-        title: Text(description ?? caption.numberLabel),
+        title: Text(description ?? caption.numberLabel, style: AppContentTypography.episodeTitleOf(context)),
         subtitle: subtitle,
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: onTap,

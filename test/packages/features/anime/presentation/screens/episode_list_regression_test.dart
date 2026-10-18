@@ -121,7 +121,8 @@ void main() {
         final title = find.descendant(of: first, matching: find.text(_longTitle));
         expect(tester.getRect(caption).bottom, lessThan(tester.getRect(title).top));
         final context = tester.element(first);
-        expect(tester.widget<Text>(title).style?.fontSize, Theme.of(context).textTheme.titleMedium?.fontSize);
+        expect(tester.widget<Text>(title).style?.fontSize, 18);
+        expect(tester.widget<Text>(caption).style?.fontSize, 14);
         expect(MediaQuery.textScalerOf(context).scale(20), closeTo(scale * 20, 0.001));
         final visited = <int>{};
         for (var row = 0; row < 3; row++) {
@@ -292,6 +293,12 @@ void main() {
           heights.add(rect.height);
           lefts.add(rect.left);
           expect(rect.width, greaterThan(size.width * 0.8));
+          if (number == 8) {
+            final title = find.descendant(of: row, matching: find.text(_longTitle));
+            expect(tester.widget<Text>(title).style?.fontSize, 15);
+            final caption = find.descendant(of: row, matching: find.text('Серия 8'));
+            expect(tester.widget<Text>(caption).style?.fontSize, 14);
+          }
         }
         expect(lefts.toSet(), hasLength(1));
         expect(heights.first, greaterThan(heights.last), reason: 'descriptive titles use additional row height');

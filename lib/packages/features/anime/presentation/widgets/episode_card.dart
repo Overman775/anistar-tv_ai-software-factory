@@ -38,7 +38,6 @@ class EpisodeCard extends StatelessWidget {
       builder: (context, focused) {
         final theme = Theme.of(context);
         final primary = theme.colorScheme.primary;
-        final textTheme = theme.textTheme;
 
         return ExcludeSemantics(
           child: Stack(
@@ -82,7 +81,7 @@ class EpisodeCard extends StatelessWidget {
                             caption.numberLabel.toUpperCase(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: textTheme.labelMedium?.copyWith(
+                            style: AppContentTypography.episodeCaptionOf(context)?.copyWith(
                               color: focused ? Colors.white : AppPalette.textSecondary,
                               fontWeight: FontWeight.w700,
                             ),
@@ -130,10 +129,8 @@ class EpisodeCard extends StatelessWidget {
                           description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: textTheme.titleMedium?.copyWith(
-                            color: AppPalette.textPrimary,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppContentTypography.episodeTitleOf(context)
+                              ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w700),
                         ),
                       ),
                     ],

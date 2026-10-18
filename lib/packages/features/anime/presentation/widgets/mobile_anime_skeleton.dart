@@ -28,7 +28,7 @@ class MobileAnimeSkeleton extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (MediaQuery.sizeOf(context).width >= 600) ...[
-                Text(title, style: Theme.of(context).textTheme.headlineSmall),
+                Text(title, style: AppContentTypography.detailTitleOf(context)),
                 const SizedBox(height: 12),
               ],
               const TvSkeletonBox(height: 20),
@@ -41,7 +41,7 @@ class MobileAnimeSkeleton extends StatelessWidget {
         ),
         if (MediaQuery.sizeOf(context).width < 600) ...[
           const SizedBox(height: 20),
-          Text(title, style: Theme.of(context).textTheme.headlineSmall),
+          Text(title, style: AppContentTypography.detailTitleOf(context)),
         ],
         const SizedBox(height: 16),
         const TvSkeletonBox(height: 48),

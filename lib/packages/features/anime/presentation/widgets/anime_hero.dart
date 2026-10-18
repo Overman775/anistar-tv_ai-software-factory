@@ -34,7 +34,6 @@ class AnimeHero extends StatelessWidget {
     final posterUrl = posterUri?.toString();
     final fallbackPosterUrl = fallbackPosterUri?.toString();
     final metadata = [details.year, details.seriesInfo, details.voiceover].whereType<String>().join(' • ');
-    final textTheme = Theme.of(context).textTheme;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -129,8 +128,10 @@ class AnimeHero extends StatelessWidget {
                           details.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: (constraints.maxWidth >= 1200 ? textTheme.headlineLarge : textTheme.headlineMedium)
-                              ?.copyWith(color: AppPalette.textPrimary),
+                          style: AppContentTypography.detailTitleOf(
+                            context,
+                            wide: constraints.maxWidth >= 1200,
+                          )?.copyWith(color: AppPalette.textPrimary),
                         ),
                         if (metadata.isNotEmpty) ...[
                           const SizedBox(height: AppSpacing.sm),

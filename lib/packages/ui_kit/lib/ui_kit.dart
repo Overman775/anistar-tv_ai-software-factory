@@ -1,3 +1,4 @@
+export './src/theme/app_content_typography.dart';
 export './src/theme/app_focus_style.dart';
 export './src/theme/app_palette.dart';
 export './src/theme/app_theme.dart';

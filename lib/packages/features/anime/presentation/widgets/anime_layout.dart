@@ -21,7 +21,6 @@ abstract final class AnimeLayout {
   /// Reserve the same scaled caption and two title lines in loading and ready.
   static double episodeHeight(BuildContext context, double gridWidth) {
     final width = (gridWidth - AppSpacing.lg * 2) / episodeColumns(gridWidth);
-    final theme = Theme.of(context).textTheme;
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     double twoLineHeight(TextStyle? style) {
@@ -39,8 +38,8 @@ abstract final class AnimeLayout {
       return height;
     }
 
-    final captionHeight = twoLineHeight(theme.labelMedium) + AppSpacing.xs * 2;
-    final titleHeight = math.max(twoLineHeight(theme.titleMedium), AppSpacing.xs * 2 + 26);
+    final captionHeight = twoLineHeight(AppContentTypography.episodeCaptionOf(context)) + AppSpacing.xs * 2;
+    final titleHeight = math.max(twoLineHeight(AppContentTypography.episodeTitleOf(context)), AppSpacing.xs * 2 + 26);
 
     return math.max(width * 9 / 16, AppSpacing.sm + captionHeight + AppSpacing.md + titleHeight + AppSpacing.md);
   }
