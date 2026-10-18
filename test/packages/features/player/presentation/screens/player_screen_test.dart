@@ -89,6 +89,8 @@ void main() {
 
   bool controlsVisible(WidgetTester tester) => tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible;
 
+  double previewSeconds(WidgetTester tester) => tester.widget<Slider>(find.byType(Slider)).value / 1000;
+
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
@@ -119,53 +121,65 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('short arrow press seeks once and release prevents any repeat', (tester) async {
-    await mount(tester);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 499));
-    expect(video.seeks, [const Duration(seconds: 10)]);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(seconds: 2));
-    expect(video.seeks, [const Duration(seconds: 10)]);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pump();
-    expect(video.seeks.last, Duration.zero);
-    await unmount(tester);
-  });
+  for (final direction in [LogicalKeyboardKey.arrowRight, LogicalKeyboardKey.arrowLeft]) {
+    testWidgets('short $direction previews before one release seek without pause or play', (tester) async {
+      await mount(tester);
+      final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+      video.positions[1] = const Duration(seconds: 100);
+      controller.value = controller.value.copyWith(position: const Duration(seconds: 100));
+      final plays = video.playCalls.length;
+      final pauses = video.pauseCalls.length;
+      final target = direction == LogicalKeyboardKey.arrowRight ? 110 : 90;
+      await tester.sendKeyDownEvent(direction);
+      await tester.pump(const Duration(milliseconds: 499));
+      expect(video.seekRequests, isEmpty);
+      expect(previewSeconds(tester), target);
+      expect(controller.value.position, const Duration(seconds: 100));
+      expect(find.text('01:${target == 110 ? '50' : '30'} / 24:00'), findsOneWidget);
+      await tester.sendKeyUpEvent(direction);
+      await tester.pump(const Duration(seconds: 2));
+      expect(video.seekRequests, [Duration(seconds: target)]);
+      expect(video.playCalls, hasLength(plays));
+      expect(video.pauseCalls, hasLength(pauses));
+      await unmount(tester);
+    });
 
-  testWidgets('holding arrows accelerates predictably independent of key repeat frequency', (tester) async {
-    await mount(tester);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump();
-    var previous = 10;
-    for (var tick = 1; tick <= 18; tick++) {
-      for (var repeat = 0; repeat < 3; repeat++) {
-        await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
-      }
+    testWidgets('held $direction has exact 500ms acceleration boundaries and ignores OS repeats', (tester) async {
+      await mount(tester);
+      final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+      video.positions[1] = const Duration(seconds: 720);
+      controller.value = controller.value.copyWith(position: const Duration(seconds: 720));
+      final sign = direction == LogicalKeyboardKey.arrowRight ? 1 : -1;
+      await tester.sendKeyDownEvent(direction);
       await tester.pump();
-      expect(video.seeks.last.inSeconds, previous, reason: 'hardware repeat must not duplicate seek');
-      await tester.pump(const Duration(milliseconds: 500));
-      final step = switch (tick) {
-        < 4 => 10,
-        < 8 => 20,
-        < 12 => 30,
-        < 16 => 60,
-        _ => 120,
-      };
-      previous += step;
-      expect(video.seeks.last.inSeconds, previous, reason: 'tick $tick');
+      var target = sign * 10 + 720;
+      // Explicit oracle: ticks at 2/4/6/8 seconds start each new acceleration interval.
+      const steps = [10, 10, 10, 20, 20, 20, 20, 30, 30, 30, 30, 60, 60, 60, 60, 120, 120];
+      for (final step in steps) {
+        for (var repeat = 0; repeat < 3; repeat++) {
+          await tester.sendKeyRepeatEvent(direction);
+        }
+        await tester.pump(const Duration(milliseconds: 499));
+        expect(previewSeconds(tester), target);
+        expect(video.seekRequests, isEmpty);
+        await tester.pump(const Duration(milliseconds: 1));
+        target = (target + sign * step).clamp(0, 1440);
+        expect(previewSeconds(tester), target);
+        expect(video.seekRequests, isEmpty);
+        expect(controlsVisible(tester), isTrue);
+      }
+      await tester.sendKeyUpEvent(direction);
+      await tester.pump();
+      expect(video.seekRequests, [Duration(seconds: target)]);
+      await tester.pump(const Duration(milliseconds: 3999));
       expect(controlsVisible(tester), isTrue);
-    }
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(seconds: 3));
-    expect(controlsVisible(tester), isTrue);
-    expect(video.seeks.last.inSeconds, previous);
-    await tester.pump(const Duration(seconds: 1));
-    expect(controlsVisible(tester), isFalse);
-    await unmount(tester);
-  });
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(controlsVisible(tester), isFalse);
+      await unmount(tester);
+    });
+  }
 
-  testWidgets('direction changes and a new hold reset acceleration; old key up cannot stop new direction', (
+  testWidgets('direction changes continue the draft and reset acceleration while old key up is ignored', (
     tester,
   ) async {
     await mount(tester);
@@ -173,57 +187,165 @@ void main() {
     for (var tick = 0; tick < 12; tick++) {
       await tester.pump(const Duration(milliseconds: 500));
     }
-    final position = video.seeks.last;
+    expect(previewSeconds(tester), 300);
+    expect(video.seekRequests, isEmpty);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
-    expect(video.seeks.last, position - const Duration(seconds: 10));
+    expect(previewSeconds(tester), 290);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 500));
-    expect(video.seeks.last, position - const Duration(seconds: 20));
+    expect(previewSeconds(tester), 280);
+    expect(video.seekRequests, isEmpty);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 280)]);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 500));
-    expect(video.seeks.last, position);
+    expect(previewSeconds(tester), 300);
+    expect(video.seekRequests, hasLength(1));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 280), const Duration(seconds: 300)]);
     await unmount(tester);
   });
 
-  testWidgets('seek hold clamps both boundaries without repeated native commands', (tester) async {
+  testWidgets('seek draft clamps and identical release targets do not add native calls', (tester) async {
     await mount(tester);
     final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
     for (var tick = 0; tick < 18; tick++) {
       await tester.pump(const Duration(milliseconds: 500));
     }
-    expect(video.seeks, isEmpty);
-    expect(controlsVisible(tester), isTrue);
+    expect(previewSeconds(tester), 0);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
-    await controller.seekTo(controller.value.duration - const Duration(seconds: 5));
+    expect(video.seekRequests, isEmpty);
+    controller.value = controller.value.copyWith(position: controller.value.duration - const Duration(seconds: 5));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(video.seeks.last, controller.value.duration);
-    final requests = video.seekRequests.length;
     await tester.pump(const Duration(seconds: 5));
-    expect(video.seekRequests, hasLength(requests));
+    expect(previewSeconds(tester), 1440);
+    expect(video.seekRequests, isEmpty);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [controller.value.duration]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [controller.value.duration]);
     await unmount(tester);
   });
 
-  testWidgets('slow native seeks are serialized and pending targets accumulate then coalesce', (tester) async {
+  testWidgets('a draft returning to the confirmed or pending target adds no native command', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    video.positions[1] = const Duration(seconds: 100);
+    controller.value = controller.value.copyWith(position: const Duration(seconds: 100));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(video.seekRequests, isEmpty);
+    final gate = Completer<void>();
+    video.pendingSeek = gate;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 110)]);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    video.pendingSeek = null;
+    gate.complete();
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 110)]);
+    await unmount(tester);
+  });
+
+  testWidgets('native position ticks cannot overwrite draft time or slider', (tester) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    controller.value = controller.value.copyWith(position: const Duration(seconds: 100));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    controller.value = controller.value.copyWith(position: const Duration(seconds: 103));
+    await tester.pump();
+    expect(controller.value.position, const Duration(seconds: 103));
+    expect(previewSeconds(tester), 110);
+    expect(find.text('01:50 / 24:00'), findsOneWidget);
+    expect(video.seekRequests, isEmpty);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 110)]);
+    await unmount(tester);
+  });
+
+  testWidgets('rapid complete gestures base on pending target and serialize coalesced native seeks', (tester) async {
     await mount(tester);
     final gate = Completer<void>();
     video.pendingSeek = gate;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 10)]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    expect(previewSeconds(tester), 30);
     expect(video.seekRequests, [const Duration(seconds: 10)]);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
     video.pendingSeek = null;
     gate.complete();
     await tester.pump();
     expect(video.seeks, [const Duration(seconds: 10), const Duration(seconds: 30)]);
     expect(video.maxActiveSeeks, 1);
+    await unmount(tester);
+  });
+
+  testWidgets('timeline short gestures commit only on release and row buttons still seek directly', (tester) async {
+    await mount(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Позиция видео');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(previewSeconds(tester), 10);
+    expect(video.seekRequests, isEmpty);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 10)]);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(previewSeconds(tester), 0);
+    expect(video.seekRequests, hasLength(1));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 10), Duration.zero]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пауза / воспроизведение');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Назад на 10 секунд');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Вперёд на 10 секунд');
+    expect(video.seekRequests, hasLength(2));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(video.seekRequests.last, const Duration(seconds: 10));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    expect(video.seekRequests, [
+      const Duration(seconds: 10),
+      Duration.zero,
+      const Duration(seconds: 10),
+      Duration.zero,
+    ]);
     await unmount(tester);
   });
 
@@ -241,7 +363,8 @@ void main() {
     for (var tick = 0; tick < 4; tick++) {
       await tester.pump(const Duration(milliseconds: 500));
     }
-    expect(video.seeks.last, const Duration(seconds: 60));
+    expect(previewSeconds(tester), 60);
+    expect(video.seekRequests, isEmpty);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     final requests = video.seeks.length;
@@ -254,6 +377,7 @@ void main() {
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Вперёд на 10 секунд');
     expect(video.seeks, hasLength(requests));
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).previewPosition, isNull);
     await unmount(tester);
   });
 
@@ -272,7 +396,8 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 500));
     final requests = video.seekRequests.length;
-    Navigator.of(tester.element(find.byType(PlayerScreen))).pop();
+    expect(video.seekRequests, isEmpty);
+    await tester.binding.handlePopRoute();
     await tester.pump();
     expect(awakeCalls.last, isFalse);
     await tester.pump(const Duration(seconds: 1));
@@ -299,10 +424,116 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     final beforeDispose = video.seekRequests.length;
+    expect(video.seekRequests, isEmpty);
     await unmount(tester);
     await tester.pump(const Duration(seconds: 2));
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
     expect(video.seekRequests, hasLength(beforeDispose));
+  });
+
+  for (final cause in ['focus', 'command', 'panel', 'background', 'error', 'replacement']) {
+    testWidgets('$cause cancels draft and late key up or timer cannot commit it', (tester) async {
+      await mount(tester);
+      final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+      video.positions[1] = const Duration(seconds: 100);
+      controller.value = controller.value.copyWith(position: const Duration(seconds: 100));
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(previewSeconds(tester), 120);
+      expect(video.seekRequests, isEmpty);
+      switch (cause) {
+        case 'focus':
+          // External focus loss exercises the focus listener without a key command.
+          tester.widget<PlayerView>(find.byType(PlayerView)).playFocusNode?.requestFocus();
+          await tester.pump();
+          await tester.pump();
+          expect(FocusManager.instance.primaryFocus?.debugLabel, 'Пауза / воспроизведение');
+        case 'command':
+          await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+          await tester.pump();
+        case 'panel':
+          await tester.tap(find.byKey(const ValueKey('player-quality')));
+          await settle(tester);
+          expect(find.text('Качество видео'), findsOneWidget);
+        case 'background':
+          tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+          await tester.pump();
+        case 'error':
+          controller.value = controller.value.copyWith(errorDescription: 'Simulated playback error');
+          await settle(tester);
+          expect(video.sources, hasLength(2));
+        case 'replacement':
+          await tester.tap(find.byKey(const ValueKey('player-next-episode')));
+          await settle(tester);
+          expect(video.sources, hasLength(2));
+      }
+      final recoverySeeks = List<Duration>.of(video.seekRequests);
+      // Recovery may restore confirmed 100s. The cancelled 120s must never be submitted.
+      expect(recoverySeeks, cause == 'error' ? [const Duration(seconds: 100)] : isEmpty);
+      expect(tester.widget<PlayerView>(find.byType(PlayerView)).previewPosition, isNull);
+      expect(previewSeconds(tester), cause == 'replacement' ? 0 : 100);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowRight);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(video.seekRequests, recoverySeeks);
+      expect(tester.widget<PlayerView>(find.byType(PlayerView)).previewPosition, isNull);
+      if (cause == 'background') {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+        await tester.pump();
+      }
+      await unmount(tester);
+    });
+  }
+
+  testWidgets('paused hold remains paused and release keeps controls visible', (tester) async {
+    await mount(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.mediaPause);
+    await tester.pump();
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    final plays = video.playCalls.length;
+    final pauses = video.pauseCalls.length;
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    for (var tick = 0; tick < 10; tick++) {
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    expect(video.seekRequests, isEmpty);
+    expect(controlsVisible(tester), isTrue);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 6));
+    expect(video.seekRequests, [const Duration(seconds: 210)]);
+    expect(controller.value.isPlaying, isFalse);
+    expect(video.playCalls, hasLength(plays));
+    expect(video.pauseCalls, hasLength(pauses));
+    expect(controlsVisible(tester), isTrue);
+    await unmount(tester);
+  });
+
+  testWidgets('old native result cannot drain queued gestures into replacement controller', (tester) async {
+    await mount(tester);
+    final gate = Completer<void>();
+    video.pendingSeek = gate;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(previewSeconds(tester), 30);
+    await tester.tap(find.byKey(const ValueKey('player-next-episode')));
+    await settle(tester);
+    expect(video.sources, hasLength(2));
+    video.pendingSeek = null;
+    gate.complete();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(seconds: 1));
+    expect(video.seekRequests, [const Duration(seconds: 10)]);
+    expect(video.positions[2] ?? Duration.zero, Duration.zero);
+    expect(tester.widget<PlayerView>(find.byType(PlayerView)).previewPosition, isNull);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    expect(video.seekRequests, [const Duration(seconds: 10), const Duration(seconds: 10)]);
+    expect(video.maxActiveSeeks, 1);
+    await unmount(tester);
   });
 
   for (final key in [LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowUp]) {
@@ -420,6 +651,9 @@ void main() {
     await mount(tester);
     final gate = Completer<void>();
     video.pendingSeek = gate;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpWidget(const SizedBox());

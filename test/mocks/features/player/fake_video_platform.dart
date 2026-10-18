@@ -10,6 +10,8 @@ final class FakeVideoPlatform extends VideoPlayerPlatform {
   final Map<int, StreamController<VideoEvent>> events = {};
   final Map<int, Duration> positions = {};
   final List<Duration> seeks = [];
+  final List<int> playCalls = [];
+  final List<int> pauseCalls = [];
   bool failInitialization = false;
   bool failNextSeek = false;
   bool delayInitialization = false;
@@ -77,10 +79,10 @@ final class FakeVideoPlatform extends VideoPlayerPlatform {
   }
 
   @override
-  Future<void> pause(int playerId) => Future<void>.value();
+  Future<void> pause(int playerId) async => pauseCalls.add(playerId);
 
   @override
-  Future<void> play(int playerId) => Future<void>.value();
+  Future<void> play(int playerId) async => playCalls.add(playerId);
 
   @override
   Future<void> setLooping(int playerId, bool looping) => Future<void>.value();

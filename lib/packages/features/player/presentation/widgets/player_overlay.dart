@@ -14,6 +14,7 @@ class PlayerOverlay extends StatefulWidget {
     required this.onPlayPause,
     required this.onSeek,
     this.onSeekKeyEvent,
+    this.previewPosition,
     this.onSelectQuality,
     this.onSelectEpisode,
     this.onPreviousEpisode,
@@ -34,6 +35,7 @@ class PlayerOverlay extends StatefulWidget {
   }
 
   final bool Function(KeyEvent)? onSeekKeyEvent;
+  final Duration? previewPosition;
   final int episodeNumber;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
@@ -178,7 +180,8 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
     final textTheme = Theme.of(context).textTheme;
     final value = widget.value;
     final durationMs = value.duration.inMilliseconds;
-    final positionMs = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
+    final position = widget.previewPosition ?? value.position;
+    final positionMs = position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
     final buttonStyle = AppFocusStyle.button().copyWith(
       minimumSize: const WidgetStatePropertyAll(Size(52, 52)),
       iconSize: const WidgetStatePropertyAll(30),
@@ -306,7 +309,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                     ),
                   const SizedBox(width: AppSpacing.md),
                   Text(
-                    '${PlayerOverlay._format(value.position)} / ${PlayerOverlay._format(value.duration)}',
+                    '${PlayerOverlay._format(position)} / ${PlayerOverlay._format(value.duration)}',
                     style: textTheme.bodyMedium?.copyWith(
                       color: Colors.white,
                       fontFeatures: const [FontFeature.tabularFigures()],
