@@ -1,6 +1,6 @@
 # ✅ Состояние проверок | AniStar TV
 
-Дата: 12 октября 2026 года. Последние результаты DTO/live smoke — в разделе 43; предыдущие записи сохраняют свой исторический scope. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
+Дата: 12 октября 2026 года. Последние результаты Melos — в разделе 46, DTO/live smoke — в разделе 43; предыдущие записи сохраняют свой исторический scope. Scope: Android / Android TV, прямой AniStar HTTP и онлайн HLS.
 
 ## 1. Критерии готовности
 
@@ -107,7 +107,7 @@ Flutter **3.44.0 → 3.47.7 stable**, Dart **3.12.0 → 3.13.5**. Релиз Flu
 - Из analyzer-конфигурации убраны только три deprecated lint: `unnecessary_await_in_return`, `avoid_private_typedef_functions`, `one_member_abstracts`. Dart рекомендует [удалить первый](https://dart.dev/tools/linter-rules/unnecessary_await_in_return), [второй](https://dart.dev/tools/linter-rules/avoid_private_typedef_functions) и [третий](https://dart.dev/tools/linter-rules/one_member_abstracts); strict-mode и действующие правила сохранены.
 - Просмотрены все восемь golden diff: изменения 0.03–0.64% затрагивают растеризацию скруглённых рамок. Текст, расположение, focus и badge сохранены. Эталоны закреплены для нового SDK; допуск сравнения не ослаблен.
 
-Локальный [скилл обновления](../.agents/skills/anistar-flutter-update/SKILL.md) адаптирован из RC Mobile App без Melos, iOS и CI/CD. Неиспользуемые заготовки GitHub workflows удалены; команды локальных проверок сохранены.
+Локальный [скилл обновления](../.agents/skills/anistar-flutter-update/SKILL.md) используется для локального обновления SDK и зависимостей без iOS и CI/CD. Неиспользуемые заготовки GitHub workflows удалены; команды локальных проверок сохранены.
 
 ## 6. Текущая сборка
 
@@ -235,7 +235,7 @@ Live-сайт в этой доработке повторно не изменя�
 
 ## 15. Hero и спокойные переходы
 
-10 октября 2026 года анимации приведены к общим токенам по принципам RC Mobile App. Постер передаётся через typed route extra и присутствует в AnimeSkeleton с первого кадра. До окончания входного перехода HTTP-результат не заменяет Hero; служебный offstage layout не считается завершением. На Back постер возвращается в карточку из исходной вкладки.
+10 октября 2026 года анимации приведены к общим токенам с общими длительностями и кривыми. Постер передаётся через typed route extra и присутствует в AnimeSkeleton с первого кадра. До окончания входного перехода HTTP-результат не заменяет Hero; служебный offstage layout не считается завершением. На Back постер возвращается в карточку из исходной вкладки.
 
 Detail использует fade и вертикальный сдвиг 2%, player — только fade. Вкладки получают короткий fade-in без одновременного удержания двух каталогов. Подтверждённая звёздочка использует AnimatedSwitcher. Focus, scroll и controls учитывают reduced motion; Hero и shimmer отключаются также при accessibleNavigation.
 
@@ -550,7 +550,7 @@ Android smoke очистил локальную сессию выбранног�
 
 ## 31. Общие ассеты и логотип (2026-10-11)
 
-FlutterGen настроен в UI Kit по примеру `rc-mobile-app/uikit`: генерирует Assets и FontFamily командой `fvm dart run build_runner build --workspace`. Картинки бренда перенесены из resources в `lib/packages/ui_kit/assets/images/` без изменения содержимого. Экран входа и меню используют общий AnistarLogo; Android launcher, баннер и заставка генерируются из тех же исходников. Список шрифтов Inter и их лицензия сохранены, тема и test bootstrap используют generated API.
+FlutterGen настроен в UI Kit через пакет UI Kit: генерирует Assets и FontFamily командой `fvm dart run build_runner build --workspace`. Картинки бренда перенесены из resources в `lib/packages/ui_kit/assets/images/` без изменения содержимого. Экран входа и меню используют общий AnistarLogo; Android launcher, баннер и заставка генерируются из тех же исходников. Список шрифтов Inter и их лицензия сохранены, тема и test bootstrap используют generated API.
 
 | Проверка | Результат |
 | --- | --- |
@@ -819,3 +819,107 @@ tests passed. Baselines в этом прогоне не обновлялись. 
 Логи: `build/verification/release-1.1.1/`. Live/native smoke из §43 сохраняет применимость
 к app code; после него изменены только release metadata, документация и graphify tooling.
 APK с новым versionCode в этом этапе не пересобирался.
+
+
+## 46. Melos и локальный developer tooling (2026-10-11 UTC)
+
+Для настройки изучены правила проекта, Melos pubspec, README, руководство
+тестирования, code style, правила Git и scripts. Внешние образцы использовались
+только для чтения; их локальные пути и идентификаторы не входят в документацию.
+
+Добавлены 57 Melos scripts поверх существующего Dart pub workspace: приложение
+остаётся в корне, шесть package directories сохранены. Melos 7.8.0 закреплён
+в pubspec/lockfile. Resolver добавил девять зависимостей
+Melos и выбрал xml 6.6.1 вместо 7.0.1 из-за его constraint; runtime зависимости
+приложения намеренно не обновлялись. Анализ, генерация и сборки проверены заново.
+Команды и обоснование исключений: [Melos tooling](melos_tooling.md);
+версии и Git: [VCS](vcs_guidelines.md).
+
+### Фактические прогоны
+
+| Проверка | Результат |
+| --- | --- |
+| Local Melos / RC-style launcher | `fvm dart run melos bootstrap --enforce-lockfile` — 7 packages; `fvm exec melos --version` — 7.8.0 |
+| Полный `melos run check` | exit 0: SDK/lockfile, format 299 files / 0 changed, analyzer и DCM без замечаний, 376 unit/widget/architecture, 66 goldens; seed 20261010 |
+| Окончательный `test:tooling` | 67 Python tests: 8 APK quality, 38 E2E/runner, 14 version/dispatch, 7 graphify regressions |
+| `test:e2e` | TV 13/13, mobile 8/8; последовательный aggregate exit 0; seed 20261010 |
+| TV device | anistar_tv_e2e, emulator-5554, API 36 ARM64 TV, D-pad preflight passed |
+| Mobile device | anistar_mobile_e2e, emulator-5556, API 36 ARM64 phone |
+| `generate:clean`, `generate` | Реальная очистка build_runner и workspace генерация routes/FlutterGen; app sources после project format без diff |
+| `generate:branding` | Launcher/adaptive icons, TV banners, Android 12 safe splash; нативные ресурсы без diff |
+| `generate:e2e-media` | FFmpeg 9.0.2, 360p/720p HLS побайтно совпали; исходные fixtures восстановлены из backup |
+| `watch` | Первая генерация прошла; watcher намеренно остановлен SIGINT (exit 130), затем normal generate прошёл |
+| `run:dev`, `run:prod` | Реальный обычный debug-запуск на TV с `--no-resident`; оба exit 0 |
+| `build:android:dev:apk:debug` | Обычный main_dev.dart APK собран после integration tests |
+| `build:android:prod:apk` | Обычный release main_prod.dart APK собран; freshness подтверждён для armeabi-v7a, arm64-v8a, x86_64 |
+| `build:android:prod:bundle` | AppBundle собран локально, публикации нет |
+| `check:apk` | Повторно passed после bundle/prod debug launch; все 3 ABI совпали |
+| `get`, `workspace`, `deps`, `outdated`, `doctor`, `devices`, `emulators` | Реальный вызов через Melos, exit 0 |
+| `fix:check`, `dcm:fix -- --dry-run` | Dart: nothing to fix; DCM: 0 auto-fixable issues; файлы не менялись |
+| `upgrade -- --dry-run`, `upgrade:major -- --dry-run` | Resolver preview прошёл; manifests/lockfile и Git refs не изменились |
+| `version:show/check`, `version:plan` | Show/check и patch/minor/major/build preview прошли |
+| `version:set -- --app-version 1.1.2 --build-number 5` | Настоящий dry-run вывел 1.1.1+4 → 1.1.2+5; текущая версия и Git refs сохранены |
+| `graph:check`, `vcs:check`, Bash syntax | Патч/extractor regressions, diff check и `bash -n` passed |
+
+Последний полный `check` включал 66 Python tests; после добавления CLI regression
+и исправления test stub pipe окончательный отдельный `test:tooling` включает 67.
+Flutter suites и E2E не повторялись ради счётчика: app code после этих прогонов
+не менялся. Golden baselines не обновлялись. Прежние правки авторизации, постоянного
+левого меню, playback-only KEEP_SCREEN_ON, ускоряющейся перемотки и автоскрытия
+управления сохранены; их Android/widget regressions входят в свежие suites.
+
+Первый полный check завершился ошибкой Python tools из-за macOS Python 3.9.
+Добавлен `with_python.sh`: выбирает совместимый Python 3.10+ и передаёт его также
+вложенным scripts. В этом окружении использован Python 3.14.8; graphify — 3.12.12.
+Повторный полный check прошёл. В ходе dry-run обнаружены и исправлены требования
+DCM fix к абсолютному нормализованному SDK path. В новых shell regression tests
+устранены неверное предположение о порядке старта двух концов pipe и fake reader,
+который раньше мог преждевременно закрыть stdout producer; актуальные 14 tests passed.
+
+Melos 7.8 перехватывает вложенные --help/--version даже после --: первые help-пробы
+возвращали NoScriptException, первый version:set с --version лишь печатал версию
+launcher. Эти попытки не считались успешным выполнением developer scripts.
+Version setter исправлен на --app-version, ожидаемый dry-run вывод проверен явно.
+Справка underlying tools открывается напрямую; watch и DCM fix проверены реальным
+вызовом/безопасным dry-run. Исходные неуспешные логи сохранены рядом с исправленными.
+
+Release APK: **66 779 522 байта**, SHA-256
+`6f874e7b08078ffe16bce5854d0e506775b71101034441782c0f7da86f751083`.
+AppBundle: **65 871 074 байта**, SHA-256
+`600ba8d6bf34356bcf38c4db4087d016f97d2ccc04090531e9d8d9782ea6339c`.
+Артефакты: `build/app/outputs/flutter-apk/app-prod-release.apk` и
+`build/app/outputs/bundle/prodRelease/app-prod-release.aab`.
+
+Логи и manifest результатов: `build/verification/melos-*.log`,
+`build/verification/melos-summary.json`, `melos-commands*/results.json` и
+`melos-generators-summary.json`. E2E JUnit/JSON:
+`build/e2e/all-seed-20261010-tv-anistar_tv_e2e-mobile-anistar_mobile_e2e.K24ICQ/`.
+
+### Границы проверки
+
+Не выполнялись live/account scenarios (пишут серверную историю), фактические
+version:set --write в checkout, native melos version/publish, commits/tags/push/merge,
+реальный релиз или публикация. Запись версии проверена только на temporary fixtures.
+Upgrades и fixes только preview; clean/clean:all не вызывались для удаления build
+артефактов и доказательств, но generator cache clean выполнен реально. Golden update
+не запускался, чтобы сохранить проверенные baselines. Aliases проверены по общим
+реально выполненным targets; check:flutter не повторял subset уже прошедшего check.
+Dev release APK/bundle и prod debug APK отдельными build scripts не прогонялись;
+prod debug реально собирался при run:prod, dispatch обоих flavors проверен tests.
+
+Сохранены прежние нефатальные предупреждения KGP/CupertinoIcons font. APK использует
+существующую тестовую подпись. Headless AVD/fixture проверки не заменяют физический
+TV, ручную визуальную QA и live AniStar/CDN. Fastlane/CI/CD/iOS/Pods, SVG/OpenAPI/l10n,
+Обязательные внешние ID задач и .ai-pipeline review tooling на этом этапе не добавлялись.
+
+Локальный AGENTS.md обновлён, но остаётся ignored согласно существующему .gitignore.
+Ссылка на ../.tessl/RULES.md отсутствует в checkout; выполнены доступные инструкции.
+
+
+`graph:update` прошёл в AST-only режиме без API: **3660 nodes, 5935 edges,
+227 communities**. Сохранён автоматический backup curated graph. Предупреждения:
+три Gradle DSL файла не дают symbols; 20 файлов без поддерживаемого extension/shebang
+пропущены; при пересчёте communities 88 названий заменены по hub. Copilot-копия
+skill остаётся 0.9.19 при runtime 0.9.85. Семантика изменённых Markdown и LLM labels
+не пересобирались: это намеренная граница требуемого AST-only обновления, без API cost.
+Лог: `build/verification/melos-graph-update.log`.

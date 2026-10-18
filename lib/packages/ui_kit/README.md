@@ -2,7 +2,7 @@
 
 UI Kit содержит тему и общие TV-компоненты. Публичный импорт: `package:ui_kit/ui_kit.dart`.
 
-Ассеты доступны через `package:ui_kit/assets.dart`: `Assets` для картинок и файлов, `FontFamily` для шрифтов. FlutterGen генерирует их командой `fvm dart run build_runner build --workspace` из корня workspace. Исходники бренда находятся в `assets/images/`, шрифты — в `assets/fonts/`. `AnistarLogo` использует прозрачный `anistar_logo.png`; Android launcher и заставка Android 12 используют отдельный `anistar_launcher.png` с фоном; экран входа и меню не рисуют отдельный логотип. Нативные ресурсы обновляются командой `bash scripts/generate_branding.sh`.
+Ассеты доступны через `package:ui_kit/assets.dart`: `Assets` для картинок и файлов, `FontFamily` для шрифтов. FlutterGen генерирует их командой `fvm dart run melos run generate` из корня workspace. Исходники бренда находятся в `assets/images/`, шрифты — в `assets/fonts/`. `AnistarLogo` использует прозрачный `anistar_logo.png`; Android launcher и заставка Android 12 используют отдельный `anistar_launcher.png` с фоном; экран входа и меню не рисуют отдельный логотип. Нативные ресурсы обновляются командой `fvm dart run melos run generate:branding`.
 
 Ориентир взаимодействия и границы адаптации: [ADR-0008](../../../docs/adr/0008-youtube-tv-interaction-reference.md).
 

@@ -6,15 +6,16 @@
 
 ## 🚀 Быстрый старт
 
-Проект использует **FVM** и **Dart pub workspace**. Нужны JDK 17, Android SDK и устройство или эмулятор.
+Проект использует **FVM**, **Melos** и **Dart pub workspace**. Нужны JDK 17, Android SDK и устройство или эмулятор.
 
 ```bash
 fvm install
-fvm flutter pub get
-fvm flutter run --flavor dev -t lib/main_dev.dart
+fvm flutter pub get --enforce-lockfile
+fvm dart run melos bootstrap --enforce-lockfile
+fvm dart run melos run run:dev
 ```
 
-Полная локальная проверка: `bash scripts/check.sh` (нужен DCM). Команды тестов и CI: [Разработка и тестирование](docs/05_development_and_testing.md).
+Полная локальная проверка: `fvm dart run melos run check` (нужен DCM). Все команды: [Melos tooling](docs/melos_tooling.md). Команды тестов: [Разработка и тестирование](docs/05_development_and_testing.md).
 
 Начальное зеркало: `https://v30.astar.bz`. Для `vN.astar.bz` клиент сохраняет подтверждённый номер версии и при недоступности проверяет до четырёх следующих зеркал. Другое HTTPS-зеркало задаётся через `--dart-define=ANISTAR_MIRROR_URL=https://mirror.example` или `env/dev.json`. Доступность зависит от зеркала и IP; интерактивная CAPTCHA не обходится.
 
@@ -43,6 +44,7 @@ fvm flutter run --flavor dev -t lib/main_dev.dart
 - [🎨 UI Kit](lib/packages/ui_kit/README.md): тема и общие TV-компоненты.
 - [🧭 ADR](docs/adr/README.md): принятые технические решения.
 - [📺 Ориентир интерфейса](docs/adr/0008-youtube-tv-interaction-reference.md): YouTube для телевизоров, правила навигации, плеера, фокуса и анимаций для будущих изменений.
+- [🌿 Git и версии](docs/vcs_guidelines.md): ветки, коммиты и безопасный preview версии.
 - [✅ Состояние проверок](docs/06_verification.md): критерии готовности, результаты и ограничения.
 
 Спецификации для дальнейшей разработки: [вход, избранное, страницы, playback, зеркала, TV и историю просмотра](docs/specs/README.md).

@@ -4,88 +4,91 @@
         {
             "label": "Flutter: Generate Assets and Routes",
             "type": "shell",
-            "command": "fvm dart run build_runner build --workspace",
+            "command": "fvm dart run melos run generate",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Check",
             "type": "shell",
-            "command": "bash scripts/check.sh",
+            "command": "fvm dart run melos run check",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Clean",
             "type": "shell",
-            "command": "fvm flutter clean",
+            "command": "fvm dart run melos run clean",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Pub Get",
             "type": "shell",
-            "command": "fvm flutter pub get",
+            "command": "fvm dart run melos run get",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Build APK",
             "type": "shell",
-            "command": "fvm flutter build apk --release --flavor prod -t lib/main_prod.dart",
+            "command": "fvm dart run melos run build:android:prod:apk",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Build App Bundle",
             "type": "shell",
-            "command": "fvm flutter build appbundle --release --flavor prod -t lib/main_prod.dart",
+            "command": "fvm dart run melos run build:android:prod:bundle",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Run Tests",
             "type": "shell",
-            "command": "bash scripts/check.sh test:unit",
+            "command": "fvm dart run melos run test:unit",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Format Code",
             "type": "shell",
-            "command": "bash scripts/check.sh format",
+            "command": "fvm dart run melos run format",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Analyze Code",
             "type": "shell",
-            "command": "bash scripts/check.sh analyze",
+            "command": "fvm dart run melos run analyze",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Check Goldens",
             "type": "shell",
-            "command": "bash scripts/check.sh test:goldens",
+            "command": "fvm dart run melos run test:goldens",
             "problemMatcher": []
         },
         {
             "label": "Flutter: TV E2E",
             "type": "shell",
-            "command": "bash scripts/e2e-tv.sh",
+            "command": "fvm dart run melos run test:e2e:tv",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Mobile E2E",
             "type": "shell",
-            "command": "bash scripts/e2e-mobile.sh",
+            "command": "fvm dart run melos run test:e2e:mobile",
             "problemMatcher": []
         },
         {
             "label": "Flutter: TV and Mobile E2E",
             "type": "shell",
-            "command": "bash scripts/e2e-all.sh",
+            "command": "fvm dart run melos run test:e2e",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Live Android E2E",
             "type": "process",
-            "command": "bash",
+            "command": "fvm",
             "args": [
-                "scripts/e2e-tv.sh",
-                "live"
+                "dart",
+                "run",
+                "melos",
+                "run",
+                "test:e2e:live"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

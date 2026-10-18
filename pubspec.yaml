@@ -54,6 +54,7 @@ dev_dependencies:
   http_mock_adapter: ^0.6.1
   integration_test:
     sdk: flutter
+  melos: 7.8.0
   shared_preferences: ^2.5.6
   video_player_platform_interface: ^6.9.0
   yaml: ^3.1.4
@@ -68,3 +69,239 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "lib/packages/ui_kit/assets/images/anistar_launcher.png"
   adaptive_icon_foreground_inset: 18
   min_sdk_android: 21
+
+# One command interface over the existing Dart pub workspace; app stays in root.
+melos:
+  sdkPath: .fvm/flutter_sdk
+  useRootAsPackage: true
+  ide:
+    intellij:
+      enabled: false
+  scripts:
+    analyze:
+      run: "bash scripts/check.sh analyze"
+      description: "Strict analyzer for app and all workspace packages"
+
+    clean:
+      run: "flutter clean"
+      description: "Clean app build output"
+
+    clean:all:
+      run: "melos run clean && melos run generate:clean"
+      description: "Clean app and code generator caches"
+
+    format:
+      run: "bash scripts/check.sh format"
+      description: "Format maintained Dart sources"
+
+    format:check:
+      run: "bash scripts/check.sh format:check"
+      description: "Check format without editing files"
+
+    fix:
+      run: "dart fix --apply"
+      description: "Apply Dart fixes; inspect resulting diff"
+
+    fix:check:
+      run: "dart fix --dry-run"
+      description: "Preview Dart fixes"
+
+    dcm:
+      run: "bash scripts/check.sh dcm"
+      description: "Strict DCM analysis including tests"
+
+    dcm:fix:
+      run: "bash scripts/dcm_fix.sh"
+      description: "Apply DCM fixes; inspect resulting diff"
+
+    fix:all:
+      run: "melos run fix && melos run dcm:fix"
+      description: "Apply Dart and DCM fixes sequentially"
+
+    check:
+      run: "bash scripts/check.sh check && melos run test:tooling && melos run version:check"
+      description: "SDK, lockfile, format, analyzer, DCM, unit, golden and tooling checks"
+
+    check:flutter:
+      run: "bash scripts/check.sh ci"
+      description: "Local Flutter-only checks without DCM"
+
+    get:
+      run: "flutter pub get --enforce-lockfile"
+      description: "Resolve the whole workspace using the committed lockfile"
+
+    upgrade:
+      run: "flutter pub upgrade"
+      description: "Upgrade compatible workspace dependencies"
+
+    upgrade:major:
+      run: "flutter pub upgrade --major-versions"
+      description: "Upgrade constraints and dependencies; explicit maintenance command"
+
+    outdated:
+      run: "flutter pub outdated"
+      description: "Inspect workspace dependency updates"
+
+    deps:
+      run: "flutter pub deps"
+      description: "Show workspace dependency graph"
+
+    workspace:
+      run: "melos list"
+      description: "List app and six local packages"
+
+    doctor:
+      run: "flutter doctor -v"
+      description: "Diagnose local Flutter and Android tooling"
+
+    devices:
+      run: "flutter devices"
+      description: "List attached devices"
+
+    emulators:
+      run: "flutter emulators"
+      description: "List configured emulators"
+
+    generate:
+      run: "bash scripts/generate.sh"
+      description: "Generate typed routes and FlutterGen assets sequentially"
+
+    build_runner:
+      run: "melos run generate"
+      description: "Compatibility alias for RC quick start"
+
+    generate:assets:
+      run: "melos run generate"
+      description: "Generate FlutterGen assets and fonts with typed routes"
+
+    watch:
+      run: "dart run build_runner watch --workspace"
+      description: "Watch workspace code generation; long running"
+
+    generate:clean:
+      run: "dart run build_runner clean --workspace"
+      description: "Clean workspace generator cache"
+
+    build_runner:clean:
+      run: "melos run generate:clean"
+      description: "Compatibility alias for generator cache cleaning"
+
+    generate:branding:
+      run: "bash scripts/generate_branding.sh"
+      description: "Export Android TV launcher, banner and safe splash (macOS)"
+
+    generate:icon:
+      run: "melos run generate:branding"
+      description: "Export icons with TV dimensions and safe splash"
+
+    generate:splash:
+      run: "melos run generate:branding"
+      description: "Export splash with Android 12 safe wrapper and TV icons"
+
+    generate:e2e-media:
+      run: "bash scripts/regenerate_e2e_media.sh"
+      description: "Regenerate local 360p/720p HLS fixtures (FFmpeg required)"
+
+    check:apk:
+      run: "python3 tool/quality/verify_android_apk.py"
+      description: "Verify prod release APK freshness for every AOT ABI"
+
+    graph:update:
+      run: "graphify update ."
+      description: "Refresh local code knowledge graph (optional graphify)"
+
+    graph:check:
+      run: "bash scripts/graphify_check.sh"
+      description: "Check graphify extractor patch and regression tests (optional)"
+
+    vcs:check:
+      run: "git diff --check"
+      description: "Check whitespace and conflict markers in local diff"
+
+    version:show:
+      run: "python3 tool/version/app_version.py show"
+      description: "Show the app version and README agreement"
+
+    version:check:
+      run: "python3 tool/version/app_version.py check"
+      description: "Validate current app version without Git changes"
+
+    version:plan:
+      run: "python3 tool/version/app_version.py plan"
+      description: "Preview patch/minor/major/build increment; pass bump argument"
+
+    version:set:
+      run: "python3 tool/version/app_version.py set"
+      description: "Preview explicit version/build; writes only with --write"
+
+    test:unit:
+      run: "bash scripts/check.sh test:unit"
+      description: "Run unit from central test suite"
+
+    test:goldens:
+      run: "bash scripts/check.sh test:goldens"
+      description: "Run goldens from central test suite"
+
+    test:goldens:update:
+      run: "bash scripts/check.sh test:goldens:update"
+      description: "Run goldens:update from central test suite"
+
+    test:coverage:
+      run: "bash scripts/check.sh test:coverage"
+      description: "Run coverage from central test suite"
+
+    test:tooling:
+      run: "bash scripts/with_python.sh bash scripts/test_tooling.sh"
+      description: "Run Python quality, E2E runner, version and optional graphify regressions"
+
+    test:e2e:
+      run: "bash scripts/with_python.sh bash scripts/e2e-all.sh"
+      description: "Run TV and mobile fixtures sequentially on separate emulators"
+
+    test:e2e:tv:
+      run: "bash scripts/with_python.sh bash scripts/e2e-tv.sh"
+      description: "Run Android TV fixture E2E; optional emulator serial"
+
+    test:e2e:mobile:
+      run: "bash scripts/with_python.sh bash scripts/e2e-mobile.sh"
+      description: "Run Android mobile fixture E2E; optional emulator serial"
+
+    test:e2e:live:
+      run: "bash scripts/with_python.sh bash scripts/e2e_live.sh"
+      description: "Run live TV account scenario; changes remote watched history, explicit only"
+
+    test:network:live:
+      run: "flutter test tool/diagnostics/anistar_network_test.dart --reporter=expanded"
+      description: "Read-only live network/login diagnosis with local credentials"
+
+    run:dev:
+      run: "bash scripts/flutter_app.sh run dev debug"
+      description: "Run dev app; optional Flutter arguments"
+
+    build:android:dev:apk:
+      run: "bash scripts/flutter_app.sh apk dev release"
+      description: "Build dev release apk; APK includes AOT freshness check"
+
+    build:android:dev:bundle:
+      run: "bash scripts/flutter_app.sh bundle dev release"
+      description: "Build dev release bundle; APK includes AOT freshness check"
+
+    build:android:dev:apk:debug:
+      run: "bash scripts/flutter_app.sh apk dev debug"
+      description: "Build dev debug APK"
+
+    run:prod:
+      run: "bash scripts/flutter_app.sh run prod debug"
+      description: "Run prod app; optional Flutter arguments"
+
+    build:android:prod:apk:
+      run: "bash scripts/flutter_app.sh apk prod release"
+      description: "Build prod release apk; APK includes AOT freshness check"
+
+    build:android:prod:bundle:
+      run: "bash scripts/flutter_app.sh bundle prod release"
+      description: "Build prod release bundle; APK includes AOT freshness check"
+
+    build:android:prod:apk:debug:
+      run: "bash scripts/flutter_app.sh apk prod debug"
+      description: "Build prod debug APK"

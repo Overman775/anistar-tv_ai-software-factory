@@ -1,18 +1,18 @@
 # 🧪 Разработка и тестирование | AniStar TV
 
-Команды выполняются из корня проекта. Unit/widget-тесты используют fixtures. Emulator E2E проверяет приложение с локальными HTML/HLS и настоящим Android player; live smoke использует AniStar/CDN.
+Команды выполняются из корня проекта через [Melos](melos_tooling.md); низкоуровневые scripts остаются доступны для диагностики. Unit/widget-тесты используют fixtures. Emulator E2E проверяет приложение с локальными HTML/HLS и настоящим Android player; live smoke использует AniStar/CDN.
 
 ## 1. Окружение и запуск
 
 Нужны **FVM**, Flutter **3.47.7** из `.fvmrc`, Dart **3.13.5**, JDK **17**, Android SDK и устройство/эмулятор.
 
-Для Android E2E-скриптов нужен Python **3.10 или новее** в PATH: их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
+Для Android E2E-скриптов нужен Python **3.10 или новее**. Melos автоматически выбирает доступный совместимый interpreter; override — `ANISTAR_PYTHON`. Для прямых scripts настройте PATH: их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
 
 ```bash
 fvm install
-fvm flutter pub get
-fvm flutter run --flavor dev -t lib/main_dev.dart \
-  --dart-define-from-file=env/dev.json
+fvm flutter pub get --enforce-lockfile
+fvm dart run melos bootstrap --enforce-lockfile
+fvm dart run melos run run:dev
 ```
 
 `env/dev.json` хранится в Git. Для собственного production-зеркала скопируйте `env/prod.example.json` в `env/prod.json`; этот файл игнорируется Git. Default зеркало работает без файла defines.
@@ -35,43 +35,42 @@ VS Code использует `.fvm/flutter_sdk`; launch и tasks находят�
 Полная локальная проверка:
 
 ```bash
-bash scripts/check.sh
+fvm dart run melos run check
 ```
 
-Порядок: SDK и lockfile → форматирование → analyzer → DCM → unit/widget/architecture с coverage → golden comparison. Ошибка останавливает команду и возвращает ненулевой exit code. Форматирование и baselines при проверке не изменяются.
+Порядок: SDK и lockfile → форматирование → analyzer → DCM → unit/widget/architecture с coverage → golden comparison → Python tooling → version check. Ошибка останавливает команду и возвращает ненулевой exit code. Форматирование и baselines при проверке не изменяются.
 
 | Режим | Команда |
 | --- | --- |
-| Форматирование | `bash scripts/check.sh format` |
-| Только проверка формата | `bash scripts/check.sh format:check` |
-| Analyzer / DCM | `bash scripts/check.sh analyze` / `bash scripts/check.sh dcm` |
-| Unit/widget и coverage | `bash scripts/check.sh test:unit` |
-| Golden comparison | `bash scripts/check.sh test:goldens` |
-| Обновить golden baseline | `bash scripts/check.sh test:goldens:update` |
-| Быстрые Flutter-проверки без DCM | `bash scripts/check.sh ci` |
+| Форматирование | `fvm dart run melos run format` |
+| Только проверка формата | `fvm dart run melos run format:check` |
+| Analyzer / DCM | `fvm dart run melos run analyze` / `fvm dart run melos run dcm` |
+| Unit/widget и coverage | `fvm dart run melos run test:unit` |
+| Golden comparison | `fvm dart run melos run test:goldens` |
+| Обновить golden baseline | `fvm dart run melos run test:goldens:update` |
+| Быстрые Flutter-проверки без DCM | `fvm dart run melos run check:flutter` |
 
 DCM нужен для полной локальной проверки; допустимая версия указана в `dcm_global.yaml`. Analyzer считает infos ошибкой. Все workspace-пакеты наследуют корневой `analysis_options.yaml`.
 
 Проверки выполняются локально; CI/CD не настроен. Режим `ci` оставлен как короткий профиль без DCM: формат, analyzer, unit coverage и goldens. Для полного прогона используйте `check`. Coverage сохраняется в `coverage/lcov.info`, различия golden — рядом с тестом в `failures/`.
 
-По умолчанию порядок тестов задаёт seed **20261010**. Другой seed: `ANISTAR_TEST_SEED=1337 bash scripts/check.sh test:unit`. При необходимости задайте путь установленного SDK через `ANISTAR_FLUTTER_SDK`; версия всё равно сверяется с `.fvmrc`.
+По умолчанию порядок тестов задаёт seed **20261010**. Другой seed: `ANISTAR_TEST_SEED=1337 fvm dart run melos run test:unit`. При необходимости задайте путь установленного SDK через `ANISTAR_FLUTTER_SDK`; версия всё равно сверяется с `.fvmrc`.
 
 Запускайте Flutter-команды последовательно: они используют общий generated output. Живой Android-сценарий выполняется отдельно от детерминированных проверок.
 
 ```bash
 # E2E на запущенном Android emulator
-bash scripts/e2e.sh emulator-5554
+fvm dart run melos run test:e2e:tv -- emulator-5554
 
 # Постер Hero покадрово на Android, без сети и аккаунта
 fvm flutter test integration_test/navigation_motion_test.dart -d emulator-5554 --flavor dev
 
 # Живой AniStar/CDN smoke
-bash scripts/e2e.sh emulator-5554 live
+fvm dart run melos run test:e2e:live -- emulator-5554
 
 # APK приложения
-fvm flutter build apk --debug --flavor dev -t lib/main_dev.dart
-fvm flutter build apk --release --flavor prod -t lib/main_prod.dart
-python3 tool/quality/verify_android_apk.py
+fvm dart run melos run build:android:dev:apk:debug
+fvm dart run melos run build:android:prod:apk
 ```
 
 APK находятся в `build/app/outputs/flutter-apk/`. Release использует существующую тестовую подпись; перед публикацией настройте собственный signing config.
@@ -87,10 +86,10 @@ APK сравнивает текущие AOT libraries с отдельным JNI 
 Изменение typed routes, ассетов или списка шрифтов UI Kit требует генерации из корня workspace:
 
 ```bash
-fvm dart run build_runner build --workspace
+fvm dart run melos run generate
 ```
 
-FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`, как в `rc-mobile-app/uikit`: создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт — `package:ui_kit/assets.dart` (также экспортируется через `ui_kit.dart`). Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.inter`; для ручного создания Image/AssetImage передавайте `package: Assets.package`. FontFamily.inter уже содержит пакетный префикс; TvTypography использует его напрямую. Generated-файлы сохраняются в Git, вручную их не редактируем.
+FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`: создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт — `package:ui_kit/assets.dart` (также экспортируется через `ui_kit.dart`). Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.inter`; для ручного создания Image/AssetImage передавайте `package: Assets.package`. FontFamily.inter уже содержит пакетный префикс; TvTypography использует его напрямую. Generated-файлы сохраняются в Git, вручную их не редактируем.
 
 ---
 
@@ -257,11 +256,11 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 ## 7. Обновление Flutter
 
-Локальный [anistar-flutter-update](../.agents/skills/anistar-flutter-update/SKILL.md) обновляет stable SDK через FVM и пакеты pub workspace, затем запускает проверки и Android-сборку. Melos, iOS и CI/CD в этот workflow не входят. Текущие версии, результаты и ограничения: [Состояние проверок](06_verification.md).
+Локальный [anistar-flutter-update](../.agents/skills/anistar-flutter-update/SKILL.md) обновляет stable SDK через FVM и пакеты pub workspace, затем запускает проверки и Android-сборку. Melos служит общей точкой запуска проверок и генерации; iOS и CI/CD в этот workflow не входят. Текущие версии, результаты и ограничения: [Состояние проверок](06_verification.md).
 
 ## 8. Иконка, Android TV баннер и заставка
 
-Исходники: `lib/packages/ui_kit/assets/images/anistar_launcher.png` (1024×1024) и `lib/packages/ui_kit/assets/images/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `bash scripts/generate_branding.sh`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
+Исходники: `lib/packages/ui_kit/assets/images/anistar_launcher.png` (1024×1024) и `lib/packages/ui_kit/assets/images/anistar_tv_banner.png` (1280×720). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; xhdpi — 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
 Этот же скрипт обновляет нативную заставку через `flutter_native_splash.yaml`: баннер используется на Android до версии 12, прозрачный `anistar_logo.png` с нативным отступом под круглую маску — на Android 12 и новее. Скрипт сохраняет drawable wrapper в дневной и ночной теме. Подробнее: [ресурсы бренда](branding-assets.md). Старые `logo.png` и `android_icon.png` больше не нужны.
 
@@ -303,7 +302,7 @@ bash scripts/e2e-tv.sh live
 ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json bash scripts/e2e-tv.sh live
 ```
 
-В VS Code: **Terminal → Run Task → Flutter: Live Android E2E**; выбирается запущенный `ANISTAR_TV_AVD` / `anistar_tv_e2e`. Задача вызывает тот же скрипт и автоматически использует локальный JSON. Дополнительный `.env`-загрузчик не нужен: как в RC Mobile, Flutter передаёт JSON через `--dart-define-from-file`, а live harness читает `String.fromEnvironment` и заполняет форму входа.
+В VS Code: **Terminal → Run Task → Flutter: Live Android E2E**; выбирается запущенный `ANISTAR_TV_AVD` / `anistar_tv_e2e`. Задача вызывает тот же скрипт и автоматически использует локальный JSON. Дополнительный `.env`-загрузчик не нужен: Flutter передаёт JSON через `--dart-define-from-file`, а live harness читает `String.fromEnvironment` и заполняет форму входа.
 
 Прямой запуск без скрипта, если окружение уже подготовлено:
 

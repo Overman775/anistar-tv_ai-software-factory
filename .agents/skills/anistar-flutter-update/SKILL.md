@@ -5,7 +5,7 @@ description: "Обновление stable Flutter через FVM и зависи
 
 # Обновление Flutter в AniStar TV
 
-Адаптировано из `rc-flutter-update` проекта RC Mobile App. Здесь Android / Android TV, Dart pub workspace и локальные проверки; Melos, iOS, браузеры и CI/CD не нужны.
+Адаптировано из `rc-flutter-update` проекта RC Mobile App. Здесь Android / Android TV, Dart pub workspace и локальные проверки; Melos объединяет локальные команды; iOS, браузеры и CI/CD не нужны.
 
 ## Контекст
 
@@ -41,16 +41,13 @@ description: "Обновление stable Flutter через FVM и зависи
    ```
 
    Учитывай весь workspace. Для прямых зависимостей проверь `latest`, обнови нижние границы constraints до проверенных версий, включая patch/minor. Не добавляй overrides ради зелёного resolver. Для SDK-pinned и несовместимых transitive пакетов укажи конкретное ограничение; не называй их обновлёнными до latest.
-6. Прочитай официальные migration guides и changelog реально изменившихся API. Для Android проверь предупреждения SDK о Kotlin/AGP/Gradle и [матрицу совместимости KGP](https://kotlinlang.org/docs/gradle-configure-project.html). Обновляй native toolchain в совместимых пределах; не редактируй pub cache и не включай built-in Kotlin глобально, пока плагины ещё применяют legacy KGP. Исправь использование пакетов; если затронуты typed routes, выполни `fvm dart run build_runner build`. Если изменилось форматирование, запусти `bash scripts/check.sh format`.
+6. Прочитай официальные migration guides и changelog реально изменившихся API. Для Android проверь предупреждения SDK о Kotlin/AGP/Gradle и [матрицу совместимости KGP](https://kotlinlang.org/docs/gradle-configure-project.html). Обновляй native toolchain в совместимых пределах; не редактируй pub cache и не включай built-in Kotlin глобально, пока плагины ещё применяют legacy KGP. Исправь использование пакетов; если затронуты typed routes, выполни `fvm dart run melos run generate`. Если изменилось форматирование, запусти `fvm dart run melos run format`.
 7. Проверь:
 
    ```bash
-   bash scripts/check.sh check
-   python3 -m unittest discover -s tool/quality -p '*_test.py'
-   python3 -m unittest discover -s tool/e2e -p '*_test.py'
-   bash scripts/e2e.sh emulator-PORT
-   fvm flutter build apk --release --flavor prod -t lib/main_prod.dart
-   python3 tool/quality/verify_android_apk.py
+   fvm dart run melos run check
+   fvm dart run melos run test:e2e
+   fvm dart run melos run build:android:prod:apk
    ```
 
    E2E запускай на Android emulator с текущим SDK и настоящими HTTP/storage/player через локальный HTTPS fixture. Укажи фактический device и seed. Если устройство недоступно, явно отметь непроверенный уровень; не подменяй его widget-тестом. После integration test собирай APK с обычным pub lifecycle.

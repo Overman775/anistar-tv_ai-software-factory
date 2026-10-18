@@ -6,7 +6,7 @@
 
 Android 12+ native splash использует прозрачный `anistar_logo.png` и drawable `android12splash_safe.xml` с отступом 26% с каждой стороны. Отступы учитывают круглую маску системного splash и форму знака; фон совпадает с `#080B14`. Launcher icon и Flutter-логотип имеют собственные размеры.
 
-Ресурсы пересоздаются командой `bash scripts/generate_branding.sh`: после стандартных Flutter generators скрипт сохраняет ссылку на safe drawable в light/night LaunchTheme и экспортирует TV icons/banner. Конфигурация splash не принуждает landscape: телефон запускается в своей ориентации, TV-профиль задаётся нативно и runner. [Требования Android к splash](https://developer.android.com/develop/ui/views/launch/splash-screen).
+Ресурсы пересоздаются командой `fvm dart run melos run generate:branding`: после стандартных Flutter generators скрипт сохраняет ссылку на safe drawable в light/night LaunchTheme и экспортирует TV icons/banner. Конфигурация splash не принуждает landscape: телефон запускается в своей ориентации, TV-профиль задаётся нативно и runner. [Требования Android к splash](https://developer.android.com/develop/ui/views/launch/splash-screen).
 
 Прозрачный знак создан встроенным imagegen из существующего `anistar_launcher.png`. Промпт:
 
