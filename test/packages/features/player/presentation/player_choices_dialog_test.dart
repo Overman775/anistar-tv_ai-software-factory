@@ -25,8 +25,8 @@ void main() {
         tester,
         PlayerChoicesDialog<String>(
           title: 'Качество',
-          choices: const ['1080p', '720p', '480p', '360p'],
-          selected: '720p',
+          choices: const ['SD 360p', 'HD 720p'],
+          selected: 'HD 720p',
           label: (quality) => quality,
         ),
         size: size,

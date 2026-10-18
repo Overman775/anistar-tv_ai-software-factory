@@ -4,6 +4,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../domain/models/playback_session.dart';
+import '../playback_quality_label.dart';
 
 class PlayerOverlay extends StatefulWidget {
   const PlayerOverlay({
@@ -178,6 +179,8 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final selectedQuality = widget.session.selectedQuality;
+    final qualityLabel = 'Качество: ${selectedQuality.label}';
     final value = widget.value;
     final durationMs = value.duration.inMilliseconds;
     final position = widget.previewPosition ?? value.position;
@@ -326,13 +329,20 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                       icon: const Icon(Icons.playlist_play_rounded),
                     ),
                   if (widget.onSelectQuality != null)
-                    IconButton(
-                      key: const ValueKey('player-quality'),
-                      style: buttonStyle,
-                      focusNode: _quality,
-                      onPressed: widget.onSelectQuality,
-                      tooltip: 'Качество: ${widget.session.selectedQuality.height}p',
-                      icon: const Icon(Icons.settings_outlined),
+                    Tooltip(
+                      message: qualityLabel,
+                      excludeFromSemantics: true,
+                      child: TextButton(
+                        key: const ValueKey('player-quality'),
+                        style: buttonStyle,
+                        focusNode: _quality,
+                        onPressed: widget.onSelectQuality,
+                        child: Text(
+                          selectedQuality.shortLabel,
+                          semanticsLabel: qualityLabel,
+                          style: textTheme.titleMedium,
+                        ),
+                      ),
                     ),
                 ],
               ),

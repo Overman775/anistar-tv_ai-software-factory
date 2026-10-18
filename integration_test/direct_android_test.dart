@@ -100,7 +100,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await _wait(tester, () => player.value.isPlaying, 'remote resume');
     await RemoteControls.openQuality(tester);
-    await _wait(tester, () => find.text('360p').evaluate().isNotEmpty, 'quality dialog');
+    await _wait(tester, () => find.text('SD 360p').evaluate().isNotEmpty, 'quality dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     final previous = player;

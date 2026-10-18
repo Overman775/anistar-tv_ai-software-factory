@@ -15,6 +15,7 @@ import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_refresh_budget.dart';
 import '../../domain/models/playback_session.dart';
 import '../../player_providers.dart';
+import '../playback_quality_label.dart';
 import '../playback_screen_awake.dart';
 import '../player_route_observer.dart';
 import '../player_seek_hold.dart';
@@ -462,7 +463,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         title: 'Качество видео',
         choices: session.availableQualities,
         selected: session.selectedQuality,
-        label: (quality) => '${quality.height}p',
+        label: (quality) => quality.label,
       ),
     );
     if (_isCurrent(initializationId)) {

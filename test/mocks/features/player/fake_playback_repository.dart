@@ -11,13 +11,15 @@ final class FakePlaybackRepository implements PlaybackRepository {
   int episode = 1;
   int anime = 10938;
   PlaybackQuality quality = PlaybackQuality.high;
+  PlaybackQuality? selectedQuality;
+  List<PlaybackQuality> availableQualities = PlaybackQuality.values;
   Completer<Result<PlaybackSession, Failure>>? pending;
 
   PlaybackSession get session => PlaybackSession(
     manifestUri: Uri.parse('https://cdn.test/$calls/720.mp4'),
     requestedQuality: quality,
-    selectedQuality: quality,
-    availableQualities: PlaybackQuality.values,
+    selectedQuality: selectedQuality ?? quality,
+    availableQualities: availableQualities,
     episodeNumbers: episodeNumbers,
     httpHeaders: const {'Referer': 'https://v30.astar.bz/player?id=10938'},
   );

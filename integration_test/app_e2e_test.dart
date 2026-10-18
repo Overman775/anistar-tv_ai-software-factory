@@ -393,9 +393,9 @@ void main() {
     await _openVideo(tester);
     final player = E2eHarness.requirePlayer(tester);
     await RemoteControls.openQuality(tester);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'remote chooser');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isNotEmpty, 'remote chooser');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isEmpty, 'cancel chooser');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isEmpty, 'cancel chooser');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'remote pause after cancellation');
     expect(identical(player, E2eHarness.requirePlayer(tester)), isTrue);
@@ -528,7 +528,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 700));
     expect((player.value.position - pausedPosition).abs(), lessThan(const Duration(milliseconds: 600)));
     await RemoteControls.openQuality(tester);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'quality dialog');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isNotEmpty, 'quality dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     final high = player;

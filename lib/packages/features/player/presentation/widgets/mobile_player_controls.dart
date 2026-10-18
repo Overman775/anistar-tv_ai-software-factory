@@ -3,6 +3,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../domain/models/playback_session.dart';
+import '../playback_quality_label.dart';
 import 'mobile_player_control_button.dart';
 
 /// Touch controls use the same playback commands as the television overlay.
@@ -67,6 +68,8 @@ class MobilePlayerControls extends StatelessWidget {
     final durationMs = value.duration.inMilliseconds;
     final position = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
     final textTheme = Theme.of(context).textTheme;
+    final selectedQuality = session.selectedQuality;
+    final qualityLabel = 'Качество: ${selectedQuality.label}';
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -213,15 +216,16 @@ class MobilePlayerControls extends StatelessWidget {
                         ),
                       if (onSelectQuality != null)
                         Tooltip(
-                          message: 'Качество видео',
-                          child: TextButton.icon(
+                          message: qualityLabel,
+                          excludeFromSemantics: true,
+                          child: TextButton(
                             key: const ValueKey('player-quality'),
                             style: TextButton.styleFrom(minimumSize: const Size(48, 48), foregroundColor: Colors.white),
                             onPressed: onSelectQuality,
-                            icon: const Icon(Icons.settings_outlined, size: 24),
-                            label: Text(
-                              '${session.selectedQuality.height}p',
-                              style: textTheme.bodySmall?.copyWith(color: Colors.white),
+                            child: Text(
+                              selectedQuality.shortLabel,
+                              semanticsLabel: qualityLabel,
+                              style: textTheme.titleSmall?.copyWith(color: Colors.white),
                             ),
                           ),
                         ),

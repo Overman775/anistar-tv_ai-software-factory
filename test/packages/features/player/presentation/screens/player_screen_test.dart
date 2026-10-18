@@ -972,7 +972,7 @@ void main() {
     await settle(tester);
     expect(storage.watched[10938], {1});
     await openMenu(tester);
-    await tester.tap(find.text('360p'));
+    await tester.tap(find.text('SD 360p'));
     await settle(tester);
     expect(storage.writes, 1);
     await openMenu(tester, episodes: true);
