@@ -55,7 +55,10 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final Map<String, FocusNode> _filterFocus = {};
   List<CatalogFilter> _filters = [];
   int _lastFilterIndex = 0;
-  int _episodeColumns = 2;
+  int _episodeColumns = 3;
+  double _episodeHeight = 0;
+  int? _focusedEpisodeNumber;
+  int _episodeNavigationGeneration = 0;
   late Future<AnimeScreenData> _future;
   Animation<double>? _routeAnimation;
   bool _entered = false;
@@ -138,6 +141,16 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         ascending.firstOrNull;
     final episodes = ascending.reversed.toList();
     _episodeNumbers = episodes.map((episode) => episode.number).toList(growable: false);
+    if (_focusedEpisodeNumber != null && !_episodeNumbers.contains(_focusedEpisodeNumber)) {
+      _focusedEpisodeNumber = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && ModalRoute.of(context)?.isCurrent != false) {
+          final firstEpisode = _episodeNumbers.firstOrNull;
+          final target = firstEpisode == null ? _favoriteFocus : _episodeFocus[firstEpisode];
+          (target?.context == null ? _favoriteFocus : target)?.requestFocus();
+        }
+      });
+    }
 
     if (!AppLayoutScope.isTvOf(context)) {
       return MobileAnimeContent(
@@ -218,19 +231,22 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 _episodeColumns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
+                _episodeHeight = AnimeLayout.episodeHeight(context, constraints.crossAxisExtent);
 
                 return SliverGrid.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: AnimeLayout.episodeColumns(constraints.crossAxisExtent),
                     mainAxisSpacing: AppSpacing.xl,
                     crossAxisSpacing: AppSpacing.lg,
-                    childAspectRatio: 16 / 9,
+                    mainAxisExtent: _episodeHeight,
                   ),
                   itemCount: episodes.length,
+                  findChildIndexCallback: _episodeIndexForKey,
                   itemBuilder: (context, index) {
                     final episode = episodes[index];
 
                     return Builder(
+                      key: ValueKey(episode.number),
                       builder: (episodeContext) => EpisodeCard(
                         focusNode: _episodeFocus.putIfAbsent(
                           episode.number,
@@ -239,7 +255,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
                         episode: episode,
                         isWatched:
                             ref.watch(watchedEpisodesProvider(widget.animeId)).value?.contains(episode.number) ?? false,
-                        onFocusChanged: (focused) => _onEpisodeFocusChanged(episodeContext, focused),
+                        onFocusChanged: (focused) => _onEpisodeFocusChanged(episodeContext, episode.number, focused),
                         onTap: () => _openEpisode(episode),
                       ),
                     );
@@ -306,6 +322,20 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
 
   void _openEpisode(AnimeEpisode episode) => widget.onEpisodeTap(episode);
 
+  int? _episodeIndexForKey(Key key) {
+    final index = key is ValueKey<int> ? _episodeNumbers.indexOf(key.value) : -1;
+
+    return index < 0 ? null : index;
+  }
+
+  int _episodeBelow(int index) {
+    if (index ~/ _episodeColumns == (_episodeNumbers.length - 1) ~/ _episodeColumns) {
+      return index;
+    }
+
+    return (index + _episodeColumns).clamp(0, _episodeNumbers.length - 1);
+  }
+
   KeyEventResult _handleNavigation(FocusNode node, KeyEvent event) {
     final current = FocusManager.instance.primaryFocus;
     final key = event.logicalKey;
@@ -313,6 +343,24 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     final firstAction = _episodeNumbers.isEmpty ? _favoriteFocus : _playFocus;
     final filterIndex = _filters.indexWhere((filter) => _filterFocus[filter.path] == current);
     final index = _episodeNumbers.indexWhere((number) => identical(_episodeFocus[number], current));
+    if (index >= 0 && !(key == LogicalKeyboardKey.arrowUp && index < _episodeColumns)) {
+      final column = index % _episodeColumns;
+      final next = switch (key) {
+        LogicalKeyboardKey.arrowLeft => column == 0 ? index : index - 1,
+        LogicalKeyboardKey.arrowRight =>
+          column == _episodeColumns - 1 || index == _episodeNumbers.length - 1 ? index : index + 1,
+        LogicalKeyboardKey.arrowUp => index - _episodeColumns,
+        LogicalKeyboardKey.arrowDown => _episodeBelow(index),
+        _ => null,
+      };
+      if (next != null) {
+        if (next != index && (event is KeyDownEvent || event is KeyRepeatEvent)) {
+          unawaited(_focusEpisode(index, next));
+        }
+
+        return KeyEventResult.handled;
+      }
+    }
     if (key == LogicalKeyboardKey.arrowUp && (current == _playFocus || current == _favoriteFocus)) {
       target = _backFocus.context == null ? null : _backFocus;
       if (_filters.isNotEmpty) {
@@ -344,6 +392,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
+      ++_episodeNavigationGeneration;
       target?.requestFocus();
       if ((target == _playFocus || target == _favoriteFocus) && MediaQuery.textScalerOf(context).scale(18) <= 18) {
         unawaited(
@@ -359,10 +408,49 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     return KeyEventResult.handled;
   }
 
-  void _onEpisodeFocusChanged(BuildContext episodeContext, bool focused) {
+  Future<void> _focusEpisode(int from, int to) async {
+    final generation = ++_episodeNavigationGeneration;
+    final number = _episodeNumbers[to];
+    final target = _episodeFocus[number];
+    if (target?.context != null) {
+      target?.requestFocus();
+
+      return;
+    }
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    // Build the adjacent virtualized row before requesting its focus node.
+    final rowDelta = to ~/ _episodeColumns - from ~/ _episodeColumns;
+    final position = _scrollController.position;
+    final offset = (position.pixels + rowDelta * (_episodeHeight + AppSpacing.xl)).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    await _scrollController.animateTo(
+      offset,
+      duration: AppMotion.durationOf(context, AppMotion.fast),
+      curve: AppMotion.enterCurve,
+    );
+    if (!mounted || generation != _episodeNavigationGeneration || ModalRoute.of(context)?.isCurrent == false) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && generation == _episodeNavigationGeneration && _episodeNumbers.contains(number)) {
+        final next = _episodeFocus[number];
+        if (next?.context != null) {
+          next?.requestFocus();
+        }
+      }
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
+  void _onEpisodeFocusChanged(BuildContext episodeContext, int number, bool focused) {
     if (!focused) {
       return;
     }
+    _focusedEpisodeNumber = number;
     unawaited(
       Scrollable.ensureVisible(
         episodeContext,
