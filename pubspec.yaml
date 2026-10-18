@@ -220,7 +220,7 @@ melos:
 
     version:show:
       run: "python3 tool/version/app_version.py show"
-      description: "Show the app version and README agreement"
+      description: "Show the app version from the root pubspec"
 
     version:check:
       run: "python3 tool/version/app_version.py check"
