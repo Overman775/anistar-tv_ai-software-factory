@@ -145,7 +145,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.mediaPlay);
     await tester.pump();
     expect(view.controller.value.isPlaying, isFalse);
-    await tester.tap(find.text('360p'));
+    await tester.tap(find.text('SD 360p'));
     await settle(tester);
     view = tester.widget<PlayerView>(find.byType(PlayerView));
     expect(view.controller.value.position, const Duration(seconds: 30));

@@ -314,7 +314,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'touch pause after chooser cancellation');
     final qualityPosition = player.value.position;
     await MobileControls.playerAction(tester, 'player-quality');
-    await MobileControls.tap(tester, find.text('360p'), 'select 360p');
+    await MobileControls.tap(tester, find.text('SD 360p'), 'select 360p');
     final high = player;
     await _waitReplacement(tester, high, '360p controller');
     player = E2eHarness.requirePlayer(tester);

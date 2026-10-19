@@ -21,6 +21,7 @@ class PlayerView extends StatefulWidget {
     required this.session,
     required this.title,
     this.onSeekKeyEvent,
+    this.previewPosition,
     this.onSeekRelative,
     this.onRotate,
     this.onInteractionStart,
@@ -36,6 +37,7 @@ class PlayerView extends StatefulWidget {
   });
 
   final bool Function(KeyEvent)? onSeekKeyEvent;
+  final Duration? previewPosition;
   final VoidCallback? onRotate;
   final VoidCallback? onInteractionStart;
   final VoidCallback? onInteractionEnd;
@@ -174,6 +176,7 @@ class _PlayerViewState extends State<PlayerView> {
                             onSelectEpisode: widget.onSelectEpisode,
                             onSeek: widget.onSeek,
                             onSeekKeyEvent: widget.onSeekKeyEvent,
+                            previewPosition: widget.previewPosition,
                           ),
                   ),
                 ),

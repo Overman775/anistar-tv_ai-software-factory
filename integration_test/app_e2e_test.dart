@@ -393,9 +393,9 @@ void main() {
     await _openVideo(tester);
     final player = E2eHarness.requirePlayer(tester);
     await RemoteControls.openQuality(tester);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'remote chooser');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isNotEmpty, 'remote chooser');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isEmpty, 'cancel chooser');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isEmpty, 'cancel chooser');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'remote pause after cancellation');
     expect(identical(player, E2eHarness.requirePlayer(tester)), isTrue);
@@ -426,10 +426,19 @@ void main() {
     await E2eHarness.waitFor(tester, () => !player.value.isPlaying, 'pause for seek hold');
     await player.seekTo(const Duration(seconds: 15));
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowLeft);
-    await E2eHarness.waitFor(tester, () => player.value.position <= Duration.zero, 'held rewind to start');
+    await E2eHarness.waitFor(
+      tester,
+      () => tester.widget<Slider>(find.byType(Slider)).value == 0,
+      'held rewind preview to start',
+    );
+    expect(player.value.position, const Duration(seconds: 15), reason: 'hold must not seek native video');
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowLeft);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await E2eHarness.waitFor(tester, () => player.value.position <= Duration.zero, 'release commits rewind');
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(player.value.position, Duration.zero, reason: 'short press also waits for release');
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
     await E2eHarness.waitFor(tester, () => player.value.position.inSeconds == 10, 'one short seek step');
     await tester.pump(const Duration(milliseconds: 800));
     expect(player.value.position.inSeconds, 10, reason: 'release stops native repeat');
@@ -519,7 +528,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 700));
     expect((player.value.position - pausedPosition).abs(), lessThan(const Duration(milliseconds: 600)));
     await RemoteControls.openQuality(tester);
-    await E2eHarness.waitFor(tester, () => find.text('360p').evaluate().isNotEmpty, 'quality dialog');
+    await E2eHarness.waitFor(tester, () => find.text('SD 360p').evaluate().isNotEmpty, 'quality dialog');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     final high = player;

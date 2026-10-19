@@ -1,3 +1,8 @@
+import 'dart:math' as math;
+
+import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
+
 /// Geometry shared by the details page and its loading placeholders.
 abstract final class AnimeLayout {
   static double heroHeight(double width, {double textScale = 1}) =>
@@ -11,11 +16,31 @@ abstract final class AnimeLayout {
     return width >= 900 ? 380 : 470;
   }
 
-  static int episodeColumns(double width) {
-    if (width >= 1600) {
-      return 4;
+  static int episodeColumns(double _) => 3;
+
+  /// Reserve the same scaled caption and two title lines in loading and ready.
+  static double episodeHeight(BuildContext context, double gridWidth) {
+    final width = (gridWidth - AppSpacing.lg * 2) / episodeColumns(gridWidth);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    double twoLineHeight(TextStyle? style) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: 'Серия\nНазвание',
+          style: style?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        textScaler: scaler,
+        textDirection: direction,
+      )..layout();
+      final height = painter.height;
+      painter.dispose();
+
+      return height;
     }
 
-    return width >= 900 ? 3 : 2;
+    final captionHeight = twoLineHeight(AppContentTypography.episodeCaptionOf(context)) + AppSpacing.xs * 2;
+    final titleHeight = math.max(twoLineHeight(AppContentTypography.episodeTitleOf(context)), AppSpacing.xs * 2 + 26);
+
+    return math.max(width * 9 / 16, AppSpacing.sm + captionHeight + AppSpacing.md + titleHeight + AppSpacing.md);
   }
 }

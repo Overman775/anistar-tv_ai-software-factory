@@ -4,6 +4,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../domain/models/playback_session.dart';
+import '../playback_quality_label.dart';
 
 class PlayerOverlay extends StatefulWidget {
   const PlayerOverlay({
@@ -14,6 +15,7 @@ class PlayerOverlay extends StatefulWidget {
     required this.onPlayPause,
     required this.onSeek,
     this.onSeekKeyEvent,
+    this.previewPosition,
     this.onSelectQuality,
     this.onSelectEpisode,
     this.onPreviousEpisode,
@@ -34,6 +36,7 @@ class PlayerOverlay extends StatefulWidget {
   }
 
   final bool Function(KeyEvent)? onSeekKeyEvent;
+  final Duration? previewPosition;
   final int episodeNumber;
   final VoidCallback? onPreviousEpisode;
   final VoidCallback? onNextEpisode;
@@ -176,9 +179,12 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final selectedQuality = widget.session.selectedQuality;
+    final qualityLabel = 'Качество: ${selectedQuality.label}';
     final value = widget.value;
     final durationMs = value.duration.inMilliseconds;
-    final positionMs = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
+    final position = widget.previewPosition ?? value.position;
+    final positionMs = position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
     final buttonStyle = AppFocusStyle.button().copyWith(
       minimumSize: const WidgetStatePropertyAll(Size(52, 52)),
       iconSize: const WidgetStatePropertyAll(30),
@@ -306,7 +312,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                     ),
                   const SizedBox(width: AppSpacing.md),
                   Text(
-                    '${PlayerOverlay._format(value.position)} / ${PlayerOverlay._format(value.duration)}',
+                    '${PlayerOverlay._format(position)} / ${PlayerOverlay._format(value.duration)}',
                     style: textTheme.bodyMedium?.copyWith(
                       color: Colors.white,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -323,13 +329,20 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                       icon: const Icon(Icons.playlist_play_rounded),
                     ),
                   if (widget.onSelectQuality != null)
-                    IconButton(
-                      key: const ValueKey('player-quality'),
-                      style: buttonStyle,
-                      focusNode: _quality,
-                      onPressed: widget.onSelectQuality,
-                      tooltip: 'Качество: ${widget.session.selectedQuality.height}p',
-                      icon: const Icon(Icons.settings_outlined),
+                    Tooltip(
+                      message: qualityLabel,
+                      excludeFromSemantics: true,
+                      child: TextButton(
+                        key: const ValueKey('player-quality'),
+                        style: buttonStyle,
+                        focusNode: _quality,
+                        onPressed: widget.onSelectQuality,
+                        child: Text(
+                          selectedQuality.shortLabel,
+                          semanticsLabel: qualityLabel,
+                          style: textTheme.titleMedium,
+                        ),
+                      ),
                     ),
                 ],
               ),

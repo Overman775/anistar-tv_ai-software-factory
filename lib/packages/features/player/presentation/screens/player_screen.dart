@@ -15,6 +15,7 @@ import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_refresh_budget.dart';
 import '../../domain/models/playback_session.dart';
 import '../../player_providers.dart';
+import '../playback_quality_label.dart';
 import '../playback_screen_awake.dart';
 import '../player_route_observer.dart';
 import '../player_seek_hold.dart';
@@ -50,6 +51,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   late final PlayerSeekHold _seekHold;
   FocusNode? _seekFocus;
   Duration? _seekTarget;
+  Duration? _seekPreview;
   Duration? _pendingSeek;
   VideoPlayerController? _seekingPlayer;
   VideoPlayerController? _controller;
@@ -71,7 +73,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     super.initState();
     _logger = ref.read(loggerProvider);
     _screenAwake = PlaybackScreenAwake(_logger);
-    _seekHold = PlayerSeekHold(_seekRelative);
+    _seekHold = PlayerSeekHold(_previewSeek, onRelease: _releaseSeek, onCancel: _cancelSeekPreview);
     HardwareKeyboard.instance.addHandler(_observeKey);
     FocusManager.instance.addListener(_onFocusChanged);
     _appResumed = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -134,6 +136,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       playFocusNode: _playFocus,
       controller: data.controller,
       controlsVisible: _controlsVisible,
+      previewPosition: _seekPreview,
       episodeNumber: _episodeNumber,
       onSelectQuality: _selectQuality,
       onSelectEpisode: _selectEpisode,
@@ -197,9 +200,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     }
     if (event is KeyUpEvent) {
       _seekHold.handle(event);
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft || event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        _scheduleControlsHide();
-      }
     } else if (event is KeyDownEvent || event is KeyRepeatEvent) {
       if (event.logicalKey != LogicalKeyboardKey.arrowLeft && event.logicalKey != LogicalKeyboardKey.arrowRight) {
         _seekHold.stop();
@@ -211,7 +211,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   bool _handleSeekKey(KeyEvent event) {
-    if (!_appResumed || !_routeActive || !(_route?.isCurrent ?? true)) {
+    final player = _controller;
+    if (!_isTv ||
+        !_appResumed ||
+        !_routeActive ||
+        !(_route?.isCurrent ?? true) ||
+        player == null ||
+        !player.value.isInitialized ||
+        player.value.hasError) {
       return false;
     }
     if (event is KeyDownEvent) {
@@ -456,7 +463,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         title: 'Качество видео',
         choices: session.availableQualities,
         selected: session.selectedQuality,
-        label: (quality) => '${quality.height}p',
+        label: (quality) => quality.label,
       ),
     );
     if (_isCurrent(initializationId)) {
@@ -514,10 +521,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   void _scheduleControlsHide() {
     _controlsTimer?.cancel();
+    if (_seekHold.isActive) {
+      return;
+    }
     _controlsTimer = Timer(const Duration(seconds: 4), _onControlsTimer);
   }
 
+  void _previewSeek(Duration offset) {
+    final player = _controller;
+    if (player == null || !player.value.isInitialized || player.value.hasError) {
+      _seekHold.stop();
+
+      return;
+    }
+    final target = (_seekPreview ?? _seekTarget ?? player.value.position) + offset;
+    setState(() {
+      _seekPreview = Duration(milliseconds: target.inMilliseconds.clamp(0, player.value.duration.inMilliseconds));
+      _controlsVisible = true;
+    });
+    _controlsTimer?.cancel();
+  }
+
+  void _releaseSeek() {
+    final target = _seekPreview;
+    _cancelSeekPreview();
+    if (target != null) {
+      _seek(target);
+    }
+    _scheduleControlsHide();
+  }
+
+  void _cancelSeekPreview() {
+    if (_seekPreview == null) {
+      return;
+    }
+    if (_disposed) {
+      _seekPreview = null;
+    } else {
+      setState(() => _seekPreview = null);
+    }
+  }
+
   void _seek(Duration position) {
+    _seekHold.stop();
     final player = _controller;
     if (player == null || !player.value.isInitialized || player.value.hasError) {
       return;
@@ -590,6 +636,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _startScrubbing() {
+    _seekHold.stop();
     _scrubbing = true;
     _controlsTimer?.cancel();
   }
@@ -626,6 +673,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _setPlaying(bool playing) {
+    _seekHold.stop();
     if (!_appResumed) {
       _lifecycleResumePlaying = playing;
       if (playing) {

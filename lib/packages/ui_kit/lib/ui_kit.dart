@@ -1,3 +1,4 @@
+export './src/theme/app_content_typography.dart';
 export './src/theme/app_focus_style.dart';
 export './src/theme/app_palette.dart';
 export './src/theme/app_theme.dart';
@@ -6,10 +7,12 @@ export './src/widgets/anistar_logo.dart';
 export './src/widgets/app_action_sheet.dart';
 export './src/widgets/app_device_profile.dart';
 export './src/widgets/app_layout_scope.dart';
+export './src/widgets/app_metadata_badge.dart';
 export './src/widgets/app_network_image.dart';
 export './src/widgets/app_responsive_root.dart';
 export './src/widgets/tv_backdrop.dart';
 export './src/widgets/tv_choice_tile.dart';
+export './src/widgets/tv_focus_tile.dart';
 export './src/widgets/tv_focusable.dart';
 export './src/widgets/tv_header_surface.dart';
 export './src/widgets/tv_poster_hero.dart';
