@@ -1,0 +1,92 @@
+rules:
+  # Native Dart AST patterns; this is a bounded API check, not taint analysis.
+  - id: anistar.dart.accept-all-certificates
+    languages: [dart]
+    severity: ERROR
+    message: Reject invalid TLS certificates instead of accepting every certificate.
+    pattern-either:
+      - pattern: $CLIENT.badCertificateCallback = (...) => true
+      - pattern: $CLIENT.badCertificateCallback = (...) { return true; }
+      - pattern: $CLIENT..badCertificateCallback = (...) => true
+      - pattern: $CLIENT..badCertificateCallback = (...) { return true; }
+
+  - id: anistar.dart.dio-accept-all-certificates
+    languages: [dart]
+    severity: ERROR
+    message: Do not disable Dio certificate validation.
+    pattern-either:
+      - pattern: $ADAPTER.validateCertificate = (...) => true
+      - pattern: $ADAPTER.validateCertificate = (...) { return true; }
+      - pattern: 'IOHttpClientAdapter(..., validateCertificate: (...) => true, ...)'
+
+  # Deliberately only direct values with explicit credential names. Safe summaries,
+  # redaction helpers and status messages are not treated as credential values.
+  - id: anistar.dart.direct-credential-log
+    languages: [dart]
+    severity: ERROR
+    message: Do not pass raw credentials or cookies to Logger.
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.$METHOD($SECRET, ...)
+          - pattern: $LOGGER.$METHOD<$TYPE>($SECRET, ...)
+      - metavariable-regex:
+          metavariable: $LOGGER
+          regex: '(?i)^_?logger$'
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '^(t|d|i|w|e|f|traceFor|debugFor|infoFor|warningFor|errorFor|fatalFor)$'
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: '(?i)^(?:[a-z_][a-z_0-9]*\.)?(?:password|cookieHeader|accessToken|refreshToken|sessionToken|authorization)$'
+
+  - id: anistar.kotlin.webview-ssl-proceed
+    languages: [kotlin]
+    severity: ERROR
+    message: Cancel WebView SSL errors instead of proceeding past certificate failure.
+    patterns:
+      - pattern-inside: |
+          fun onReceivedSslError(...) { ... }
+      - pattern-either:
+          - pattern: $HANDLER.proceed()
+          - pattern: $HANDLER?.proceed()
+
+  - id: anistar.python.disabled-tls-verification
+    languages: [python]
+    severity: ERROR
+    message: Keep TLS certificate verification enabled.
+    pattern-either:
+      - pattern: requests.$METHOD(..., verify=False, ...)
+      - pattern: ssl._create_unverified_context(...)
+      - pattern: $CONTEXT.verify_mode = ssl.CERT_NONE
+
+  - id: anistar.python.shell-command
+    languages: [python]
+    severity: ERROR
+    message: Pass an argument list to subprocess without shell=True.
+    patterns:
+      - pattern: subprocess.$METHOD(..., shell=True, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '^(run|call|check_call|check_output|Popen)$'
+
+  - id: anistar.python.unsafe-deserialization
+    languages: [python]
+    severity: ERROR
+    message: Use a data-only format or a safe YAML loader for external data.
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: yaml.unsafe_load(...)
+      - pattern: yaml.load(..., Loader=yaml.Loader, ...)
+      - pattern: yaml.load(..., Loader=yaml.UnsafeLoader, ...)
+
+  - id: anistar.python.nonliteral-code-execution
+    languages: [python]
+    severity: ERROR
+    message: Do not execute code assembled from runtime data.
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE, ...)
+          - pattern: exec($CODE, ...)
+      - pattern-not: eval("...", ...)
+      - pattern-not: exec("...", ...)

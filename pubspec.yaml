@@ -79,7 +79,9 @@ melos:
       enabled: false
   scripts:
     analyze:
-      run: "bash scripts/check.sh analyze"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:analyze --include-private
       description: "Strict analyzer for app and all workspace packages"
 
     clean:
@@ -87,15 +89,19 @@ melos:
       description: "Clean app build output"
 
     clean:all:
-      run: "melos run clean && melos run generate:clean"
+      run: "dart run melos run clean && dart run melos run generate:clean"
       description: "Clean app and code generator caches"
 
     format:
-      run: "bash scripts/check.sh format"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:format --include-private
       description: "Format maintained Dart sources"
 
     format:check:
-      run: "bash scripts/check.sh format:check"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:format-check --include-private
       description: "Check format without editing files"
 
     fix:
@@ -107,7 +113,9 @@ melos:
       description: "Preview Dart fixes"
 
     dcm:
-      run: "bash scripts/check.sh dcm"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:dcm --include-private
       description: "Strict DCM analysis including tests"
 
     dcm:fix:
@@ -115,16 +123,48 @@ melos:
       description: "Apply DCM fixes; inspect resulting diff"
 
     fix:all:
-      run: "melos run fix && melos run dcm:fix"
+      run: "dart run melos run fix && dart run melos run dcm:fix"
       description: "Apply Dart and DCM fixes sequentially"
 
     check:
-      run: "bash scripts/check.sh check && melos run test:tooling && melos run version:check"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:format-check --include-private
+        - dart run melos run quality:analyze --include-private
+        - dart run melos run quality:dcm --include-private
+        - dart run melos run quality:unit --include-private
+        - dart run melos run quality:goldens --include-private
+        - dart run melos run test:tooling --include-private
+        - dart run melos run version:check --include-private
       description: "SDK, lockfile, format, analyzer, DCM, unit, golden and tooling checks"
 
     check:flutter:
-      run: "bash scripts/check.sh ci"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:format-check --include-private
+        - dart run melos run quality:analyze --include-private
+        - dart run melos run quality:unit --include-private
+        - dart run melos run quality:goldens --include-private
       description: "Local Flutter-only checks without DCM"
+
+    security:secrets:
+      run: "bash scripts/security_gitleaks.sh history"
+      description: "Scan all committed Git history for secrets offline"
+
+    security:deps:
+      run: "bash scripts/security_osv.sh"
+      description: "Check the workspace lockfile against OSV advisories online"
+
+    security:code:
+      run: "bash scripts/security_semgrep.sh"
+      description: "Scan maintained code with local Semgrep rules offline"
+
+    security:
+      steps:
+        - dart run melos run security:secrets
+        - dart run melos run security:deps
+        - dart run melos run security:code
+      description: "Run secrets, dependency and code security scans sequentially"
 
     get:
       run: "flutter pub get --enforce-lockfile"
@@ -147,7 +187,7 @@ melos:
       description: "Show workspace dependency graph"
 
     workspace:
-      run: "melos list"
+      run: "dart run melos list"
       description: "List app and six local packages"
 
     doctor:
@@ -167,11 +207,11 @@ melos:
       description: "Generate typed routes and FlutterGen assets sequentially"
 
     build_runner:
-      run: "melos run generate"
+      run: "dart run melos run generate"
       description: "Compatibility alias for RC quick start"
 
     generate:assets:
-      run: "melos run generate"
+      run: "dart run melos run generate"
       description: "Generate FlutterGen assets and fonts with typed routes"
 
     watch:
@@ -183,7 +223,7 @@ melos:
       description: "Clean workspace generator cache"
 
     build_runner:clean:
-      run: "melos run generate:clean"
+      run: "dart run melos run generate:clean"
       description: "Compatibility alias for generator cache cleaning"
 
     generate:branding:
@@ -191,26 +231,30 @@ melos:
       description: "Export Android TV launcher, banner and safe splash (macOS)"
 
     generate:icon:
-      run: "melos run generate:branding"
+      run: "dart run melos run generate:branding"
       description: "Export icons with TV dimensions and safe splash"
 
     generate:splash:
-      run: "melos run generate:branding"
+      run: "dart run melos run generate:branding"
       description: "Export splash with Android 12 safe wrapper and TV icons"
 
     generate:e2e-media:
+      private: true
       run: "bash scripts/regenerate_e2e_media.sh"
       description: "Regenerate local 360p/720p HLS fixtures (FFmpeg required)"
 
     check:apk:
+      private: true
       run: "python3 tool/quality/verify_android_apk.py"
       description: "Verify prod release APK freshness for every AOT ABI"
 
     graph:update:
+      private: true
       run: "graphify update ."
       description: "Refresh local code knowledge graph (optional graphify)"
 
     graph:check:
+      private: true
       run: "bash scripts/graphify_check.sh"
       description: "Check graphify extractor patch and regression tests (optional)"
 
@@ -223,7 +267,8 @@ melos:
       description: "Show the app version from the root pubspec"
 
     version:check:
-      run: "python3 tool/version/app_version.py check"
+      private: true
+      run: bash scripts/with_python.sh python3 tool/version/app_version.py check
       description: "Validate current app version without Git changes"
 
     version:plan:
@@ -235,19 +280,27 @@ melos:
       description: "Preview explicit version/build; writes only with --write"
 
     test:unit:
-      run: "bash scripts/check.sh test:unit"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:unit --include-private
       description: "Run unit from central test suite"
 
     test:goldens:
-      run: "bash scripts/check.sh test:goldens"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:goldens --include-private
       description: "Run goldens from central test suite"
 
     test:goldens:update:
-      run: "bash scripts/check.sh test:goldens:update"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:goldens:update --include-private
       description: "Run goldens:update from central test suite"
 
     test:coverage:
-      run: "bash scripts/check.sh test:coverage"
+      steps:
+        - dart run melos run quality:prepare --include-private
+        - dart run melos run quality:unit --include-private
       description: "Run coverage from central test suite"
 
     test:tooling:
@@ -259,18 +312,22 @@ melos:
       description: "Run TV and mobile fixtures sequentially on separate emulators"
 
     test:e2e:tv:
+      private: true
       run: "bash scripts/with_python.sh bash scripts/e2e-tv.sh"
       description: "Run Android TV fixture E2E; optional emulator serial"
 
     test:e2e:mobile:
+      private: true
       run: "bash scripts/with_python.sh bash scripts/e2e-mobile.sh"
       description: "Run Android mobile fixture E2E; optional emulator serial"
 
     test:e2e:live:
+      private: true
       run: "bash scripts/with_python.sh bash scripts/e2e_live.sh"
       description: "Run live TV account scenario; changes remote watched history, explicit only"
 
     test:network:live:
+      private: true
       run: "flutter test tool/diagnostics/anistar_network_test.dart --reporter=expanded"
       description: "Read-only live network/login diagnosis with local credentials"
 
@@ -305,3 +362,80 @@ melos:
     build:android:prod:apk:debug:
       run: "bash scripts/flutter_app.sh apk prod debug"
       description: "Build prod debug APK"
+
+    # Explicit local-package invocation also works without a global Melos launcher.
+    # Preparation belongs to the public profile; leaves never prepare recursively.
+    quality:prepare:
+      private: true
+      run: |
+        bash -euo pipefail <<'BASH'
+        sdk=${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}
+        seed=${ANISTAR_TEST_SEED:-20261010}
+        [[ $seed =~ ^[0-9]+$ ]] || { echo "ANISTAR_TEST_SEED must be a non-negative integer." >&2; exit 64; }
+        "$sdk/bin/flutter" --no-version-check --version --machine | "$sdk/bin/dart" tool/quality/verify_sdk.dart
+        "$sdk/bin/flutter" --no-version-check pub get --enforce-lockfile
+        sources=$(find lib infrastructure test integration_test tool/quality \
+          -type d \( -name build -o -name .dart_tool \) -prune -o \
+          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
+          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print)
+        [[ -n $sources ]] || { echo "No maintained Dart sources found." >&2; exit 1; }
+        BASH
+
+    quality:format:
+      private: true
+      run: |
+        bash -euo pipefail <<'BASH'
+        find lib infrastructure test integration_test tool/quality \
+          -type d \( -name build -o -name .dart_tool \) -prune -o \
+          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
+          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print0 |
+          xargs -0 "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/dart" format
+        BASH
+
+    quality:format-check:
+      private: true
+      run: |
+        bash -euo pipefail <<'BASH'
+        find lib infrastructure test integration_test tool/quality \
+          -type d \( -name build -o -name .dart_tool \) -prune -o \
+          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
+          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print0 |
+          xargs -0 "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/dart" format --output=none --set-exit-if-changed
+        BASH
+
+    quality:analyze:
+      private: true
+      run: >-
+        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
+        analyze --no-pub --fatal-infos
+
+    quality:dcm:
+      private: true
+      run: >-
+        dcm analyze lib infrastructure test integration_test tool/quality
+        --sdk-path "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/cache/dart-sdk"
+        --fatal-style --fatal-warnings --no-analytics
+
+    quality:unit:
+      private: true
+      run: >-
+        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
+        test --no-pub --exclude-tags=golden --concurrency=4
+        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}" --coverage
+        --coverage-package=anistar_tv --coverage-package=core --coverage-package=networking
+        --coverage-package=storage --coverage-package=app_logging --coverage-package=anistar
+        --coverage-package=ui_kit
+
+    quality:goldens:
+      private: true
+      run: >-
+        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
+        test --no-pub --tags=golden --concurrency=1
+        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}"
+
+    quality:goldens:update:
+      private: true
+      run: >-
+        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
+        test --no-pub --tags=golden --concurrency=1
+        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}" --update-goldens

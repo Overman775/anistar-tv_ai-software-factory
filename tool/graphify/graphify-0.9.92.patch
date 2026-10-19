@@ -1,0 +1,174 @@
+--- a/extractors/dart.py
++++ b/extractors/dart.py
+@@ -7 +7,6 @@
+-from graphify.extractors.base import _file_stem, _make_id, _read_source_text
++from graphify.extractors.base import _file_stem, _make_id as _base_make_id, _read_source_text
++
++
++def _make_id(*parts: str) -> str:
++    # Dollar signs are legal Dart identifier characters, not punctuation.
++    return _base_make_id(*(part.replace("$", "_u0024_") for part in parts))
+@@ -29,7 +34,2 @@
+-            # Blank to the SAME number of newlines the comment spanned, not
+-            # to an empty string: every offset computed against src_clean
+-            # below (including every source_location line number) is only
+-            # valid if src_clean's line count tracks the original file's.
+-            # Deleting a multi-line comment outright shifted every later
+-            # line number up by the comment's own height (#3365).
+-            return "\n" * token.count("\n")
++            # Preserve character offsets as well as line locations (#3365).
++            return re.sub(r"[^\n]", " ", token)
+@@ -37,0 +38,5 @@
++    # Scan syntax without literal contents. Keep offsets/newlines so the
++    # original literals remain available for URI/navigation extraction.
++    src_code = comment_string_pattern.sub(
++        lambda match: re.sub(r"[^\n]", " ", match.group(0)), src_clean
++    )
+@@ -49 +54 @@
+-    if part_of_match:
++    if part_of_match and src_code[part_of_match.start():part_of_match.start(1)].strip():
+@@ -158,2 +163,2 @@
+-    class_pattern = r"^\s*(?:(?:abstract|sealed|base|interface|final|mixin)\s+)*(?:class|mixin|enum|extension\s+type)\s+(\w+)"
+-    for m in re.finditer(class_pattern, src_clean, re.MULTILINE):
++    class_pattern = r"^\s*(?:(?:abstract|sealed|base|interface|final|mixin)\s+)*(?:class|mixin|enum|extension\s+type)\s+([\w$]+)"
++    for m in re.finditer(class_pattern, src_code, re.MULTILINE):
+@@ -171 +176 @@
+-        rest = src_clean[start_idx : start_idx + 500]
++        rest = src_code[start_idx : start_idx + 500]
+@@ -208 +213 @@
+-        extends_m = re.search(r"^\s*(?:extends|on)\s+([a-zA-Z0-9_.]+)", header)
++        extends_m = re.search(r"^\s*(?:extends|on)\s+([a-zA-Z0-9_$.]+)", header)
+@@ -281,2 +286,2 @@
+-        brace_pos = src_clean.find("{", start_idx)
+-        semi_pos = src_clean.find(";", start_idx)
++        brace_pos = src_code.find("{", start_idx)
++        semi_pos = src_code.find(";", start_idx)
+@@ -289,2 +294,2 @@
+-            end_pos = _find_matching_brace(src_clean, start_idx)
+-            class_body = src_clean[brace_pos:end_pos]
++            end_pos = _find_matching_brace(src_code, start_idx)
++            class_body = src_code[brace_pos:end_pos]
+@@ -293 +298 @@
+-            for em in re.finditer(r"\bon<(\w+)>\s*\(", class_body):
++            for em in re.finditer(r"\bon<([\w$]+)>\s*\(", class_body):
+@@ -301 +306 @@
+-            for sm in re.finditer(r"\b(?:emit|yield)\s*\(?\s*(?:const\s+)?([A-Z]\w*)\b", class_body):
++            for sm in re.finditer(r"\b(?:emit|yield)\s*\(?\s*(?:const\s+)?([A-Z][\w$]*)\b", class_body):
+@@ -310 +315 @@
+-            for am in re.finditer(r"\b(?:\w*[Bb]loc\w*|context\.read<\w+>\(\))\.add\(\s*(?:const\s+)?([A-Z]\w*)\b", class_body):
++            for am in re.finditer(r"\b(?:[\w$]*[Bb]loc[\w$]*|context\.read<[\w$]+>\(\))\.add\(\s*(?:const\s+)?([A-Z][\w$]*)\b", class_body):
+@@ -319 +324 @@
+-            for rm in re.finditer(r"\bref\.(?:watch|read|listen)\s*\(\s*(\w+)\b", class_body):
++            for rm in re.finditer(r"\bref\.(?:watch|read|listen)\s*\(\s*([\w$]+)\b", class_body):
+@@ -327 +332 @@
+-            for bm in re.finditer(r"\bBloc(?:Builder|Listener|Consumer|Provider|Selector)\s*<\s*([a-zA-Z0-9_]+)\b", class_body):
++            for bm in re.finditer(r"\bBloc(?:Builder|Listener|Consumer|Provider|Selector)\s*<\s*([a-zA-Z0-9_$]+)\b", class_body):
+@@ -336 +341 @@
+-            for lm in re.finditer(r"\b(?:read|watch|select|of)\s*<([a-zA-Z0-9_]+)>", class_body):
++            for lm in re.finditer(r"\b(?:read|watch|select|of)\s*<([a-zA-Z0-9_$]+)>", class_body):
+@@ -347,2 +352,2 @@
+-    annotation_pattern = r"@(\w+)(?:\([^)]*\))?"
+-    for am in re.finditer(annotation_pattern, src_clean):
++    annotation_pattern = r"@([\w$]+)(?:\([^)]*\))?"
++    for am in re.finditer(annotation_pattern, src_code):
+@@ -353,4 +358,4 @@
+-        intervening_text = src_clean[annotation_pos : annotation_pos + 300]
+-
+-        class_m = re.search(r"^\s*(?:(?:abstract|sealed|base|interface|final|mixin)\s+)*(?:class|mixin|enum|extension\s+type)\s+(\w+)", intervening_text, re.MULTILINE)
+-        func_m = re.search(r"^\s*(?:factory\s+|static\s+|async\s+|external\s+|abstract\s+)?(?:\([^)]+\)|[a-zA-Z0-9_<>,.?]+)(?:\s+[a-zA-Z0-9_<>,.?]+){0,3}\s+(\w+)\s*\(", intervening_text, re.MULTILINE)
++        intervening_text = src_code[annotation_pos : annotation_pos + 300]
++
++        class_m = re.search(r"^\s*(?:(?:abstract|sealed|base|interface|final|mixin)\s+)*(?:class|mixin|enum|extension\s+type)\s+([\w$]+)", intervening_text, re.MULTILINE)
++        func_m = re.search(r"^\s*(?:factory\s+|static\s+|async\s+|external\s+|abstract\s+)?(?:\([^)]+\)|[a-zA-Z0-9_$<>,.?]+)(?:\s+[a-zA-Z0-9_$<>,.?]+){0,3}\s+([\w$]+)\s*\(", intervening_text, re.MULTILINE)
+@@ -399,2 +404,2 @@
+-    typedef_pattern = r"^\s*typedef\s+(\w+)\s*(?:<[^>]+>)?\s*=\s*([a-zA-Z0-9_<>,.?\s]+);"
+-    for m in re.finditer(typedef_pattern, src_clean, re.MULTILINE):
++    typedef_pattern = r"^\s*typedef\s+([\w$]+)\s*(?:<[^>]+>)?\s*=\s*([a-zA-Z0-9_$<>,.?\s]+);"
++    for m in re.finditer(typedef_pattern, src_code, re.MULTILINE):
+@@ -413,2 +418,2 @@
+-    ext_pattern = r"^\s{0,4}extension\s+(\w+)?(?:<[^>]+>)?\s+on\s+(\w+)"
+-    for m in re.finditer(ext_pattern, src_clean, re.MULTILINE):
++    ext_pattern = r"^\s{0,4}extension\s+([\w$]+)?(?:<[^>]+>)?\s+on\s+([\w$]+)"
++    for m in re.finditer(ext_pattern, src_code, re.MULTILINE):
+@@ -430,2 +435,2 @@
+-    var_pattern = r"^\s{0,2}(?:late\s+)?(?:(?:final|const|var)\s+)?(?:\([^)]+\)\s+|([a-zA-Z0-9_<>,.?]+(?:\s+[a-zA-Z0-9_<>,.?]+){0,3})\s+)?(?:(\w+)|(?:\w+\s*)?\(([^)]+)\))\s*(?:=|$|;)"
+-    for m in re.finditer(var_pattern, src_clean, re.MULTILINE):
++    var_pattern = r"^\s{0,2}(?:late\s+)?(?:(?:final|const|var)\s+)?(?:\([^)]+\)\s+|([a-zA-Z0-9_$<>,.?]+(?:\s+[a-zA-Z0-9_$<>,.?]+){0,3})\s+)?(?:([\w$]+)|(?:[\w$]+\s*)?\(([^)]+)\))\s*(?:=|$|;)"
++    for m in re.finditer(var_pattern, src_code, re.MULTILINE):
+@@ -447,0 +453,2 @@
++                    if not clean_type:
++                        continue
+@@ -456 +463 @@
+-                if re.match(r"^[a-zA-Z_]\w*$", name) and not re.match(r"^[A-Z]", name):
++                if re.match(r"^[a-zA-Z_$][\w$]*$", name) and not re.match(r"^[A-Z]", name):
+@@ -464,2 +471,2 @@
+-    method_pattern = r"^\s{0,2}(?:factory\s+|static\s+|async\s+|external\s+|abstract\s+)?(?:\([^)]+\)|[a-zA-Z0-9_<>,.?]+)(?:\s+[a-zA-Z0-9_<>,.?]+){0,3}\s+(\w+(?:\.\w+)?)\s*\("
+-    for m in re.finditer(method_pattern, src_clean, re.MULTILINE):
++    method_pattern = r"^\s{0,2}(?:factory\s+|static\s+|async\s+|external\s+|abstract\s+)?(?:\([^)]+\)|[a-zA-Z0-9_$<>,.?]+)(?:\s+[a-zA-Z0-9_$<>,.?]+){0,3}\s+([\w$]+(?:\.[\w$]+)?)\s*\("
++    for m in re.finditer(method_pattern, src_code, re.MULTILINE):
+@@ -479,3 +486,3 @@
+-        brace_pos = src_clean.find("{", start_idx)
+-        semi_pos = src_clean.find(";", start_idx)
+-        arrow_pos = src_clean.find("=>", start_idx)
++        brace_pos = src_code.find("{", start_idx)
++        semi_pos = src_code.find(";", start_idx)
++        arrow_pos = src_code.find("=>", start_idx)
+@@ -490,2 +497,2 @@
+-            end_pos = _find_matching_brace(src_clean, start_idx)
+-            func_body = src_clean[brace_pos:end_pos]
++            end_pos = _find_matching_brace(src_code, start_idx)
++            func_body = src_code[brace_pos:end_pos]
+@@ -494 +501 @@
+-            for rm in re.finditer(r"\bref\.(?:watch|read|listen)\s*\(\s*(\w+)\b", func_body):
++            for rm in re.finditer(r"\bref\.(?:watch|read|listen)\s*\(\s*([\w$]+)\b", func_body):
+@@ -502 +509 @@
+-            for am in re.finditer(r"\b(?:\w*[Bb]loc\w*|context\.read<\w+>\(\))\.add\(\s*(?:const\s+)?([A-Z]\w*)\b", func_body):
++            for am in re.finditer(r"\b(?:[\w$]*[Bb]loc[\w$]*|context\.read<[\w$]+>\(\))\.add\(\s*(?:const\s+)?([A-Z][\w$]*)\b", func_body):
+@@ -511 +518 @@
+-            for lm in re.finditer(r"\b(?:read|watch|select|of)\s*<([a-zA-Z0-9_]+)>", func_body):
++            for lm in re.finditer(r"\b(?:read|watch|select|of)\s*<([a-zA-Z0-9_$]+)>", func_body):
+@@ -520 +527,3 @@
+-            for nm in re.finditer(r"\b(?:go|push|goNamed|pushNamed|replace|replaceNamed)\s*\(\s*(?:context\s*,\s*)?['\"]([a-zA-Z0-9_/?=&%-]+)['\"]", func_body):
++            for nm in re.finditer(r"\b(?:go|push|goNamed|pushNamed|replace|replaceNamed)\s*\(\s*(?:context\s*,\s*)?['\"]([a-zA-Z0-9_$/?=&%-]+)['\"]", src_clean[brace_pos:end_pos]):
++                if not func_body[nm.start():nm.start(1)].strip():
++                    continue
+@@ -527 +536 @@
+-            for cm in re.finditer(r"\b(?:go|push|goNamed|pushNamed|replace|replaceNamed)\s*\(\s*(?:context\s*,\s*)?([A-Z][a-zA-Z0-9_]*\.[a-zA-Z0-9_]+)", func_body):
++            for cm in re.finditer(r"\b(?:go|push|goNamed|pushNamed|replace|replaceNamed)\s*\(\s*(?:context\s*,\s*)?([A-Z][a-zA-Z0-9_$]*\.[a-zA-Z0-9_$]+)", func_body):
+@@ -534 +543 @@
+-            for om in re.finditer(r"\b(?:push|replace)\s*\(\s*(?:context\s*,\s*)?.*?\b([A-Z]\w*(?:Route|Screen|Page))\b", func_body):
++            for om in re.finditer(r"\b(?:push|replace)\s*\(\s*(?:context\s*,\s*)?.*?\b([A-Z][\w$]*(?:Route|Screen|Page))\b", func_body):
+@@ -549 +558 @@
+-    condition = rf"""if\s*\(\s*[\w.]+\s*(?:==\s*{quoted}\s*)?\)\s*"""
++    condition = rf"""if\s*\(\s*[\w$.]+\s*(?:==\s*{quoted}\s*)?\)\s*"""
+@@ -556,0 +566,2 @@
++            if not src_code[m.start():m.start("uri")].strip():
++                continue
+@@ -568 +579 @@
+-    generic_call_pattern = r"\b\w+<([a-zA-Z0-9_.]+(?:<[a-zA-Z0-9_.,\s<>]+>)?)\s*>\s*\("
++    generic_call_pattern = r"\b[\w$]+<([a-zA-Z0-9_$.]+(?:<[a-zA-Z0-9_$.,\s<>]+>)?)\s*>\s*\("
+@@ -570 +581 @@
+-    for m in re.finditer(generic_call_pattern, src_clean):
++    for m in re.finditer(generic_call_pattern, src_code):
+--- a/extractors/engine.py
++++ b/extractors/engine.py
+@@ -2055,0 +2056 @@
++    "tree_sitter_kotlin",
+@@ -2111 +2112 @@
+-    return None if fallback in method_owner else fallback
++    return None if receiver == "super" or fallback in method_owner else fallback
+@@ -8805,0 +8807,9 @@
++                        # Preserve explicit current/base-instance receivers. A
++                        # super call cannot bind back to the override itself.
++                        receiver_node = first.children[0] if first.children else None
++                        if receiver_node is not None:
++                            if receiver_node.type == "super_expression":
++                                self_receiver = "super"
++                            elif (receiver_node.type == "this_expression"
++                                  and _read_text(receiver_node, source) == "this"):
++                                self_receiver = "this"
+--- a/extract.py
++++ b/extract.py
+@@ -3880 +3880 @@
+-    key = re.sub(r"[^a-zA-Z0-9_]+", "", label)
++    key = re.sub(r"[^a-zA-Z0-9_$]+", "", label)

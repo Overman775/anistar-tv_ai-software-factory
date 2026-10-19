@@ -87,7 +87,7 @@ fvm flutter test test/packages/ui_kit
 
 ## 4. Ресурсы
 
-Публичный импорт: `package:ui_kit/assets.dart`, где `Assets` отвечает за изображения и файлы, а `FontFamily` за шрифты. FlutterGen создаёт эти exports из `assets/images/` и `assets/fonts/`. Из корня workspace типизированные exports генерируются командой `fvm dart run melos run generate`, а нативные ресурсы на macOS — `fvm dart run melos run generate:branding`. Использование package assets и команды генерации описаны в [разработке и тестировании](../../../docs/05_development_and_testing.md#2-проверки-и-сборка) и [Melos tooling](../../../docs/melos_tooling.md#4-генерация-и-обслуживание).
+Публичный импорт: `package:ui_kit/assets.dart`, где `Assets` отвечает за изображения и файлы, а `FontFamily` за шрифты. FlutterGen создаёт эти exports из `assets/images/` и `assets/fonts/`. Из корня workspace типизированные exports генерируются командой `fvm dart run melos run generate`, а нативные ресурсы на macOS — `fvm dart run melos run generate:branding`. Использование package assets и команды генерации описаны в [разработке и тестировании](../../../docs/05_development_and_testing.md#2-проверки-и-сборка) и [Melos tooling](../../../docs/melos_tooling.md#5-генерация-и-ресурсы).
 
 | Исходник в `assets/images/` | Назначение |
 | --- | --- |

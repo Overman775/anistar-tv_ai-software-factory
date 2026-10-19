@@ -57,7 +57,7 @@ Conventional Commits помогают выбирать уровень, но не
 
 ```bash
 fvm dart run melos run version:show
-fvm dart run melos run version:check
+fvm dart run melos run version:check --include-private
 fvm dart run melos run version:plan -- patch
 fvm dart run melos run version:plan -- minor
 fvm dart run melos run version:plan -- major
@@ -74,7 +74,8 @@ fvm dart run melos run version:set -- --app-version 1.1.2 --build-number 5
 CHANGELOG заполняется отдельно по реально завершённым изменениям. Проверки
 version tooling тестируют запись в temporary directory, а не в checkout.
 
-Используйте `melos run version:*`. Встроенный `melos version` рассчитан на
+`version:check` — приватная команда. Запускайте её явно с `--include-private`.
+Остальные команды `version:*` доступны обычным способом. Встроенный `melos version` рассчитан на
 автоматическое версионирование пакетов и может писать changelog/commit/tag.
 Это не выбранный workflow приложения.
 [Поведение встроенной команды](https://melos.invertase.dev/commands/version).
@@ -89,3 +90,78 @@ version tooling тестируют запись в temporary directory, а не 
 проверкой. Выполнить ручную проверку физического TV и signing config перед
 распространением. Tag `vX.Y.Z`, commit, PR/merge, push и публикация выполняются
 отдельно. Настройка tooling и локальная сборка не разрешают выполнять их.
+
+---
+
+## 5. Локальные Git hooks
+
+Lefthook запускает локальные проверки перед commit и push. Graphify отдельно
+устанавливает native hooks после commit, checkout, merge и rewrite, чтобы
+обслуживать локальный граф. Локальные hooks не обеспечивают серверное
+требование: сервер Git не запускает hooks из checkout.
+`pre-commit` проверяет staged diff на whitespace-ошибки и офлайн сканирует
+staged изменения на secrets. Проверка secrets также запрещает staged локальные
+credentials и Android signing files. Закреплённый Dart SDK проверяет формат
+Dart-файлов, которые Lefthook передал как изменённые.
+Formatter читает содержимое из рабочего дерева и не меняет файлы или index.
+Частично staged файл проверяется целиком по текущему рабочему содержимому, которое
+может отличаться от содержимого в index.
+
+`pre-push` сначала сканирует всю локальную committed историю на secrets, затем
+запускает полный `check` на текущем рабочем дереве.
+Чистое дерево не требуется. Незакоммиченные изменения могут повлиять на результат,
+поэтому локальный check может отличаться от отправленного commit. В `check` входит
+сравнение golden baselines, но не их обновление. Hooks не запускают fixture E2E,
+сборку APK или live-проверки. Состав `check` описан в
+[руководстве Melos](melos_tooling.md#2-проверки-и-тесты).
+
+### Установка
+
+Установите FVM и SDK проекта до запуска Melos-команд. Установите Lefthook через
+Homebrew, чтобы запускать Git hooks. Для сканирования secrets, зависимостей и
+кода установите Gitleaks, OSV-Scanner и Semgrep:
+
+```bash
+brew install lefthook gitleaks osv-scanner semgrep
+```
+
+Установленные CLI обязательны для соответствующих проверок. Если нужный CLI
+отсутствует, проверка завершается ошибкой.
+
+До установки проверьте существующие custom hooks и настройку `core.hooksPath`.
+Сохраните их конфигурацию и действия. Не используйте принудительную установку
+или сброс существующих hooks.
+
+После clone один раз из корня проекта установите Git hooks:
+
+```bash
+lefthook install
+```
+
+Graphify необязателен. Если он установлен, отдельно выполните `graphify hook install`
+из корня проекта. Эта команда устанавливает hooks `post-commit`, `post-checkout`,
+`post-merge` и `post-rewrite`, merge driver `graphify` и правило
+`graphify-out/graph.json merge=graphify` в `.gitattributes`. Эти hooks дополняют
+Lefthook и не изменяют его `pre-commit` и `pre-push`. Подробности приведены в
+[руководстве Graphify](../tool/graphify/README.md).
+
+Полный `check` использует закреплённый Flutter SDK, DCM и Python 3.10+ для Python
+tooling/version задач. Подготовка среды описана в
+[руководстве Melos](melos_tooling.md#1-подготовка-и-быстрый-запуск).
+
+### Ручной запуск
+
+Из корня проекта можно проверить конфигурацию или выполнить hook-команды отдельно:
+
+```bash
+lefthook validate
+bash scripts/lefthook.sh run pre-commit
+lefthook run pre-push --force
+fvm dart run melos run check
+```
+
+Для ручного `pre-commit` используйте wrapper: он отключает auto-stash Lefthook,
+чтобы проверка читала рабочие файлы без скрытия unstaged изменений. Полный профиль
+запускайте через `fvm dart run melos run check`; эту же команду вызывает `pre-push`.
+Lefthook содержит только Git hooks. При ручном запуске `pre-push` вне push-контекста
+используйте `--force`, если Lefthook пропускает hook без push-файлов.

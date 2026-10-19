@@ -19,7 +19,7 @@ Runner создаёт `SharedPreferencesStorage`, вызывает `init` и п�
 
 ## Как проверить
 
-`test/app/app_container_test.dart` проверяет binding runtime-экземпляров и охватывает DI, но не проверяет native backend хранилища. Android E2E проверяет запись cookies, восстановление через новый runner и удаление при выходе на настоящем backend `flutter_secure_storage`. Команды запуска Android fixture E2E описаны в [Melos tooling](../../docs/melos_tooling.md#2-запуск-сборка-и-устройства).
+`test/app/app_container_test.dart` проверяет binding runtime-экземпляров и охватывает DI, но не проверяет native backend хранилища. Android E2E проверяет запись cookies, восстановление через новый runner и удаление при выходе на настоящем backend `flutter_secure_storage`. Команды запуска Android fixture E2E описаны в [Melos tooling](../../docs/melos_tooling.md#2-проверки-и-тесты).
 
 ## Навигация
 

@@ -1,0 +1,25 @@
+title = "AniStar TV secrets"
+
+[extend]
+useDefault = true
+
+# Public localhost fixture key; see tool/e2e/README.md. Other rules still scan it.
+[[allowlists]]
+description = "Public localhost HTTPS fixture key"
+targetRules = ["private-key"]
+paths = ['''^tool/e2e/tls/localhost\.key$''']
+
+# Live account passwords may have too little entropy for generic API-key rules.
+[[rules]]
+id = "anistar-live-password"
+description = "Non-empty live account password in Dart defines"
+regex = '''["']ANISTAR_TEST_PASSWORD["'][ \t]*:[ \t]*["']([^"'\r\n]+)["']'''
+secretGroup = 1
+keywords = ["ANISTAR_TEST_PASSWORD"]
+
+[[rules]]
+id = "android-signing-password"
+description = "Literal Android signing password"
+regex = '''(?i)(?:storePassword|keyPassword)[ \t]*[=:][ \t]*["']([^"'\r\n]+)["']'''
+secretGroup = 1
+keywords = ["storepassword", "keypassword"]

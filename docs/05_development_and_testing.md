@@ -54,9 +54,54 @@ fvm dart run melos run check
 
 DCM нужен для полной локальной проверки. Допустимая версия указана в `dcm_global.yaml`. Analyzer считает infos ошибкой. Все workspace-пакеты наследуют корневой `analysis_options.yaml`.
 
-Проверки выполняются локально. CI/CD не настроен. Режим `ci` оставлен как короткий профиль без DCM. Он запускает format, analyzer, unit coverage и goldens. Для полного прогона используйте `check`.
+Проверки выполняются локально. CI/CD не настроен. `check:flutter` — короткий профиль без DCM. Он запускает format, analyzer, unit coverage и goldens. Для полного прогона используйте `check`.
 
 Coverage сохраняется в `coverage/lcov.info`. Различия golden сохраняются рядом с тестом в `failures/`.
+
+### Проверки безопасности
+
+Melos предоставляет отдельные проверки безопасности. Они не входят в `check`.
+Из security-проверок `pre-commit` запускает staged secrets scan, а `pre-push`
+сначала сканирует committed историю, затем запускает `check`.
+
+```bash
+fvm dart run melos run security:secrets
+fvm dart run melos run security:deps
+fvm dart run melos run security:code
+fvm dart run melos run security
+```
+
+`security:secrets` использует Gitleaks со стандартными правилами и локальными
+правилами для live account и Android signing passwords. Команда сканирует всю
+доступную Git history. Требуется полный, не shallow clone. Вывод маскирует
+секреты. Встроенные inline allow директивы и локальные ignore-файлы не подавляют
+findings.
+
+`security:deps` использует OSV-Scanner с корневым `pubspec.lock`, без resolution
+и обхода source/cache. Команда обращается к OSV в сети и передаёт package
+metadata. Она не имеет автоматического offline fallback.
+
+`security:code` использует Semgrep OSS с локальными правилами `.semgrep/` и
+`.semgrepignore`. Проверка выполняется локально, без входа в аккаунт или передачи
+исходников. Она не обращается к сети и требует Python 3.10+ для разбора
+результата.
+
+Правила проверяют отключение TLS validation в Dart, Kotlin и Python, прямое
+логирование credentials/cookies, `subprocess` с `shell=True`, небезопасную
+десериализацию и `eval`/`exec` с runtime data. Это ограниченные AST checks, а не
+полная taint analysis. `.semgrepignore` исключает generated outputs, caches и
+`tool/security/fixtures/semgrep/`. Остальные тесты сканируются. Semgrep metrics и
+version checks отключены. Wrapper выводит путь, строку и rule ID для findings,
+но не печатает совпавший source или сырые diagnostics. Tool errors и findings
+завершают команду с ошибкой.
+
+Установка CLI описана в [руководстве VCS](vcs_guidelines.md#5-локальные-git-hooks).
+Команды проверки завершаются ошибкой, если нужный CLI отсутствует.
+
+Не добавляйте реальные credentials в fixtures или исходный код. Public localhost
+TLS fixture key является единственным узким Gitleaks private-key исключением.
+Он используется только локальным fixture server; исключение не отключает другие
+правила для файла. Правило расположено в `.gitleaks.toml`.
 
 По умолчанию порядок тестов задаёт seed **20261010**. Чтобы задать другой seed, используйте `ANISTAR_TEST_SEED=1337 fvm dart run melos run test:unit`. При необходимости задайте путь установленного SDK через `ANISTAR_FLUTTER_SDK`. Версия всё равно сверяется с `.fvmrc`.
 
@@ -64,13 +109,13 @@ Coverage сохраняется в `coverage/lcov.info`. Различия golden
 
 ```bash
 # E2E на запущенном Android emulator
-fvm dart run melos run test:e2e:tv -- emulator-5554
+fvm dart run melos run test:e2e:tv --include-private -- emulator-5554
 
 # Постер Hero покадрово на Android, без сети и аккаунта
 fvm flutter test integration_test/navigation_motion_test.dart -d emulator-5554 --flavor dev
 
 # Живой AniStar/CDN smoke
-fvm dart run melos run test:e2e:live -- emulator-5554
+fvm dart run melos run test:e2e:live --include-private -- emulator-5554
 
 # APK приложения
 fvm dart run melos run build:android:dev:apk:debug
@@ -316,7 +361,7 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 Назначение исходных PNG, прозрачность UI-знака и safe area splash описаны в [ресурсах UI Kit](../lib/packages/ui_kit/README.md#4-ресурсы). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; размеры для xhdpi: 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
-Этот же скрипт обновляет заставку по `flutter_native_splash.yaml` и восстанавливает safe drawable в обеих темах. Используйте общий wrapper, чтобы повторная генерация сохранила размеры TV-ресурсов и безопасные отступы заставки. Все команды: [Melos tooling](melos_tooling.md#генерация-и-обслуживание).
+Этот же скрипт обновляет заставку по `flutter_native_splash.yaml` и восстанавливает safe drawable в обеих темах. Используйте общий wrapper, чтобы повторная генерация сохранила размеры TV-ресурсов и безопасные отступы заставки. Все команды: [Melos tooling](melos_tooling.md#5-генерация-и-ресурсы).
 
 ---
 
@@ -328,7 +373,7 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 ```bash
 # Реальный Dio на компьютере; отдельные in-memory preferences/cookies:
-fvm flutter test tool/diagnostics/anistar_network_test.dart --reporter=expanded
+fvm dart run melos run test:network:live --include-private
 # Android: реальный runner, Riverpod, Dio и encrypted session storage:
 fvm flutter test integration_test/network_smoke_test.dart -d emulator-5554 --flavor dev \
   --dart-define-from-file=env/live-test.local.json
@@ -351,9 +396,10 @@ chmod 600 env/live-test.local.json
 # Заполните ANISTAR_TEST_USERNAME и ANISTAR_TEST_PASSWORD в локальном JSON.
 
 # Последующие запуски автоматически подставляют credentials:
-bash scripts/e2e-tv.sh live
+fvm dart run melos run test:e2e:live --include-private -- emulator-5556
 # Или credentials в отдельном локальном файле:
-ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json bash scripts/e2e-tv.sh live
+ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json \
+  fvm dart run melos run test:e2e:live --include-private -- emulator-5556
 ```
 
 В VS Code: **Terminal → Run Task → Flutter: Live Android E2E**; выбирается запущенный `ANISTAR_TV_AVD` / `anistar_tv_e2e`. Задача вызывает тот же скрипт и автоматически использует локальный JSON. Дополнительный `.env`-загрузчик не нужен: Flutter передаёт JSON через `--dart-define-from-file`, а live harness читает `String.fromEnvironment` и заполняет форму входа.

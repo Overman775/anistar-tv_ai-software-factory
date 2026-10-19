@@ -108,21 +108,22 @@ Command output uses `stdout_excerpt`, `stderr_excerpt`,
 ## AniStar deterministic commands
 
 Run from the frozen checkout root, serially, using current `pubspec.yaml`,
-`scripts/check.sh`, `scripts/test_tooling.sh` and `docs/melos_tooling.md` as the
-command authorities. The table describes available coverage; it does not claim
-that any command has run or passed.
+`scripts/with_python.sh`, `scripts/test_tooling.sh` and `docs/melos_tooling.md` as
+the command authorities. Melos owns quality commands; Lefthook owns Git hooks.
+The table describes available coverage; it does not claim that any command has
+run or passed.
 
 | Command | Actual coverage |
 | --- | --- |
 | `fvm dart run melos run check` | SDK pin and enforced lockfile; maintained Dart format; strict Flutter analyzer; fatal DCM style/warnings; unit/widget/architecture coverage; golden comparison; Python tooling; app version agreement. Fail-fast aggregate. |
-| `fvm dart run melos run format:check` | Maintained Dart formatting without writes; wrapper first verifies SDK and resolves the enforced lockfile. |
-| `fvm dart run melos run analyze` | Flutter analyzer with `--no-pub --fatal-infos`, after wrapper SDK/lockfile checks. |
-| `fvm dart run melos run dcm` | DCM over `lib infrastructure test integration_test tool/quality`, with `--fatal-style --fatal-warnings`, after wrapper SDK/lockfile checks. |
+| `fvm dart run melos run format:check` | Maintained Dart formatting without writes; Melos preparation verifies the SDK pin and enforced lockfile. |
+| `fvm dart run melos run analyze` | Flutter analyzer with `--no-pub --fatal-infos`, after Melos verifies the SDK pin and enforced lockfile. |
+| `fvm dart run melos run dcm` | DCM over `lib infrastructure test integration_test tool/quality`, with `--fatal-style --fatal-warnings`, after Melos verifies the SDK pin and enforced lockfile. |
 | `fvm dart run melos run test:unit` | Central root `test/` unit/widget/architecture suite excluding golden tags, concurrency 4, coverage for app and all six workspace packages. |
 | `fvm dart run melos run test:goldens` | Central golden comparison, concurrency 1; no baseline updates. |
 | `fvm dart run melos run test:tooling` | Python quality/APK verifier, E2E runner, version and Factory regressions; graphify regressions only when its local interpreter is configured. |
 | `fvm dart run melos run get` | Workspace resolution with `--enforce-lockfile`; no dependency upgrade or vulnerability verdict. |
-| `fvm dart run melos run version:check` | Stable X.Y.Z+N in the root pubspec; no version bump. |
+| `fvm dart run melos run version:check --include-private` | Stable X.Y.Z+N in the root pubspec; no version bump. |
 | `fvm dart run melos run test:e2e` | TV then mobile Android fixture suites on prepared separate emulators. |
 | `fvm dart run melos run build:android:prod:apk` | Production release APK with AOT freshness verification; local build, no publication. |
 

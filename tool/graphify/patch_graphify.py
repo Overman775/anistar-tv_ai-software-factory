@@ -1,4 +1,4 @@
-"""Apply the reviewed producer patch only to the exact graphify 0.9.85 sources."""
+"""Apply the reviewed producer patch only to the exact manifest-version sources."""
 import argparse
 import hashlib
 import importlib.metadata
@@ -33,14 +33,14 @@ def main():
         elif actual != hashes["patched"]:
             parser.error(f"Unrecognized installed source: {name}; no files changed")
     if not originals:
-        print("graphify 0.9.85 producer patch verified (all SHA-256 hashes match)")
+        print(f"graphify {version} producer patch verified (all SHA-256 hashes match)")
         return
     if args.check:
         parser.error("Producer patch is not installed")
     if len(originals) != len(manifest["files"]):
         parser.error("Partially patched installation; restore original files before applying")
     # Preflight the entire patch before changing the tool installation.
-    command = ["patch", "--batch", "--forward", "-p1", "-i", str(here / "graphify-0.9.85.patch")]
+    command = ["patch", "--batch", "--forward", "-p1", "-i", str(here / f"graphify-{version}.patch")]
     subprocess.run(command + ["--dry-run"], cwd=package, check=True)
     with tempfile.TemporaryDirectory(prefix="anistar-graphify-backup-") as temp:
         backup = Path(temp)
@@ -57,7 +57,7 @@ def main():
             for name in originals:
                 shutil.copy2(backup / name, package / name)
             raise
-    print("Applied graphify 0.9.85 producer patch; full re-extraction is required")
+    print(f"Applied graphify {version} producer patch; full re-extraction is required")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,31 @@
+lefthook: bash scripts/lefthook.sh
+glob_matcher: doublestar
+
+# Format staged paths directly from the current worktree with the pinned SDK.
+templates:
+  dart: '"${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/dart"'
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: staged-diff
+      run: git diff --cached --check
+    - name: staged-secrets
+      run: bash scripts/security_gitleaks.sh staged
+    - name: staged-dart-format
+      glob: '{lib,infrastructure,test,integration_test,tool/quality}/**/*.dart'
+      exclude:
+        - '**/{build,.dart_tool}/**'
+        - '**/*.g.dart'
+        - '**/*.gen.dart'
+        - '**/*.freezed.dart'
+        - '**/generated_plugin_registrant.dart'
+      run: '{dart} format --output=none --set-exit-if-changed {staged_files}'
+
+pre-push:
+  piped: true
+  jobs:
+    - name: secrets-history
+      run: fvm dart run melos run security:secrets
+    - name: check
+      run: fvm dart run melos run check

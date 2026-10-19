@@ -1,0 +1,17 @@
+# Generated outputs and local SDK/dependency caches.
+.git/
+.dart_tool/
+.fvm/
+.gradle/
+build/
+coverage/
+node_modules/
+__pycache__/
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.mocks.dart
+*.gen.dart
+graphify-out/
+# Deliberately vulnerable scanner examples, tested explicitly by tooling tests.
+tool/security/fixtures/semgrep/

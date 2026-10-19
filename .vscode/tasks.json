@@ -64,13 +64,13 @@
         {
             "label": "Flutter: TV E2E",
             "type": "shell",
-            "command": "fvm dart run melos run test:e2e:tv",
+            "command": "fvm dart run melos run test:e2e:tv --include-private",
             "problemMatcher": []
         },
         {
             "label": "Flutter: Mobile E2E",
             "type": "shell",
-            "command": "fvm dart run melos run test:e2e:mobile",
+            "command": "fvm dart run melos run test:e2e:mobile --include-private",
             "problemMatcher": []
         },
         {
@@ -88,7 +88,8 @@
                 "run",
                 "melos",
                 "run",
-                "test:e2e:live"
+                "test:e2e:live",
+                "--include-private"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
