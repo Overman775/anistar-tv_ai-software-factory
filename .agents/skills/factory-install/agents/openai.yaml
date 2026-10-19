@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factory Install"
+  short_description: "Анализ, установка и обновление окружения AniStar TV"
+  default_prompt: "Используй $factory-install: проверь окружение AniStar TV, покажи список предлагаемых установок и обновлений и дождись моего согласия перед изменениями."

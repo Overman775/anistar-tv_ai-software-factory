@@ -4,6 +4,7 @@ Flutter Android TV/mobile. CleanArch. Riverpod DI, BLoC, native HLS. FVM, Dart p
 
 ## Agents
 
+factory-install → project/toolchain scan, setup and update with consent (macOS, Windows, Linux)
 anistar-flutter-update → SDK/dependencies
 impeccable → UI/UX
 graphify → architecture/flow

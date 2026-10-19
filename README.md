@@ -1,6 +1,8 @@
-# 📺 AniStar TV
+# 📺 AniStar TV + AI Software Factory
 
 **AniStar TV — личный некоммерческий пет-проект:** неофициальный клиент AniStar на Flutter для Android TV и Android-телефонов.
+
+Здесь можно познакомиться и с приложением для просмотра аниме, и с **AI Software Factory** — организацией разработки с AI-агентами на примере этого проекта.
 
 Приложение позволяет найти аниме, выбрать серию и смотреть её на телевизоре или телефоне.
 
@@ -20,21 +22,34 @@
 
 ## 🏭 AI Software Factory
 
-Репозиторий также **демонстрирует мою AI Software Factory** — подход к разработке с AI-агентами на примере AniStar TV. Подробнее — в [руководстве по фабрике](docs/07_ai_tooling.md).
+**AI Software Factory — вторая часть проекта:** скиллы, роли агентов и рабочие процессы, с помощью которых развивается AniStar TV.
 
-## 🚀 Быстрый старт
+Человек задаёт цель и принимает результат. Агенты исследуют код, готовят планы и задачи, реализуют изменения, пишут тесты и проводят ревью. В репозитории доступны инструкции этих процессов и инструменты локальных проверок.
 
-Нужны FVM, JDK 17, Android SDK и подключённое Android-устройство или эмулятор. Из корня проекта установите закреплённый SDK, подготовьте workspace, сгенерируйте маршруты и ресурсы, затем запустите dev-приложение:
+Фабрику можно изучать отдельно от приложения: посмотреть, как разделены роли, устроена передача задач и проверяются результаты работы агентов. Начните с [руководства AI Software Factory](docs/07_ai_tooling.md).
+
+## 🚀 Установка проекта
+
+**Через скилл:** попросите агента «Через `factory-install` установи или обнови окружение проекта».
+[Factory Install](.agents/skills/factory-install/SKILL.md) проверит окружение, покажет список изменений и дождётся вашего согласия.
+
+**Вручную:** нужны Git, Bash, FVM, Python 3.10+, JDK 17 и настроенный Android SDK. Команды из корня проекта:
 
 ```bash
+# Установка инструментов на macOS
+brew install git bash fvm python@3.12
+brew install --cask temurin@17
+# brew install --cask android-studio  # (опционально) для настройки Android SDK
+# brew install gh lefthook gitleaks osv-scanner semgrep ffmpeg  # (опционально)
+
 fvm install
-fvm flutter pub get --enforce-lockfile
+fvm flutter pub get --enforce-lockfile  # Устанавливает и Melos
 fvm dart run melos bootstrap --enforce-lockfile
 fvm dart run melos run generate
 fvm dart run melos run run:dev
 ```
 
-После запуска приложение проверит зеркало и сохранённую сессию. Если подтверждённой сессии нет, потребуется вход. Настройка окружения, выбор устройства и другие варианты запуска описаны в [Melos tooling](docs/melos_tooling.md).
+Для запуска подключите Android-устройство или эмулятор. [Настройка Android SDK](.agents/skills/factory-install/references/android.md), [Windows](.agents/skills/factory-install/references/windows.md), [Linux](.agents/skills/factory-install/references/linux.md).
 
 ## 📚 Документация
 
