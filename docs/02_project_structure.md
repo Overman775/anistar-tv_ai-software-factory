@@ -21,8 +21,9 @@ AniStar TV построен как Flutter-приложение с Dart pub work
 │   ├── main_dev.dart
 │   └── main_prod.dart
 ├── test/                 # Unit, widget, golden и architecture tests
-├── integration_test/     # Android fixture и явные live scenarios
+├── integration_test/     # Android fixtures, optional iOS fixture и явные live scenarios
 ├── android/              # Android и Android TV конфигурация
+├── ios/                  # iOS Runner, flavors dev/prod и Simulator-конфигурации
 ├── env/                  # Dart define JSON и шаблоны
 ├── docs/                 # Руководства, спецификации и ADR
 └── pubspec.yaml          # Корневое приложение, workspace и Melos
@@ -80,7 +81,7 @@ Feature объявляет интерфейс и provider-контракт. Ко
 
 ## 4. Запуск и composition root
 
-`lib/main_dev.dart` и `lib/main_prod.dart` вызывают `runApplication()` из `lib/runner/runner.dart`. Runner инициализирует Flutter, error handlers, logger, platform profile, storage и mirror manager, затем создаёт корневой `ProviderScope` и запускает `App`.
+`lib/main_dev.dart` и `lib/main_prod.dart` вызывают `runApplication()` из `lib/runner/runner.dart`. Android и iOS dev/prod flavors используют эти entry points. Runner инициализирует Flutter, error handlers, logger, platform profile, storage и mirror manager, затем создаёт корневой `ProviderScope` и запускает `App`.
 
 `lib/app/app_container.dart` собирает repository implementations и infrastructure providers через Riverpod overrides. `lib/app/app_router.dart` и `app_routes.dart` владеют typed routes. Feature widgets сообщают о пользовательском действии через callback. App выбирает маршрут.
 

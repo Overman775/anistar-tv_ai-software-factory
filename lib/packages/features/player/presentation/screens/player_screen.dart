@@ -296,7 +296,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       httpHeaders: session.httpHeaders,
       formatHint: VideoFormat.hls,
       // This screen owns foreground pause/resume together with its screen flag.
-      videoPlayerOptions: VideoPlayerOptions(allowBackgroundPlayback: true),
+      videoPlayerOptions: VideoPlayerOptions(
+        allowBackgroundPlayback: true,
+        preventsDisplaySleepDuringVideoPlayback: false,
+      ),
     );
     _controller = player;
     try {

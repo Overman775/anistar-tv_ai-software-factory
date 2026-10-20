@@ -1,10 +1,10 @@
 # Мобильное взаимодействие | AniStar TV
 
-Эта спецификация определяет поведение AniStar TV на Android-телефоне: отдельную сенсорную компоновку поверх общих repositories, состояния аккаунта и native player. Android TV остаётся основной платформой; её контракт и ориентир YouTube для телевизоров закреплены в [ADR-0008](../adr/0008-youtube-tv-interaction-reference.md) и [TV-взаимодействии](06_tv_interaction.md).
+Эта спецификация определяет поведение AniStar TV на Android-телефоне и iPhone Simulator: отдельную сенсорную компоновку поверх общих repositories, состояния аккаунта и native player. Android TV остаётся основной платформой; её контракт и ориентир YouTube для телевизоров закреплены в [ADR-0008](../adr/0008-youtube-tv-interaction-reference.md) и [TV-взаимодействии](06_tv_interaction.md). Полноценная поддержка физических Apple-устройств, iPad и tvOS не заявлена.
 
 ## 1. Профиль устройства и размеры
 
-До запуска UI `AppDeviceProfileResolver` получает Android `UiModeManager.currentModeType` через MethodChannel. Значение `UI_MODE_TYPE_TELEVISION` выбирает TV. Остальные режимы выбирают mobile. Отсутствующий канал и ошибка платформы также выбирают mobile. Ширина не определяет роль устройства, поэтому повёрнутый телефон сохраняет мобильный интерфейс.
+До запуска UI Android `AppDeviceProfileResolver` получает `UiModeManager.currentModeType` через MethodChannel. Значение `UI_MODE_TYPE_TELEVISION` выбирает TV. Остальные режимы выбирают mobile. На iOS по умолчанию используется mobile. Отсутствующий Android-канал и ошибка платформы также выбирают mobile. Ширина не определяет роль устройства, поэтому повёрнутый телефон сохраняет мобильный интерфейс. `test:e2e:ios ... tv` задаёт TV-профиль только диагностическому iPad Simulator запуску; production resolver не выбирает его по ширине.
 
 Явный `deviceProfile` в runner нужен для контролируемого запуска и тестов. Без `AppLayoutScope` компоненты сохраняют TV-поведение.
 

@@ -1,7 +1,7 @@
 # 🛠️ Команды Melos | AniStar TV
 
 Используйте Melos из корня проекта для подготовки workspace, проверок, тестов,
-генерации и Android-сборки. Команды запускают локальную версию Melos 7.8.1,
+генерации и Android/iOS Simulator-сборок. Команды запускают локальную версию Melos 7.8.1,
 закреплённую в корневом `pubspec.yaml` и `pubspec.lock`.
 
 Melos 7.8.1 — максимальная совместимая версия при текущем `flutter_launcher_icons`:
@@ -12,7 +12,7 @@ Melos 7.8.1 — максимальная совместимая версия п�
 - [1. Подготовка и быстрый запуск](#1-подготовка-и-быстрый-запуск)
 - [2. Проверки и тесты](#2-проверки-и-тесты)
 - [3. Проверки безопасности](#3-проверки-безопасности)
-- [4. Запуск приложения и сборка Android](#4-запуск-приложения-и-сборка-android)
+- [4. Запуск приложения и сборка](#4-запуск-приложения-и-сборка)
 - [5. Генерация и ресурсы](#5-генерация-и-ресурсы)
 - [6. Зависимости и обслуживание](#6-зависимости-и-обслуживание)
 - [7. Остальные команды](#7-остальные-команды)
@@ -21,7 +21,8 @@ Melos 7.8.1 — максимальная совместимая версия п�
 
 ## 1. Подготовка и быстрый запуск
 
-Для работы нужны FVM с Flutter SDK 3.47.7 из `.fvmrc`, JDK 17 и Android SDK. DCM нужен
+Для Android нужны FVM с Flutter SDK 3.47.7 из `.fvmrc`, JDK 17 и Android SDK. Для
+iOS Simulator нужны macOS и Xcode. DCM нужен
 для полной команды `check`. Для Python-задач требуется Python 3.10 или новее.
 Дополнительные инструменты нужны только для соответствующих операций:
 
@@ -125,6 +126,26 @@ DCM, Python-инструменты и проверку версии. Отдел�
 Условия запуска и побочные эффекты
 описаны в [руководстве по разработке и тестированию](05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
 
+`test:e2e:ios` — отдельный опциональный native fixture-runner. Он не входит в
+`check` или Android `test:e2e`. Передайте booted Simulator UDID и flavor:
+
+```bash
+fvm dart run melos run test:e2e:ios -- <simulator-UDID> <dev|prod> [mobile|tv]
+```
+
+Для обычного mobile-сценария третий аргумент можно опустить или указать `mobile`.
+Третий аргумент `tv` запускает только iPad layout diagnostic; он требует выбранный
+iPad Simulator и задаёт TV profile только тестовому runner. Это не поддержка iPad
+или tvOS и не включает автоматический выбор профиля по ширине.
+
+```bash
+fvm dart run melos run test:e2e:ios -- <iPad-UDID> dev tv
+```
+
+Пропуск означает, что iOS Keychain, AVFoundation и HLS не проверены. Требования
+к сертификату fixture и его сохранению в выбранном Simulator описаны в
+[E2E tooling](../tool/e2e/README.md#ios-fixture-e2e).
+
 Тесты пакетов находятся в общем корневом `test/`; каждый запуск использует этот
 набор один раз. Coverage сохраняется в `coverage/lcov.info`. Задайте другой seed
 порядка тестов через `ANISTAR_TEST_SEED`, например:
@@ -177,7 +198,7 @@ fvm dart run melos run security
 
 ---
 
-## 4. Запуск приложения и сборка Android
+## 4. Запуск приложения и сборка
 
 Команды `run:*` запускают debug-приложение. Команды `build:*:apk:debug` собирают
 debug APK, а `build:*:apk` и `build:*:bundle` — release APK и App Bundle.
@@ -192,6 +213,8 @@ debug APK, а `build:*:apk` и `build:*:bundle` — release APK и App Bundle.
 | Собрать prod release APK | `fvm dart run melos run build:android:prod:apk` |
 | Собрать dev release App Bundle | `fvm dart run melos run build:android:dev:bundle` |
 | Собрать prod release App Bundle | `fvm dart run melos run build:android:prod:bundle` |
+| Собрать dev debug для iPhone Simulator | `fvm dart run melos run build:ios:dev:simulator` |
+| Собрать prod debug для iPhone Simulator | `fvm dart run melos run build:ios:prod:simulator` |
 
 `build:android:prod:apk` по умолчанию собирает подписанный APK и требует локальную
 конфигурацию `.private/signing/key.properties` и keystore в `.private/`.
@@ -209,9 +232,23 @@ fvm dart run melos run check:apk --include-private
 ```
 
 `dev` использует `lib/main_dev.dart` и `env/dev.json`. `prod` использует
-`lib/main_prod.dart`; локальный `env/prod.json` применяется, если он существует.
-Иначе используется зеркало по умолчанию. Образец конфигурации находится в
+`lib/main_prod.dart` и `env/prod.json`. Все запусковые и сборочные команды
+вызывают подготовку окружения и передают `--dart-define-from-file`. Подготовка
+проверяет dev/prod JSON; отсутствующий prod создаётся из шаблона, существующий
+локальный файл сохраняется. Выполнить её отдельно можно командой
+`fvm dart run melos run env:prepare`. Публичный шаблон находится в
 `env/prod.example.json`.
+
+Android dev/prod имеют отдельные application ID `com.anistar.tv.dev` и
+`com.anistar.tv`. Старое приложение с `com.anistar.anistar_tv` остаётся отдельной
+установкой; локальные данные не переносятся. iOS использует те же bundle ID и
+flavors. iPhone Simulator по умолчанию получает mobile-профиль. Поддержка
+физических Apple-устройств, iPad и tvOS не заявлена.
+
+Для базового iOS launch выберите `Anistar TV (Development)` или
+`Anistar TV (Production)` в `.vscode/launch.json`, выберите booted iPhone Simulator
+и нажмите F5. Оба профиля запускают debug с соответствующим flavor JSON и сначала
+выполняют `env:prepare`. Profile Mode доступен только для Android.
 
 Flutter, Gradle и code generation используют общий output. Запускайте их
 последовательно. Подробный gate и Android E2E-предусловия приведены в
@@ -237,7 +274,7 @@ fvm dart run melos run generate
 | `generate`, `build_runner`, `generate:assets` | Запустить общую генерацию; последние две — совместимые псевдонимы |
 | `watch` | Длительно наблюдать за workspace через `build_runner watch` |
 | `generate:clean`, `build_runner:clean` | Очистить кэш build_runner; вторая команда — совместимый псевдоним |
-| `generate:branding`, `generate:icon`, `generate:splash` | Экспортировать согласованный набор Android launcher icon, TV banner и splash на macOS |
+| `generate:branding`, `generate:icon`, `generate:splash` | Генерировать Android launcher icon, TV banner и splash, а также iOS AppIcon и LaunchScreen на macOS |
 | `generate:e2e-media` (приватная команда) | Пересоздать 360p/720p HLS fixtures; нужен FFmpeg с `libx264` |
 
 Пересоздавайте fixtures явно:
@@ -247,8 +284,8 @@ fvm dart run melos run generate:e2e-media --include-private
 ```
 
 Не запускайте Flutter icon или splash generators отдельно: общий wrapper
-сохраняет размеры TV-ресурсов и Android 12 safe splash. Подробности о
-launcher icon, banner и splash находятся в
+сохраняет размеры TV-ресурсов и Android 12 safe splash. Подробности об Android
+и iOS icon и splash находятся в
 [руководстве по разработке и тестированию](05_development_and_testing.md#8-иконка-и-android-tv-баннер).
 Установка и обслуживание Graphify описаны в
 [руководстве Graphify](../tool/graphify/README.md).

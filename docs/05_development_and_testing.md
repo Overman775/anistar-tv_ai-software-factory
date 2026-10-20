@@ -2,29 +2,32 @@
 
 Команды выполняются из корня проекта через [Melos](melos_tooling.md). Низкоуровневые scripts остаются доступны для диагностики.
 
-Unit/widget и architecture tests используют fixtures и fakes для проверки изолированной логики. Android E2E проверяет production runner с локальными HTML/HLS и настоящим Android player. Live smoke отдельно обращается к AniStar/CDN. Выбирайте минимальный уровень, который покрывает изменённый контракт. Запускайте live-проверку только явно.
+Unit/widget и architecture tests используют fixtures и fakes для проверки изолированной логики. Android E2E проверяет production runner с локальными HTML/HLS и настоящим Android player. Отдельный опциональный iOS E2E использует Simulator, Keychain и AVFoundation. Live smoke отдельно обращается к AniStar/CDN. Выбирайте минимальный уровень, который покрывает изменённый контракт. Запускайте live-проверку только явно.
 
 ## 1. Окружение и запуск
 
-Нужны **FVM**, Flutter **3.47.7** из `.fvmrc`, Dart **3.13.5**, JDK **17**, Android SDK и устройство/эмулятор.
+Для Android нужны **FVM**, Flutter **3.47.7** из `.fvmrc`, Dart **3.13.5**, JDK **17**, Android SDK и устройство/эмулятор. Для iOS Simulator нужны macOS и Xcode.
 
-Для Android E2E-скриптов нужен Python **3.10 или новее**. Melos автоматически выбирает доступный совместимый interpreter. Override задайте через `ANISTAR_PYTHON`. Для прямых scripts настройте PATH. Их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
+Для Android и iOS fixture E2E нужен Python **3.10 или новее**. Melos автоматически выбирает доступный совместимый interpreter. Override задайте через `ANISTAR_PYTHON`. Для прямых scripts настройте PATH. Их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
 
 ```bash
 fvm install
 fvm flutter pub get --enforce-lockfile
 fvm dart run melos bootstrap --enforce-lockfile
+fvm dart run melos run env:prepare
 fvm dart run melos run run:dev
 ```
 
-`env/dev.json` хранится в Git. Для собственного production-зеркала скопируйте `env/prod.example.json` в `env/prod.json`. Git игнорирует этот файл. Default зеркало работает без файла defines.
+`env/dev.json` хранится в Git. `env:prepare` проверяет dev/prod JSON и создаёт отсутствующий `env/prod.json` из `env/prod.example.json`. Существующий prod-файл сохраняется. Git игнорирует его. Wrapper запуска и сборки всегда передаёт flavor-файл через `--dart-define-from-file`.
 
 ### Flavors
 
 | Flavor | Entry point | Назначение |
 | --- | --- | --- |
-| dev | `lib/main_dev.dart` | Разработка, отдельный Android application ID |
-| prod | `lib/main_prod.dart` | Основное приложение |
+| dev | `lib/main_dev.dart` | Разработка, Android/iOS ID `com.anistar.tv.dev` |
+| prod | `lib/main_prod.dart` | Основное приложение, Android/iOS ID `com.anistar.tv` |
+
+Android использует namespace `com.anistar.anistar_tv`; его не меняют вместе с application IDs. Старое Android приложение остаётся отдельной установкой, данные не мигрируют. iOS build/debug доступен для iPhone Simulator. Физические Apple-устройства, iPad и tvOS не входят в заявленную поддержку.
 
 Debug/profile сохраняет диагностические логи и открывает viewer из каталога. Release пишет только ошибки в системный output. Файловый output и viewer отключены. Это зависит от build mode, а не имени flavor.
 
@@ -136,6 +139,12 @@ fvm dart run melos run build:android:prod:apk
 
 Этот gate не запускает live аккаунт и не обновляет golden baselines. Live и golden update требуют отдельного явного объёма работ.
 
+При изменениях iOS отдельно соберите оба Simulator debug flavor командами
+`fvm dart run melos run build:ios:dev:simulator` и
+`fvm dart run melos run build:ios:prod:simulator`. Для базового запуска выберите
+`Anistar TV (Development)` и `Anistar TV (Production)` в VS Code на booted iPhone
+Simulator. Это не запускает опциональный native fixture E2E.
+
 В прежнем Flutter 3.44 / AGP 9 наблюдался устаревший JNI merge после изменения
 Dart-кода. Защита в app Gradle сохранена: up-to-date для этой стадии копирования отключён. Проверка
 APK сравнивает текущие AOT libraries с отдельным JNI staging Flutter 3.47, JNI merge и содержимым архива после stripping. Набор ABI также должен совпадать.
@@ -228,8 +237,9 @@ await expectLater(stream, emitsInOrder([isA<CatalogLoading>(), isA<CatalogReady>
 ---
 
 <a id="5-e2e-и-smoke-на-android-tv"></a>
+<a id="5-интеграционные-тесты-android-tv-и-телефона"></a>
 
-## 5. Интеграционные тесты Android TV и телефона
+## 5. Интеграционные тесты Android TV, телефона и iOS Simulator
 
 Используются два отдельных существующих AVD. Запустите их через Device Manager или `fvm flutter emulators --launch <avd>`. Команды находят запущенный экземпляр по имени AVD и проверяют его системный профиль. Команды используют dev flavor с закреплённым SDK/lockfile. Они не выбирают первый попавшийся эмулятор. Широкое окно телефона не считается TV.
 
@@ -238,6 +248,19 @@ await expectLater(stream, emitsInOrder([isA<CatalogLoading>(), isA<CatalogReady>
 | TV | `anistar_tv_e2e`: Android TV API 36 | `integration_test/app_e2e_test.dart` | `bash scripts/e2e-tv.sh` |
 | Телефон | `anistar_mobile_e2e`: Pixel 6, Android API 36 | `integration_test/mobile_e2e_test.dart` | `bash scripts/e2e-mobile.sh` |
 | Обе платформы | Два разных устройства | TV, затем mobile, с отдельным результатом каждого | `bash scripts/e2e-all.sh` |
+
+Опциональный iOS E2E запускается отдельно из корня и не входит в `check` или Android `test:e2e`:
+
+```bash
+fvm dart run melos run test:e2e:ios -- <simulator-UDID> <dev|prod> [mobile|tv]
+```
+
+Выберите уже запущенный Simulator и flavor. Пропуск означает, что iOS Keychain,
+AVFoundation и HLS не проверены. Runner добавляет корневой сертификат локального
+HTTPS fixture в выбранный Simulator и оставляет его там после завершения. Runner
+не сбрасывает данные Simulator и не удаляет сертификат. Третий аргумент `tv`
+разрешён только для iPad Simulator и задаёт тестовый TV layout profile; это
+диагностика компоновки без iPad или tvOS product support. См. [E2E tooling](../tool/e2e/README.md#ios-fixture-e2e).
 
 Если нужны другие существующие AVD, задайте `ANISTAR_TV_AVD` / `ANISTAR_MOBILE_AVD`. Для конкретного запущенного экземпляра передайте `emulator-<port>` аргументом соответствующему скрипту. Скрипты не создают и не стирают AVD. Если нужное устройство отсутствует, скрипт показывает доступные экземпляры и команду запуска. В VS Code есть отдельные задачи **Flutter: TV E2E**, **Flutter: Mobile E2E**, **Flutter: TV and Mobile E2E**.
 
@@ -357,11 +380,13 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 <a id="8-иконка-и-android-tv-баннер"></a>
 
-## 8. Иконка, Android TV баннер и заставка
+## 8. Иконка, Android TV баннер и заставки Android/iOS
 
-Назначение исходных PNG, прозрачность UI-знака и safe area splash описаны в [ресурсах UI Kit](../lib/packages/ui_kit/README.md#4-ресурсы). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; размеры для xhdpi: 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
+Назначение исходных PNG, прозрачность UI-знака и safe area splash описаны в [ресурсах UI Kit](../lib/packages/ui_kit/README.md#4-ресурсы). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт Android adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; размеры для xhdpi: 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
-Этот же скрипт обновляет заставку по `flutter_native_splash.yaml` и восстанавливает safe drawable в обеих темах. Используйте общий wrapper, чтобы повторная генерация сохранила размеры TV-ресурсов и безопасные отступы заставки. Все команды: [Melos tooling](melos_tooling.md#5-генерация-и-ресурсы).
+Тот же wrapper запускает `flutter_launcher_icons` и `flutter_native_splash:create`. iOS AppIcon создаётся из `anistar_launcher.png`. iOS LaunchScreen использует `anistar_tv_banner.png`, `scaleAspectFit` и фон `#080B14`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
+
+Для Android скрипт обновляет splash по `flutter_native_splash.yaml` и восстанавливает safe drawable в дневной и ночной темах. Он также экспортирует TV-иконки и баннеры. Запускайте общий wrapper, чтобы сохранить эти ресурсы и безопасные отступы splash. Все команды: [Melos tooling](melos_tooling.md#5-генерация-и-ресурсы).
 
 ---
 
@@ -428,7 +453,8 @@ Credentials передаются только в integration test через `--
 Результаты конкретного запуска сообщайте в итоговом отчёте задачи: проверенный diff или revision, команды и exit codes, выполненные сценарии и пропуски, SDK, устройство и seed, если они влияют на результат. Логи, JUnit/JSON и APK остаются build-артефактами; для передаваемого APK укажите путь и SHA-256 в отчёте. В руководствах сохраняйте правила и команды, а в CHANGELOG записывайте существенные изменения проекта. Не накапливайте в документации историю прогонов, счётчики тестов и хеши сборок.
 
 - Fixture проверяет заданный протокол и отказы. Live smoke отдельно подтверждает работу сайта/CDN для конкретного зеркала, IP и момента проверки.
-- Эмулятор с native player не подтверждает аппаратный декодер, физический пульт, читаемость и плавность на реальном TV или телефоне. Для этих выводов нужна отдельная проверка на устройстве.
+- Android Emulator с native player не подтверждает аппаратный декодер, физический пульт, читаемость и плавность на реальном TV или телефоне. iOS Simulator E2E проверяет выбранный runtime-путь, но не физические Apple-устройства. Для этих выводов нужна отдельная проверка на устройстве.
+- iOS build и базовый запуск не подтверждают Keychain restore или native HLS. Если iOS fixture E2E не запускался, эти области остаются непроверенными.
 - Воспроизведённый fixture отказ и refresh не подтверждают естественное суточное истечение подписанной ссылки. Эти сценарии различайте в отчёте.
 - Restore Secure Storage после перезапуска не подтверждает миграцию с предыдущей версии storage/backend. При обновлении хранилища проверяйте установленную старую версию отдельно от чистой установки.
 - Пройденная проверка относится к проверенным исходникам и конфигурации. После изменений указывайте, какие уровни выполнены заново; прежний прогон не становится свежим автоматически.

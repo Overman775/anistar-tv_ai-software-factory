@@ -1,6 +1,6 @@
 # 🌐 Работа с сетью и HLS | AniStar TV
 
-Dio получает HTML AniStar. DOM и JSON5 разбираются на устройстве. Native `video_player` воспроизводит HLS с CDN через Android Media3. Так транспорт сайта отделён от транспорта видео. Приложение не исполняет скрипты сайта и не проксирует медиапоток. Подробные контракты и приёмка приведены в [спецификациях](specs/README.md).
+Dio получает HTML AniStar. DOM и JSON5 разбираются на устройстве. Native `video_player` воспроизводит HLS с CDN через Android Media3 или iOS AVFoundation. Так транспорт сайта отделён от транспорта видео. Приложение не исполняет скрипты сайта и не проксирует медиапоток. Подробные контракты и границы проверки приведены в [спецификациях](specs/README.md).
 
 ## 1. Границы сетевого слоя
 
@@ -94,7 +94,7 @@ VideoPlayerController.networkUrl(
 
 > **Формат нельзя определять по расширению.** Новый 720p URL заканчивается на `.mp4`, но содержит HLS. Передавайте VideoFormat.hls явно.
 
-Referer указывает на player page с anime_id. Android HTTP data-source factory передаёт его манифестам и сегментам. Native HLS разрешает относительные и абсолютные ссылки. Браузер и HTTP-прокси не участвуют. `files_mp4`, скачивание и офлайн-просмотр не используются.
+Referer указывает на player page с anime_id. Android HTTP data-source factory передаёт его манифестам и сегментам. Native HLS разрешает относительные и абсолютные ссылки. На iOS запросы обслуживает AVFoundation. Браузер и HTTP-прокси не участвуют. `files_mp4`, скачивание и офлайн-просмотр не используются. iOS Simulator build не подтверждает native HLS; для этого запускайте отдельный iOS fixture E2E.
 
 ---
 
@@ -135,7 +135,7 @@ AnistarSession использует cookie_jar для domain/path policy. Он �
 
 Гостевая форма вместо авторизованной HTML-страницы завершает сессию и удаляет protected router вместе с плеером. HTTP 403 сам по себе не завершает сессию: он может означать блокировку зеркала. Player HTML без формы/ссылки выхода не используется для определения статуса аккаунта.
 
-SecureStorage использует Android backend flutter_secure_storage. Ошибки чтения/записи не скрываются. Каталог открывается только после успешного сохранения. Android backup отключён, чтобы cookies не восстанавливались отдельно от ключа шифрования.
+SecureStorage использует `flutter_secure_storage`. На iOS flavor выбирает Keychain `accountName`; bundle ID изолирует default Keychain group и preferences. Android backup отключён, чтобы cookies не восстанавливались отдельно от ключа шифрования. Ошибки чтения/записи не скрываются. Каталог открывается только после успешного сохранения.
 
 Пароль, cookies, HTML и печатные клавиши не попадают в логи. Cookies AniStar не передаются native HLS. CDN использует подписанный URL и Referer.
 

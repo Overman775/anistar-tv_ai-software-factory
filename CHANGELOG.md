@@ -6,6 +6,30 @@
 
 - Melos обновлён до `7.8.1`, go_router — до `18.1.0`, material_ui — до `1.7.0`. Обновлены совместимые транзитивные зависимости, включая переход XML на `7.0.1`.
 
+## 1.3.0 — 20 октября 2026
+
+Согласованы Android dev/prod IDs и добавлен iPhone Simulator launch. Номер сборки: `1.3.0+6`.
+
+### Добавлено
+
+- iOS Runner с dev/prod flavors и базовым запуском на iPhone Simulator. Bundle IDs: `com.anistar.tv.dev` и `com.anistar.tv`.
+- Отдельная опциональная Melos-команда `test:e2e:ios` для native fixture-проверки на выбранном Simulator.
+- Профиль `tv` для опциональной iPad Simulator компоновочной диагностики через отдельный test-only запуск.
+- `env:prepare` для проверки JSON окружения и создания только отсутствующего `env/prod.json` из публичного шаблона.
+- VS Code debug-профили dev/prod с единым flavor JSON и подготовкой окружения перед F5.
+- iOS AppIcon из `anistar_launcher.png` и LaunchScreen из `anistar_tv_banner.png` через установленную генерацию branding.
+
+### Изменено
+
+- Android application IDs — `com.anistar.tv.dev` для dev и `com.anistar.tv` для prod. Namespace, MethodChannel и certificate pin сохранены. Новые IDs создают отдельные установки без переноса старых локальных данных.
+- iOS dev/prod изолируют preferences и Keychain по bundle ID и flavor.
+- Файловый logger ожидает готовность worker без фиксированного тайм-аута и очищает worker при ошибке запуска или раннем выходе.
+- Сборка iOS Simulator сама по себе не подтверждает Keychain restore и native HLS; для них предусмотрен отдельный опциональный iOS E2E. Физические Apple-устройства, iPad и tvOS не входят в поддержку.
+
+### Исправлено
+
+- Правила R8 сохраняют имена Kotlin coroutine bridge типов, которые JNI `shared_preferences_android` разрешает при запуске Android release.
+
 ## 1.2.0 — 19 октября 2026
 
 Обновлены карточки, список серий и управление плеером. Номер сборки: `1.2.0+5`.

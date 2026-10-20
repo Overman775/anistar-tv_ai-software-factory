@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -10,6 +11,89 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../support/test_app.dart';
 
 void main() {
+  test('iOS icon catalog contains opaque launcher artwork at every declared size', () async {
+    const directory = 'ios/Runner/Assets.xcassets/AppIcon.appiconset';
+    final catalog = jsonDecode(await File('$directory/Contents.json').readAsString());
+    if (catalog case {'images': final List<Object?> entries}) {
+      expect(entries, isNotEmpty);
+      for (final entry in entries) {
+        if (entry case {'filename': final String name, 'size': final String size, 'scale': final String scale}) {
+          final image = await _decodeFile('$directory/$name');
+          try {
+            final expectedSize = (double.parse(size.split('x').first) * double.parse(scale.split('x').first)).round();
+            expect(image.width, expectedSize, reason: name);
+            expect(image.height, expectedSize, reason: name);
+            final pixels = await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+            if (pixels == null) {
+              fail('Could not decode $name');
+            }
+            for (var offset = 3; offset < pixels.lengthInBytes; offset += 4) {
+              if (pixels.getUint8(offset) != 255) {
+                fail('$name contains transparent pixels');
+              }
+            }
+          } finally {
+            image.dispose();
+          }
+        } else {
+          fail('Every AppIcon slot must declare its image, size and scale');
+        }
+      }
+    } else {
+      fail('AppIcon catalog must declare its images');
+    }
+    final source = await _decodeFile('lib/packages/ui_kit/assets/images/anistar_launcher.png');
+    final marketing = await _decodeFile('$directory/Icon-App-1024x1024@1x.png');
+    try {
+      final original = await source.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+      final generated = await marketing.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+      expect(original, isNotNull);
+      expect(
+        generated?.buffer.asUint8List(),
+        original?.buffer.asUint8List(),
+        reason: 'iOS must use existing launcher artwork',
+      );
+    } finally {
+      source.dispose();
+      marketing.dispose();
+    }
+  });
+
+  test('iOS LaunchScreen preserves the banner aspect and dark background', () async {
+    const directory = 'ios/Runner/Assets.xcassets';
+    final storyboard = await File('ios/Runner/Base.lproj/LaunchScreen.storyboard').readAsString();
+    expect(storyboard, contains('contentMode="scaleAspectFit" image="LaunchImage"'));
+    expect(storyboard, contains('image="LaunchBackground"'));
+    final catalog = jsonDecode(await File('$directory/LaunchImage.imageset/Contents.json').readAsString());
+    if (catalog case {'images': final List<Object?> entries}) {
+      expect(entries, hasLength(3));
+      for (final entry in entries) {
+        if (entry case {'filename': final String name, 'scale': final String scale}) {
+          final image = await _decodeFile('$directory/LaunchImage.imageset/$name');
+          try {
+            final multiplier = int.parse(scale.split('x').first);
+            expect(image.width, multiplier * 320, reason: name);
+            expect(image.height, multiplier * 180, reason: name);
+            expect(image.width / image.height, 1280 / 720, reason: 'Banner must retain its aspect ratio');
+          } finally {
+            image.dispose();
+          }
+        } else {
+          fail('Every LaunchImage scale must have artwork');
+        }
+      }
+    } else {
+      fail('LaunchImage catalog must declare its images');
+    }
+    final background = await _decodeFile('$directory/LaunchBackground.imageset/background.png');
+    try {
+      final pixels = await background.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+      expect(pixels?.buffer.asUint8List(), [8, 11, 20, 255]);
+    } finally {
+      background.dispose();
+    }
+  });
+
   test('Android splash artwork fits the circular mask in every generated density and theme', () async {
     const resources = 'android/app/src/main/res';
     final wrapper = await File('$resources/drawable/android12splash_safe.xml').readAsString();
@@ -90,4 +174,13 @@ void main() {
     final pixels = await tester.runAsync(decoded.toByteData);
     expect(pixels?.getUint8(3), 0, reason: 'UI logo must have a transparent background');
   });
+}
+
+Future<ui.Image> _decodeFile(String path) async {
+  final codec = await ui.instantiateImageCodec(await File(path).readAsBytes());
+  try {
+    return (await codec.getNextFrame()).image;
+  } finally {
+    codec.dispose();
+  }
 }

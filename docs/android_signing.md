@@ -2,8 +2,12 @@
 
 Production APK собирается локально с постоянным ключом AniStar TV. Команда сборки
 проверяет сертификат, идентификатор приложения и версию перед успешным завершением.
-Общие Android-команды описаны в
-[руководстве Melos](melos_tooling.md#4-запуск-приложения-и-сборка-android).
+Production `applicationId` — `com.anistar.tv`; dev использует `com.anistar.tv.dev`.
+Эти Android IDs не меняют namespace `com.anistar.anistar_tv`, MethodChannel или
+certificate pin. Новое приложение устанавливается отдельно от прежнего ID, без
+переноса его локальных данных.
+Общие команды описаны в
+[руководстве Melos](melos_tooling.md#4-запуск-приложения-и-сборка).
 
 ## 1. Локальная production-сборка
 
@@ -78,4 +82,4 @@ Production APK и `prod` debug APK имеют одинаковый `applicationI
 разные сертификаты. Android отклонит production APK как обновление такой
 debug-сборки. APK можно собрать и проверить до решения о переустановке. Если
 владелец выберет переустановку, удаление приложения сотрёт его локальные данные.
-Dev flavor имеет отдельный `applicationId` с суффиксом `.dev`.
+Dev flavor имеет отдельный `applicationId` `com.anistar.tv.dev`.

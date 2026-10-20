@@ -12,7 +12,7 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[2]
-APPLICATION_ID = "com.anistar.anistar_tv"
+APPLICATION_ID = "com.anistar.tv"
 
 
 def run_tool(command: list[str], *, allow_failure: bool = False) -> subprocess.CompletedProcess[str]:
