@@ -97,6 +97,15 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  testWidgets('screen owns display sleep instead of the video plugin', (tester) async {
+    await mount(tester);
+    final player = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    expect(player.videoPlayerOptions?.preventsDisplaySleepDuringVideoPlayback, isFalse);
+    expect(awakeCalls.last, isTrue);
+    await unmount(tester);
+    expect(awakeCalls.last, isFalse);
+  });
+
   testWidgets('unexpected source error stays safe and remote retry can initialize video', (tester) async {
     final pending = Completer<Result<PlaybackSession, Failure>>();
     repository.pending = pending;
@@ -746,6 +755,7 @@ void main() {
       ),
     );
     await settle(tester);
+    expect(video.playCalls, isEmpty, reason: 'Late initialization must not start playback in the background');
     // Background initialization must still leave the initial flag disabled.
     // ignore: avoid-duplicate-test-assertions
     expect(awakeCalls, [false]);

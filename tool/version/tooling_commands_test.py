@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,14 @@ class ToolingCommandsTest(unittest.TestCase):
         self.env = dict(os.environ, ANISTAR_FLUTTER_SDK=str(self.temp), CALLS=str(self.log),
                         MODES=str(self.mode_log))
         self.env.pop("ANISTAR_ANDROID_SIGNING_MODE", None)
+        for relative in ("scripts/flutter_app.sh", "scripts/with_python.sh", "tool/environment/prepare.py"):
+            destination = self.temp / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        environment = self.temp / "env"
+        environment.mkdir()
+        for name in ("dev.json", "prod.example.json"):
+            (environment / name).write_text('{"ANISTAR_MIRROR_URL":"https://fixture.example/"}\n')
         for name in ("flutter", "dart"):
             path = self.bin / name
             path.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
@@ -39,7 +48,7 @@ class ToolingCommandsTest(unittest.TestCase):
             path.chmod(0o755)
 
     def dispatch(self, *arguments):
-        return subprocess.run(["bash", str(ROOT / "scripts/flutter_app.sh"), *arguments],
+        return subprocess.run(["bash", str(self.temp / "scripts/flutter_app.sh"), *arguments],
                               env=self.env, capture_output=True, text=True, check=False)
 
     def test_dev_run_preserves_flutter_arguments_and_defines(self):
@@ -74,6 +83,8 @@ class ToolingCommandsTest(unittest.TestCase):
         verifier_log = self.temp / "verifiers.jsonl"
         python = self.bin / "python3"
         python.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                          "if sys.argv[1:2] == ['-c']:\n"
+                          "    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
                           "with open(os.environ['VERIFIERS'], 'a') as log:\n"
                           "    log.write(json.dumps(sys.argv[1:]) + '\\n')\n")
         python.chmod(0o755)

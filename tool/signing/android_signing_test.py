@@ -17,7 +17,7 @@ import android_signing as signing
 
 PIN = "AB" * 32
 RUN_PROCESS = subprocess.run
-BADGING = "package: name='com.anistar.anistar_tv' versionCode='7' versionName='1.2.3'\n"
+BADGING = "package: name='com.anistar.tv' versionCode='7' versionName='1.2.3'\n"
 
 
 class AndroidSigningTest(unittest.TestCase):
@@ -71,7 +71,8 @@ class AndroidSigningTest(unittest.TestCase):
         self.assertNotIn("--print-certs", self.calls[-1])
 
     def test_metadata_rejects_wrong_application_version_and_release_flags(self):
-        for badging in (BADGING.replace("anistar_tv'", "anistar_tv.dev'"),
+        for badging in (BADGING.replace("com.anistar.tv'", "com.anistar.tv.dev'"),
+                        BADGING.replace("com.anistar.tv'", "com.anistar.anistar_tv'"),
                         BADGING.replace("versionCode='7'", "versionCode='8'"),
                         BADGING.replace("1.2.3", "1.2.4"), "unparseable",
                         BADGING + "application-debuggable\n", BADGING + "application-testOnly\n"):

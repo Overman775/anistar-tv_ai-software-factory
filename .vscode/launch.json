@@ -6,11 +6,16 @@
             "request": "launch",
             "type": "dart",
             "program": "lib/main_dev.dart",
-            "args": [
+            "cwd": "${workspaceFolder}",
+            "flutterMode": "debug",
+            "preLaunchTask": "env:prepare",
+            "env": {
+                "ANISTAR_ANDROID_SIGNING_MODE": "unsigned"
+            },
+            "toolArgs": [
                 "--flavor",
                 "dev",
-                "--dart-define-from-file",
-                "${workspaceFolder}/env/dev.json"
+                "--dart-define-from-file=${workspaceFolder}/env/dev.json"
             ]
         },
         {
@@ -18,25 +23,33 @@
             "request": "launch",
             "type": "dart",
             "program": "lib/main_prod.dart",
-            "args": [
+            "cwd": "${workspaceFolder}",
+            "flutterMode": "debug",
+            "preLaunchTask": "env:prepare",
+            "env": {
+                "ANISTAR_ANDROID_SIGNING_MODE": "unsigned"
+            },
+            "toolArgs": [
                 "--flavor",
                 "prod",
-                "--release",
-                "--dart-define-from-file",
-                "${workspaceFolder}/env/prod.example.json"
+                "--dart-define-from-file=${workspaceFolder}/env/prod.json"
             ]
         },
         {
-            "name": "Anistar TV (Profile Mode)",
+            "name": "Anistar TV (Profile Mode, Android only)",
             "request": "launch",
             "type": "dart",
             "program": "lib/main_dev.dart",
             "flutterMode": "profile",
-            "args": [
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "env:prepare",
+            "env": {
+                "ANISTAR_ANDROID_SIGNING_MODE": "unsigned"
+            },
+            "toolArgs": [
                 "--flavor",
                 "dev",
-                "--dart-define-from-file",
-                "${workspaceFolder}/env/dev.json"
+                "--dart-define-from-file=${workspaceFolder}/env/dev.json"
             ]
         }
     ]

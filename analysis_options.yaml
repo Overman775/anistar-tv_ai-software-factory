@@ -12,6 +12,7 @@ analyzer:
     - "build/**"
     - lib/generated_plugin_registrant.dart
     - android/**
+    - ios/**
   errors:
     avoid_print: error
     cancel_subscriptions: error

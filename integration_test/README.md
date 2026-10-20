@@ -1,6 +1,6 @@
-# Интеграционные наборы Android | AniStar TV
+# Интеграционные наборы Android и iOS Simulator | AniStar TV
 
-TV- и mobile-наборы проверяют важные пользовательские сценарии на Android с локальными HTTP/HLS fixtures. Они дополняют unit/widget-проверки и не заменяют их.
+TV- и mobile-наборы проверяют важные пользовательские сценарии на Android с локальными HTTP/HLS fixtures. Отдельный опциональный набор проверяет iOS runner на выбранном Simulator. Эти наборы дополняют unit/widget-проверки и не заменяют их.
 
 ## Наборы и entry points
 
@@ -8,6 +8,7 @@ TV- и mobile-наборы проверяют важные пользовате�
 | --- | --- | --- |
 | TV fixtures | `app_e2e_test.dart` | Пульт, focus, удержание кнопок, боковые панели и native playback на Android TV |
 | Mobile fixtures | `mobile_e2e_test.dart` | Touch, ввод в Flutter-поля, вкладки и панели, scroll/pull refresh, Back, поворот Android, native playback, сессия и восстановление ошибок |
+| iOS fixtures | `ios_e2e_test.dart` | Запускает общие touch-сценарии на iPhone Simulator через native player/storage; результаты появятся только после отдельного запуска |
 | TV live | `direct_android_test.dart` | Явно запускаемая проверка реального сайта и CDN с тестовым аккаунтом |
 | Сеть и вход | `network_smoke_test.dart` | Явно запускаемая live-проверка сети и входа без изменения избранного |
 | TV motion | `navigation_motion_test.dart` | Отдельная проверка нативного renderer TV-переходов |
@@ -32,6 +33,10 @@ Entry points fixture-наборов запускаются через скрип
 
 Совпадение областей на двух платформах намеренное. Touch и D-pad проходят через разные интерфейсы и маршруты фокуса. Widget-окружение само по себе не подтверждает работу native video, secure storage, HTTP headers и renderer. `navigation_motion_test.dart` дополняет widget-проверки Android decoder/renderer. Live-наборы проверяют совместимость с внешним сайтом и не заменяют детерминированные fixtures.
 
+Android TV/mobile входят в обязательный `test:e2e`. iOS fixture E2E запускается отдельно командой `fvm dart run melos run test:e2e:ios -- <simulator-UDID> <dev|prod> [mobile|tv]`; flavor обязателен, профиль по умолчанию — `mobile`. В профиле `mobile` runner вызывает общие touch-сценарии с native storage/player, без Flutter fakes. Успешная сборка не подтверждает их выполнение: пока E2E не запускался, результаты для iOS runtime, Keychain и HLS не заявляются.
+
+Опциональный `tv` запускает только компоновочную диагностику на выбранном iPad Simulator. Runner задаёт TV profile через test-only define; производственное приложение не выбирает TV по ширине. Эта проверка не подтверждает поддержку iPad, tvOS или Apple TV remote.
+
 Четыре ранее известные TV golden-регрессии находятся в отдельном наборе. Во время E2E-аудита не исправляйте их обновлением эталонов.
 
 ## Правила новых сценариев
@@ -49,7 +54,7 @@ Entry points fixture-наборов запускаются через скрип
 
 ## Границы текущих проверок
 
-Основной набор использует один существующий телефон и один Android TV AVD с реальным системным профилем и viewport. Более узкие/широкие экраны и масштаб текста покрываются widget/golden-тестами. Это не матрица всех устройств и версий Android.
+Основной Android набор использует один существующий телефон и один Android TV AVD с реальным системным профилем и viewport. Отдельный iOS запуск использует один уже booted Simulator и выбранный flavor. Ни один набор не является матрицей всех устройств и версий ОС. Более узкие/широкие экраны и масштаб текста покрываются widget/golden-тестами.
 
 Lifecycle в сценарии подаётся через Flutter binding. Player и Android screen flag при этом настоящие.
 

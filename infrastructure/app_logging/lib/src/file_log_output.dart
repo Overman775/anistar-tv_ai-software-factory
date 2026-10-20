@@ -12,14 +12,17 @@ final class FileLogOutput implements LogOutput {
   static Directory? _logDirectory;
 
   final Directory? _directory;
+  final void Function((SendPort, String)) _workerEntrypoint;
   final List<String> _buffer = [];
   Future<void>? _initialization;
   Future<void>? _shutdown;
   Isolate? _isolate;
   SendPort? _sendPort;
+  ReceivePort? _workerEvents;
   bool _closed = false;
 
-  FileLogOutput({this._directory});
+  FileLogOutput({this._directory, void Function((SendPort, String))? workerEntrypoint})
+    : _workerEntrypoint = workerEntrypoint ?? _startLogWriter;
 
   @override
   Future<void> init() {
@@ -98,20 +101,56 @@ final class FileLogOutput implements LogOutput {
   }
 
   Future<void> _initialize() async {
-    final directory = _directory ?? Directory('${(await getApplicationCacheDirectory()).path}/logs');
-    await directory.create(recursive: true);
-    _logDirectory = directory;
-    final name = 'app_log_${DateTime.now().microsecondsSinceEpoch}.txt';
-    final ready = ReceivePort();
     try {
-      _isolate = await Isolate.spawn(_startLogWriter, (ready.sendPort, '${directory.path}/$name'));
-      final port = await ready.first.timeout(const Duration(seconds: 5)) as SendPort;
+      final directory = _directory ?? Directory('${(await getApplicationCacheDirectory()).path}/logs');
+      await directory.create(recursive: true);
+      _logDirectory = directory;
+      final name = 'app_log_${DateTime.now().microsecondsSinceEpoch}.txt';
+      final events = ReceivePort();
+      _workerEvents = events;
+      _isolate = await Isolate.spawn(
+        _workerEntrypoint,
+        (events.sendPort, '${directory.path}/$name'),
+        onError: events.sendPort,
+        onExit: events.sendPort,
+      );
+      final ready = Completer<SendPort>();
+      var hasFailed = false;
+      events.listen((event) {
+        if (event is SendPort) {
+          if (!ready.isCompleted) {
+            ready.complete(event);
+          }
+
+          return;
+        }
+        if (hasFailed || event == null && _closed && ready.isCompleted) {
+          return;
+        }
+        hasFailed = true;
+        final error = switch (event) {
+          [final String message, final String stack] => RemoteError(message, stack),
+          _ => StateError('Log writer exited before completing its work'),
+        };
+        if (!ready.isCompleted) {
+          ready.completeError(error);
+        } else {
+          _closed = true;
+          _releaseWorker();
+          Zone.current.handleUncaughtError(error, StackTrace.current);
+        }
+      });
+      // A debugger may pause the child isolate before its entrypoint. Readiness
+      // has no wall-clock deadline; worker errors and exit still fail init.
+      final port = await ready.future;
       _sendPort = port;
       _buffer
         ..forEach(port.send)
         ..clear();
-    } finally {
-      ready.close();
+    } on Object {
+      _closed = true;
+      _releaseWorker();
+      rethrow;
     }
   }
 
@@ -128,11 +167,17 @@ final class FileLogOutput implements LogOutput {
       }
     } finally {
       finished.close();
-      _sendPort = null;
-      _buffer.clear();
-      _isolate?.kill(priority: Isolate.immediate);
-      _isolate = null;
+      _releaseWorker();
     }
+  }
+
+  void _releaseWorker() {
+    _workerEvents?.close();
+    _workerEvents = null;
+    _sendPort = null;
+    _buffer.clear();
+    _isolate?.kill(priority: Isolate.immediate);
+    _isolate = null;
   }
 }
 

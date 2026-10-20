@@ -92,14 +92,14 @@ fvm flutter test test/packages/ui_kit
 | Исходник в `assets/images/` | Назначение |
 | --- | --- |
 | `anistar_logo.png` | Прозрачный RGBA-знак 1254×1254 для `AnistarLogo` на стартовом экране, входе и в TV-меню. Также используется для Android 12+ splash. |
-| `anistar_launcher.png` | Изображение с фоном 1024×1024 для launcher и adaptive icon |
-| `anistar_tv_banner.png` | Баннер с фоном 1280×720 для Android TV launcher и splash до Android 12 |
+| `anistar_launcher.png` | Изображение с фоном 1024×1024 для Android launcher и adaptive icon, а также iOS AppIcon |
+| `anistar_tv_banner.png` | Баннер с фоном 1280×720 для Android TV launcher и splash до Android 12, а также iOS LaunchScreen |
 
 В UI-знаке фон и промежутки между лучами прозрачны. Тёмная рамка кнопки play принадлежит самому знаку. Не заменяйте UI-знак launcher-изображением с фоном.
 
-Android 12+ splash использует `android12splash_safe.xml`. Отступ 26% с каждой стороны помещает знак в круглую системную маску. Фон: `#080B14`. Общий скрипт экспорта после генерации сохраняет ссылку на этот drawable в дневной и ночной LaunchTheme.
+Android 12+ splash использует `android12splash_safe.xml`. Отступ 26% с каждой стороны помещает знак в круглую системную маску. Фон: `#080B14`. Общий скрипт экспорта после генерации сохраняет ссылку на этот drawable в дневной и ночной LaunchTheme. iOS LaunchScreen использует `anistar_tv_banner.png` с `scaleAspectFit` и фоном `#080B14`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
 
-Конфигурация splash не фиксирует ориентацию. Runner выбирает профиль TV/mobile. Настройка нативных ресурсов: [иконка, баннер и заставка](../../../docs/05_development_and_testing.md#8-иконка-android-tv-баннер-и-заставка).
+Настройка splash не задаёт ориентацию. Runner выбирает профиль TV/mobile. Android- и iOS-ресурсы генерируются общей командой `fvm dart run melos run generate:branding`; настройка описана в разделе [иконка, баннер и заставка](../../../docs/05_development_and_testing.md#8-иконка-android-tv-баннер-и-заставка).
 
 [brand_assets_test.dart](../../../test/packages/ui_kit/brand_assets_test.dart) проверяет доступность package assets, прозрачность знака и размещение splash внутри маски во всех плотностях и обеих темах. Golden-снимки стартового экрана, входа и меню фиксируют знак на поверхностях приложения.
 

@@ -188,6 +188,10 @@ void main() {
       ...privateNames,
       ...securityNames,
       'build:android:prod:apk:unsigned',
+      'env:prepare',
+      'test:e2e:ios',
+      'build:ios:dev:simulator',
+      'build:ios:prod:simulator',
     });
     expect(
       scripts.entries.where((entry) => (entry.value as YamlMap)['private'] == true).map((entry) => entry.key).toSet(),

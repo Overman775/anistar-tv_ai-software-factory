@@ -4,7 +4,7 @@
 
 ## Источник и playback session
 
-Поддерживается только онлайн HLS через Android native video_player / Media3. Chrome, WebView, parser-сервер, proxy, MP4 download и offline playlist не участвуют.
+Поддерживается только онлайн HLS через Flutter `video_player` и native player: Android использует Media3, iOS — AVFoundation. Chrome, WebView, parser-сервер, proxy, MP4 download и offline playlist не участвуют. Наличие iOS runner и успешная Simulator-сборка сами по себе не подтверждают работу HLS; для этого нужен выбранный iOS native fixture E2E.
 
 Перед открытием источника repository получает свежий player HTML. Выбранная серия определяется номером, качество — files её объекта. Поддерживаемые значения качества — `360` и `720`; доступный поток любого из них открывается native player как HLS независимо от суффикса URL. Если запрошенного качества нет, выбирается наибольшее доступное для этой серии; `requestedQuality` и `selectedQuality` хранятся раздельно. Отсутствующие серия или поток дают Failure.
 
@@ -62,15 +62,17 @@ Controls остаются видимыми во время выбора цели
 
 Кнопки предыдущей и следующей серии выбирают ближайший доступный номер ниже/выше текущего, включая пропуски нумерации. На границе списка недоступная кнопка скрыта и исключена из фокуса. Переключение использует обычную смену серии: позиция сбрасывается, качество сохраняется, прежний native controller освобождается. Кнопки player используют общий AppFocusStyle. Left в правой панели закрывает её без применения черновика и восстанавливает исходный фокус (в player — фокус видео). Right в левом меню сворачивает его, возвращая последнюю доступную карточку или действие содержимого.
 
-## Удержание экрана и Android lifecycle
+## Удержание экрана и lifecycle
 
-`PlayerScreen` управляет Android-флагом окна `FLAG_KEEP_SCREEN_ON` через локальный MethodChannel. Удержание включено только у активной страницы плеера в `resumed`, когда controller инициализирован, `isPlaying == true`, нет буферизации, завершения и ошибки. Позиция и видимость controls не являются условиями удержания. Открытая панель качества/серий не отменяет удержание, пока видео играет.
+`PlayerScreen` управляет удержанием через локальный MethodChannel. Удержание включено только у активной страницы плеера в `resumed`, когда controller инициализирован, `isPlaying == true`, нет буферизации, завершения и ошибки. Позиция и видимость controls не являются условиями удержания. Открытая панель качества/серий не отменяет удержание, пока видео играет.
 
 Pause и native stop немедленно снимают флаг через listener. Play/resume включает его снова при выполнении условий. Завершение, runtime/command error, смена источника, повторная загрузка и dispose снимают флаг. Back снимает его в начале обратного перехода, до dispose. Обычная страница поверх player снимает удержание; возврат к играющему player восстанавливает его. Каталог, вход и остальные обычные экраны не включают флаг.
 
 Экран сам владеет lifecycle pause/resume. Любой выход из `resumed` снимает флаг и ставит видео на паузу; возвращение возобновляет только видео, игравшее перед уходом. Пользовательская пауза сохраняется. Поздняя initialization в фоне не запускает видео и не включает удержание. Native Activity дополнительно очищает флаг при `onPause`, удалении Flutter engine и уничтожении Activity; запоздалая команда включения в фоне отклоняется.
 
-Используется только флаг текущего окна, без `WAKE_LOCK`, изменения системного timeout, `SHOW_WHEN_LOCKED`, `TURN_SCREEN_ON` или отключения keyguard. Ручная блокировка устройства сохраняется. Этот механизм рекомендован Android для активного видео и предотвращения TV Ambient Mode: [Keep the screen on](https://developer.android.com/develop/background-work/background-tasks/awake/screen-on).
+Android использует только флаг текущего окна, без `WAKE_LOCK`, изменения системного timeout, `SHOW_WHEN_LOCKED`, `TURN_SCREEN_ON` или отключения keyguard. Ручная блокировка устройства сохраняется. Этот механизм рекомендован Android для активного видео и предотвращения TV Ambient Mode: [Keep the screen on](https://developer.android.com/develop/background-work/background-tasks/awake/screen-on).
+
+iOS adapter управляет `UIApplication.shared.isIdleTimerDisabled` через тот же MethodChannel. Он сохраняет прежнее значение при первом захвате и восстанавливает его при остановке, уходе сцены из foreground и detach. После возврата сцены timer повторно захватывается только после свежей Dart-команды. `video_player` не получает второй механизм удержания. Поведение AVFoundation/Keychain и HLS требует отдельного native fixture E2E; без его запуска оно остаётся непроверенным.
 
 ## Восстановление воспроизведения
 
@@ -87,6 +89,6 @@ HTML и native `errorDescription` с signed URL не попадают в UI ил
 ## Источники и границы подтверждения
 
 - [Playback repository](../../lib/packages/features/player/data/repositories/anistar_playback_repository.dart), [player screen](../../lib/packages/features/player/presentation/screens/player_screen.dart), [budget](../../lib/packages/features/player/domain/models/playback_refresh_budget.dart).
-- [Session tests](../../test/packages/features/player/data/repositories/anistar_playback_repository_test.dart), [lifecycle tests](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart), [live smoke](../../integration_test/direct_android_test.dart).
+- [Session tests](../../test/packages/features/player/data/repositories/anistar_playback_repository_test.dart), [lifecycle tests](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart), [iOS fixture E2E](../../integration_test/ios_e2e_test.dart), [live smoke](../../integration_test/direct_android_test.dart).
 
 Проверка native HLS на эмуляторе не подтверждает аппаратный декодер физического TV. Fixture отказ и refresh не подтверждают естественное суточное expiry; эти уровни проверяются и отражаются в отчёте отдельно. Границы описаны в [разработке и тестировании](../05_development_and_testing.md#10-результаты-и-границы-проверки).

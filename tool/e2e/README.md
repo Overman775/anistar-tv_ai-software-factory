@@ -1,6 +1,6 @@
-# Android TV и Mobile E2E Fixtures | AniStar TV
+# Android TV, Mobile и iOS Simulator E2E Fixtures | AniStar TV
 
-Инструменты E2E запускают Android integration tests против локальных HTTPS fixtures. Fixture server имитирует AniStar HTML и HLS; настоящие repositories, parser и native video работают с его ответами. Сценарии и правила их написания описаны в [`integration_test/README.md`](../../integration_test/README.md).
+Android runners запускают integration tests против локальных HTTPS fixtures. Fixture server имитирует AniStar HTML и HLS; настоящие repositories, parser и native video работают с его ответами. Отдельный опциональный iOS runner использует iPhone Simulator. Сценарии и правила их написания описаны в [`integration_test/README.md`](../../integration_test/README.md).
 
 ## Окружение
 
@@ -21,6 +21,31 @@ Melos выбирает доступный совместимый Python interpre
 Скрипты выбирают AVD по имени, а не первый emulator в adb. Имена можно переопределить через `ANISTAR_TV_AVD` и `ANISTAR_MOBILE_AVD`. Чтобы указать запущенный экземпляр явно, передайте `emulator-<port>` первым аргументом платформенного скрипта. Например: `bash scripts/e2e-mobile.sh emulator-5554`. Старый CLI остаётся совместимым: `bash scripts/e2e.sh <tv-emulator> fixtures` и `bash scripts/e2e.sh <phone-emulator> fixtures-mobile`.
 
 Общий runner выполняет TV и mobile последовательно, сохраняет результат каждого и после ошибки TV запускает mobile. Flutter/Gradle и APK output общие, поэтому одновременные E2E runners блокируются build lock.
+
+<a id="ios-fixture-e2e"></a>
+## iOS fixture E2E
+
+Запускайте iOS набор только явно из корня проекта:
+
+```bash
+fvm dart run melos run test:e2e:ios -- <simulator-UDID> <dev|prod> [mobile|tv]
+```
+
+Нужны macOS, Xcode и уже booted Simulator. Runner принимает его UDID и flavor,
+затем необязательный профиль `mobile` (по умолчанию) или `tv`. Профиль `tv` доступен
+только если выбранный Simulator имеет iPad device type; имя и ширина окна не
+используются для проверки. Он задаёт test-only TV layout diagnostic и не меняет
+production resolver и не означает поддержку iPad/tvOS. Runner запускает iOS native
+player и локальный HTTPS fixture. Команда не входит в обязательный Android
+`test:e2e` или `check`; успешная Simulator-сборка не подтверждает Keychain и HLS.
+Не booted UDID или неверное устройство для профиля `tv` завершают runner ошибкой,
+а не успешным пропуском.
+
+Runner устанавливает публичный localhost fixture root certificate через
+`simctl keychain` только в выбранный Simulator. Certificate остаётся установлен
+после прогона. Runner не стирает данные Simulator и не удаляет certificate;
+учитывайте это при выборе устройства. Отчёт сохраняется в `build/e2e/ios-<flavor>.*`.
+`result.json` записывает flavor, `mobile`/`tv` profile, exit code и оставшийся trust.
 
 ## Побочные эффекты и очистка
 

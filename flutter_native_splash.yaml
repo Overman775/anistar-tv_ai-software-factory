@@ -2,7 +2,8 @@ flutter_native_splash:
   color: "#080B14"
   image: lib/packages/ui_kit/assets/images/anistar_tv_banner.png
   android: true
-  ios: false
+  ios: true
+  ios_content_mode: scaleAspectFit
   web: false
   fullscreen: true
 

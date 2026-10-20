@@ -43,13 +43,17 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "28.2.13676358"
 
+    buildFeatures {
+        resValues = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 
     defaultConfig {
-        applicationId = "com.anistar.anistar_tv"
+        applicationId = "com.anistar.tv"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -63,10 +67,12 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
+            resValue("string", "app_name", "AniStar TV Dev")
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         create("prod") {
             dimension = "environment"
+            resValue("string", "app_name", "AniStar TV")
         }
     }
 
@@ -84,6 +90,7 @@ android {
     buildTypes {
         release {
             signingConfig = if (localSigning != null) signingConfigs.getByName("production") else null
+            proguardFiles("proguard-rules.pro")
         }
     }
 }

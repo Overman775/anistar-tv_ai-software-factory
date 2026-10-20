@@ -1,6 +1,6 @@
 # 📺 AniStar TV + AI Software Factory
 
-**AniStar TV — личный некоммерческий пет-проект:** неофициальный клиент AniStar на Flutter для Android TV и Android-телефонов.
+**AniStar TV — личный некоммерческий пет-проект:** неофициальный клиент AniStar на Flutter для Android TV и телефонов. Проект также собирает и запускает dev/prod на iPhone Simulator; полноценная поддержка iOS и iPad не заявлена.
 
 Здесь можно познакомиться и с приложением для просмотра аниме, и с **AI Software Factory** — организацией разработки с AI-агентами на примере этого проекта.
 
@@ -46,10 +46,11 @@ fvm install
 fvm flutter pub get --enforce-lockfile  # Устанавливает и Melos
 fvm dart run melos bootstrap --enforce-lockfile
 fvm dart run melos run generate
+fvm dart run melos run env:prepare
 fvm dart run melos run run:dev
 ```
 
-Для запуска подключите Android-устройство или эмулятор. [Настройка Android SDK](.agents/skills/factory-install/references/android.md), [Windows](.agents/skills/factory-install/references/windows.md), [Linux](.agents/skills/factory-install/references/linux.md).
+Для Android подключите устройство или эмулятор. Для iPhone Simulator используйте macOS с Xcode и выберите dev/prod конфигурацию VS Code. `env:prepare` проверяет `env/dev.json` и создаёт отсутствующий `env/prod.json` из шаблона, не перезаписывая существующий файл. Подробности находятся в [Melos tooling](docs/melos_tooling.md). [Настройка Android SDK](.agents/skills/factory-install/references/android.md), [Windows](.agents/skills/factory-install/references/windows.md), [Linux](.agents/skills/factory-install/references/linux.md).
 
 ## 📚 Документация
 

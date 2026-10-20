@@ -8,11 +8,11 @@ AuthController / AuthRepository принадлежат feature Auth. AnistarClie
 
 ## Сессия и изоляция origin
 
-Ключ записи: `anistar.session.v1.<Uri.encodeComponent(origin.origin)>`. JSON record содержит `version=1`, origin, account и host/domain cookies. Зеркала и порты изолированы. Android backup выключен, чтобы запись cookies не восстанавливалась отдельно от ключа шифрования.
+Ключ записи: `anistar.session.v1.<Uri.encodeComponent(origin.origin)>`. JSON record содержит `version=1`, origin, account и host/domain cookies. Зеркала и порты изолированы. Android dev/prod используют разные application IDs. На iOS bundle ID задаёт отдельные preferences и default Keychain group; `SecureStorage` дополнительно задаёт `accountName` `com.anistar.tv.dev` для dev и `com.anistar.tv` для prod. Сессии flavors не пересекаются. Android backup выключен, чтобы запись cookies не восстанавливалась отдельно от ключа шифрования.
 
 Cookie jar применяет domain/path/secure policy. Дополнительно исключаются истёкшие Secure cookies. Cookies прикрепляются только к текущему HTTPS origin. На чужом origin header Cookie удаляется. Native HLS не получает cookies сайта.
 
-Изменения session сериализованы. Повреждённый JSON, несовпадающий origin/version или некорректные cookies удаляют повреждённую запись. Ошибка Secure Storage не маскируется под отсутствие аккаунта.
+Изменения session сериализованы. Повреждённый JSON, несовпадающий origin/version или некорректные cookies удаляют повреждённую запись. Ошибка Secure Storage не маскируется под отсутствие аккаунта. Реальное восстановление iOS Keychain должно подтверждаться отдельным native fixture E2E; сборка или widget test этого не доказывает.
 
 При смене origin router идентифицируется аккаунтом и зеркалом. Состояние навигации предыдущего зеркала не переносится даже при одинаковом имени аккаунта. Logout текущего origin не удаляет записи других зеркал.
 

@@ -34,10 +34,12 @@
 - [Единый стиль отметок и понятные подписи на карточках](intents/card-badges-and-captions.md).
 - [Три колонки серий на TV и одна серия в ряд на телефоне](intents/episode-grid-tv-and-mobile.md).
 - [Немного уменьшить шрифты на главной и странице сериала](intents/readable-smaller-typography.md).
+- [Новые идентификаторы приложения и запуск на iOS](intents/app-identifiers-and-ios-launch.md).
 
 ## Согласованные планы
 
 - [Карточки, серии и управление плеером — revision 1](plans/ui-player-intents-2026-10-19.md).
+- [Идентификаторы приложения и запуск iOS — revision 6](plans/app-identifiers-and-ios-launch.md).
 
 ## Предложения для выбора
 
@@ -64,8 +66,8 @@ README пакетов описывают публичные входы, усло
 
 | Материал | Назначение |
 | :--- | :--- |
-| [Android integration tests](../integration_test/README.md) | Сценарии TV/mobile, правила написания тестов и границы покрытия |
-| [E2E tooling](../tool/e2e/README.md) | Запуск Android runners, окружение, fixtures, media и отчёты |
+| [Integration tests](../integration_test/README.md) | Android TV/mobile и отдельный iOS Simulator fixture E2E |
+| [E2E tooling](../tool/e2e/README.md) | Запуск Android/iOS runners, окружение, fixtures, media и отчёты |
 | [Graphify tooling](../tool/graphify/README.md) | Локальный патч извлечения, его применение и проверка |
 
 ## Написание документации

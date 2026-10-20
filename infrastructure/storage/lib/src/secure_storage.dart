@@ -4,11 +4,21 @@ import 'package:app_logging/app_logging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStorage {
+  // Flutter supplies this define from the native --flavor selection. Each
+  // bundle also has its own default Keychain access group and preferences.
+  static const _iosService = String.fromEnvironment('FLUTTER_APP_FLAVOR') == 'dev'
+      ? 'com.anistar.tv.dev'
+      : 'com.anistar.tv';
   final FlutterSecureStorage _storage;
   final Logger _logger;
 
   SecureStorage({FlutterSecureStorage? storage, Logger? logger})
-    : _storage = storage ?? const FlutterSecureStorage(),
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            // Pinned IOSOptions defaults: unlocked, unsynchronized, no groupId.
+            iOptions: IOSOptions(accountName: _iosService),
+          ),
       _logger = logger ?? Logger(level: Level.off);
 
   Future<String?> get(String key, {String? defaultValue}) async {

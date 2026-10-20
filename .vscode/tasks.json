@@ -95,6 +95,58 @@
                 "cwd": "${workspaceFolder}"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "env:prepare",
+            "type": "process",
+            "command": "fvm",
+            "args": [
+                "dart",
+                "run",
+                "melos",
+                "run",
+                "env:prepare"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Flutter: Optional iOS E2E",
+            "type": "process",
+            "command": "fvm",
+            "args": [
+                "dart",
+                "run",
+                "melos",
+                "run",
+                "test:e2e:ios",
+                "--",
+                "${input:iosSimulator}",
+                "${input:iosFlavor}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "iosSimulator",
+            "type": "promptString",
+            "description": "Booted iOS Simulator UDID (optional E2E)"
+        },
+        {
+            "id": "iosFlavor",
+            "type": "pickString",
+            "description": "iOS fixture app flavor",
+            "options": [
+                "dev",
+                "prod"
+            ],
+            "default": "dev"
         }
     ]
 }
