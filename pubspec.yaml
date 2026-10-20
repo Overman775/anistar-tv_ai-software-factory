@@ -77,6 +77,10 @@ melos:
   ide:
     intellij:
       enabled: false
+  command:
+    bootstrap:
+      hooks:
+        post: "python3 tool/graphify/prepare.py --optional"
   scripts:
     analyze:
       steps:
@@ -250,12 +254,12 @@ melos:
 
     graph:update:
       private: true
-      run: "graphify update ."
+      run: "python3 tool/graphify/prepare.py --update"
       description: "Refresh local code knowledge graph (optional graphify)"
 
     graph:check:
       private: true
-      run: "bash scripts/graphify_check.sh"
+      run: "python3 tool/graphify/prepare.py --check"
       description: "Check graphify extractor patch and regression tests (optional)"
 
     vcs:check:

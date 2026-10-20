@@ -37,7 +37,7 @@ abstract final class DioClient {
     return dio;
   }
 
-  /// Keeps diagnostics after session/header interceptors, as in RC Mobile.
+  /// Inserts session/header interceptors before logging to preserve diagnostic order.
   static void addInterceptors(Dio dio, List<Interceptor> interceptors) {
     final loggingIndex = dio.interceptors.indexWhere((interceptor) => interceptor is DioLoggingInterceptor);
     dio.interceptors.insertAll(loggingIndex < 0 ? dio.interceptors.length : loggingIndex, interceptors);

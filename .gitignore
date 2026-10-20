@@ -36,7 +36,7 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+build/
 
 # Symbolication related
 app.*.symbols
@@ -54,18 +54,25 @@ app.*.map.json
 .fvm/
 
 # Generated Graphify state is local; agent instructions and configs are shared.
-/.graphifyignore
-/graphify-out/
+graphify-out/
 
 # Machine-specific production endpoint for --dart-define-from-file.
 /env/prod.json
 
 # Deterministic test artifacts; golden baselines remain tracked.
-/coverage/
+coverage/
 /test/**/failures/
 
 # Python tooling bytecode.
 **/__pycache__/
+
+# Local dotenv inputs; public templates remain available to Git.
+.env
+.env.*
+*.env
+!**/.env.example
+!**/.env.sample
+!**/.env.template
 
 # Local live-test credentials, never committed.
 /env/*.local.json
@@ -77,8 +84,13 @@ app.*.map.json
 /.ai-pipeline/state/
 /.ai-pipeline/staging/
 
-# Personal Claude project overrides; shared settings remain tracked.
-/.claude/settings.local.json
+# Personal agent overrides and locks; shared instructions/configs remain tracked.
+AGENTS.local.md
+CLAUDE.local.md
+**/.claude/settings.local.json
+**/.claude/*.lock
+**/.codex/settings.local.json
+**/.codex/*.lock
 
 # External skill bundles are installed locally; Factory skills remain shared.
 /.agents/skills/graphify

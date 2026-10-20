@@ -90,16 +90,31 @@ interpreter: transient env может оказаться другой верси
 `uv pip install --python <venv-python> graphifyy==<version>`.
 Для текущего проекта используй CLI этого venv. Не делай глобальный downgrade.
 
-Запиши **фактический** interpreter в `graphify-out/.graphify_python` через
-`Path.write_text(..., encoding='utf-8')`. Эта sidecar локальна: не копируй путь
-с другого компьютера. Проверь также `.graphify_root` по установленному skill.
+Если patch ещё не применён, используй interpreter Graphify, разрешённый по
+инструкциям выше, и примени его из корня проекта:
 
-Из корня checkout тем же interpreter выполни:
+```bash
+<graphify-python> tool/graphify/patch_graphify.py
+```
+
+Затем проверь инструмент и подготовь локальные sidecar и scan root:
+
+```bash
+python3 tool/graphify/prepare.py
+```
+
+Команда находит Python совместимой существующей установки и записывает
+машинный путь только в ignored `graphify-out/.graphify_python`. Не копируй этот
+путь между компьютерами. Новые checkout и worktree используют тот же механизм.
+Если Graphify отсутствует и он не входит в подтверждённый состав, используй
+`python3 tool/graphify/prepare.py --optional`: команда пропустит только отсутствие
+установки. Если установленный Graphify или его конфигурация неисправны, команда
+завершится ошибкой.
+
+Из корня checkout проверь patch и regression tests:
 
 ```text
-<graphify-python> tool/graphify/patch_graphify.py
-<graphify-python> tool/graphify/patch_graphify.py --check
-<graphify-python> -m unittest discover -s tool/graphify -p 'test_*.py'
+python3 tool/graphify/prepare.py --check
 ```
 
 Installer требует CLI `patch` в PATH Python subprocess. Он проверяет distribution
@@ -121,11 +136,14 @@ Installer может дополнить инструкции и hooks. Сохр�
 и конфигурацию. Не оставляй дублирующиеся копии skill разных версий.
 Прочитай установленный `SKILL.md` Graphify перед построением.
 
-Проверь `.graphifyignore` и существующие Git ignore/exclude. В этом репозитории
-`.graphifyignore` локален и в clone может отсутствовать. Исключи credentials,
-signed URLs, HTML сессий, `.git`, caches, SDK, build outputs, generated code,
-golden/media binaries и сами `graphify-out` artifacts. Сохрани существующие правила.
-Не исключай maintained `lib/`, `infrastructure/`, scripts, тесты и `docs/` целиком.
+Проверь tracked `.graphifyignore` и фактический список найденных файлов. Правила
+общие для clone и worktree; машинные пути хранятся только в ignored sidecar.
+Исключи `.git`, FVM SDK links, `.dart_tool`, вложенные build/cache/vendor outputs,
+iOS Pods/ephemeral/DerivedData, coverage, generated sources, graphify outputs,
+binary assets, HLS media fixtures, private credentials и runtime artifacts.
+Не исключай maintained `lib/`, `infrastructure/`, scripts, tests, docs и Factory
+instructions целиком. Проверь, что traversal не следует по symlink `.fvm` во
+внешний Flutter SDK.
 
 Если граф отсутствует **или patch применён впервые**, выполни полный pipeline
 из установленного skill: новый AST cache, semantic extraction документов,
@@ -140,8 +158,11 @@ Headless `graphify extract` без backend либо `--code-only` не подт�
 семантический граф документов. При недоступном semantic extraction сообщи
 неполноту; рабочий code graph можно сохранить как промежуточный результат.
 
-Для уже исправленного готового графа выполни `graphify update .`.
-Документные изменения могут потребовать semantic pass по installed skill:
+Для уже исправленного готового графа владелец задачи выполняет один финальный
+`graphify update .` после всех изменений индексируемых файлов. Другие роли могут
+читать граф запросами, но не обновляют его. Если позднее меняется индексируемый
+вход, владелец выполняет обновление ещё раз после последнего такого изменения.
+Проверь semantic coverage документов отдельным semantic pass по installed skill:
 CLI update сам по себе его не доказывает. Проверь непустой `graph.json`,
 `GRAPH_REPORT.md`, `graph.html`, source locations, health и успешный query.
 Покажи предупреждения целостности и неполное покрытие. Не удаляй плохие edges

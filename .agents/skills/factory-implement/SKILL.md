@@ -294,6 +294,11 @@ Before new code, Developer checks:
 Minimality never removes security, trust validation, error handling,
 accessibility, tests, or explicit requirements.
 
+For graph freshness, follow
+`references/shared-finalize.md#stateful-finalize`: the Teamlead owns one final
+refresh after all writers finish. Delegates and reviewers may query the current
+graph; refresh again only when a later change modifies indexed inputs.
+
 ## Failure Routing
 
 | Failure | Action |

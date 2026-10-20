@@ -37,12 +37,26 @@ def main():
         return
     if args.check:
         parser.error("Producer patch is not installed")
-    if len(originals) != len(manifest["files"]):
+    # The previous reviewed revision patched only the three extractor files.
+    # Accept exactly that known complete revision for a corpus-policy upgrade;
+    # all other mixtures remain errors. Every source hash was checked above.
+    previous_revision = originals == ["detect.py"]
+    if len(originals) != len(manifest["files"]) and not previous_revision:
         parser.error("Partially patched installation; restore original files before applying")
-    # Preflight the entire patch before changing the tool installation.
-    command = ["patch", "--batch", "--forward", "-p1", "-i", str(here / f"graphify-{version}.patch")]
-    subprocess.run(command + ["--dry-run"], cwd=package, check=True)
     with tempfile.TemporaryDirectory(prefix="anistar-graphify-backup-") as temp:
+        reviewed_patch = here / f"graphify-{version}.patch"
+        if previous_revision:
+            # Use only the reviewed detect.py section. Existing extractor bytes
+            # already match their exact patched hashes; never reverse/reapply.
+            sections = reviewed_patch.read_text(encoding="utf-8").split("--- a/")
+            corpus = ["--- a/" + section for section in sections[1:]
+                      if section.startswith("detect.py\n")]
+            if len(corpus) != 1:
+                parser.error("Missing reviewed corpus migration patch")
+            reviewed_patch = Path(temp) / "corpus.patch"
+            reviewed_patch.write_text(corpus[0], encoding="utf-8")
+        command = ["patch", "--batch", "--forward", "-p1", "-i", str(reviewed_patch)]
+        subprocess.run(command + ["--dry-run"], cwd=package, check=True)
         backup = Path(temp)
         for name in originals:
             dest = backup / name

@@ -62,4 +62,7 @@ Concise, direct. Preserve exact commands, paths and technical terms.
 - `/graphify` → read the installed skill first.
 - If `graphify-out/graph.json` exists, start codebase questions with `graphify query`; use `path`/`explain` for relationships/concepts. Dirty graph files do not justify skipping it.
 - Graph absent → targeted source search. Wiki index → broad navigation; full report only when needed.
-- After code/tooling changes: `graphify update .`.
+- The task owner performs one final `graphify update .` after all writers finish,
+  when indexed inputs changed and Graphify is available. Delegates may query the
+  current graph for navigation; the owner refreshes it again only if a later
+  change modifies indexed inputs.

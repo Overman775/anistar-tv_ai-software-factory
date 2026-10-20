@@ -10,10 +10,5 @@ python3 -m unittest discover -s tool/version -p '*_test.py'
 python3 -m unittest discover -s tool/signing -p '*_test.py'
 # Factory suites use separate processes because test_skill_contract module names collide.
 python3 tool/factory/run_tests.py
-# graphify is optional, isolated tooling with its own Python environment.
-if [[ -f graphify-out/.graphify_python ]]; then
-  graphify_python=$(cat graphify-out/.graphify_python)
-  "$graphify_python" -m unittest discover -s tool/graphify -p 'test_*.py'
-else
-  echo 'Graphify regression tests not run: local graphify interpreter is not configured.'
-fi
+# Graphify is optional, but a broken installed/configured tool must fail.
+python3 tool/graphify/prepare.py --optional --check

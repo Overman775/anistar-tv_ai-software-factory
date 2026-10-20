@@ -172,3 +172,11 @@
 @@ -3880 +3880 @@
 -    key = re.sub(r"[^a-zA-Z0-9_]+", "", label)
 +    key = re.sub(r"[^a-zA-Z0-9_$]+", "", label)
+--- a/detect.py
++++ b/detect.py
+@@ -2006 +2006 @@
+-    # Always include graphify-out/memory/ - query results filed back into the graph
++    # Include query feedback unless an explicit corpus exclusion forbids it.
+@@ -2009 +2009 @@
+-    if memory_dir.exists():
++    if memory_dir.exists() and not _is_ignored(memory_dir, root, explicit_ignore_patterns):

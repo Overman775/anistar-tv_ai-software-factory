@@ -73,11 +73,33 @@ Melos использует `.fvm/flutter_sdk`. Переменная `ANISTAR_FLU
 который выбирает Melos, также поддерживаются `--sdk-path` и `MELOS_SDK_PATH`.
 Глобальная установка Melos не требуется.
 
-Python-команды Melos выбирают доступный Python 3.10 или новее. По умолчанию
+Команды с `scripts/with_python.sh` выбирают доступный Python 3.10 или новее. По умолчанию
 проверяются `python3`, затем `python3.14`–`python3.10`. Переменная
 `ANISTAR_PYTHON` задаёт исполняемый файл явно. Выбор распространяется на
 вложенные Python-инструменты. Для прямого вызова скриптов настройте `PATH`
 самостоятельно.
+
+Graphify-команды вызывают `python3 tool/graphify/prepare.py` напрямую; для них
+нужен Python 3.10+ в `PATH`. При `melos bootstrap --enforce-lockfile` проект вызывает
+подготовку Graphify в
+optional-режиме. Если совместимая установка найдена, команда проверяет patch и
+сохраняет interpreter в локальной ignored sidecar `graphify-out/.graphify_python`.
+Без Graphify bootstrap продолжается. Обнаруженная установка с неверной версией,
+patch или sidecar останавливает проверку. Для ручной настройки нового checkout
+выполни:
+
+```bash
+python3 tool/graphify/prepare.py --optional
+```
+
+Переменная `ANISTAR_GRAPHIFY_PYTHON` позволяет выбрать другую локальную
+установку Graphify.
+
+Правила корпуса хранятся в tracked `.graphifyignore`, поэтому одинаковы для
+checkout и worktree. Они исключают FVM SDK link, build/cache и generated outputs,
+binary assets и HLS fixtures, credentials и runtime artifacts. Maintained source,
+tests, docs и Factory instructions остаются доступны Graphify. См.
+[руководство Graphify](../tool/graphify/README.md).
 
 Для установки Git hooks см. [руководство VCS](vcs_guidelines.md#5-локальные-git-hooks).
 
@@ -336,10 +358,17 @@ lockfile; после них проверьте diff и выполните пол
 | `version:check` (приватная команда) | Проверить формат версии без изменений Git |
 | `version:plan` | Показать план увеличения версии; передать `patch`, `minor`, `major` или `build` |
 | `version:set` | Предпросмотреть заданную версию; запись требует `--write` |
-| `graph:update` (приватная команда) | Обновить локальный граф Graphify |
-| `graph:check` (приватная команда) | Проверить локальный патч Graphify и регрессионные тесты |
+| `graph:update` (приватная команда) | Обновить локальный граф Graphify через найденный interpreter |
+| `graph:check` (приватная команда) | Проверить локальный patch Graphify и регрессионные тесты |
 
 У каждой команды своя ответственность; подробности версии и Git находятся в
 [руководстве VCS](vcs_guidelines.md). `quality:*` — восемь приватных внутренних
 задач Melos. Публичные профили вызывают их напрямую. Не используйте их как
 повседневные команды.
+
+Итоговое обновление Graphify в задаче выполняет её владелец один раз после
+завершения всех писателей. Другие роли могут использовать `graphify query`,
+`path` и `explain` для навигации. Если после обновления меняется индексируемый
+файл, владелец запускает update снова после последнего изменения. Команда
+`graphify update .` сама по себе не подтверждает полноту semantic fragments
+документов.

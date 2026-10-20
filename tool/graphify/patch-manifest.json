@@ -13,6 +13,10 @@
     "extract.py": {
       "original": "81b1a9c4b67df3cf978bc30e2824c92ced9bbca7fcaf2c4dd7fec58d6c499cf1",
       "patched": "543e074de2325838043cce4a9db593be79d3dd352d7046dc9afa3b17dd3789ab"
+    },
+    "detect.py": {
+      "original": "8fafbb924ce0bfd4fda6e7be66cefb9a94a12f00c368b03b8bf85c5058f60970",
+      "patched": "e29d43ea48fc3e98cb70d54a0e2fe16bc6c7060373eb95f6eb590203eba3ba6a"
     }
   }
 }

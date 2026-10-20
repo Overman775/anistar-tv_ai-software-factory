@@ -53,15 +53,20 @@ tree and any check evidence, report cancellation, and create/clean no Factory Im
    Do not copy `execution-brief.md`, analysis, or gate reports into `docs/`,
    `docs/tasks/`, source files, tests, or another archive.
 
-4. If production code, tests, generated project code, or project docs changed,
-   run:
+4. If any indexed source, test, documentation, or tooling input changed, the
+   Teamlead owns one final graph refresh after all writers and fixes finish. If
+   Graphify is available and configured, run:
 
 ```bash
 graphify update .
 ```
 
-   Graphify failure becomes `NOT_RUN` note; it does not invalidate successful
-   execution. Do not stage, discard, or reset graph changes.
+   Delegated roles and the independent reviewer may query the latest graph for
+   navigation. They must not run their own refreshes. Changes made after this
+   refresh invalidate it only when they modify indexed inputs; in that case the
+   Teamlead refreshes once more after the last such change. Graphify failure
+   becomes a `NOT_RUN` note and does not invalidate successful execution. Do not
+   stage, discard, or reset graph changes.
 
 5. Refresh changed-file count. Only now mark manifest `status: completed`,
    `resumable: false`, and `cleanup: PENDING`.

@@ -5,7 +5,7 @@ description: "Обновление stable Flutter через FVM и зависи
 
 # Обновление Flutter в AniStar TV
 
-Адаптировано из `rc-flutter-update` проекта RC Mobile App. Здесь Android / Android TV, Dart pub workspace и локальные проверки; Melos объединяет локальные команды; iOS, браузеры и CI/CD не нужны.
+Инструкция описывает обновление Android / Android TV, Dart pub workspace и локальные проверки AniStar TV. Melos объединяет локальные команды; iOS, браузеры и CI/CD не нужны.
 
 ## Контекст
 

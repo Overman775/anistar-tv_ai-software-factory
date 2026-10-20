@@ -1,0 +1,102 @@
+# Shared corpus policy. Bare directory names apply at every depth.
+# SDK/cache links and dependency copies are not maintained project source.
+.git/
+.fvm/
+flutter_sdk/
+.dart_tool/
+.gradle/
+.kotlin/
+.pub-cache/
+.pub/
+node_modules/
+vendor/
+.venv/
+venv/
+__pycache__/
+.cache/
+.idea/
+
+# Build/runtime outputs, including nested workspace-package outputs.
+build/
+.build/
+dist/
+target/
+coverage/
+DerivedData/
+Pods/
+.symlinks/
+ephemeral/
+/ios/Flutter/Generated.xcconfig
+/ios/Flutter/flutter_export_environment.sh
+/ios/Runner/GeneratedPluginRegistrant.*
+/android/local.properties
+/android/app/debug/
+/android/app/profile/
+/android/app/release/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+graphify-out/
+/.ai-pipeline/state/
+/.ai-pipeline/staging/
+**/failures/
+
+# Retain AGENTS.md, maintained .agents/.codex/.claude instructions and tests.
+# External skill bundles are installed locally and duplicate tool documentation.
+/.agents/skills/graphify/
+/.agents/skills/impeccable/
+/.agents/skills/asd-ste100/
+/.codex/skills/graphify/
+/.codex/skills/impeccable/
+/.codex/skills/asd-ste100/
+/.claude/skills/
+/.claude/settings.local.json
+
+# Generated Dart sources are derivable from maintained declarations.
+*.g.dart
+*.gen.dart
+*.freezed.dart
+*.mocks.dart
+generated_plugin_registrant.dart
+
+# HLS .ts is MPEG transport stream here; keep TypeScript elsewhere indexable.
+/tool/e2e/media/
+/assets/
+/resources/
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.ico
+*.svg
+*.ttf
+*.otf
+*.mp4
+*.mov
+*.webm
+*.mkv
+*.mp3
+*.wav
+*.m4a
+*.ogg
+
+# Private configuration, credentials and captured runtime data.
+/.private/
+/env/prod.json
+/env/*.local.json
+**/key.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+.session-password
+*.log
+*.har
+
+# OS/editor leftovers.
+.DS_Store
+*.iml
+*.swp

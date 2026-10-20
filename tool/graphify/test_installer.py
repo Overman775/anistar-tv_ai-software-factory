@@ -65,6 +65,24 @@ class InstallerTest(unittest.TestCase):
         self.run_installer()
         self.assert_hashes("patched")
 
+    def test_previous_complete_extractor_revision_migrates_without_repatching_extractors(self):
+        self.run_installer()
+        extractors = {name: (self.package / name).read_bytes()
+                      for name in MANIFEST["files"] if name != "detect.py"}
+        # Restore exactly the previous reviewed revision: three extractors patched,
+        # detector original. Other partial mixtures must still be rejected.
+        sections = (HERE / f"graphify-{MANIFEST['version']}.patch").read_text().split("--- a/")
+        detector_patch = self.root / "detector.patch"
+        detector_patch.write_text("--- a/" + next(section for section in sections[1:]
+                                                if section.startswith("detect.py\n")))
+        subprocess.run(["patch", "--batch", "--reverse", "-p1", "-i", str(detector_patch)],
+                       cwd=self.package, check=True, capture_output=True)
+        self.assertEqual(self.hashes()["detect.py"], MANIFEST["files"]["detect.py"]["original"])
+        self.run_installer("--check", expected=2)
+        self.run_installer()
+        self.assert_hashes("patched")
+        self.assertEqual(extractors, {name: (self.package / name).read_bytes() for name in extractors})
+
     def test_check_rejects_unpatched_without_writing(self):
         self.assert_rejected_unchanged("Producer patch is not installed", "--check")
 
