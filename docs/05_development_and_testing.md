@@ -122,7 +122,7 @@ fvm dart run melos run build:android:dev:apk:debug
 fvm dart run melos run build:android:prod:apk
 ```
 
-APK находятся в `build/app/outputs/flutter-apk/`. Release использует существующую тестовую подпись. Перед публикацией настройте собственный signing config.
+APK находятся в `build/app/outputs/flutter-apk/`. Production release использует локальную Android-подпись из `.private/signing/`; настройка описана в [руководстве Android-подписи](android_signing.md).
 
 После integration test запускайте обычную APK-команду с pub lifecycle, чтобы plugin registrar соответствовал build mode и entry point.
 
@@ -376,10 +376,10 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 fvm dart run melos run test:network:live --include-private
 # Android: реальный runner, Riverpod, Dio и encrypted session storage:
 fvm flutter test integration_test/network_smoke_test.dart -d emulator-5554 --flavor dev \
-  --dart-define-from-file=env/live-test.local.json
+  --dart-define-from-file=.private/credentials/live-test.json
 ```
 
-Host-проверка читает локальный JSON без вывода credentials и проверяет зеркало, каталог, вход и restore. Другой путь передаётся через `--dart-define=ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/credentials.json`. Она расположена вне offline unit suite и запускается только явно. Android smoke очищает локальную сессию выбранного зеркала, входит тестовым аккаунтом, читает каталог, пересоздаёт приложение и подтверждает restore без второго POST, затем выходит. Избранное и история на сайте не меняются.
+Host-проверка по умолчанию читает `.private/credentials/live-test.json` из корня проекта без вывода credentials и проверяет зеркало, каталог, вход и restore. Другой путь передаётся через `--dart-define=ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/credentials.json`. Она расположена вне offline unit suite и запускается только явно. Android smoke очищает локальную сессию выбранного зеркала, входит тестовым аккаунтом, читает каталог, пересоздаёт приложение и подтверждает restore без второго POST, затем выходит. Избранное и история на сайте не меняются.
 
 Если host-проверка проходит, а Android сообщает недоступность зеркала, сначала проверьте DNS эмулятора: `adb -s emulator-5554 shell ping -c 1 v30.astar.bz` и аналогично `google.com`. `unknown host` для обоих означает сбой DNS окружения; потеря ICMP-пакетов после строки `PING host (IP)` сама по себе не означает недоступность HTTPS. Перезапустите используемый AVD с доступным DNS, например `emulator -avd anistar_tv_e2e -dns-server 8.8.4.4 -no-snapshot-load`. Это настройка эмулятора, не клиента; данные AVD не стираются. [Настройка DNS Android Emulator](https://developer.android.com/studio/run/emulator-networking-dns).
 
@@ -387,17 +387,19 @@ Host-проверка читает локальный JSON без вывода c
 
 ### Полный live-сценарий
 
-Для полного сценария нужен локальный `env/live-test.local.json` с правами `0600`; файл исключён из Git. Поля: `ANISTAR_TEST_USERNAME` и `ANISTAR_TEST_PASSWORD`. Пароль не копировать в исходники, fixtures, вывод тестов или CHANGELOG. Создайте файл из [шаблона](../env/live-test.example.json), получите логин и пароль отдельного тестового аккаунта у владельца и заполните оба строковых поля локально. Все `env/*.local.json` исключены из Git.
+Для полного сценария нужен файл `.private/credentials/live-test.json` с правами `0600` в каталогах `.private/` и `.private/credentials/` с правами `0700`. Поля: `ANISTAR_TEST_USERNAME` и `ANISTAR_TEST_PASSWORD`. Пароль не копировать в исходники, fixtures, вывод тестов или CHANGELOG. Создайте файл из [шаблона](../env/live-test.example.json), получите логин и пароль отдельного тестового аккаунта у владельца и заполните оба строковых поля локально. Весь `.private/` и legacy-файлы `env/*.local.json` исключены из Git для защиты от случайного добавления. Runner читает live credentials из `.private/credentials/` по умолчанию; legacy-файлы в `env/` он не использует.
 
 ```bash
-# Однократная настройка на новом компьютере; существующий файл не перезаписывать:
-cp -n env/live-test.example.json env/live-test.local.json
-chmod 600 env/live-test.local.json
+# Однократная настройка; cp -n не перезаписывает существующий файл:
+mkdir -p .private/credentials
+chmod 700 .private .private/credentials
+cp -n env/live-test.example.json .private/credentials/live-test.json
+chmod 600 .private/credentials/live-test.json
 # Заполните ANISTAR_TEST_USERNAME и ANISTAR_TEST_PASSWORD в локальном JSON.
 
 # Последующие запуски автоматически подставляют credentials:
 fvm dart run melos run test:e2e:live --include-private -- emulator-5556
-# Или credentials в отдельном локальном файле:
+# Или credentials в другом локальном файле:
 ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json \
   fvm dart run melos run test:e2e:live --include-private -- emulator-5556
 ```
@@ -408,7 +410,7 @@ ANISTAR_LIVE_CREDENTIALS_FILE=/absolute/path/live-test.json \
 
 ```bash
 fvm flutter test integration_test/direct_android_test.dart -d emulator-5556 --flavor dev \
-  --dart-define-from-file=env/live-test.local.json
+  --dart-define-from-file=.private/credentials/live-test.json
 ```
 
 Перед прогоном очищаются локальная сессия выбранного зеркала и локальные отметки аниме `10938` для тестового аккаунта; в конце выполняется logout. Используйте dev flavor и отдельный тестовый аккаунт.

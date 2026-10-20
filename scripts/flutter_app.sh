@@ -11,6 +11,15 @@ shift 3
 [[ $action == run || $action == apk || $action == bundle ]] || exit 64
 [[ $flavor == dev || $flavor == prod ]] || exit 64
 [[ $mode == debug || $mode == profile || $mode == release ]] || exit 64
+if [[ $flavor == prod && $mode == release ]]; then
+  export ANISTAR_ANDROID_SIGNING_MODE=${ANISTAR_ANDROID_SIGNING_MODE:-local}
+  [[ $ANISTAR_ANDROID_SIGNING_MODE == local || $ANISTAR_ANDROID_SIGNING_MODE == unsigned ]] || {
+    echo 'Invalid Android signing mode' >&2; exit 64;
+  }
+else
+  # Dev/debug commands must never load production credentials.
+  export ANISTAR_ANDROID_SIGNING_MODE=unsigned
+fi
 sdk_dir=${ANISTAR_FLUTTER_SDK:-$project_root/.fvm/flutter_sdk}
 flutter_cmd=("$sdk_dir/bin/flutter" --no-version-check)
 "${flutter_cmd[@]}" --version --machine | "$sdk_dir/bin/dart" tool/quality/verify_sdk.dart
@@ -25,6 +34,11 @@ if [[ $action == apk ]]; then
   if [[ $mode == release ]]; then
     python3 tool/quality/verify_android_apk.py --variant "${flavor}Release" \
       --apk "build/app/outputs/flutter-apk/app-$flavor-release.apk"
+    if [[ $flavor == prod ]]; then
+      python3 tool/signing/android_signing.py verify \
+        --apk "build/app/outputs/flutter-apk/app-$flavor-release.apk" \
+        --mode "$ANISTAR_ANDROID_SIGNING_MODE"
+    fi
   fi
 else
   "${flutter_cmd[@]}" build appbundle "${arguments[@]}" "$@"

@@ -22,12 +22,17 @@ class ToolingCommandsTest(unittest.TestCase):
         self.bin = self.temp / "bin"
         self.bin.mkdir()
         self.log = self.temp / "calls.jsonl"
-        self.env = dict(os.environ, ANISTAR_FLUTTER_SDK=str(self.temp), CALLS=str(self.log))
+        self.mode_log = self.temp / "modes.jsonl"
+        self.env = dict(os.environ, ANISTAR_FLUTTER_SDK=str(self.temp), CALLS=str(self.log),
+                        MODES=str(self.mode_log))
+        self.env.pop("ANISTAR_ANDROID_SIGNING_MODE", None)
         for name in ("flutter", "dart"):
             path = self.bin / name
             path.write_text("#!/usr/bin/env python3\nimport json, os, sys\n"
                             "with open(os.environ['CALLS'], 'a') as log:\n"
                             "    log.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                            "with open(os.environ['MODES'], 'a') as log:\n"
+                            "    log.write(json.dumps(os.environ.get('ANISTAR_ANDROID_SIGNING_MODE')) + '\\n')\n"
                             "if sys.argv[0].endswith('/dart'):\n"
                             "    sys.stdin.read()\n"
                             "print('{}')\n")
@@ -62,6 +67,48 @@ class ToolingCommandsTest(unittest.TestCase):
         for arguments in (("apk",), ("upload", "prod", "release"),
                           ("apk", "staging", "release"), ("apk", "dev", "invalid")):
             self.assertEqual(self.dispatch(*arguments).returncode, 64)
+        self.assertFalse(self.log.exists())
+
+    def test_prod_release_defaults_local_and_explicit_unsigned_preserves_verifiers(self):
+        # Intercept only Python verifier processes; the wrapper itself is real.
+        verifier_log = self.temp / "verifiers.jsonl"
+        python = self.bin / "python3"
+        python.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
+                          "with open(os.environ['VERIFIERS'], 'a') as log:\n"
+                          "    log.write(json.dumps(sys.argv[1:]) + '\\n')\n")
+        python.chmod(0o755)
+        # Existing SDK stubs use env python3; give them a direct interpreter so
+        # only wrapper verification commands are intercepted by PATH.
+        for name in ("flutter", "dart"):
+            stub = self.bin / name
+            stub.write_text(stub.read_text().replace("#!/usr/bin/env python3", f"#!{sys.executable}"))
+        self.env.update(PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}", VERIFIERS=str(verifier_log))
+        for mode in ("local", "unsigned"):
+            if mode == "unsigned":
+                self.env["ANISTAR_ANDROID_SIGNING_MODE"] = mode
+            result = self.dispatch("apk", "prod", "release")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(set(json.loads(line) for line in self.mode_log.read_text().splitlines()), {mode})
+            verifiers = [json.loads(line) for line in verifier_log.read_text().splitlines()]
+            self.assertEqual(verifiers[0][:3], ["tool/quality/verify_android_apk.py", "--variant", "prodRelease"])
+            self.assertEqual(verifiers[1], ["tool/signing/android_signing.py", "verify", "--apk",
+                                           "build/app/outputs/flutter-apk/app-prod-release.apk", "--mode", mode])
+            self.mode_log.unlink()
+            verifier_log.unlink()
+
+    def test_dev_and_prod_debug_override_inherited_local_signing(self):
+        self.env["ANISTAR_ANDROID_SIGNING_MODE"] = "local"
+        for arguments in (("run", "dev", "debug"), ("bundle", "dev", "release"),
+                          ("apk", "prod", "debug")):
+            result = self.dispatch(*arguments)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set(json.loads(line) for line in self.mode_log.read_text().splitlines()), {"unsigned"})
+
+    def test_invalid_production_signing_mode_fails_before_sdk(self):
+        self.env["ANISTAR_ANDROID_SIGNING_MODE"] = "debug"
+        result = self.dispatch("apk", "prod", "release")
+        self.assertEqual(result.returncode, 64)
+        self.assertIn("Invalid Android signing mode", result.stderr)
         self.assertFalse(self.log.exists())
 
     def test_bad_python_override_fails_before_child_command(self):

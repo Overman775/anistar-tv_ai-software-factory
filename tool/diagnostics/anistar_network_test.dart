@@ -47,7 +47,7 @@ void main() {
     debugPrint('Live catalog: ${page.items.length} items');
     const credentialsPath = String.fromEnvironment(
       'ANISTAR_LIVE_CREDENTIALS_FILE',
-      defaultValue: 'env/live-test.local.json',
+      defaultValue: '.private/credentials/live-test.json',
     );
     final credentials = await _step('local credentials', () async {
       final Object? decoded = jsonDecode(await File(credentialsPath).readAsString());

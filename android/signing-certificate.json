@@ -1,0 +1,7 @@
+{
+  "applicationId": "com.anistar.anistar_tv",
+  "flavor": "prod",
+  "certificateSha256": "F31B32C196CFB5FCCF459D553B4208B9476C13B39895FAB454CAF516FEC1AF65",
+  "keyAlias": "anistar-tv-release",
+  "keystoreType": "JKS"
+}

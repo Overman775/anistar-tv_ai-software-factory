@@ -104,7 +104,7 @@ previous_immersive=$("${adb_cmd[@]}" shell settings get secure immersive_mode_co
 immersive_changed=1
 if [[ $mode == live ]]; then
   phase=live-credentials
-  credentials_file=${ANISTAR_LIVE_CREDENTIALS_FILE:-$project_root/env/live-test.local.json}
+  credentials_file=${ANISTAR_LIVE_CREDENTIALS_FILE:-$project_root/.private/credentials/live-test.json}
   python3 - "$credentials_file" <<'PYCONFIG'
 import json, sys
 from pathlib import Path

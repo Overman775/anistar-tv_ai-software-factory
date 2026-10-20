@@ -359,6 +359,10 @@ melos:
       run: "bash scripts/flutter_app.sh bundle prod release"
       description: "Build prod release bundle; APK includes AOT freshness check"
 
+    build:android:prod:apk:unsigned:
+      run: "ANISTAR_ANDROID_SIGNING_MODE=unsigned bash scripts/flutter_app.sh apk prod release"
+      description: "Build unsigned prod APK locally without signing credentials; includes AOT freshness check"
+
     build:android:prod:apk:debug:
       run: "bash scripts/flutter_app.sh apk prod debug"
       description: "Build prod debug APK"

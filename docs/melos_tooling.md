@@ -193,6 +193,13 @@ debug APK, а `build:*:apk` и `build:*:bundle` — release APK и App Bundle.
 | Собрать dev release App Bundle | `fvm dart run melos run build:android:dev:bundle` |
 | Собрать prod release App Bundle | `fvm dart run melos run build:android:prod:bundle` |
 
+`build:android:prod:apk` по умолчанию собирает подписанный APK и требует локальную
+конфигурацию `.private/signing/key.properties` и keystore в `.private/`.
+Весь `.private/` исключён из Git. Для локальной unsigned compilation используйте
+`fvm dart run melos run build:android:prod:apk:unsigned`. Настройка ключа, проверка
+сертификата и локальный unsigned режим описаны в
+[руководстве Android-подписи](android_signing.md).
+
 Release APK-команда проверяет, что упакованные AOT libraries соответствуют
 текущему Flutter build для всех ABI. Приватная `check:apk` повторно запускает
 эту проверку для prod release APK. Она не заменяет сборку:

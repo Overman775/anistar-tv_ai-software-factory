@@ -183,7 +183,12 @@ void main() {
         '''test:e2e:tv test:e2e:mobile test:e2e:live test:network:live generate:e2e-media check:apk graph:update graph:check version:check quality:prepare quality:format quality:format-check quality:analyze quality:dcm quality:unit quality:goldens quality:goldens:update''';
     const securityNames = ['security:secrets', 'security:deps', 'security:code', 'security'];
     final privateNames = private.split(' ');
-    expect(scripts.keys.toSet(), {...preserved.split(' '), ...privateNames, ...securityNames});
+    expect(scripts.keys.toSet(), {
+      ...preserved.split(' '),
+      ...privateNames,
+      ...securityNames,
+      'build:android:prod:apk:unsigned',
+    });
     expect(
       scripts.entries.where((entry) => (entry.value as YamlMap)['private'] == true).map((entry) => entry.key).toSet(),
       privateNames.toSet(),

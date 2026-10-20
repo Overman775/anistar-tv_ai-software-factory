@@ -127,6 +127,7 @@ class GitleaksTest(ScannerFixture):
 
     def test_sensitive_paths_include_nul_delimited_unusual_names(self):
         paths = ("env/prod.json", "env/live-test.local.json", "nested/key.properties",
+                 ".private/credentials/live-test.json", ".private/signing/backup-receipt.json",
                  "signing.properties", "nested/keystore.properties", "a space.jks",
                  "quote'file.keystore", 'quote"file.p12', "line\nbreak.pfx")
         for path in paths:

@@ -21,7 +21,7 @@ if [[ $1 == staged ]]; then
   git diff --cached --name-only --no-renames --diff-filter=ACMRT -z > "$staged_paths"
   while IFS= read -r -d '' staged_path; do
     case "$staged_path" in
-      env/*.local.json|env/prod.json|*.jks|*.keystore|*.p12|*.pfx|\
+      .private/*|env/*.local.json|env/prod.json|*.jks|*.keystore|*.p12|*.pfx|\
       key.properties|*/key.properties|signing.properties|*/signing.properties|\
       keystore.properties|*/keystore.properties)
         echo 'Sensitive local credentials or Android signing file is staged. Remove it from the index; use public env/*.example.json templates.' >&2

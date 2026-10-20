@@ -1,4 +1,11 @@
 # Miscellaneous
+**/key.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+.session-password
+**/.session-password
 *.class
 *.log
 *.pyc
@@ -62,6 +69,9 @@ app.*.map.json
 
 # Local live-test credentials, never committed.
 /env/*.local.json
+
+# Private signing inputs and live-test credentials, never committed.
+/.private/
 
 # Factory runtime artifacts; shared roles, skills and configuration remain tracked.
 /.ai-pipeline/state/
