@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factory Meta Retro"
+  short_description: "Retrospective on the whole agent factory"
+  default_prompt: "Use $factory-meta-retro to examine how the factory worked in this session and suggest improvements for future runs."
