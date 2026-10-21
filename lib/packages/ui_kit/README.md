@@ -97,7 +97,7 @@ fvm flutter test test/packages/ui_kit
 
 В UI-знаке фон и промежутки между лучами прозрачны. Тёмная рамка кнопки play принадлежит самому знаку. Не заменяйте UI-знак launcher-изображением с фоном.
 
-Android 12+ splash использует `android12splash_safe.xml`. Отступ 26% с каждой стороны помещает знак в круглую системную маску. Фон: `#080B14`. Общий скрипт экспорта после генерации сохраняет ссылку на этот drawable в дневной и ночной LaunchTheme. iOS LaunchScreen использует `anistar_tv_banner.png` с `scaleAspectFit` и фоном `#080B14`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
+Android 12+ splash использует `android12splash_safe.xml`. Отступ 26% с каждой стороны помещает знак в круглую системную маску. Фон: `#101214`. Общий скрипт экспорта после генерации сохраняет ссылку на этот drawable в дневной и ночной LaunchTheme. iOS LaunchScreen использует `anistar_tv_banner.png` с `scaleAspectFit` и фоном `#101214`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
 
 Настройка splash не задаёт ориентацию. Runner выбирает профиль TV/mobile. Android- и iOS-ресурсы генерируются общей командой `fvm dart run melos run generate:branding`; настройка описана в разделе [иконка, баннер и заставка](../../../docs/05_development_and_testing.md#8-иконка-android-tv-баннер-и-заставка).
 

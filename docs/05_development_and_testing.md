@@ -384,7 +384,7 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 Назначение исходных PNG, прозрачность UI-знака и safe area splash описаны в [ресурсах UI Kit](../lib/packages/ui_kit/README.md#4-ресурсы). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт Android adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; размеры для xhdpi: 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
-Тот же wrapper запускает `flutter_launcher_icons` и `flutter_native_splash:create`. iOS AppIcon создаётся из `anistar_launcher.png`. iOS LaunchScreen использует `anistar_tv_banner.png`, `scaleAspectFit` и фон `#080B14`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
+Тот же wrapper запускает `flutter_launcher_icons` и `flutter_native_splash:create`. iOS AppIcon создаётся из `anistar_launcher.png`. iOS LaunchScreen использует `anistar_tv_banner.png`, `scaleAspectFit` и фон `#101214`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
 
 Для Android скрипт обновляет splash по `flutter_native_splash.yaml` и восстанавливает safe drawable в дневной и ночной темах. Он также экспортирует TV-иконки и баннеры. Запускайте общий wrapper, чтобы сохранить эти ресурсы и безопасные отступы splash. Все команды: [Melos tooling](melos_tooling.md#5-генерация-и-ресурсы).
 

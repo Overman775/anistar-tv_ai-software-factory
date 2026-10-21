@@ -88,7 +88,7 @@ void main() {
     final background = await _decodeFile('$directory/LaunchBackground.imageset/background.png');
     try {
       final pixels = await background.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
-      expect(pixels?.buffer.asUint8List(), [8, 11, 20, 255]);
+      expect(pixels?.buffer.asUint8List(), [16, 18, 20, 255]);
     } finally {
       background.dispose();
     }
