@@ -88,7 +88,7 @@ void main() {
     final background = await _decodeFile('$directory/LaunchBackground.imageset/background.png');
     try {
       final pixels = await background.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
-      expect(pixels?.buffer.asUint8List(), [8, 11, 20, 255]);
+      expect(pixels?.buffer.asUint8List(), [16, 18, 20, 255]);
     } finally {
       background.dispose();
     }
@@ -156,7 +156,7 @@ void main() {
     for (final path in Assets.fonts.values) {
       expect((await rootBundle.load(path)).lengthInBytes, greaterThan(0));
     }
-    expect(TvTypography.fontFamily, 'packages/ui_kit/Inter');
+    expect(TvTypography.fontFamily, 'packages/ui_kit/Manrope');
   });
 
   testWidgets('shared logo decodes the package image without an extra semantic label', (tester) async {

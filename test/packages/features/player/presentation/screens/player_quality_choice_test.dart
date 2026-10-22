@@ -105,7 +105,9 @@ void main() {
         final view = tester.widget<PlayerView>(find.byType(PlayerView));
         expect(view.session.selectedQuality, quality);
         expect(find.descendant(of: find.byKey(qualityButton), matching: find.text(short)), findsOneWidget);
-        final node = tester.getSemantics(find.byKey(qualityButton));
+        final node = tester.semantics.simulatedAccessibilityTraversal().singleWhere(
+          (node) => node.label == 'Качество: $label',
+        );
         expect(node.label, 'Качество: $label');
         expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
         node.owner?.performAction(node.id, SemanticsAction.tap);

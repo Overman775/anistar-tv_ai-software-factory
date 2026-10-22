@@ -80,11 +80,24 @@ void main() {
         final menuFocus = FocusManager.instance.primaryFocus;
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();
-        router.router.pop();
+        await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(tester.element(find.byType(CatalogNavigationRail)), same(menu));
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Комедия');
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).genresActive, isFalse);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+        await tester.pumpAndSettle();
+        final homeFocus = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-false'))).focusNode;
+        expect(FocusManager.instance.primaryFocus, same(homeFocus));
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
         expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
+        await tester.pumpAndSettle();
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pumpAndSettle();
       }
       final sourceFocus = FocusManager.instance.primaryFocus;
@@ -101,9 +114,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AnimeCard), findsWidgets);
       expect(FocusManager.instance.primaryFocus, same(cardFocus));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus, same(sourceFocus));
       expect(repository.requests, hasLength(1));

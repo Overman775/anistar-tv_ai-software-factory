@@ -137,7 +137,7 @@ fvm dart run melos run test:e2e
 fvm dart run melos run build:android:prod:apk
 ```
 
-Этот gate не запускает live аккаунт и не обновляет golden baselines. Live и golden update требуют отдельного явного объёма работ.
+Этот gate не запускает live-аккаунт и не обновляет golden baselines. Live-проверка требует отдельного явного объёма работ. Генерация goldens входит в разрешённый объём текущей задачи, если её покрывает прямое разрешение пользователя или утверждённый план; повторный запрос подтверждения не нужен. После генерации просмотрите PNG и diff, затем запустите сравнение goldens.
 
 При изменениях iOS отдельно соберите оба Simulator debug flavor командами
 `fvm dart run melos run build:ios:dev:simulator` и
@@ -159,7 +159,7 @@ fvm dart run melos run generate
 
 FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`. Он создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт: `package:ui_kit/assets.dart`. Этот файл также экспортируется через `ui_kit.dart`.
 
-Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.inter`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. FontFamily.inter уже содержит пакетный префикс. TvTypography использует его напрямую. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
+Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.manrope`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. `FontFamily.manrope` уже содержит пакетный префикс. `TvTypography` использует его напрямую. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
 
 ---
 
@@ -175,7 +175,7 @@ FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`. Он созд
 
 Fixtures и fakes находятся в `test/mocks/`. HTTP заменяется adapter, репозитории fake-реализациями, native player fake platform. Unit/widget-тесты не обращаются к сайту.
 
-`test/flutter_test_config.dart` вызывает общий bootstrap из `test/support/`: тестовый logger, локальные Inter/Material Icons и запрет создания настоящего HttpClient. Проверки HTTP используют fixture adapter. Проверки логирования передают capturing logger явно.
+`test/flutter_test_config.dart` вызывает общий bootstrap из `test/support/`: тестовый logger, локальные Manrope/Lucide и запрет создания настоящего HttpClient. Проверки HTTP используют fixture adapter. Проверки логирования передают capturing logger явно.
 
 `pumpTvApp` задаёт production theme, ProviderScope и TV viewport. Свойства view сбрасываются после теста. Fake video platform восстанавливает прежний platform instance. Тесты также покрывают bootstrap, разбор Dart directives и остановку quality gate.
 
@@ -201,7 +201,7 @@ retry пагинации, redaction подписанного URL и закрыт
 
 Тесты защищают ветвления, контракт и исправленные баги. Coverage включает приложение и workspace-пакеты. Цель 100% не установлена.
 
-Golden PNG хранятся рядом с тестами в `goldens/`. Обновляйте их только после просмотра изменений UI. Проверяются каталог и вкладки, ошибки/пустые состояния, вход, loading каталога и карточки, длинные названия и описание.
+Golden PNG хранятся рядом с тестами в `goldens/`. Генерируйте baselines после просмотра изменений UI, когда обновление входит в разрешённый объём задачи. После генерации просмотрите PNG и diff, затем проверьте точное сравнение. Проверяются каталог и вкладки, ошибки/пустые состояния, вход, loading каталога и карточки, длинные названия и описание. Для редизайна прототипа сверяйте предусмотренные состояния и CSS viewport с [визуальной системой](specs/11_visual_system.md); golden не подтверждает работу с живым сайтом или на физическом устройстве.
 
 Скелетоны в снимках статичны через `MediaQuery.disableAnimations`. `pumpAndSettle` проверяет отсутствие продолжающегося shimmer в этом режиме. Сравнение точное. Шрифты и SDK закреплены.
 
@@ -384,7 +384,7 @@ Favorites E2E хранит список в локальном HTTPS fixture, в�
 
 Назначение исходных PNG, прозрачность UI-знака и safe area splash описаны в [ресурсах UI Kit](../lib/packages/ui_kit/README.md#4-ресурсы). Экспорт на macOS: `fvm dart run melos run generate:branding`. Скрипт создаёт Android adaptive icon с inset 18%, legacy icons 80–320 px и TV banners 160×90–640×360; размеры для xhdpi: 160×160 и 320×180 соответственно. Manifest использует `android:icon`, `android:banner` и название `AniStar TV`. Размеры и текст в баннере соответствуют [Android TV guidelines](https://developer.android.com/design/ui/tv/guides/system/tv-app-icon-guidelines).
 
-Тот же wrapper запускает `flutter_launcher_icons` и `flutter_native_splash:create`. iOS AppIcon создаётся из `anistar_launcher.png`. iOS LaunchScreen использует `anistar_tv_banner.png`, `scaleAspectFit` и фон `#080B14`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
+Тот же wrapper запускает `flutter_launcher_icons` и `flutter_native_splash:create`. iOS AppIcon создаётся из `anistar_launcher.png`. iOS LaunchScreen использует `anistar_tv_banner.png`, `scaleAspectFit` и фон `#101214`. В `Info.plist` сохранены портретная и альбомная ориентации Runner.
 
 Для Android скрипт обновляет splash по `flutter_native_splash.yaml` и восстанавливает safe drawable в дневной и ночной темах. Он также экспортирует TV-иконки и баннеры. Запускайте общий wrapper, чтобы сохранить эти ресурсы и безопасные отступы splash. Все команды: [Melos tooling](melos_tooling.md#5-генерация-и-ресурсы).
 

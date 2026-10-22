@@ -183,7 +183,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 3999));
       expect(controlsVisible(tester), isTrue);
       await tester.pump(const Duration(milliseconds: 1));
-      expect(controlsVisible(tester), isFalse);
+      expect(controlsVisible(tester), target == 1440);
       await unmount(tester);
     });
   }
@@ -910,7 +910,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pump();
     await tester.pump();
-    expect(find.byTooltip('К сериям'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-back')), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
     expect(find.byType(PlayerScreen), findsNothing);
@@ -952,6 +952,50 @@ void main() {
     await settle(tester);
   });
 
+  testWidgets('completed native value keeps the whole control layer visible even if isPlaying remains true', (
+    tester,
+  ) async {
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    video.positions[1] = controller.value.duration;
+    controller.value = controller.value.copyWith(
+      position: controller.value.duration,
+      isCompleted: true,
+      isPlaying: true,
+    );
+    await tester.pump(const Duration(seconds: 5));
+    expect(controlsVisible(tester), isTrue);
+    await tester.tapAt(tester.getCenter(find.byType(VideoPlayer)));
+    await tester.pump(const Duration(seconds: 5));
+    expect(controlsVisible(tester), isTrue);
+    expect(repository.calls, 1);
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+  });
+
+  testWidgets('position-only notifications cannot renew idle and hidden controls have no hit or semantic targets', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await mount(tester);
+    final controller = tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller;
+    for (var second = 1; second <= 5; second++) {
+      controller.value = controller.value.copyWith(position: Duration(seconds: second));
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(controlsVisible(tester), isFalse);
+    for (final key in ['back', 'play', 'timeline', 'rewind', 'forward', 'episodes', 'quality']) {
+      expect(find.byKey(ValueKey('player-$key')).hitTestable(), findsNothing);
+    }
+    final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);
+    expect(labels, isNot(contains('К сериям')));
+    expect(labels, isNot(contains('Пауза')));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+    await tester.pumpWidget(const SizedBox());
+    await settle(tester);
+    semantics.dispose();
+  });
+
   testWidgets('marks after native play, not during initialization; quality changes do not duplicate writes', (
     tester,
   ) async {
@@ -986,7 +1030,7 @@ void main() {
     await settle(tester);
     expect(storage.writes, 1);
     await openMenu(tester, episodes: true);
-    expect(find.text('Серия 1 — просмотрена ✓'), findsOneWidget);
+    expect(find.text('Серия 1 — просмотрена'), findsOneWidget);
     await tester.tap(find.text('Серия 2'));
     await settle(tester);
     expect(storage.watched[10938], {1, 2});

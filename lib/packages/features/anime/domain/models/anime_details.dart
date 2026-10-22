@@ -1,4 +1,5 @@
 import '../../../catalog/domain/models/catalog_filter.dart';
+import 'anime_part.dart';
 
 final class AnimeDetails {
   final String? description;
@@ -13,6 +14,11 @@ final class AnimeDetails {
   final String title;
   final String? voiceover;
   final String? year;
+  final double? rating;
+  final String? director;
+  final String? updateMessage;
+  final String? publicationDate;
+  final List<AnimePart> parts;
 
   AnimeDetails({
     required this.id,
@@ -27,6 +33,12 @@ final class AnimeDetails {
     this.seriesInfo,
     this.voiceover,
     this.year,
+    this.rating,
+    this.director,
+    this.updateMessage,
+    this.publicationDate,
+    List<AnimePart> parts = const [],
   }) : genres = List.unmodifiable(genres),
-       filters = List.unmodifiable(filters);
+       filters = List.unmodifiable(filters),
+       parts = List.unmodifiable(parts);
 }

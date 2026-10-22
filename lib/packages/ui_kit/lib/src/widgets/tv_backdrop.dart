@@ -1,50 +1,49 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
 
+/// The static, accent-free graphite ellipse shared by catalog surfaces.
 class TvBackdrop extends StatelessWidget {
   const TvBackdrop({required this.child, super.key});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [AppPalette.backgroundElevated, AppPalette.background, Color(0xFF10091D)],
-        stops: [0, 0.58, 1],
-      ),
-    ),
-    child: Stack(
-      children: [
-        const Positioned(
-          top: -180,
-          right: -120,
-          width: 420,
-          height: 420,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [Color(0x337C3AED), Color(0x007C3AED)]),
-            ),
-          ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final width = constraints.hasBoundedWidth ? constraints.maxWidth : MediaQuery.sizeOf(context).width;
+      final height = constraints.hasBoundedHeight ? constraints.maxHeight : MediaQuery.sizeOf(context).height;
+      final shortestSide = math.min(width, height);
+
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppPalette.background,
+          gradient: shortestSide > 0
+              ? RadialGradient(
+                  center: const Alignment(0, -1.32),
+                  radius: width * 0.9 / shortestSide,
+                  transform: const _CatalogEllipse(),
+                  colors: const [AppPalette.catalogHorizon, AppPalette.background],
+                )
+              : null,
         ),
-        const Positioned(
-          bottom: -220,
-          left: -160,
-          width: 480,
-          height: 480,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [Color(0x2422D3EE), Color(0x0022D3EE)]),
-            ),
-          ),
-        ),
-        Positioned.fill(child: child),
-      ],
-    ),
+        child: child,
+      );
+    },
   );
+}
+
+/// CSS: ellipse 90% 72% at 50% -16%, without an animated shader.
+class _CatalogEllipse extends GradientTransform {
+  const _CatalogEllipse();
+
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) {
+    final ratio = bounds.width > 0 ? bounds.height * 0.8 / bounds.width : 1.0;
+    final centerY = bounds.top - bounds.height * 0.16;
+
+    return Matrix4.diagonal3Values(1, ratio, 1)..setTranslationRaw(0, centerY * (1 - ratio), 0);
+  }
 }

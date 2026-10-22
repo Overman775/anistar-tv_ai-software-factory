@@ -115,7 +115,8 @@ abstract final class RemoteControls {
 
     return route?.isCurrent == true &&
         (route?.animation == null || route?.animation?.status == AnimationStatus.completed) &&
-        (widget is! ButtonStyleButton || widget.onPressed != null);
+        (widget is! ButtonStyleButton || widget.onPressed != null) &&
+        (widget is! AppButton || widget.enabled && !widget.busy);
   }
 
   static Future<void> _open(WidgetTester tester, String target) async {

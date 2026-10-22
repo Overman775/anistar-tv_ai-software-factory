@@ -70,10 +70,16 @@ void main() {
     controller.value = controller.value.copyWith(position: const Duration(seconds: 8), isPlaying: true);
     await tester.pump();
     expect(find.text('00:08 / 24:00'), findsOneWidget);
-    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Пауза'),
+      findsOneWidget,
+    );
     controller.value = controller.value.copyWith(isPlaying: false);
     await tester.pump();
-    expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Воспроизвести'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('hidden video updates aspect ratio when native dimensions change', (tester) async {

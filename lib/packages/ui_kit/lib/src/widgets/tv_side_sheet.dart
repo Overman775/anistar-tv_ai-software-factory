@@ -6,10 +6,11 @@ import '../theme/app_palette.dart';
 
 /// A TV action surface with a stable right edge and its own focus scope.
 class TvSideSheet extends StatelessWidget {
-  const TvSideSheet({required this.title, required this.child, super.key});
+  const TvSideSheet({required this.title, required this.child, this.closeOnLeft = true, super.key});
 
   final String title;
   final Widget child;
+  final bool closeOnLeft;
 
   ThemeData _theme(BuildContext context) {
     final style = AppFocusStyle.button();
@@ -30,7 +31,7 @@ class TvSideSheet extends StatelessWidget {
   }
 
   KeyEventResult _handleKey(BuildContext context, KeyEvent event) {
-    if (event.logicalKey != LogicalKeyboardKey.arrowLeft) {
+    if (!closeOnLeft || event.logicalKey != LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent) {
@@ -44,7 +45,7 @@ class TvSideSheet extends StatelessWidget {
   Widget build(BuildContext context) => Align(
     alignment: Alignment.centerRight,
     child: SizedBox(
-      width: 440,
+      width: AppSizes.sideSheet,
       height: double.infinity,
       child: Theme(
         data: _theme(context),
@@ -78,21 +79,34 @@ class TvSideSheet extends StatelessWidget {
 }
 
 Future<T?> showTvSideSheet<T>({required BuildContext context, required WidgetBuilder builder}) =>
-    Navigator.of(context, rootNavigator: true).push<T>(
-      RawDialogRoute<T>(
+    Navigator.of(context, rootNavigator: true).push<T>(_TvSideSheetRoute<T>(context: context, builder: builder));
+
+/// RawDialogRoute exposes one duration; this route also keeps the common exit duration.
+class _TvSideSheetRoute<T> extends RawDialogRoute<T> {
+  final Duration _exitDuration;
+
+  @override
+  Duration get reverseTransitionDuration => _exitDuration;
+
+  _TvSideSheetRoute({required BuildContext context, required WidgetBuilder builder})
+    : _exitDuration = AppMotion.durationOf(context, AppMotion.panelExit),
+      super(
         barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-        barrierColor: const Color(0x99000000),
-        transitionDuration: AppMotion.durationOf(context, AppMotion.page),
+        barrierColor: AppPalette.scrimHeavy,
+        transitionDuration: AppMotion.durationOf(context, AppMotion.panelEnter),
         requestFocus: true,
         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
         directionalTraversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
         pageBuilder: (context, _, _) => builder(context),
         transitionBuilder: (context, animation, _, child) => SlideTransition(
-          position: Tween(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: AppMotion.enterCurve)).animate(animation),
+          position: Tween(begin: const Offset(1, 0), end: Offset.zero)
+              .chain(
+                CurveTween(
+                  curve: animation.status == AnimationStatus.reverse ? AppMotion.exitCurve : AppMotion.enterCurve,
+                ),
+              )
+              .animate(animation),
           child: child,
         ),
-      ),
-    );
+      );
+}

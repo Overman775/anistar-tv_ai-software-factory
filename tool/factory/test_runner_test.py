@@ -18,7 +18,7 @@ class IsolatedRunnerTest(unittest.TestCase):
     def test_missing_or_empty_required_default_suite_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ('factory-code-review', 'factory-implement', 'factory-planning', 'factory-decompose', 'factory-github'):
+            for name in ('factory-code-review', 'factory-implement', 'factory-planning', 'factory-decompose', 'factory-pr'):
                 path = root / '.agents/skills' / name / 'scripts'
                 path.mkdir(parents=True)
                 (path / 'test_skill_contract.py').write_text('import unittest\nclass Contract(unittest.TestCase):\n def test_ok(self): pass\n')

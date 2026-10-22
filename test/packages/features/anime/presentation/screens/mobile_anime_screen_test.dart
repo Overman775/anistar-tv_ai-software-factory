@@ -13,6 +13,7 @@ import 'package:core/data.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/anime/fake_anime_screen_repository.dart';
 import '../../../../../mocks/features/fake_watched_episodes_repository.dart';
@@ -44,6 +45,26 @@ final _data = AnimeScreenData(
 );
 
 void main() {
+  testWidgets('short mobile landscape scrolls to its only actionable watch control', (tester) async {
+    await pumpMobileApp(
+      tester,
+      const AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: _title, onEpisodeTap: _ignoreEpisode),
+      size: const Size(844, 390),
+      wrapInScaffold: false,
+      overrides: [
+        animeRepositoryProvider.overrideWithValue(
+          FakeAnimeScreenRepository(load: (_, _) async => Result.success(_data)),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final watch = find.widgetWithText(AppButton, 'Смотреть серию 1');
+    await tester.scrollUntilVisible(watch, 150, scrollable: find.byType(Scrollable).first);
+    expect(watch, findsOneWidget, reason: 'only one live watch action may exist');
+    expect(watch.hitTestable(), findsOneWidget, reason: 'inline watch action remains reachable by scrolling');
+    expect(tester.takeException(), isNull);
+  });
+
   for (final empty in [false, true]) {
     testWidgets('mobile anime pull reloads ${empty ? 'empty' : 'existing'} episodes and keeps content on error', (
       tester,
@@ -134,7 +155,7 @@ void main() {
     await tester.pumpAndSettle();
     await _pullAnime(tester, find.byType(ListView));
     expect(calls, 2);
-    expect(find.widgetWithText(FilledButton, 'Смотреть серию 1').hitTestable(), findsOneWidget);
+    expect(find.widgetWithText(AppButton, 'Смотреть серию 1').hitTestable(), findsOneWidget);
     pending.complete(Result.success(data));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -231,22 +252,22 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    final play = find.widgetWithText(FilledButton, 'Смотреть серию 3');
+    final play = find.widgetWithText(AppButton, 'Смотреть серию 3');
     await tester.ensureVisible(play);
     await tester.tap(play);
     expect(opened, 3);
     final chip = find.widgetWithText(ActionChip, 'Комедия');
-    await tester.ensureVisible(chip);
+    await tester.scrollUntilVisible(chip, -150, scrollable: find.byType(Scrollable).first);
     await tester.tap(chip);
     expect(selected?.path, '/comedy/');
     final more = find.text('Подробнее');
-    await tester.ensureVisible(more);
+    await tester.scrollUntilVisible(more, 150, scrollable: find.byType(Scrollable).first);
     await tester.tap(more);
     await tester.pump();
     expect(find.text('Свернуть описание'), findsOneWidget);
     final episode = find.byKey(const ValueKey('mobile-episode-5'));
     await tester.scrollUntilVisible(episode, 200, scrollable: find.byType(Scrollable).first);
-    final node = tester.getSemantics(episode);
+    final node = tester.semantics.simulatedAccessibilityTraversal().singleWhere((node) => node.label == 'Серия 5');
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     node.owner?.performAction(node.id, SemanticsAction.tap);
     await tester.pump();
@@ -288,8 +309,8 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
-          if (!loading && name == 'landscape') {
-            expect(find.widgetWithText(FilledButton, 'Смотреть серию 1').hitTestable(), findsOneWidget);
+          if (!loading && name == 'landscape' && scale > 1) {
+            expect(find.widgetWithText(AppButton, 'Смотреть серию 1').hitTestable(), findsOneWidget);
           }
           await expectLater(
             find.byType(MaterialApp),

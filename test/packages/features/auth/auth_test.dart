@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:anistar_tv/app/app.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
+import 'package:anistar_tv/packages/features/auth/domain/auth_invalid_credentials_failure.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
@@ -13,6 +14,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:networking/networking.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../mocks/features/auth/fake_auth_repository.dart';
 import '../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
@@ -64,20 +67,44 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'test');
     await tester.enterText(password, 'secret');
     final submit = find.byKey(const ValueKey('login_submit'));
-    final send = tester.widget<FilledButton>(submit).onPressed;
+    final send = tester.widget<AppButton>(submit).onPressed;
     for (var i = 0; i < 10; i++) {
-      send?.call();
+      send();
     }
     await tester.pump();
     expect(repository.loginCalls, 1);
-    expect(tester.widget<FilledButton>(submit).onPressed, isNull);
+    expect(tester.widget<AppButton>(submit).busy, isTrue);
     expect(tester.widget<TextFormField>(password).controller?.text, 'secret');
-    pending.complete(const Result.failure(UnknownFailure()));
+    pending.complete(const Result.failure(AuthInvalidCredentialsFailure()));
     await tester.pumpAndSettle();
     expect(tester.widget<TextFormField>(password).controller?.text, isEmpty);
-    expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
+    expect(tester.widget<AppButton>(submit).busy, isFalse);
     expect(tester.takeException(), isNull);
   });
+
+  for (final failure in <Failure>[const ConnectionFailure(), const ServerFailure(), const UnknownFailure()]) {
+    testWidgets('a ${failure.runtimeType} preserves both login fields', (tester) async {
+      repository.loginResult = Result.failure(failure);
+      await pumpTvApp(
+        tester,
+        const LoginScreen(),
+        wrapInScaffold: false,
+        overrides: [authRepositoryProvider.overrideWithValue(repository)],
+      );
+      await tester.pumpAndSettle();
+      final username = find.byKey(const ValueKey('login_username'));
+      final password = find.byKey(const ValueKey('login_password'));
+      await tester.enterText(username, 'retained-user');
+      await tester.enterText(password, 'retained-input');
+      await tester.tap(find.byKey(const ValueKey('login_submit')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextFormField>(username).controller?.text, 'retained-user');
+      expect(tester.widget<TextFormField>(password).controller?.text, 'retained-input');
+      expect(repository.loginCalls, 1);
+      expect(find.textContaining('Гост'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('anonymous launch is gated; login opens catalog; expiry destroys protected navigation', (tester) async {
     await pumpTvApp(
@@ -116,7 +143,7 @@ void main() {
   });
 
   testWidgets('login validates inputs, rejects safely and clears the password', (tester) async {
-    repository.loginResult = const Result.failure(UnknownFailure());
+    repository.loginResult = const Result.failure(AuthInvalidCredentialsFailure());
     await pumpTvApp(
       tester,
       const LoginScreen(),
@@ -148,12 +175,12 @@ void main() {
     await settle();
     expect(repository.loginCalls, 1);
     expect(tester.widget<TextFormField>(password).controller?.text, isEmpty);
-    expect(find.text(const UnknownFailure().message), findsOneWidget);
+    expect(find.text(const AuthInvalidCredentialsFailure().message), findsOneWidget);
   });
 
   testWidgets('restore focuses username and rejected login returns focus to password for remote retry', (tester) async {
     final semantics = tester.ensureSemantics();
-    repository.loginResult = const Result.failure(UnknownFailure());
+    repository.loginResult = const Result.failure(AuthInvalidCredentialsFailure());
     await pumpTvApp(
       tester,
       const LoginScreen(),
@@ -175,21 +202,21 @@ void main() {
     expect(repository.loginCalls, 1);
     final error = tester.getSemantics(find.byKey(const ValueKey('login_error'))).getSemanticsData();
     expect(error.flagsCollection.isLiveRegion, isTrue);
-    expect(error.label, contains(const UnknownFailure().message));
+    expect(error.label, contains(const AuthInvalidCredentialsFailure().message));
     // Focus is checked again after a separate, rejected network operation.
     // ignore: avoid-duplicate-test-assertions
     expect(tester.widget<EditableText>(find.descendant(of: password, matching: field)).focusNode.hasFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
     expect(
-      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>()?.key,
       const ValueKey('login_submit'),
     );
     semantics.dispose();
   });
 
   testWidgets('arrows keep both populated fields editable through rejection and a second attempt', (tester) async {
-    repository.loginResult = const Result.failure(UnknownFailure());
+    repository.loginResult = const Result.failure(AuthInvalidCredentialsFailure());
     await pumpTvApp(
       tester,
       const LoginScreen(),
@@ -206,7 +233,7 @@ void main() {
     final passwordNode = tester
         .widget<EditableText>(find.descendant(of: password, matching: find.byType(EditableText)))
         .focusNode;
-    final submitNode = tester.widget<FilledButton>(submit).focusNode;
+    final submitNode = tester.widget<AppButton>(submit).focusNode;
     await tester.enterText(username, 'test');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -264,7 +291,7 @@ void main() {
   test('failed secure deletion keeps the authenticated gate and returns an error', () async {
     repository
       ..restoreResult = const Result.success('test')
-      ..logoutResult = const Result.failure(UnknownFailure());
+      ..logoutResult = const Result.failure(AuthInvalidCredentialsFailure());
     final container = ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repository)]);
     addTearDown(container.dispose);
     await container.read(authControllerProvider.future);

@@ -104,7 +104,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(visible(target), mode != 'error');
-      expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+      expect(find.byType(AppIcon), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
@@ -113,7 +113,7 @@ void main() {
   testWidgets('non-HTTP schemes render fallback without creating a network image', (tester) async {
     for (final url in ['file://localhost/p.jpg', 'ftp://cdn.test/p.jpg', 'https:///p.jpg']) {
       await pumpTvApp(tester, AppNetworkImage(imageUrl: url));
-      expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+      expect(find.byType(AppIcon), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
   });
@@ -121,11 +121,11 @@ void main() {
   testWidgets('uses the shared fallback for an invalid image URL', (tester) async {
     await pumpTvApp(tester, const AppNetworkImage(imageUrl: 'not-a-url', semanticLabel: 'Постер аниме'));
 
-    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
+    expect(find.byType(AppIcon), findsOneWidget);
     expect(tester.getSemantics(find.byType(AppNetworkImage)).label, contains('Постер аниме'));
   });
 
-  testWidgets('applies the shared Inter TV typography', (tester) async {
+  testWidgets('applies the shared Manrope TV typography', (tester) async {
     late TextStyle? style;
 
     await pumpTvApp(
@@ -143,10 +143,13 @@ void main() {
     final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<Object?>;
     final families = manifest.whereType<Map<String, Object?>>();
     expect(families.map((entry) => entry['family']), contains(style?.fontFamily));
-    final inter = families.singleWhere((entry) => entry['family'] == style?.fontFamily);
-    final fonts = inter['fonts'] ?? (throw StateError('Font manifest entry has no faces'));
+    final manrope = families.singleWhere((entry) => entry['family'] == style?.fontFamily);
+    final fonts = manrope['fonts'] ?? (throw StateError('Font manifest entry has no faces'));
     final faces = fonts as List<Object?>;
-    expect(faces.whereType<Map<String, Object?>>().map((face) => face['weight']), containsAll([400, 500, 700]));
+    expect(
+      faces.whereType<Map<String, Object?>>().map((face) => face['weight']),
+      containsAll([400, 500, 600, 700, 800]),
+    );
   });
 
   testWidgets('decode follows layout and DPR while retaining original disk cache for Hero', (tester) async {

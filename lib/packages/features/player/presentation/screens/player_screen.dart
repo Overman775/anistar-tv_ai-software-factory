@@ -20,6 +20,7 @@ import '../playback_screen_awake.dart';
 import '../player_route_observer.dart';
 import '../player_seek_hold.dart';
 import '../widgets/player_choices_dialog.dart';
+import '../widgets/player_control_button.dart';
 import '../widgets/player_retry_view.dart';
 import '../widgets/player_view.dart';
 
@@ -100,11 +101,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
             top: 8,
             left: 8,
             child: SafeArea(
-              child: IconButton(
-                key: const ValueKey('player-back'),
-                tooltip: 'К сериям',
+              child: PlayerControlButton(
+                buttonKey: 'player-back',
+                label: 'К сериям',
                 onPressed: _backToEpisodes,
-                icon: const Icon(Icons.arrow_back_rounded),
+                child: const AppIcon(AppIconType.arrowLeft),
               ),
             ),
           ),
@@ -358,7 +359,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       _resumePosition = player.value.position;
       final wasPlaying = _resumePlaying;
       _resumePlaying = player.value.isPlaying;
-      if (!player.value.isPlaying) {
+      if (!player.value.isPlaying || player.value.isCompleted) {
         _controlsTimer?.cancel();
         if (!_controlsVisible) {
           setState(() => _controlsVisible = true);
@@ -402,7 +403,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _onControlsTimer() {
-    if (!mounted || !_appResumed || !(_route?.isCurrent ?? true) || !(_controller?.value.isPlaying ?? false)) {
+    final value = _controller?.value;
+    if (!mounted ||
+        !_appResumed ||
+        !(_route?.isCurrent ?? true) ||
+        value == null ||
+        !value.isPlaying ||
+        value.isCompleted ||
+        value.hasError) {
       return;
     }
     if (_seekHold.isActive || _scrubbing) {
@@ -509,7 +517,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         choices: episodes,
         selected: _episodeNumber,
         label: (number) => watched.contains(number) || session.watchedEpisodes.contains(number)
-            ? 'Серия $number — просмотрена ✓'
+            ? 'Серия $number — просмотрена'
             : 'Серия $number',
       ),
     );
@@ -650,7 +658,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _onVideoTap() {
-    if (!_isTv && _controlsVisible && (_controller?.value.isPlaying ?? false)) {
+    final value = _controller?.value;
+    if (!_isTv && _controlsVisible && value != null && value.isPlaying && !value.isCompleted) {
       _controlsTimer?.cancel();
       setState(() => _controlsVisible = false);
       _focusNode.requestFocus();
@@ -835,7 +844,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: AppPalette.playerBackground,
     body: Listener(
       onPointerDown: _onPointerDown,
       child: Focus(

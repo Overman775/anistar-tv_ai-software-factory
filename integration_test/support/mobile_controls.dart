@@ -2,10 +2,12 @@
 // ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import 'e2e_harness.dart';
@@ -40,7 +42,7 @@ abstract final class MobileControls {
     final submit = find.byKey(const ValueKey('login_submit'));
     await E2eHarness.waitFor(
       tester,
-      () => submit.evaluate().isNotEmpty && tester.widget<FilledButton>(submit).onPressed != null,
+      () => submit.evaluate().isNotEmpty && !tester.widget<AppButton>(submit).busy,
       'touch login ready',
     );
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
@@ -54,9 +56,17 @@ abstract final class MobileControls {
     await tap(tester, card(10938), 'touch anime card');
     await E2eHarness.waitFor(
       tester,
-      () => find.byType(AnimeScreen).evaluate().isNotEmpty && find.text('Смотреть серию 1').evaluate().isNotEmpty,
+      () => find.byType(AnimeScreen).evaluate().isNotEmpty && find.byType(MobileAnimeContent).evaluate().isNotEmpty,
       'mobile details',
     );
+    await revealAnimeAction(tester, 'Смотреть серию 1');
+    expect(find.text('Смотреть серию 1').hitTestable(), findsOneWidget);
+  }
+
+  static Future<void> revealAnimeAction(WidgetTester tester, String label) async {
+    final scroll = find.descendant(of: find.byType(AnimeScreen), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.text(label), 200, scrollable: scroll);
+    await tester.pump(const Duration(milliseconds: 300));
   }
 
   static Future<void> openVideo(WidgetTester tester) async {
@@ -66,6 +76,8 @@ abstract final class MobileControls {
       () => E2eHarness.player(tester)?.value.isInitialized == true,
       'native mobile HLS initialized',
     );
+    expect(find.byKey(const ValueKey('mobile-navigation')), findsNothing);
+    expect(find.byKey(const ValueKey('mobile-header')), findsNothing);
     await E2eHarness.waitFor(
       tester,
       () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,

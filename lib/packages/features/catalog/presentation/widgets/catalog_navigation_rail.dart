@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../common/presentation/widgets/account_identity.dart';
+
 typedef CatalogNavigationItem = ({
   Key key,
   IconData icon,
@@ -23,53 +25,41 @@ class CatalogNavigationRail extends StatelessWidget {
   final bool expanded;
   final List<CatalogNavigationItem> items;
 
+  AppIconType _icon(CatalogNavigationItem item) => switch (item.key) {
+    ValueKey(value: 'catalog-tab-true') => AppIconType.heart,
+    ValueKey(value: 'catalog-account') => AppIconType.logOut,
+    _ => AppIconType.fromMaterial(item.icon),
+  };
+
   @override
   Widget build(BuildContext context) => TweenAnimationBuilder<double>(
     tween: Tween(begin: 0, end: expanded ? 1 : 0),
-    duration: AppMotion.durationOf(context, AppMotion.standard),
-    curve: AppMotion.enterCurve,
+    duration: AppMotion.durationOf(context, expanded ? AppMotion.panelEnter : AppMotion.panelExit),
+    curve: expanded ? AppMotion.enterCurve : AppMotion.exitCurve,
     builder: (context, progress, _) => SizedBox(
       key: const ValueKey('catalog-navigation-rail'),
       width: collapsedWidth + (expandedWidth - collapsedWidth) * progress,
       child: Material(
-        color: Color.lerp(Colors.transparent, AppPalette.backgroundElevated, progress),
+        color: AppPalette.backgroundElevated,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
           child: Column(
             children: [
               SizedBox(
-                height: math.max(
-                  88,
-                  MediaQuery.textScalerOf(context).scale(22) * 1.2 +
-                      (accountName == null ? 0 : MediaQuery.textScalerOf(context).scale(14) * 1.4) +
-                      24,
-                ),
+                height: math.max(88, MediaQuery.textScalerOf(context).scale(22) * 1.3 + AppSpacing.xl),
                 child: Row(
                   children: [
-                    const SizedBox(width: 16),
-                    const AnistarLogo(),
-                    SizedBox(width: progress * 16),
+                    const SizedBox(width: 8),
+                    const AnistarLogo(size: 40),
+                    SizedBox(width: progress * AppSpacing.md),
                     Expanded(
                       child: Opacity(
                         opacity: progress,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'AniStar TV',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 22, height: 1.2),
-                            ),
-                            if (accountName case final name?)
-                              Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppPalette.textSecondary),
-                              ),
-                          ],
+                        child: Text(
+                          'AniStar TV',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
                     ),
@@ -78,11 +68,11 @@ class CatalogNavigationRail extends StatelessWidget {
               ),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   children: [
                     for (final item in items)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                         child: Semantics(
                           selected: item.selected,
                           label: item.label,
@@ -93,14 +83,14 @@ class CatalogNavigationRail extends StatelessWidget {
                               focusNode: item.focusNode,
                               autofocus: item.autofocus,
                               onPressed: item.onPressed,
-                              style: AppFocusStyle.button(
-                                selected: item.selected,
-                              ).copyWith(padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 16))),
+                              style: AppFocusStyle.button(selected: item.selected).copyWith(
+                                padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: AppSpacing.md)),
+                              ),
                               child: ExcludeSemantics(
                                 child: Row(
                                   children: [
-                                    Icon(item.icon, size: 24),
-                                    SizedBox(width: progress * 16),
+                                    AppIcon(_icon(item), size: 24),
+                                    SizedBox(width: progress * AppSpacing.md),
                                     Expanded(
                                       child: Opacity(
                                         opacity: progress,
@@ -121,6 +111,21 @@ class CatalogNavigationRail extends StatelessWidget {
                   ],
                 ),
               ),
+              if (accountName case final name?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md, left: AppSpacing.xs),
+                  child: ClipRect(
+                    child: SizedBox(
+                      height: 64,
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        minWidth: expandedWidth - AppSpacing.xl - AppSpacing.xs,
+                        maxWidth: expandedWidth - AppSpacing.xl - AppSpacing.xs,
+                        child: AccountIdentity(name: name),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

@@ -44,9 +44,9 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Серия 2'), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.forward_10_rounded));
+    await tester.tap(find.byKey(const ValueKey('player-forward')));
     expect(seekPosition, const Duration(minutes: 10, seconds: 10));
-    await tester.tap(find.byIcon(Icons.pause_rounded));
+    await tester.tap(find.byKey(const ValueKey('player-play')));
     expect(playPauseCalls, 1);
   });
   testWidgets('remote timeline clamps seeks and returns focus to the selected control', (tester) async {
@@ -114,7 +114,7 @@ void main() {
         onSeek: (position) => target = position,
       ),
     );
-    await tester.tap(find.byIcon(Icons.replay_10_rounded));
+    await tester.tap(find.byKey(const ValueKey('player-rewind')));
     expect(target, Duration.zero);
     await tester.tapAt(tester.getCenter(find.byType(Slider)));
     expect(target?.inSeconds, closeTo(12, 1));

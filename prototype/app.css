@@ -1,0 +1,635 @@
+/* UI Kit / AppColors — ЕДИНСТВЕННЫЙ источник значений цветов всего приложения.
+   Для будущих ИИ: в компонентах и на всех экранах использовать var(--color-ROLE)
+   или существующие семантические алиасы --bg/--surface/--text/--accent и т. д.
+   Не копировать HEX/RGB в новые правила, inline-style или JS. Если нужна новая роль,
+   добавить её сюда с понятным назначением. Полупрозрачные подложки и цвета градиентов
+   тоже токены. currentColor/инherit сохраняют наследование, это не новые цвета.
+   --bg и другие короткие имена ниже — алиасы UI Kit; .home-shell выбирает палитру
+   каталога через те же токены. Их область видимости сохранена: внешний вид не меняется.
+   Flutter: переносить роли в общий AppPalette/Theme, а не в цвета отдельных виджетов. */
+:root {
+  /* Основная палитра и состояния.
+     Малиновый акцент единый на ВСЕХ экранах: действия, фокус, выбранные пункты.
+     Для будущих ИИ: переиспользовать --accent/--on-accent; не возвращать локальные
+     цвета в компоненты. Ошибки используют отдельный --color-danger.
+     Основные нейтрали совпадают с графитом каталога, без прежнего зелёного оттенка. */
+  --color-base-bg:var(--color-catalog-bg);
+  --color-base-surface:var(--color-catalog-surface);
+  --color-base-raised:var(--color-catalog-raised);
+  --color-base-border:var(--color-catalog-border);
+  --color-base-text:var(--color-catalog-text);
+  --color-base-muted:var(--color-catalog-muted);
+  --color-accent:#D986A6;
+  --color-on-accent:#24141C;
+  --color-danger:#ffb7b0;
+  --color-accent-hover:#E6A2BC;
+  --color-accent-subtle:#D986A610;
+  /* Каталог, меню, аккаунт */
+  --color-catalog-bg:#101214;
+  --color-catalog-horizon:#1c2024;
+  /* UI Kit / CatalogBackground: общий спокойный графитовый фон.
+     Центр широкого эллипса вынесен выше экрана: видна только нижняя дуга.
+     Для будущих ИИ: переиспользовать этот токен на главной, в избранном и
+     каталогах; не копировать градиент по экранам и не подмешивать акцент. */
+  --catalog-background:radial-gradient(ellipse 90% 72% at 50% -16%,var(--color-catalog-horizon) 0%,var(--color-catalog-bg) 100%);
+  --color-catalog-surface:#1b1e21;
+  --color-catalog-raised:#2b3034;
+  --color-catalog-border:#394045;
+  --color-catalog-text:#f5f6f3;
+  --color-catalog-muted:#b2b9bd;
+  --color-menu-bg-base:var(--color-menu-bg-catalog);
+  --color-menu-bg-catalog:#171a1c;
+  --color-menu-border:var(--color-catalog-border);
+  --color-avatar-surface:var(--color-control-focus);
+  --color-menu-control:#242a2d;
+  --color-control-focus:#30373a;
+  /* Изображения, подложки и затемнения */
+  --color-media-bg:#080c0d;
+  --color-media-caption-shade:#080c0de6;
+  --color-badge-bg:rgb(16 18 20 / 93.3%);
+  --color-inspector-bg:rgb(16 18 20 / 90%);
+  --color-favorite-ribbon-bg:rgb(16 18 20 / 64%);
+  --color-shadow-strong:#0008;
+  --color-shadow-soft:#0005;
+  --color-scrim-medium:#0009;
+  --color-scrim-heavy:#000a;
+  --color-transparent:transparent;
+  --color-white:#fff;
+  --color-black:#000;
+  /* Плеер: отдельные роли для читаемости поверх видео */
+  --color-player-bg-legacy:var(--color-player-bg);
+  --color-player-bg:#050606;
+  --color-player-muted:#b7babd;
+  --color-player-control:#191d20;
+  --color-player-text:#f1f3f4;
+  --color-player-on-light:#121517;
+  --color-player-shade-top:rgb(0 0 0 / 76%);
+  --color-player-shade-bottom:rgb(0 0 0 / 88%);
+}
+
+/* UI Kit / AppIcon: Lucide — окончательный единый набор всего приложения.
+   Для будущих ИИ: миграция Flutter на lucide_icons_flutter обязательна;
+   переиспользовать AppIcon, не вводить альтернативные иконпаки.
+   Оригинальные Lucide SVG, одна геометрия и один stroke для всего UI.
+   icon() и таблица lucideIcons в app.js; источники/лицензия — assets/lucide/.
+   Flutter: lucide_icons_flutter, соответствия LucideIcons.* описаны в таблице.
+   Не добавлять иконочные шрифты или отдельные стили под каждый экран. */
+:root{--app-icon-stroke:2}
+.od-icon.lucide-icon{display:inline-block;inline-size:var(--od-icon-size,1em);block-size:var(--od-icon-size,1em);flex:none;fill:none;stroke:currentColor;stroke-width:var(--app-icon-stroke);stroke-linecap:round;stroke-linejoin:round;vertical-align:middle}
+@font-face{font-family:Manrope;src:url('assets/manrope-400.ttf');font-weight:400;font-display:swap}@font-face{font-family:Manrope;src:url('assets/manrope-600.ttf');font-weight:600;font-display:swap}@font-face{font-family:Manrope;src:url('assets/manrope-800.ttf');font-weight:800;font-display:swap}
+:root{--bg:var(--color-base-bg);--surface:var(--color-base-surface);--raised:var(--color-base-raised);--line:var(--color-base-border);--text:var(--color-base-text);--muted:var(--color-base-muted);--accent:var(--color-accent);--on-accent:var(--color-on-accent);--danger:var(--color-danger);--rail:112px;--gutter:clamp(24px,3.4vw,64px);--body:clamp(16px,1.25vw,24px);--title:clamp(36px,3.34vw,64px);--heading:clamp(24px,1.7vw,32px);--small:clamp(14px,1.05vw,20px);--gap:24px;--radius-card:12px;--radius-control:10px;--radius-small:4px;--radius-edge:0px;--radius:var(--radius-card);--fast:180ms;--enter:280ms;--exit:180ms}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif}body{font-size:var(--body);line-height:1.5}button,input{font:inherit}button{cursor:pointer;color:inherit;background:none;border:0;text-align:inherit}button:disabled{opacity:.45;cursor:default}button:focus,input:focus,a:focus{outline:3px solid var(--accent);outline-offset:6px}button:focus{background-color:var(--raised)}input:focus{outline-offset:4px}h1,h2,h3,p{margin:0}h1,h2,h3{font-weight:800;letter-spacing:-.04em;line-height:1.16}h1{font-size:var(--title)}h2{font-size:var(--heading)}h3{font-size:var(--body)}p{line-height:1.6}.od-icon{--od-icon-size:28px}.muted{color:var(--muted)}.small{font-size:var(--small)}.eyebrow{display:block;color:var(--accent);font-size:var(--small);font-weight:800;letter-spacing:.16em;text-transform:uppercase}.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);height:100dvh}.sidebar{position:relative;z-index:5;background:var(--color-menu-bg-base);border-right:1px solid var(--color-menu-border);min-width:0}.menu-inner{display:flex;flex-direction:column;width:var(--rail);height:100%;padding:40px 24px;background:var(--color-menu-bg-base)}.sidebar:focus-within .menu-inner{position:absolute;top:0;left:0;width:320px;box-shadow:32px 0 64px var(--color-shadow-strong)}.brand{display:flex;align-items:center;gap:16px;font-size:24px;font-weight:800;white-space:nowrap}.brand img{display:block;width:64px;height:auto;flex:none}.brand span{display:none}.sidebar:focus-within .brand span{display:block}.brand em{font-style:normal;color:var(--accent)}.menu{display:grid;gap:16px;margin-top:64px}.menu button{display:flex;align-items:center;gap:24px;min-height:64px;padding:16px 18px;border-radius:var(--radius-control);white-space:nowrap;color:var(--muted);position:relative}.menu button>span:not(.od-icon){display:none}.sidebar:focus-within .menu button>span:not(.od-icon){display:block}.menu button[aria-current=page]{color:var(--accent);background:var(--color-accent-subtle)}.menu button[aria-current=page]:before{content:'';position:absolute;left:-24px;top:20px;width:4px;height:24px;background:var(--accent)}.menu button:focus{color:var(--text)}.account{margin-top:auto;display:grid;gap:16px}.account .menu{margin:0}.avatar{display:flex;align-items:center;gap:16px;padding-left:8px;white-space:nowrap;font-size:16px;color:var(--muted)}.avatar b{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--color-avatar-surface);color:var(--accent);font-size:16px;flex:none}.avatar span{display:none}.sidebar:focus-within .avatar span{display:block}.main{min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) var(--bg)}.topbar{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:40px var(--gutter) 24px;color:var(--muted);font-size:var(--small)}.topbar strong{color:var(--text);font-size:var(--body);font-weight:600}.topbar .right{display:flex;align-items:center;gap:24px}.live-mark{display:flex;align-items:center;gap:8px}.live-mark:before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent)}.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,28%);gap:48px;padding:16px var(--gutter) 32px;align-items:center;max-width:1800px;margin:auto}.hero-copy{max-width:900px}.hero h1{margin:16px 0 24px;max-width:900px}.hero p{max-width:64ch;color:var(--muted);margin-bottom:24px}.meta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;color:var(--muted);font-size:var(--small);margin:16px 0}.meta span{display:block}.meta .tag{padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius-small);color:var(--text)}.hero-art{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16px;max-width:320px;justify-self:center}.hero-art img{border-radius:var(--radius-card)}.poster-caption{writing-mode:vertical-rl;letter-spacing:.2em;font-size:12px;color:var(--muted)}.actions{display:flex;flex-wrap:wrap;gap:16px;margin-top:32px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:16px;padding:16px 28px;min-height:64px;border-radius:var(--radius-control);font-size:var(--body);font-weight:600;background:var(--surface);border:1px solid var(--line);white-space:nowrap}.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:800}.btn.primary:focus{background:var(--color-accent-hover)}.btn.icon{padding:16px;min-width:64px}.catalog{padding:24px var(--gutter) 64px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:32px}.section-head .count{color:var(--muted);font-size:var(--small)}.poster-grid{--od-cols:6;--od-gap:32px 24px;align-items:start}.anime-card{display:block;width:100%;padding:0;border-radius:var(--radius-card);min-width:0}.poster-wrap{position:relative;display:block;border-radius:var(--radius-card);background:var(--surface)}.poster-wrap img{border-radius:var(--radius-card)}.anime-card h3{margin-top:16px;font-weight:600;font-size:var(--small);line-height:1.5;letter-spacing:-.02em}.anime-card .year{display:block;color:var(--muted);font-size:var(--small);margin-top:4px}.anime-card:focus{background:none}.badge{position:absolute;top:12px;right:12px;display:flex;align-items:center;justify-content:center;background:var(--color-badge-bg);color:var(--accent);border-radius:var(--radius-small);padding:8px;--od-icon-size:20px}.page-title{padding:24px var(--gutter) 32px}.page-title p{margin-top:16px;color:var(--muted)}.genre-grid{--od-cols:3;--od-gap:24px}.genre{min-height:144px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--surface);font-size:var(--heading);font-weight:600}.genre .od-icon{color:var(--accent)}.genres-note{margin-top:40px;color:var(--muted);font-size:var(--small)}.detail-hero{grid-template-columns:minmax(0,1fr) minmax(200px,24%);align-items:start;padding-top:24px;padding-bottom:48px}.detail-hero h1{font-size:clamp(32px,3vw,56px)}.detail-hero .hero-art{max-width:280px}.genre-links{display:flex;flex-wrap:wrap;gap:16px}.genre-links button{min-height:48px;color:var(--accent);padding:8px 16px;border:1px solid var(--line);border-radius:var(--radius-control);font-size:var(--small)}.episode-grid{--od-cols:3;--od-gap:24px}.episode{display:flex;align-items:center;gap:24px;padding:24px;min-height:112px;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-card)}.ep-num{display:block;font-size:clamp(24px,2vw,36px);color:var(--muted);font-weight:800}.episode .od-field{flex:1}.episode .od-icon{color:var(--accent)}.episode .small{color:var(--muted)}.empty{max-width:800px;margin:64px auto;text-align:center;padding:40px}.empty p{color:var(--muted);margin:24px 0}.empty .actions{justify-content:center}.empty-symbol{display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:32px;--od-icon-size:64px}.back-btn{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px;border-radius:var(--radius-control);color:var(--text)}.overlay{position:fixed;inset:0;z-index:20;display:flex;justify-content:flex-end;background:var(--color-scrim-heavy)}.side-sheet{width:min(600px,90vw);max-height:100dvh;overflow:auto;background:var(--surface);padding:48px;display:flex;flex-direction:column;gap:24px;border-left:1px solid var(--line)}.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.sheet-option{display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%;min-height:80px;padding:20px;border:1px solid var(--line);border-radius:var(--radius-control)}.sheet-option[aria-pressed=true]{color:var(--accent);background:var(--color-accent-subtle)}.sheet-copy{color:var(--muted);font-size:var(--small)}.danger{color:var(--danger)}.toast{position:fixed;z-index:40;bottom:48px;left:50%;transform:translateX(-50%);max-width:80vw;padding:20px 32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--text);color:var(--bg);font-size:var(--body);box-shadow:0 16px 40px var(--color-shadow-soft)}.login{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,560px);gap:64px;align-items:center;min-height:100dvh;max-width:1600px;margin:auto;padding:64px}.login-copy .brand{margin-bottom:64px}.login-copy .brand span{display:block}.login-copy h1{margin:24px 0;max-width:700px}.login-copy p{color:var(--muted);max-width:48ch}.login-form{padding:40px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card)}.login-form h2{margin-bottom:32px}.field{display:grid;gap:8px;margin-bottom:24px}.field label{font-size:var(--small)}.field input{display:block;width:100%;min-height:64px;padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-control);color:var(--text)}.field .error{color:var(--danger);font-size:16px}.login-form .btn{width:100%;margin-bottom:16px}.login-note{font-size:16px;color:var(--muted);line-height:1.6;margin-top:24px}.error-summary{padding:16px;border:1px solid var(--danger);margin-bottom:24px;font-size:16px}.error-summary a{color:var(--danger);display:block;padding:8px}.player{min-height:100dvh;display:flex;flex-direction:column;background:var(--color-player-bg-legacy);padding:48px var(--gutter)}.player-top{display:flex;justify-content:space-between;align-items:center;gap:24px}.player-top .od-field{text-align:right}.player-stage{flex:1;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:24px;padding:48px}.player-stage img{width:96px;height:auto;border-radius:var(--radius-card);opacity:.75}.player-stage h1{font-size:var(--heading)}.player-stage p{max-width:48ch;color:var(--muted);font-size:var(--small)}.playback{max-width:1600px;width:100%;margin:0 auto}.timeline{width:100%;accent-color:var(--accent);min-height:44px;cursor:pointer}.time-row{display:flex;justify-content:space-between;font-size:var(--small);color:var(--muted)}.controls{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px}.transport{display:flex;align-items:center;gap:24px}.controls .od-icon{--od-icon-size:28px}.player-status{color:var(--accent);font-size:var(--small)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.footer-note{margin-top:40px;font-size:var(--small);color:var(--muted)}
+@media(hover:hover){button:hover{background-color:var(--raised)}.anime-card:hover{background:none;color:var(--accent)}.btn.primary:hover{background:var(--color-accent-hover)}.genre-links button:hover{border-color:var(--accent)}}
+@media(max-width:1440px){:root{--rail:96px;--gutter:40px}.menu-inner{padding:32px 16px}.brand img{width:56px}.hero{gap:32px}.hero-art{max-width:256px}.hero h1{margin-bottom:16px}.hero p{margin-bottom:16px}.actions{margin-top:24px}.btn{min-height:56px;padding:12px 24px}.topbar{padding-top:32px}.poster-grid{--od-gap:24px 16px}.menu button[aria-current=page]:before{left:-16px}}
+@media(max-width:1024px){:root{--rail:88px;--gutter:32px}.poster-grid{--od-cols:4}.hero{grid-template-columns:minmax(0,1fr) 24%;gap:24px}.hero p{font-size:16px}.hero h1{font-size:40px}.hero-art{max-width:200px}.topbar .right .live-mark{display:none}.genre-grid{--od-cols:2}.controls{flex-wrap:wrap}.login{gap:32px;padding:40px;grid-template-columns:minmax(0,1fr) minmax(300px,1fr)}.login-form{padding:24px}}
+@media(max-width:768px){:root{--rail:80px;--gutter:24px;--title:36px}.menu-inner{padding:24px 12px}.menu button{padding:16px 12px}.hero{grid-template-columns:minmax(0,1fr) 28%;gap:16px}.hero h1{font-size:32px}.hero-copy p{display:none}.poster-grid{--od-cols:3}.topbar{padding-top:24px}.genre{font-size:20px;padding:24px}.episode{gap:16px;padding:16px}.episode .ep-num{font-size:24px}.episode .od-icon{display:none}.login{grid-template-columns:1fr}.login-copy .brand{margin-bottom:24px}.side-sheet{padding:32px}.brand img{width:48px}.menu button[aria-current=page]:before{left:-12px}}
+@media(max-width:480px){:root{--rail:72px;--gutter:20px}.hero{grid-template-columns:1fr}.hero-art{display:none}.hero h1{font-size:32px}.poster-grid{--od-cols:2}.hero-copy p{display:block}.topbar .right{display:none}.genre-grid{--od-cols:1}.episode-grid{--od-gap:12px}.episode{display:grid;gap:8px;padding:12px}.episode .small{font-size:12px}.episode .od-field{font-size:14px}.btn{font-size:16px;gap:8px;padding:12px 16px}.topbar{padding-bottom:16px}.section-head{align-items:start;flex-wrap:wrap}.login{padding:24px}.player{padding:24px}.player-top{align-items:start}.player-stage{padding:24px}.transport{gap:12px}.controls{gap:16px}.poster-caption{display:none}.menu-inner{padding-inline:8px}.menu button[aria-current=page]:before{left:-8px}.side-sheet{padding:24px}}
+/* UI Kit / MediaCard: один renderer mediaCard() в app.js и один набор стилей.
+   Параметры экземпляра: --media-card-ratio, --media-card-height, --media-card-fit.
+   Внешний экран управляет сеткой; компонент — изображением, подписью и фокусом.
+   poster сохраняет согласованную обрезку главной; landscape показывает кадр жанра целиком. */
+.ui-media-card{--media-card-ratio:225/350;--media-card-height:auto;--media-card-fit:cover;
+  --media-card-caption-pad:64px 20px 20px;--media-card-title-size:var(--home-poster,var(--body));
+  --media-card-radius:var(--radius-card);--media-card-focus-scale:var(--focus-scale,1.025);
+  display:block;width:100%;padding:0;border-radius:var(--media-card-radius)}
+.ui-media-card--landscape{--media-card-ratio:219/92;--media-card-fit:contain;--media-card-caption-pad:40px 16px 12px}
+.ui-media-card .poster-wrap{display:grid;position:relative;width:100%;height:var(--media-card-height);aspect-ratio:var(--media-card-ratio);background:var(--color-media-bg);border-radius:var(--media-card-radius)}
+.ui-media-card .poster-wrap>.od-media{display:block;width:100%;height:100%;aspect-ratio:var(--media-card-ratio);object-fit:var(--media-card-fit);object-position:center;border-radius:var(--media-card-radius)}
+.ui-media-card .poster-title{display:block;position:absolute;bottom:0;left:0;right:0;padding:var(--media-card-caption-pad);border-radius:0 0 var(--media-card-radius) var(--media-card-radius);background:linear-gradient(180deg,var(--color-transparent),var(--color-media-caption-shade) 48%,var(--color-media-bg));color:var(--color-white);text-align:left;font-size:var(--media-card-title-size);font-weight:600;line-height:1.4;letter-spacing:0}
+@media(max-width:768px){.ui-media-card:not(.ui-media-card--landscape){--media-card-caption-pad:48px 12px 12px}}
+
+/* Home: one restrained product surface; tokens and responsive rules live here. */
+.home-shell {
+  --bg: var(--color-catalog-bg);
+  --surface: var(--color-catalog-surface);
+  --raised: var(--color-catalog-raised);
+  --line: var(--color-catalog-border);
+  --text: var(--color-catalog-text);
+  --muted: var(--color-catalog-muted);
+  --home-title: 2.25rem;
+  --home-body: 1.25rem;
+  --home-caption: 1.125rem;
+  --home-poster: 1.375rem;
+  --home-news: 1.5rem;
+  --home-space: 24px;
+  --home-gap: 32px;
+  --home-inset: 64px;
+  --home-radius: var(--radius-card);
+  --inspector-padding-block: 40px;
+  --inspector-surface: var(--color-inspector-bg);
+  --inspector-blur: 12px;
+  --catalog-focus-clearance: 16px;
+}
+/* Статичный фон области экрана: без анимации, фильтров и background-attachment:fixed.
+   scroll привязывает фон к самому scroll-контейнеру, а не к длине списка:
+   дуга не повторяется и не растягивается при подгрузке карточек. */
+.home-main { background-color: var(--bg); background-image:var(--catalog-background); background-repeat:no-repeat; background-attachment:scroll; color: var(--text); scroll-padding-block-start: var(--catalog-sticky-offset,280px); scroll-padding-block-end: 32px; }
+.home-main::selection, .home-main ::selection { background: var(--accent); color: var(--on-accent); }
+.home-main button { font-family: Manrope,system-ui,sans-serif; }
+.home-main button:focus { outline: 3px solid var(--accent); outline-offset: 6px; background: none; }
+.home-shell .sidebar, .home-shell .menu-inner { background: var(--color-menu-bg-catalog); }
+.home-shell .sidebar { border-right: 0; }
+.home-shell .sidebar:focus-within .menu-inner { box-shadow: 24px 0 48px -16px var(--color-scrim-medium); }
+.home-shell .menu button { font-size: var(--home-body); font-weight: 600; }
+.home-shell .menu button[aria-current=page] { color: var(--accent); background: var(--color-menu-control); }
+.home-shell .menu button[aria-current=page]::before { content: none; }
+.home-shell .menu button:focus { color: var(--text); background: var(--color-control-focus); }
+.home-shell .avatar b { background: var(--color-catalog-raised); color: var(--text); }
+.home-catalog { padding: 0 var(--home-inset) 48px; }
+/* Для будущих ИИ: отступ сверху до заголовка и снизу до карточек должен быть
+   одинаковым — --inspector-padding-block. Не добавлять снизу margin или запас высоты.
+   Отдельный зазор сетки --catalog-focus-clearance нужен только для рамки и scale карточек.
+   Правило общее для главной, избранного и выдачи фильтров. */
+.home-main .catalog-inspector {
+  position: sticky; top: 0; z-index: 3;
+  display: grid; grid-template-columns: minmax(0,1fr) minmax(240px,25%);
+  gap: 48px; align-items: start;
+  /* Равные отступы сверху/снизу; не добавлять min-height и внешний нижний margin:
+     они создают лишнюю пустоту между описанием и первым рядом карточек. */
+  min-height: 0; height: auto;
+  margin: 0; padding: var(--inspector-padding-block) 0;
+  background: var(--bg); border: 0;
+}
+.home-main .inspector-copy.od-stack { --od-gap: 16px; max-width: none; }
+/* UI Kit / AnimeTitle: один стиль названия для главной, избранного, фильтров и detail.
+   Для будущих ИИ: размер/вес менять здесь, не дублировать правила под отдельные экраны. */
+.home-main .anime-title { color: var(--text); font-size: var(--home-title); font-weight: 600; line-height: 1.2; letter-spacing: -.02em; overflow-wrap:anywhere; text-wrap: pretty; }
+.home-main .inspector-category-row { --od-gap: 24px; align-items: center; min-height: 32px; }
+.home-main .inspector-categories { color: var(--muted); font-size: var(--home-body); font-weight: 400; line-height: 1.5; }
+.home-main .inspector-rating { display: flex; align-items: center; gap: 8px; flex: none; white-space: nowrap; font-size: var(--home-body); color: var(--text); font-variant-numeric: tabular-nums; --od-icon-size: 20px; }
+.home-main .inspector-rating strong { font-weight: 600; }
+.home-main .inspector-rating > span { color: var(--muted); font-size: var(--home-caption); }
+.home-main .inspector-description { color: var(--muted); max-width: 70ch; font-size: var(--home-body); font-weight: 400; line-height: 1.6; }
+.home-main .inspector-news { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: none; padding: 4px 0 0; margin: 0; border: 0; }
+/* Полная строка обновления с сайта: естественный перенос, без вырезания номера или финала. */
+.home-main .episode-news { color: var(--text); font-size: var(--home-body); font-weight: 400; letter-spacing: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.home-main .publication-date { display: block; color: var(--muted); font-size: var(--home-caption); line-height: 1.5; font-weight: 400; }
+.home-main .publication-date { font-variant-numeric: tabular-nums; }
+.home-grid-wrap .poster-grid, .home-grid { --od-cols: 5; --od-gap: var(--home-gap); align-items: start; }
+.home-main .anime-card { border-radius: var(--home-radius); }
+/* MediaCard / FavoriteRibbon: одна полупрозрачная SVG-подложка от верхнего края.
+   Это отметка статуса. В избранном не выводится; функциональное сердце — Lucide.
+   Декоративная форма имеет собственную геометрию, не размер UI-иконки .od-icon. */
+.ui-media-card{--media-card-status-bg:var(--color-favorite-ribbon-bg);--media-card-status-color:var(--text)}
+.ui-media-card .media-card-favorite{display:flex;align-items:flex-start;justify-content:center;top:0;right:16px;width:36px;height:48px;padding:8px 8px 20px;border-radius:0;background:var(--color-transparent);color:var(--media-card-status-color);--od-icon-size:20px;pointer-events:none;isolation:isolate}
+.favorite-ribbon-shape{display:block;position:absolute;top:0;left:0;width:36px;height:48px;fill:var(--media-card-status-bg);z-index:-1}
+
+.catalog-pagination { display: flex; align-items: center; justify-content: center; min-height: 80px; margin-top: 24px; }
+.catalog-pagination:empty { display: none; }
+.catalog-status { color: var(--muted); font-size: var(--home-body,20px); padding: 16px 0; }
+.catalog-error { display: grid; justify-items: start; gap: 24px; padding: 32px 0; max-width: 65ch; }
+.catalog-error p { color: var(--muted); }
+.catalog-error.compact { padding: 16px 0; }
+.catalog-skeleton { display: grid; gap: 16px; }
+.skeleton-poster { aspect-ratio: 225/350; background: var(--surface); border-radius: var(--radius-card); }
+.skeleton-line { height: 24px; background: var(--raised); border-radius: var(--radius-small); }
+.skeleton-line.short { width: 60%; }
+#catalog-sentinel { display: block; height: 4px; }
+@media (hover:hover) {
+  .home-main .anime-card:hover { color: var(--text); }
+  .home-main .anime-card:hover .poster-wrap { outline: 1px solid var(--muted); outline-offset: 3px; }
+  .home-main .anime-card:focus .poster-wrap { outline: none; }
+}
+@media (max-width:1439px) {
+  .home-shell { --home-title: 2rem; --home-body: 1.125rem; --home-caption: 1rem; --home-poster: 1.25rem; --home-news: 1.25rem; --home-inset: 40px; --home-gap: 24px; --inspector-padding-block: 32px; }
+  .home-grid-wrap .poster-grid, .home-grid { --od-cols: 4; }
+  .home-main .catalog-inspector { gap: 32px; }
+}
+@media (max-width:1024px) {
+  .home-shell { --home-inset: 32px; --home-title: 1.75rem; }
+  .home-grid-wrap .poster-grid, .home-grid { --od-cols: 3; }
+  .home-main .catalog-inspector { grid-template-columns: minmax(0,1fr) 200px; gap: 24px; }
+}
+@media (max-width:768px) {
+  .home-shell { --home-inset: 24px; --home-title: 1.5rem; --home-body: 1rem; --home-poster: 1rem; --home-gap: 16px; --inspector-padding-block: 24px; }
+  .home-grid-wrap .poster-grid, .home-grid { --od-cols: 2; }
+  .home-main .catalog-inspector { grid-template-columns: 1fr; gap: 16px; padding-block: var(--inspector-padding-block); }
+  .home-main .inspector-copy.od-stack { --od-gap: 12px; }
+  .home-main .inspector-category-row { flex-wrap: wrap; --od-gap: 8px 16px; }
+  .home-main .inspector-news { flex-direction: column; gap: 8px; padding: 0; align-items: flex-start; }
+}
+@media (max-width:480px) {
+  .home-shell { --home-inset: 20px; --home-title: 1.375rem; }
+  .home-main .inspector-rating { --od-icon-size: 16px; }
+}
+
+/* Motion contract: exact Flutter Curves.easeOutCubic / Curves.easeInCubic. */
+:root {
+  /* InspectorMotion: ожидание фокуса настраивается отдельно; проявление текста
+     использует общие --motion-page (280 мс) и --motion-enter (easeOutCubic).
+     Главная/избранное переиспользуют AppMotion; фон и геометрия не анимируются. */
+  --motion-inspector-delay:150ms;
+  --motion-fast:160ms;
+  --motion-standard:240ms;
+  --motion-menu-enter:240ms;
+  --motion-menu-exit:156ms;
+  --motion-scrim-opacity:.44;
+  --motion-page:280ms;
+  --motion-reverse:200ms;
+  --motion-focus-exit:104ms;
+  /* AppMotion / источник: Flutter Curves.easeOutCubic и Curves.easeInCubic.
+     Общие кривые для MediaCard, меню и панелей; не дублировать по разделам.
+     Вход замедляется к концу, выход ускоряется; время задаём токенами выше.
+     При переносе во Flutter использовать соответствующие Curves, а не linear. */
+  --motion-enter:cubic-bezier(0.215,0.61,0.355,1);
+  --motion-exit:cubic-bezier(0.55,0.055,0.675,0.19);
+  --focus-scale:1.025;
+  --menu-width:320px;
+  --menu-pad:24px;
+  --menu-bg:var(--color-menu-bg-base);
+}
+.home-shell{--menu-bg:var(--color-menu-bg-catalog)}
+.shell{position:relative;isolation:isolate}
+.menu-scrim{position:absolute;inset:0;z-index:4;background:var(--color-black);opacity:0;pointer-events:none;transition:opacity var(--motion-menu-exit) var(--motion-exit)}
+.shell.menu-is-open>.menu-scrim{opacity:var(--motion-scrim-opacity);pointer-events:auto;transition-duration:var(--motion-menu-enter);transition-timing-function:var(--motion-enter)}
+/* Скрывать/анимировать только подписи :not(.od-icon). Иконки Lucide остаются
+   видимыми и в свёрнутом меню; текстовые анимации не должны затрагивать AppIcon. */
+/* The rail and the content columns never change size. Only its background moves. */
+.shell .sidebar .menu-inner,.shell .sidebar:focus-within .menu-inner{
+  position:absolute;top:0;left:0;width:var(--menu-width);height:100%;
+  padding:40px var(--menu-pad);background:var(--color-transparent);box-shadow:none;
+  pointer-events:none;isolation:isolate;
+}
+.shell .sidebar .menu-inner::before{
+  content:'';position:absolute;inset:0;z-index:-1;background:var(--menu-bg);
+  transform:translateX(calc(var(--rail) - var(--menu-width)));
+  transition:transform var(--motion-menu-exit) var(--motion-exit);
+}
+.shell .sidebar.is-expanded .menu-inner::before{transform:translateX(0);transition-duration:var(--motion-menu-enter);transition-timing-function:var(--motion-enter)}
+.shell .sidebar .menu button{width:calc(var(--rail) - var(--menu-pad)*2);pointer-events:auto;overflow:visible}
+.shell .sidebar.is-expanded .menu button{width:100%}
+.shell .sidebar .brand>span,.shell .sidebar .menu button>span:not(.od-icon),.shell .sidebar .avatar>span{
+  display:block;opacity:0;visibility:hidden;transform:translateX(-8px);
+  transition:opacity 104ms var(--motion-exit),transform 104ms var(--motion-exit),visibility 0s 104ms;
+}
+.shell .sidebar.is-expanded .brand>span,.shell .sidebar.is-expanded .menu button>span:not(.od-icon),.shell .sidebar.is-expanded .avatar>span{
+  opacity:1;visibility:visible;transform:translateX(0);
+  transition:opacity var(--motion-fast) var(--motion-enter),transform var(--motion-standard) var(--motion-enter),visibility 0s;
+}
+/* UI Kit / MediaCard motion: общий для обоих вариантов. Flutter curves и длительности
+   берём из --motion-*, без локальных keyframes и отдельных анимаций экранов. */
+.ui-media-card{position:relative;z-index:0;transform:scale(1);transform-origin:center;outline-color:var(--color-transparent);
+  transition:transform var(--motion-focus-exit) var(--motion-exit),outline-color var(--motion-focus-exit) var(--motion-exit)}
+.ui-media-card:focus,.home-main .ui-media-card:focus{z-index:2;transform:scale(var(--media-card-focus-scale));outline:3px solid var(--accent);outline-offset:6px;
+  transition-duration:var(--motion-fast);transition-timing-function:var(--motion-enter)}
+.ui-media-card:active{transform:scale(1.01)}
+.episode,.sheet-option,.genre-links button,.menu button,.btn,.back-btn{
+  transition:background-color var(--motion-focus-exit) var(--motion-exit),color var(--motion-focus-exit) var(--motion-exit),border-color var(--motion-focus-exit) var(--motion-exit)}
+.episode:focus,.sheet-option:focus,.genre-links button:focus,.menu button:focus,.btn:focus,.back-btn:focus{
+  transition-duration:var(--motion-fast);transition-timing-function:var(--motion-enter)}
+.overlay,.side-sheet{animation:none}
+.side-sheet{transform:translateX(0)}
+.overlay[data-closing=true]{pointer-events:none}
+.badge{animation:favorite-confirm var(--motion-fast) var(--motion-enter)}
+.toast{animation:notice-confirm var(--motion-fast) var(--motion-enter)}
+@keyframes favorite-confirm{from{opacity:0}to{opacity:1}}
+@keyframes notice-confirm{from{opacity:0}to{opacity:1}}
+@media(max-width:1440px){:root{--menu-pad:16px}.shell .sidebar .menu-inner,.shell .sidebar:focus-within .menu-inner{padding-block:32px}}
+@media(max-width:768px){:root{--menu-pad:12px}.shell .sidebar .menu-inner,.shell .sidebar:focus-within .menu-inner{padding-block:24px}}
+@media(max-width:480px){:root{--menu-pad:8px;--menu-width:288px}}
+@media(prefers-reduced-motion:reduce){
+  .ui-media-card,.ui-media-card:focus,.home-main .ui-media-card:focus,.ui-media-card:active{transform:none;transition:none}
+  .shell .sidebar .menu-inner::before{transition:none}
+  .shell .sidebar .brand>span,.shell .sidebar .menu button>span:not(.od-icon),.shell .sidebar .avatar>span{transition:none;transform:none}
+  .menu-scrim,.shell.menu-is-open>.menu-scrim{transition:none}
+  .episode,.sheet-option,.genre-links button,.menu button,.btn,.back-btn{transition:none}
+  .badge,.toast{animation:none}
+}
+
+/* Both menus slide as opaque surfaces; only their scrims fade. */
+.overlay{background:var(--color-transparent)}
+.panel-scrim{position:absolute;inset:0;z-index:0;background:var(--color-black);opacity:var(--motion-scrim-opacity);pointer-events:none}
+.side-sheet{position:relative;z-index:1;opacity:1}
+
+/* Left and right menus share the same surface and focus vocabulary. */
+:root{--menu-control-focus:var(--color-base-raised)}
+.home-shell{--menu-control-focus:var(--color-control-focus)}
+.side-sheet{width:min(440px,90vw);background:var(--menu-bg);border-left:0;padding:40px 32px;gap:32px}
+.side-sheet .sheet-head{align-items:flex-start;margin:0}
+.side-sheet .sheet-head h2{font-size:24px;font-weight:600;line-height:1.4;letter-spacing:-.02em;overflow-wrap:anywhere}
+.side-sheet .btn,.side-sheet .sheet-option{border-color:var(--color-transparent);border-radius:var(--radius-control);font-size:20px;font-weight:600;line-height:1.5}
+.side-sheet .btn:focus,.side-sheet .sheet-option:focus,.side-sheet .episode:focus{background:var(--menu-control-focus);color:var(--text);outline:3px solid var(--accent);outline-offset:6px}
+.favorite-panel .favorite-action{display:flex;justify-content:flex-start;gap:20px;width:100%;padding:16px;min-height:64px;background:var(--color-transparent);color:var(--text);white-space:normal}
+.favorite-panel .favorite-action>span{display:block}
+.favorite-panel .favorite-action:focus{background:var(--menu-control-focus)}
+@media(hover:hover){.side-sheet .btn:hover,.side-sheet .sheet-option:hover{background:var(--menu-control-focus);color:var(--text)}}
+@media(max-width:480px){.side-sheet{padding:32px 24px}.side-sheet .sheet-head h2{font-size:22px}.side-sheet .btn,.side-sheet .sheet-option{font-size:18px}}
+
+/* Section identity stays clear when navigating from the TV menu. */
+/* Единый заголовок: избранное, список жанров и выдача выбранного жанра. */
+.home-main .section-title{grid-column:1/-1;color:var(--text);font-size:var(--home-poster);font-weight:600;line-height:1.4;letter-spacing:0}
+/* Название раздела светлее метаданных, но лаймовый остаётся сигналом фокуса.
+   Размер берём из общей шкалы постеров, ниже размера названия выбранного аниме. */
+.home-main .catalog-inspector:has(.section-title){row-gap:16px}
+.section-header{padding:40px 0 32px}
+.genres-main{scroll-padding-block-start:32px}
+.home-main .genre{font-size:var(--home-title);border-radius:var(--home-radius);background:var(--surface);font-weight:600;letter-spacing:-.02em}
+.home-main .genre:focus{background:var(--raised)}
+@media(max-width:1439px){.section-header{padding-top:32px}}
+@media(max-width:768px){.section-header{padding:24px 0}.home-main .genre{padding:24px}}
+
+/* Сетка задаётся экраном жанров; геометрия и motion — preset MediaCard landscape. */
+.genre-card-grid{--od-cols:4;--od-gap:var(--home-gap);align-items:start}
+@media(max-width:1439px){.genre-card-grid{--od-cols:3}}
+@media(max-width:1024px){.genre-card-grid{--od-cols:2}}
+@media(max-width:480px){.genre-card-grid{--od-cols:1}}
+
+/* UI Kit / AccountSummary: статичный профиль в тех же цветах, что пункты меню.
+   Не добавлять tabindex, hover/focus или cursor:pointer — это не действие.
+   Один квадрат без внешней подложки: инициалы по центру, фото заполняет его целиком.
+   Подпись в раскрытом меню стоит рядом с квадратом, на прозрачном фоне. */
+:root{--menu-item-surface:var(--color-accent-subtle);--account-avatar-size:calc(var(--rail) - var(--menu-pad)*2);--account-radius:var(--radius-card)}
+.home-shell{--menu-item-surface:var(--color-menu-control)}
+.shell .menu button[aria-current=page]{background:var(--menu-item-surface)}
+.shell .account-summary{display:flex;gap:16px;width:calc(var(--rail) - var(--menu-pad)*2);padding:0;border-radius:0;background:var(--color-transparent);color:var(--text);cursor:default;pointer-events:none}
+.shell .sidebar.is-expanded .account-summary{width:100%}
+.shell .account-summary .account-picture{display:grid;place-items:center;width:var(--account-avatar-size);height:var(--account-avatar-size);padding:0;border-radius:var(--account-radius);background:var(--menu-item-surface);color:var(--text);font-size:16px;flex:none}
+.account-picture>.account-initials,.account-picture>img{display:block;grid-area:1/1;border-radius:inherit}
+.account-picture>img{width:100%;height:100%;object-fit:cover;background:var(--menu-item-surface)}
+.account-summary .account-name{min-width:0;font-weight:600}
+
+/* UI Kit / MediaCard episode: общая рамка, масштаб и Flutter curves уже в .ui-media-card.
+   Вариант меняет только внутреннюю компоновку; без отдельной копии focus/keyframes.
+   --media-card-height позволяет задавать высоту; по умолчанию блок растёт с текстом. */
+.ui-media-card--episode{display:flex;align-items:center;gap:24px;min-height:112px;height:var(--media-card-height);padding:24px;background:var(--surface);text-align:left}
+.home-main .ui-media-card--episode:focus,.ui-media-card--episode:focus{background:var(--raised)}
+.media-card-number{display:block;flex:none;font-size:clamp(24px,2vw,36px);font-weight:600;line-height:1.2;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.media-card-copy{flex:1;min-width:0;--od-gap:4px}
+.media-card-label{font-size:var(--home-body,var(--body));font-weight:600;line-height:1.5;white-space:nowrap}
+.media-card-status{font-size:var(--home-caption,var(--small));line-height:1.5;color:var(--muted);white-space:nowrap}
+.ui-media-card--episode>.od-icon{color:var(--text);--od-icon-size:24px}
+/* ТВ: всегда три широких MediaCard в ряду; подпись идентична жанрам. */
+.episode-card-grid{--od-cols:3;--od-gap:var(--home-gap);align-items:stretch}
+.episode-picker{--od-cols:1;--od-gap:24px;padding:8px}
+/* Экран тайтла наследует цвета и отступы общей оболочки каталога.
+   Описание выводится полностью; метаданные только из существующей записи тайтла. */
+.detail-main{scroll-padding-block-start:32px}
+.detail-page{padding:40px var(--home-inset) 64px}
+/* Постер крупнее: нижний край примерно совпадает со строкой режиссёра.
+   Сохранять естественные пропорции; не задавать фиксированную высоту картинки. */
+.detail-intro{--detail-poster-width:280px;display:grid;grid-template-columns:var(--detail-poster-width) minmax(0,1fr);gap:48px;align-items:start}
+.detail-poster{width:100%;max-width:var(--detail-poster-width)}
+.detail-poster .od-media{width:100%;height:auto;border-radius:var(--home-radius)}
+.detail-overview{--od-gap:24px;min-width:0}
+/* Только отступ размещения; типографика целиком в общем .anime-title. */
+.detail-title{margin:0 0 32px}
+.detail-meta{--od-gap:24px;color:var(--muted);font-size:var(--home-body)}
+.detail-rating{display:flex;align-items:center;gap:8px;color:var(--text);--od-icon-size:24px}
+.detail-rating>span{color:var(--muted)}
+.detail-actions{margin:0;gap:16px}
+.home-main .detail-actions .btn.primary:focus{background:var(--color-accent-hover);color:var(--on-accent)}
+.detail-update{--od-gap:8px;margin-top:32px}
+.detail-update p{font-size:var(--home-body);font-weight:600;line-height:1.5}
+.detail-update .detail-publication-date{font-size:var(--home-caption);color:var(--muted);line-height:1.5}
+.detail-description{display:grid;gap:24px;margin-top:48px}
+.detail-page h2{font-size:var(--home-title);font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.detail-description p{max-width:72ch;color:var(--muted);font-size:var(--home-body);line-height:1.65;overflow-wrap:anywhere}
+.detail-credits{margin-top:32px}
+.detail-credits dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 40px;margin:0}
+.detail-credits .od-field{--od-gap:8px}
+.detail-credits dt{color:var(--muted);font-size:var(--home-caption);line-height:1.5}
+.detail-credits dd{margin:0;font-size:var(--home-body);line-height:1.5;overflow-wrap:anywhere}
+.detail-episodes{margin-top:48px}
+.detail-episodes .section-head{align-items:center;margin-bottom:32px}
+.detail-episodes .count{font-size:var(--home-caption);color:var(--muted)}
+@media(hover:hover){.home-main .ui-media-card--episode:hover{background:var(--raised)}}
+@media(max-width:1439px){.detail-intro{--detail-poster-width:240px;gap:32px}}
+@media(max-width:1024px){.detail-intro{--detail-poster-width:200px}.detail-credits dl{grid-template-columns:repeat(2,minmax(0,1fr))}.ui-media-card--episode{gap:16px;padding:20px}}
+@media(max-width:768px){.detail-intro{grid-template-columns:minmax(0,1fr)}.detail-poster{max-width:160px}.detail-page{padding-top:24px}.detail-description,.detail-episodes{margin-top:32px}.episode-card-grid{--od-cols:1}.detail-credits dl{grid-template-columns:minmax(0,1fr)}.detail-actions{display:grid;justify-items:start}.detail-actions .btn{white-space:normal}.detail-episodes .section-head{flex-wrap:wrap;gap:16px}.ui-media-card--episode{padding:20px;min-height:96px}}
+
+/* MetadataFilter: активные серые кнопки-фильтры, тот же .btn, что у избранного.
+   Обязательны native button, data-focus и общий фокус для навигации пультом.
+   Длинное имя режиссёра переносится целиком; контейнер растёт без обрезки. */
+.detail-filters{--od-gap:16px;align-items:stretch;margin-top:8px}
+.detail-page .metadata-chip{max-width:100%;min-height:56px;padding:12px 20px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-control);color:var(--text);font-size:var(--home-body);font-weight:600;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
+.home-main .detail-page .metadata-chip:focus{background:var(--raised);outline:3px solid var(--accent);outline-offset:6px}
+@media(hover:hover){.detail-page .metadata-chip:hover{background:var(--raised);color:var(--text)}}
+
+
+/* Шапка тайтла: сильный акцент — просмотр; фильтры на втором уровне иерархии.
+   Рейтинг не кнопка; год, жанры и режиссёр сохраняют общий MetadataFilter. */
+.detail-meta{--od-gap:16px;align-items:center}
+.detail-rating{gap:8px;min-height:56px;font-size:var(--home-title);font-variant-numeric:tabular-nums}
+.detail-rating>.od-icon{color:var(--accent);--od-icon-size:28px}
+.detail-rating>strong{font-weight:600;line-height:1.2}
+.detail-rating>span{font-size:var(--home-caption)}
+.detail-meta .metadata-chip{min-height:48px;padding:8px 16px;font-size:var(--home-body)}
+.detail-actions{margin-top:8px}
+.detail-actions .btn{min-height:64px}
+.detail-filter-row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:16px;align-items:start}
+.detail-filter-label{display:block;padding-top:12px;color:var(--muted);font-size:var(--home-caption);line-height:1.5}
+.detail-filter-row .od-cluster{--od-gap:12px}
+.detail-filter-row .metadata-chip{min-height:48px;padding:8px 16px;font-size:var(--home-caption);font-weight:400}
+@media(max-width:768px){.detail-filter-row{grid-template-columns:minmax(0,1fr);gap:8px}.detail-filter-label{padding-top:0}.detail-meta .metadata-chip{min-height:44px}.detail-filter-row .metadata-chip{min-height:44px}}
+
+/* Значок фильтра — часть общего MetadataFilter, не отдельная декорация экрана. */
+.detail-page .metadata-chip{gap:12px;text-align:left}
+.detail-page .metadata-chip>.od-icon{--od-icon-size:20px;flex:none}
+
+/* Общая панель выбранного тайтла: фон от меню до правого края.
+   Отступы принадлежат содержимому, а не наружному контейнеру панели.
+   Без отрицательных margin и перекрытия соседних областей layout. */
+.home-catalog:has(>.catalog-inspector){padding-inline:0}
+.home-catalog:has(>.catalog-inspector)>.catalog-inspector{padding-inline:var(--home-inset)}
+.home-catalog:has(>.catalog-inspector)>.home-grid-wrap,
+.home-catalog:has(>.catalog-inspector)>.catalog-pagination{padding-inline:var(--home-inset)}
+/* Фокус карточки выходит за её layout-границы (scale + outline).
+   Резервируем место внутри сетки, чтобы верхний ряд не попадал под sticky-панель.
+   Это не дополнительный padding панели: её верхний/нижний отступы остаются равными. */
+.home-catalog:has(>.catalog-inspector)>.home-grid-wrap{padding-block-start:var(--catalog-focus-clearance)}
+/* Лёгкий backdrop blur отделяет sticky-текст от проходящих под ним постеров.
+   Почти непрозрачная основа сохраняет контраст; без поддержки blur фон сплошной. */
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .home-main .catalog-inspector{background:var(--inspector-surface);backdrop-filter:blur(var(--inspector-blur));-webkit-backdrop-filter:blur(var(--inspector-blur))}
+}
+@media(prefers-reduced-transparency:reduce){
+  .home-main .catalog-inspector{background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+/* UI Kit / Shape: согласованные радиусы для всего приложения.
+   Карточки и аватар — --radius-card (12px); кнопки/фильтры/пункты меню —
+   --radius-control (10px). Малые значки — --radius-small (4px).
+   Для будущих ИИ: обязательно добавить эти значения в общий UI Kit Flutter
+   как Shape/Radius-токены: card=12, control=10, small=4, edge=0 (логические пиксели).
+   UIKit здесь означает наш общий набор компонентов приложения, не Apple UIKit.
+   Подключить токены в темы кнопок и полей, MediaCard, аватар, меню и диалоги;
+   для изображения, нижней подложки, clip и рамки фокуса использовать один radius.
+   Не задавать независимые BorderRadius.circular(...) с числами на отдельных экранах:
+   компоненты должны брать соответствующий токен UI Kit. Edge-панели остаются прямыми.
+   Значения согласованы пользователем; менять их централизованно, не по одному экрану.
+   Использовать эти токены, не копировать численные радиусы по экранам.
+   Изображение и подложка подписи MediaCard следуют --media-card-radius;
+   рамка фокуса рисуется по той же форме кнопки. Панели у края экрана прямые. */
+.side-sheet,.catalog-inspector{border-radius:var(--radius-edge)}
+
+/* UI Kit / WatchOrder: компактные ссылки на части франшизы, общие радиусы и фокус.
+   Полные названия переносятся; текущая карточка — статичный элемент с check. */
+.detail-watch-order{display:grid;gap:24px;margin-top:48px}
+.watch-order-list{--od-gap:16px;list-style:none;margin:0;padding:0}
+.watch-order-list>li{max-width:100%;min-width:0}
+.watch-order-link{display:flex;align-items:center;gap:12px;max-width:100%;min-height:56px;color:var(--text);text-decoration:none;border-radius:var(--radius-control);white-space:normal;font-size:var(--home-caption)}
+.watch-order-link>span{display:block;min-width:0;overflow-wrap:anywhere}
+.watch-order-link>.od-icon{--od-icon-size:24px}
+.watch-order-link.is-current{background:var(--raised);box-shadow:inset 0 0 0 1px var(--muted)}
+.watch-order-current{flex:none;white-space:nowrap;color:var(--muted);font-size:var(--home-caption);font-weight:400}
+@media(hover:hover){a.watch-order-link:hover,button.watch-order-link:hover{background:var(--raised)}}
+.watch-order-link:focus{background:var(--raised);outline:3px solid var(--accent);outline-offset:6px}
+
+/* InspectorMotion / AnimatedCrossFade: два текстовых слоя в одной ячейке grid.
+   Обычный поток сохраняет место; фон/блюр остаются за пределами анимации. */
+.inspector-transition{display:grid;min-width:0;align-items:start}
+.inspector-transition>.inspector-copy,.inspector-transition>.inspector-news{grid-area:1/1;min-width:0}
+.inspector-transition>[aria-hidden="true"]{pointer-events:none;user-select:none}
+
+/* TV Player: компоновка Flutter PlayerOverlay, внешний вид общего UI Kit.
+   Никакой экранной кнопки «К сериям»: на ТВ работает Back пульта.
+   Header / свободная область видео / controls занимают свои строки в normal flow. */
+:root{--player-safe:clamp(32px,4.4vw,80px);--player-control:64px;--player-gap:16px;--player-title:clamp(28px,2.1vw,40px);--player-body:clamp(18px,1.3vw,24px)}
+.tv-player{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:32px;padding:var(--player-safe);background:var(--color-player-bg);color:var(--text);overflow-y:auto;outline:none}
+.tv-player .player-top{display:block;min-width:0}
+.tv-player .player-top .od-field{text-align:left;gap:12px}
+.tv-player .player-title{font-size:var(--player-title);font-weight:600;line-height:1.25;letter-spacing:-.02em;overflow-wrap:anywhere}
+.tv-player .player-episode{font-size:var(--player-body);color:var(--color-player-muted);line-height:1.5}
+.tv-player .player-stage{display:block;min-height:0;padding:0}
+.tv-player .playback{width:100%;max-width:none;margin:0}
+.tv-player .timeline{display:block;width:100%;height:48px;margin:0 0 16px;padding:0;accent-color:var(--accent);cursor:pointer}
+.tv-player .timeline:focus{outline:3px solid var(--accent);outline-offset:8px;border-radius:var(--radius-small)}
+.tv-player .controls{display:flex;justify-content:space-between;align-items:center;gap:32px;margin:0;flex-wrap:wrap}
+.tv-player .transport{display:flex;align-items:center;gap:var(--player-gap);flex-wrap:wrap}
+.tv-player .player-control{position:relative;display:flex;width:var(--player-control);height:var(--player-control);min-height:var(--player-control);padding:16px;gap:0;border:0;background:var(--color-player-control);color:var(--color-player-text);border-radius:var(--radius-control);--od-icon-size:30px;transition:background-color var(--motion-fast) var(--motion-enter),transform var(--motion-fast) var(--motion-enter)}
+.tv-player .player-control .od-icon{--od-icon-size:30px}
+.tv-player .player-control[data-action=toggle]{background:var(--color-player-text);color:var(--color-player-on-light)}
+.tv-player .player-control:focus,.tv-player .player-quality:focus{outline:3px solid var(--accent);outline-offset:6px;background:var(--color-control-focus);color:var(--color-white)}
+.tv-player .player-control[data-action=toggle]:focus{background:var(--accent);color:var(--on-accent)}
+.tv-player .player-quality{min-height:var(--player-control);padding:12px 24px;border:0;background:var(--color-player-control);color:var(--color-player-text);font-size:var(--player-body);font-weight:600}
+.tv-player .player-time{display:flex;align-items:center;font-size:var(--player-body);font-variant-numeric:tabular-nums;margin-left:16px}
+.tv-player .player-time-total{color:var(--color-player-muted);white-space:pre}
+.tv-player .player-top,.tv-player .playback{opacity:1;visibility:visible;transition:opacity var(--motion-standard) var(--motion-enter),visibility 0s}
+.tv-player.controls-hidden .player-top,.tv-player.controls-hidden .playback{opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--motion-menu-exit) var(--motion-exit),visibility 0s var(--motion-menu-exit)}
+@media(hover:hover){.tv-player .player-control:not(:disabled):hover,.tv-player .player-quality:hover{background:var(--color-control-focus);color:var(--color-white)}}
+@media(max-width:1024px){:root{--player-safe:32px;--player-control:56px;--player-gap:12px}.tv-player .controls{gap:24px}.tv-player .player-time{margin-left:8px}}
+@media(max-width:600px){:root{--player-safe:24px;--player-control:48px;--player-gap:8px}.tv-player .player-time{font-size:16px}.tv-player .controls{gap:16px}.tv-player .player-control{padding:12px}.tv-player .player-title{font-size:24px}}
+@media(prefers-reduced-motion:reduce){.tv-player .player-top,.tv-player .playback,.tv-player .player-control{transition:none}}
+
+/* Тестовое видео по интернет-ссылке: полный кадр, без обрезки. Chrome лежит в той же
+   ячейке grid; его области остаются в нормальном потоке. Затемнение помогает
+   читать управление поверх светлого кадра, само видео не размывается. */
+.tv-player{display:grid;grid-template: minmax(0,1fr) / minmax(0,1fr);padding:0;gap:0;isolation:isolate}
+.tv-player>.player-video,.tv-player>.player-chrome{grid-area:1/1;min-width:0;min-height:0}
+.player-video{display:block;width:100%;height:100%;max-height:100dvh;object-fit:contain;background:var(--color-black)}
+.player-chrome{z-index:1;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:32px;padding:var(--player-safe);background:linear-gradient(to bottom,var(--color-player-shade-top),var(--color-transparent) 32%,var(--color-transparent) 54%,var(--color-player-shade-bottom));transition:background-color var(--motion-fast) var(--motion-enter)}
+.tv-player.controls-hidden .player-chrome{background:none}
+
+/* Как Flutter PlayerView: AnimatedOpacity(AppMotion.fast) скрывает ВЕСЬ overlay,
+   включая затемнение. Видео независимо от UI. inert/aria-hidden задаются в JS —
+   эквиваленты IgnorePointer + ExcludeFocus + ExcludeSemantics. */
+.tv-player .player-chrome{opacity:1;visibility:visible;transition:opacity var(--motion-fast) var(--motion-enter),visibility 0s}
+.tv-player.controls-hidden .player-chrome{opacity:0;visibility:hidden;background:linear-gradient(to bottom,var(--color-player-shade-top),var(--color-transparent) 32%,var(--color-transparent) 54%,var(--color-player-shade-bottom));pointer-events:none;transition:opacity var(--motion-fast) var(--motion-exit),visibility 0s var(--motion-fast)}
+.tv-player .player-top,.tv-player .playback,.tv-player.controls-hidden .player-top,.tv-player.controls-hidden .playback{opacity:1;visibility:visible;transition:none}
+@media(prefers-reduced-motion:reduce){.tv-player .player-chrome,.tv-player.controls-hidden .player-chrome{transition:none}}
+
+/* TV Login / UI Kit: палитра каталога, общие радиусы/фокус/движение.
+   Не добавлять HEX и копии цветов: новые роли идут только в AppColors выше.
+   Без рекламного баннера и технических текстов; форма стоит в normal flow. */
+.tv-login{--bg:var(--color-catalog-bg);--surface:var(--color-catalog-surface);--raised:var(--color-catalog-raised);--line:var(--color-catalog-border);--text:var(--color-catalog-text);--muted:var(--color-catalog-muted);--login-text:clamp(20px,1.6vw,28px);--login-control:80px;display:grid;grid-template-columns:minmax(240px,1fr) minmax(480px,600px);gap:clamp(64px,8vw,160px);align-items:center;min-height:100dvh;max-width:none;margin:0;padding:clamp(48px,7.4vw,144px);background:var(--bg);color:var(--text)}
+.tv-login .login-copy{display:grid;place-items:center;min-width:0}
+.tv-login .login-copy .brand{display:flex;flex-direction:column;gap:24px;align-items:center;margin:0;font-size:clamp(32px,2.6vw,48px);font-weight:600;letter-spacing:-.02em}
+.tv-login .brand img{width:clamp(120px,12vw,224px);height:auto}
+.tv-login .brand span{display:block}
+.tv-login .brand em{color:var(--accent)}
+.tv-login .login-form{display:block;min-width:0;width:100%;margin:0;padding:0;background:none;border:0;border-radius:0}
+.tv-login .login-form h1{margin:0 0 40px;font-size:clamp(32px,2.5vw,48px);font-weight:600;line-height:1.25;letter-spacing:-.02em}
+.tv-login .field{display:grid;gap:12px;margin:0 0 24px}
+.tv-login .field label{display:block;color:var(--text);font-size:var(--login-text);font-weight:600;line-height:1.5}
+.tv-login .field input{display:block;min-width:0;width:100%;min-height:var(--login-control);padding:16px 24px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-control);font-size:var(--login-text);line-height:1.5;caret-color:var(--accent);transition:border-color var(--motion-fast) var(--motion-enter),background-color var(--motion-fast) var(--motion-enter)}
+.tv-login .field input:focus{background:var(--raised);border-color:var(--accent);outline:3px solid var(--accent);outline-offset:6px}
+.tv-login .field input[aria-invalid=true]{border-color:var(--danger)}
+.tv-login .password-field{display:grid;grid-template-columns:minmax(0,1fr) var(--login-control);gap:16px;align-items:stretch}
+.tv-login .password-visibility{display:flex;align-items:center;justify-content:center;min-width:0;width:100%;min-height:var(--login-control);margin:0;padding:16px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:var(--radius-control);--od-icon-size:28px}
+.tv-login .password-visibility:focus{color:var(--text);background:var(--raised);outline:3px solid var(--accent);outline-offset:6px}
+.tv-login .field .error{display:block;color:var(--danger);font-size:clamp(18px,1.25vw,24px);line-height:1.5}
+.tv-login .error:empty{display:none}
+.tv-login .login-actions{--od-gap:16px;margin-top:32px}
+.tv-login .login-actions .btn{width:100%;min-height:var(--login-control);margin:0;padding:16px 24px;font-size:var(--login-text);font-weight:600;white-space:normal;text-align:center;line-height:1.5}
+.tv-login .login-actions .primary{color:var(--on-accent);background:var(--accent);border-color:var(--accent)}
+.tv-login .login-actions .primary:focus{background:var(--color-accent-hover)}
+.tv-login .login-guest{background:none;border-color:var(--color-transparent);color:var(--muted)}
+.tv-login .login-guest:focus{color:var(--text);background:var(--surface)}
+.tv-login .login-actions .btn[aria-disabled=true]{cursor:wait}
+.tv-login .error-summary{margin:0 0 24px;padding:16px 24px;border:1px solid var(--danger);border-radius:var(--radius-control);color:var(--text);font-size:20px;line-height:1.5}
+.tv-login .error-summary a{display:inline-flex;margin-right:16px;color:var(--danger);padding:8px 0}
+@media(hover:hover){.tv-login .password-visibility:hover,.tv-login .login-guest:hover{background:var(--raised);color:var(--text)}}
+@media(max-width:1100px){.tv-login{--login-control:72px;padding:64px;gap:64px;grid-template-columns:minmax(160px,1fr) minmax(400px,520px)}}
+@media(max-width:768px){.tv-login{--login-control:64px;grid-template-columns:minmax(0,1fr);gap:40px;padding:40px 32px;align-content:center}.tv-login .login-copy .brand{flex-direction:row;gap:16px;font-size:28px}.tv-login .brand img{width:64px}.tv-login .login-form{max-width:560px;justify-self:center}.tv-login .login-form h1{font-size:32px;margin-bottom:32px}}
+@media(max-width:480px){.tv-login{padding:32px 24px;gap:32px}.tv-login .password-field{gap:12px}.tv-login .field input{padding:12px 16px}}
+@media(prefers-reduced-motion:reduce){.tv-login .field input{transition:none}}
+
+/* UI Kit / Feedback: существующие AppColors, Lucide и кнопки. Никаких кодов
+   исключений в интерфейсе. Ошибка живёт до повтора, а не исчезает как toast. */
+.tv-player .player-stage{display:grid;place-items:center;min-width:0;padding:24px}
+.playback-feedback{display:flex;flex-direction:column;align-items:center;text-align:center;gap:24px;width:min(100%,760px);padding:32px;color:var(--color-player-text)}
+.playback-feedback>.od-icon{--od-icon-size:48px;color:var(--muted)}
+.playback-feedback h2{font-size:clamp(28px,2.2vw,40px);font-weight:600;line-height:1.25;letter-spacing:-.02em}
+.playback-feedback p{max-width:48ch;font-size:var(--player-body);line-height:1.6;color:var(--color-player-muted)}
+.playback-failure .btn{min-width:240px;margin-top:8px;font-size:var(--player-body)}
+.tv-player.has-video-error .player-video{visibility:hidden}
+.tv-player.has-video-error .playback{visibility:hidden;pointer-events:none}
+.tv-player.has-video-error .player-chrome{background:var(--color-player-bg)}
+.playback-wait{gap:16px;background:var(--color-player-shade-top);border-radius:var(--radius-card);width:auto;max-width:100%}
+.playback-wait>.od-icon{color:var(--accent);animation:playback-loading 1s linear infinite}
+@keyframes playback-loading{to{transform:rotate(360deg)}}
+.tv-login .auth-feedback:empty{display:none}
+.tv-login .auth-feedback{display:flex;align-items:flex-start;gap:16px;margin:8px 0 24px;padding:20px 24px;background:var(--surface);border:1px solid var(--danger);border-radius:var(--radius-control);color:var(--text)}
+.tv-login .auth-feedback>.od-icon{--od-icon-size:24px;color:var(--danger);margin-top:4px}
+.tv-login .auth-feedback p{margin:0;font-size:clamp(18px,1.25vw,24px);line-height:1.6;overflow-wrap:anywhere}
+@media(max-height:650px){.playback-feedback{padding:16px;gap:16px}.playback-feedback>.od-icon{--od-icon-size:32px}.tv-player .player-stage{padding:8px}}
+@media(prefers-reduced-motion:reduce){.playback-wait>.od-icon{animation:none}}
+
+/* CatalogFeedback / UI Kit: общий вид ошибки и пустой выдачи без вложенных
+   карточек. Название жанра сверху, сообщение и действие в центре области.
+   Для будущих ИИ: renderer catalogFeedback() в app.js, сценарии описаны рядом.
+   Переиспользовать AppColors, --home-title/--home-body, .btn и Lucide icon().
+   Не заводить отдельные цвета/фокус/радиусы для «Вампиров» и «Детектива».
+   В Flutter вынести в единый виджет состояния каталога с параметрами
+   title/message/icon/actions/loading; логика запроса остаётся в репозитории. */
+.catalog-state-page{display:flex;flex-direction:column;min-height:100%;gap:32px}
+.catalog-feedback{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:24px;width:min(100%,800px);margin-inline:auto;padding:48px 24px;text-align:center;color:var(--text)}
+.catalog-feedback>.od-icon{--od-icon-size:48px;color:var(--muted)}
+.catalog-feedback[aria-busy=true]>.od-icon{color:var(--accent);animation:playback-loading 1s linear infinite}
+.home-main .catalog-feedback h2{font-size:var(--home-title);font-weight:600;line-height:1.25;letter-spacing:-.02em}
+.catalog-feedback p{max-width:48ch;color:var(--muted);font-size:var(--home-body);line-height:1.6}
+.catalog-feedback-actions{--od-gap:16px;justify-content:center;margin-top:8px}
+.catalog-feedback-actions .btn{font-size:var(--home-body);white-space:normal;min-height:64px}
+.catalog-feedback-actions .btn[aria-disabled=true]{cursor:wait}
+@media(max-width:768px){.catalog-feedback{padding:32px 8px}.catalog-feedback-actions{flex-direction:column;align-items:stretch;width:100%}}
+@media(prefers-reduced-motion:reduce){.catalog-feedback[aria-busy=true]>.od-icon{animation:none}}
+
+/* Временная точка входа для проверки appExitSheet: удалить при переносе во Flutter.
+   Внешний вид логотипа сохранён, тестовое действие доступно мышью и пультом. */
+.shell .sidebar .brand-exit-trigger{pointer-events:auto;padding:0;border:0;border-radius:var(--radius-control);background:var(--color-transparent);width:fit-content;max-width:100%;color:var(--text)}
+.shell .sidebar .brand-exit-trigger:focus{outline:3px solid var(--accent);outline-offset:6px}
+
+/* PlayerChoices: текущая серия отличается от focus; карточка и её анимация общие. */
+.episode-picker .episode-current-mark{position:absolute;top:12px;right:12px;display:flex;align-items:center;justify-content:center;padding:8px;border-radius:var(--radius-small);background:var(--color-badge-bg);color:var(--accent);--od-icon-size:24px;pointer-events:none}
+
+/* UI Kit / CatalogSort: единая кнопка в выдаче любого CatalogFilter, палитра
+   и фокус общие. Вложена в общий заголовок; не перекрывает текст инспектора. */
+.browse-heading{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:24px;min-width:0}
+.browse-heading>.section-title{flex:1;min-width:0}
+.home-main .browse-sort-button{min-height:48px;max-width:100%;padding:8px 16px;font-size:var(--home-caption);font-weight:400;white-space:normal;text-align:left;--od-icon-size:24px}
+.browse-sort-button>span{display:block;overflow-wrap:anywhere}
+.browse-sort-draft{display:grid;gap:24px;min-width:0}
+.sort-criteria{--od-gap:12px}
+.browse-sort-draft .od-stack{--od-gap:12px}
+.browse-sort-draft .sheet-option{min-height:56px;padding:12px 16px;font-size:clamp(18px,1.25vw,24px);line-height:1.5}
+.browse-sort-draft .sheet-option>span{display:block;overflow-wrap:anywhere}
+.sort-order-title{margin-top:8px;font-size:24px;font-weight:600;line-height:1.4;color:var(--text)}
+.sort-panel-actions{margin-top:8px}
+.sort-panel-actions .btn{min-height:56px;font-size:clamp(18px,1.25vw,24px)}
+@media(max-width:768px){.browse-heading{gap:16px;align-items:flex-start;flex-direction:column}}
+
+/* CatalogSort / ChoiceRow: check и подпись всегда слева, расстояние — общий шаг.
+   Пустое место под check сохраняет одинаковое начало текста у ВСЕХ вариантов. */
+.browse-sort-draft .sort-choice{display:grid;grid-template-columns:24px minmax(0,1fr);justify-content:start;align-items:center;gap:16px;width:100%;text-align:left}
+.browse-sort-draft .sort-choice-mark{display:flex;align-items:center;justify-content:center;width:24px;min-height:24px;--od-icon-size:24px}
+.browse-sort-draft .sort-choice-label{display:block;min-width:0;text-align:left;overflow-wrap:anywhere}

@@ -65,7 +65,7 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "lib/packages/ui_kit/assets/images/anistar_launcher.png"
-  adaptive_icon_background: "#080B14"
+  adaptive_icon_background: "#101214"
   adaptive_icon_foreground: "lib/packages/ui_kit/assets/images/anistar_launcher.png"
   adaptive_icon_foreground_inset: 18
   min_sdk_android: 21

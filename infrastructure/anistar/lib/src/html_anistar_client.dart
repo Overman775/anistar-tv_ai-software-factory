@@ -99,6 +99,7 @@ final class HtmlAnistarClient implements AnistarClient {
         AnistarClientErrorCategory.timeout => 'Превышено время ожидания ответа сервера.',
         AnistarClientErrorCategory.connection => 'Не удалось подключиться к серверу.',
         AnistarClientErrorCategory.server => 'Сервер временно недоступен.',
+        AnistarClientErrorCategory.invalidCredentials => 'Вход не выполнен. Проверьте логин и пароль.',
         AnistarClientErrorCategory.request => switch (error.response?.statusCode) {
           403 => 'AniStar отклонил запрос или требует проверку браузера. Попробуйте другое зеркало.',
           400 || 422 => 'Сервер не принял параметры запроса.',

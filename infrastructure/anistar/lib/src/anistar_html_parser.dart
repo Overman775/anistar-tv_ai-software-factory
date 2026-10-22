@@ -5,6 +5,7 @@ import 'package:json5/json5.dart';
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'contract/anistar_anime_details_dto.dart';
+import 'contract/anistar_anime_part_dto.dart';
 import 'contract/anistar_anime_summary_dto.dart';
 import 'contract/anistar_catalog_filter_dto.dart';
 import 'contract/anistar_catalog_page_dto.dart';
@@ -52,7 +53,8 @@ final class AnistarHtmlParser {
 
   AnistarAnimeDetailsDto details(String source, String slug) {
     final document = _document(source);
-    final title = document.querySelector('h1[itemprop="name"]')?.text.trim();
+    final titleElement = document.querySelector('h1[itemprop="name"]');
+    final title = titleElement?.text.trim();
     final head = document.querySelector('ul.head');
     if (title == null || title.isEmpty || head == null) {
       throw const AnistarFailure(message: 'Не удалось разобрать карточку AniStar. Возможно, сайт изменился.');
@@ -60,6 +62,11 @@ final class AnistarHtmlParser {
     final id = int.parse(slug.split('-').first);
     final genres = _metadata(head, 'Жанр');
     final category = document.querySelector('.ful-cat, .tags')?.text.toLowerCase() ?? '';
+    var header = titleElement?.parent;
+    while (header != null && !header.classes.contains('news_header')) {
+      header = header.parent;
+    }
+    final rating = header?.querySelector('.rating');
 
     return AnistarAnimeDetailsDto(
       id: id,
@@ -74,8 +81,13 @@ final class AnistarHtmlParser {
           const [],
       voiceover: _metadata(head, 'Озвучка'),
       seriesInfo: _metadata(head, 'Серии'),
-      description: document.querySelector('.descripts')?.text.trim(),
+      description: _description(document.querySelector('.news_text .descripts, .descripts')),
       isOngoing: category.contains('новинки') || category.contains('онгоинг'),
+      rating: rating == null ? null : _rating(rating),
+      director: _metadata(head, 'Режиссёр') ?? _metadata(head, 'Режиссер'),
+      updateMessage: _text(document.querySelector('.reason')),
+      publicationDate: _text(document.querySelector('.date-icon')),
+      parts: _parts(document),
     );
   }
 
@@ -131,7 +143,7 @@ final class AnistarHtmlParser {
     final labels = <String>{};
     final result = <AnistarCatalogFilterDto>[];
     for (final link in links) {
-      final uri = _uri(link.attributes['href']);
+      final uri = _catalogUri(link.attributes['href']);
       final label = link.text.trim();
       if (uri == null ||
           uri.origin != baseUri.origin ||
@@ -145,11 +157,17 @@ final class AnistarHtmlParser {
           uri.path != '/new/' &&
           uri.path != '/anime/' &&
           !uri.path.startsWith('/anime/') &&
-          !uri.path.startsWith('/filter/janrs/')) {
+          !uri.path.startsWith('/filter/')) {
         continue;
       }
       if (paths.add(uri.path) && labels.add(label.toLowerCase())) {
-        result.add(AnistarCatalogFilterDto(label: label, path: uri.path));
+        result.add(
+          AnistarCatalogFilterDto(
+            label: label,
+            path: uri.path,
+            imageUri: _uri(link.querySelector('img')?.attributes['src']),
+          ),
+        );
       }
     }
 
@@ -172,6 +190,7 @@ final class AnistarHtmlParser {
     if (title.isEmpty) {
       return null;
     }
+    final head = card.querySelector('ul.head');
 
     return AnistarAnimeSummaryDto(
       id: id,
@@ -180,6 +199,11 @@ final class AnistarHtmlParser {
       slug: uri.pathSegments.last.replaceFirst(RegExp(r'\.html$'), ''),
       title: title,
       posterUri: _uri(card.querySelector('img[itemprop="image"], .poster img')?.attributes['src']),
+      year: head == null ? null : _metadata(head, 'Год выпуска'),
+      genreText: head == null ? null : _metadata(head, 'Жанр'),
+      description: _description(card.querySelector('.news_text .descripts, .descripts')),
+      updateMessage: _text(card.querySelector('.reason')),
+      publicationDate: _text(card.querySelector('.date-icon')),
     );
   }
 
@@ -192,6 +216,77 @@ final class AnistarHtmlParser {
     final rating = double.tryParse((raw ?? '').trim().replaceAll(',', '.'));
 
     return rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null;
+  }
+
+  String? _text(Element? element) {
+    final value = element?.text.trim();
+
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String? _description(Element? element) {
+    final copy = element?.clone(true);
+    if (copy == null) {
+      return null;
+    }
+    for (final node in copy.querySelectorAll('.title_spoiler, .text_spoiler, .reason, script, style')) {
+      node.remove();
+    }
+
+    return _text(copy);
+  }
+
+  List<AnistarAnimePartDto> _parts(Document document) {
+    final result = <AnistarAnimePartDto>[];
+    for (final title in document.querySelectorAll('.news_text .title_spoiler')) {
+      final heading = title.text.trim().toLowerCase();
+      if (!heading.contains('в каком порядке') && !heading.contains('серия состоит из')) {
+        continue;
+      }
+      final content = title.nextElementSibling;
+      if (content == null || !content.classes.contains('text_spoiler')) {
+        continue;
+      }
+      for (final link in content.querySelectorAll('a[href]')) {
+        final label = _text(link);
+        final uri = _uri(link.attributes['href']);
+        if (label == null || uri == null) {
+          continue;
+        }
+        final safe =
+            uri.scheme == 'https' &&
+            uri.origin == baseUri.origin &&
+            uri.userInfo.isEmpty &&
+            !uri.hasQuery &&
+            !uri.hasFragment &&
+            !RegExp('%(?:2f|5c|2e|25)', caseSensitive: false).hasMatch(uri.path);
+        final match = safe ? RegExp(r'^/(\d+)-[^/]*\.html$').firstMatch(uri.path) : null;
+        final id = int.tryParse(match?.group(1) ?? '');
+        result.add(
+          AnistarAnimePartDto(
+            label: label,
+            uri: uri,
+            id: id != null && id > 0 ? id : null,
+            slug: id != null && id > 0 ? uri.path.substring(1, uri.path.length - 5) : null,
+          ),
+        );
+      }
+    }
+
+    return List.unmodifiable(result);
+  }
+
+  Uri? _catalogUri(String? value) {
+    final raw = Uri.tryParse(value?.trim() ?? '');
+    if (raw == null || raw.path.split('/').any((segment) => segment == '.' || segment == '..')) {
+      return null;
+    }
+    final uri = _uri(value);
+    if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.origin != baseUri.origin) {
+      return null;
+    }
+
+    return uri;
   }
 
   void _checkChallenge(String source) {
@@ -266,7 +361,9 @@ final class AnistarHtmlParser {
     for (final line in head.querySelectorAll('li')) {
       final text = line.text.trim();
       if (text.startsWith('$name:')) {
-        return text.substring(name.length + 1).trim();
+        final value = text.substring(name.length + 1).trim();
+
+        return value.isEmpty ? null : value;
       }
     }
 

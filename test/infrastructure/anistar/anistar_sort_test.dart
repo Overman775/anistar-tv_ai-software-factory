@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anistar/anistar.dart';
 import 'package:anistar/html.dart';
 import 'package:dio/dio.dart';
@@ -30,7 +32,12 @@ void main() {
         final sort = AnistarCatalogSort(criterion, ascending: ascending);
         final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));
         addTearDown(() => dio.close(force: true));
-        for (final path in ['/comedy/', '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/']) {
+        for (final path in [
+          '/comedy/',
+          '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/',
+          '/filter/year/2023/',
+          '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/',
+        ]) {
           final html = _html(sort);
           final adapter = HtmlFixtureAdapter({path: html, '${path}page/2/': html});
           dio.httpClientAdapter = adapter;
@@ -87,6 +94,78 @@ void main() {
     await client.catalog(1);
     expect(adapter.requests.last.headers['Cookie'], before);
   });
+
+  for (final path in ['/filter/year/2023/', '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/']) {
+    test('xfsearch $path rejects unconfirmed order without issuing a fallback request', () async {
+      final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));
+      addTearDown(() => dio.close(force: true));
+      const sort = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
+      for (final html in [
+        catalogHtml,
+        _html(const AnistarCatalogSort(AnistarSortCriterion.date)),
+        _html(const AnistarCatalogSort(AnistarSortCriterion.title)),
+      ]) {
+        final adapter = HtmlFixtureAdapter({path: html});
+        dio.httpClientAdapter = adapter;
+        await expectLater(
+          createTestAnistarClient(dio).catalog(1, filterPath: path, sort: sort),
+          throwsA(isA<AnistarClientException>()),
+        );
+        expect(adapter.requests, hasLength(1));
+      }
+    });
+
+    test('xfsearch $path keeps account cookies and ignores an old generation response', () async {
+      final origin = Uri.parse('https://v30.astar.bz/');
+      final session = AnistarSession(origin, MemorySecureStorage());
+      addTearDown(session.close);
+      await session.saveCookies(origin, ['dle_user_id=42; Path=/', 'dle_sort_xfsearch=rating; Path=/'], 0);
+      final firstGeneration = session.generation;
+      await session.authenticate('first', firstGeneration);
+      final gate = Completer<void>();
+      final arrived = Completer<void>();
+      final dio = Dio(BaseOptions(baseUrl: origin.toString()));
+      addTearDown(() => dio.close(force: true));
+      dio.interceptors.add(AnistarSessionInterceptor(session));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.uri.path == path) {
+              arrived.complete();
+              unawaited(gate.future.then((_) => handler.next(options)));
+            } else {
+              handler.next(options);
+            }
+          },
+        ),
+      );
+      const sort = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
+      final adapter = HtmlFixtureAdapter(
+        {path: _html(sort), '/anime/': catalogHtml},
+        responseHeaders: {
+          'set-cookie': ['dle_user_id=42; Path=/', 'dle_sort_xfsearch=title; Path=/'],
+        },
+      );
+      dio.httpClientAdapter = adapter;
+      final client = createTestAnistarClient(dio, session: session);
+      final pending = client.catalog(1, filterPath: path, sort: sort);
+      await arrived.future;
+      await session.clear();
+      final nextGeneration = session.generation;
+      await session.saveCookies(origin, ['dle_user_id=99; Path=/'], nextGeneration);
+      await session.authenticate('second', nextGeneration);
+      gate.complete();
+      await expectLater(pending, throwsA(isA<AnistarClientException>()));
+      final header = await session.cookieHeader(origin);
+      expect(session.account, 'second');
+      expect(header, contains('dle_user_id=99'));
+      expect(header, isNot(contains('dle_user_id=42')));
+      expect(header, isNot(contains('dle_sort_xfsearch')));
+      final sent = adapter.requests.single.headers['Cookie'];
+      expect(sent, contains('dle_sort_xfsearch=title'));
+      expect(sent, isNot(contains('dle_sort_cat=')));
+    });
+  }
 
   test('unchanged indicator, changed direction and absent sort form are errors, never fallback results', () async {
     final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));

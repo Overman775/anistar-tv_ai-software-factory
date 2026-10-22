@@ -39,7 +39,7 @@ void main() {
       );
       final clip = tester.widget<ClipRRect>(find.descendant(of: tile, matching: find.byType(ClipRRect)));
       final outline = _requireBoxDecoration(surface.foregroundDecoration);
-      expect(scale.scale, variant == TvFocusTileVariant.card ? 1.035 : 1);
+      expect(scale.scale, variant == TvFocusTileVariant.card ? 1.025 : 1);
       expect(scale.duration, AppMotion.fast);
       expect(surface.duration, AppMotion.fast);
       expect(tester.getSize(content), before);
@@ -101,8 +101,8 @@ void main() {
     final surface = tester.widget<AnimatedContainer>(
       find.descendant(of: selected, matching: find.byType(AnimatedContainer)),
     );
-    expect(_requireBoxDecoration(surface.decoration).color, AppPalette.surfaceElevated);
-    expect(find.descendant(of: selected, matching: find.byIcon(Icons.check)), findsOneWidget);
+    expect(_requireBoxDecoration(surface.decoration).color, AppPalette.accentSubtle);
+    expect(find.descendant(of: selected, matching: find.byType(AppIcon)), findsOneWidget);
     expect(second.hasFocus, isTrue);
     expect(tester.widgetList<AnimatedScale>(find.byType(AnimatedScale)).every((scale) => scale.scale == 1), isTrue);
   });
@@ -165,13 +165,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    final heroes = tester.widgetList<Hero>(find.byType(Hero));
     expect(
-      tester.widgetList<ClipRRect>(find.byType(ClipRRect)).every((clip) => clip.borderRadius == AppRadii.large),
+      heroes.every((hero) => hero.child is ClipRRect && (hero.child as ClipRRect).borderRadius == AppRadii.large),
       isTrue,
     );
     expect(find.byType(AppNetworkImage), findsNWidgets(2));
     expect(find.byType(Image), findsNothing);
-    for (final hero in tester.widgetList<Hero>(find.byType(Hero))) {
+    for (final hero in heroes) {
       final element = tester.element(find.byWidget(hero));
       final flight = hero.flightShuttleBuilder ?? (throw StateError('Missing Hero flight builder'));
       final shuttle = flight(element, const AlwaysStoppedAnimation(0.5), HeroFlightDirection.push, element, element);

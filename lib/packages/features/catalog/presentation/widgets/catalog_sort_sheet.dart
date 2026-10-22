@@ -43,7 +43,12 @@ class _CatalogSortSheetState extends State<CatalogSortSheet> {
 
       return KeyEventResult.handled;
     }
-    if (![LogicalKeyboardKey.arrowUp, LogicalKeyboardKey.arrowDown, LogicalKeyboardKey.arrowRight].contains(key)) {
+    if (![
+      LogicalKeyboardKey.arrowUp,
+      LogicalKeyboardKey.arrowDown,
+      LogicalKeyboardKey.arrowRight,
+      LogicalKeyboardKey.arrowLeft,
+    ].contains(key)) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
@@ -70,6 +75,7 @@ class _CatalogSortSheetState extends State<CatalogSortSheet> {
   @override
   Widget build(BuildContext context) => AppActionSheet(
     title: 'Сортировка',
+    closeOnLeft: false,
     child: Focus(
       canRequestFocus: false,
       onKeyEvent: _handleKey,

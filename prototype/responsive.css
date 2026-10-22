@@ -1,0 +1,347 @@
+/* AniStar / AdaptiveLayout — мобильное расширение существующего UI Kit.
+   Impeccable adapt: перестраивать взаимодействие, а не уменьшать ТВ-экран.
+   ИСТОЧНИКИ: цвета/градиент/радиусы/AppMotion/MediaCard — app.css;
+   данные, route, история, избранное, ошибки, запросы — общие в app.js.
+   Для будущих ИИ: НЕ переносить сюда копию палитры или телевизионных компонентов.
+   >=1024px: этот файл только скрывает дополнительный handheld chrome.
+   <=1023px: компактная оболочка; <=767px: телефон; 768–1023px: планшет.
+   Flutter: перенести эти ограничения в общий AdaptiveScaffold UI Kit, учитывая
+   TV-платформу отдельно от ширины. Малое разрешение ТВ не означает телефон.
+   Без отдельной папки/мобильной базы данных/роутера. */
+.touch-only,.compact-header,.compact-nav{display:none}
+
+@media(max-width:1023px){
+  :root{
+    /* Только размеры адаптива; все цвета и формы наследуются из AppColors/Shape. */
+    --compact-inset:24px;
+    --compact-gap:16px;
+    --compact-control:48px;
+    --compact-nav-height:72px;
+    --compact-title:24px;
+    --compact-body:16px;
+    --compact-caption:16px;
+    --compact-sheet-max:92dvh;
+  }
+  html,body{height:100%;font-size:16px}
+  body{font-size:var(--compact-body);line-height:1.5}
+  button,a,input{touch-action:manipulation;-webkit-tap-highlight-color:var(--color-transparent)}
+  input{caret-color:var(--accent)}
+  .touch-only{display:inline-flex}
+  /* Main и нижняя навигация занимают свои строки grid. JS помещает header
+     внутрь main для sticky/scroll-away; пустая первая auto-строка схлопывается.
+     Safe area сверху принадлежит shell и остаётся при скрытой шапке. */
+  .shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;height:100dvh;min-height:0;padding-top:env(safe-area-inset-top);background:var(--color-menu-bg-catalog)}
+  .shell>.sidebar,.shell>.menu-scrim{display:none}
+  .compact-header{grid-row:1;display:flex;align-items:center;gap:16px;min-width:0;padding:8px max(var(--compact-inset),env(safe-area-inset-right)) 8px max(var(--compact-inset),env(safe-area-inset-left));background:var(--color-menu-bg-catalog);color:var(--text)}
+  .compact-header .brand{display:flex;flex:none;margin:0;padding:0}
+  .compact-header .brand img{width:40px;height:auto}
+  .compact-header .brand>span{display:none}
+  .compact-heading{display:block;flex:1;min-width:0;font-size:20px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+  /* Общий ContextHeading: 2 строки + многоточие, название в данных полное.
+     Обычный текст для карточки/жанров/года/режиссёра, без раскрытия по тапу.
+     Не заменять на обрезание строки в JS или title-only подсказку для мыши. */
+  .compact-heading-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+  .compact-header .btn{min-width:var(--compact-control);min-height:var(--compact-control);padding:8px;background:none;border:0;gap:8px;--od-icon-size:24px}
+  .compact-header .compact-account{flex:none;margin-left:auto}
+  .compact-back>span{display:none}
+  .compact-nav{grid-row:3;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;min-height:var(--compact-nav-height);padding:8px max(16px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));background:var(--color-menu-bg-catalog)}
+  .compact-nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-width:0;min-height:56px;padding:4px 8px;border-radius:var(--radius-control);color:var(--muted);--od-icon-size:24px}
+  .compact-nav button>span{display:block;font-size:14px;font-weight:600;line-height:1.5;white-space:nowrap}
+  .compact-nav button[aria-current=page]{background:var(--color-menu-control);color:var(--accent)}
+  .shell>.main{grid-row:2;min-height:0;min-width:0;scroll-padding-block:16px;scroll-padding-block-start:var(--compact-scroll-padding,16px);outline:none}
+  /* FloatingHeader: тот же title/back/account, только для compact viewport.
+     Вход — AppMotion.fast, уход — общий короткий exit; только transform/opacity.
+     Не скрывать через display:none/height:0: это меняет viewport и дёргает список. */
+  .main>.compact-header{position:sticky;top:0;z-index:4;transform:translateY(0);opacity:1;transition:transform var(--motion-fast) var(--motion-enter),opacity var(--motion-fast) var(--motion-enter)}
+  .main>.compact-header.is-scroll-hidden{transform:translateY(-100%);opacity:0;pointer-events:none;transition-duration:var(--motion-focus-exit);transition-timing-function:var(--motion-exit)}
+  .home-shell{--home-inset:var(--compact-inset);--home-gap:var(--compact-gap);--home-title:var(--compact-title);--home-body:var(--compact-body);--home-caption:var(--compact-caption);--home-poster:16px;--catalog-focus-clearance:8px}
+  .home-main .btn,.btn{min-height:var(--compact-control);padding:12px 16px;gap:8px;font-size:16px;font-weight:600;line-height:1.5}
+  .btn>.od-icon{--od-icon-size:24px}
+  .home-catalog{padding:24px var(--home-inset) 32px}
+  /* На handheld нет смены описания по hover/фокусу. Полные сведения доступны
+     обычным тапом в detail; все поля и исходные строки сайта остаются в данных.
+     Сортировка browse остаётся видимой и не зависит от скрытого inspector-copy. */
+  .home-main .catalog-inspector{position:static;display:block;margin:0;padding:0 0 24px;min-height:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .home-main .catalog-inspector>.inspector-copy,
+  .home-main .catalog-inspector>.inspector-news,
+  .home-main .catalog-inspector>.inspector-transition{display:none}
+  .home-main .catalog-inspector:not(:has(.browse-heading)){display:none}
+  .home-catalog:has(>.catalog-inspector){padding-top:24px}
+  .home-catalog:has(>.catalog-inspector)>.home-grid-wrap{padding-top:8px}
+  .home-main .favorites-catalog .section-header,.genres-catalog>.section-header{display:none}
+  .home-grid-wrap .poster-grid,.home-grid{--od-cols:4;--od-gap:24px 16px}
+  .genre-card-grid{--od-cols:3;--od-gap:16px}
+  .ui-media-card{--media-card-title-size:16px;--media-card-caption-pad:48px 12px 12px}
+  .ui-media-card--landscape{--media-card-caption-pad:32px 12px 12px}
+  .home-main .anime-card .poster-title{font-size:16px;line-height:1.4}
+  .ui-media-card:focus,.home-main .ui-media-card:focus{transform:none;outline-offset:3px}
+  .ui-media-card:active{transform:none}
+  .home-main .section-title{font-size:var(--compact-title)}
+  .browse-heading{flex-direction:row;align-items:center;gap:16px}
+  /* Заголовок любого CatalogFilter уже в compactHeader(): жанр/год/режиссёр.
+     Скрываем только повтор #browse-title; сортировка и состояния остаются доступны.
+     ТВ-заголовки не затрагивать, не скрывать целиком .browse-heading. */
+  .browse-heading>.section-title{display:none}
+  .home-main .browse-sort-button{font-size:16px;min-height:48px;gap:8px;max-width:100%;padding:12px 16px}
+  .section-header{padding:0 0 24px}
+  .catalog-pagination{padding-top:24px;font-size:16px}
+  .catalog-status,.catalog-error p{font-size:16px;line-height:1.6}
+  .catalog-error{max-width:100%;padding:24px 0}
+  .catalog-error .btn{white-space:normal}
+  .catalog-skeleton{gap:12px}
+  .empty{max-width:560px;padding:32px 0;margin:24px auto}
+  .empty h1{font-size:28px;font-weight:600;line-height:1.25}
+  .empty p{font-size:16px;line-height:1.6}
+  .empty .actions{margin-top:24px}
+  .empty-symbol{--od-icon-size:48px;margin-bottom:24px;color:var(--muted)}
+  .catalog-state-page{gap:24px}
+  .catalog-feedback{gap:16px;padding:32px 0}
+  .home-main .catalog-feedback h2{font-size:24px;line-height:1.3}
+  .catalog-feedback p{font-size:16px}
+  .catalog-feedback-actions{flex-direction:column;align-items:stretch;width:min(100%,400px);--od-gap:12px}
+  .catalog-feedback-actions .btn{min-height:48px;font-size:16px;white-space:normal}
+  /* Detail: сохраняем фильтры/источники/порядок просмотра; меняется только layout. */
+  .detail-page{padding:24px var(--compact-inset) 32px}
+  /* Имя аниме перенесено в compactHeader(). Скрывать дубль только handheld:
+     исходный #anime-title сохраняется для TV и aria-labelledby секции. */
+  .home-main .detail-title{display:none}
+  .compact-header .compact-context-heading{font-size:18px;font-weight:600;line-height:1.4;letter-spacing:-.02em;margin:0;white-space:normal;overflow-wrap:anywhere}
+  .detail-intro{--detail-poster-width:200px;grid-template-columns:var(--detail-poster-width) minmax(0,1fr);gap:24px}
+  .detail-poster{max-width:var(--detail-poster-width)}
+  .detail-overview{--od-gap:16px}
+  .detail-meta{--od-gap:12px}
+  .detail-rating{font-size:28px;min-height:48px;--od-icon-size:24px}
+  .detail-rating>.od-icon{--od-icon-size:24px}
+  .detail-filters{--od-gap:16px;margin-top:0}
+  .detail-filter-row{grid-template-columns:1fr;gap:8px}
+  .detail-filter-label{padding:0;font-size:16px}
+  .detail-filter-row .od-cluster{--od-gap:8px}
+  .detail-page .metadata-chip,.detail-meta .metadata-chip,.detail-filter-row .metadata-chip{min-height:48px;font-size:16px;padding:8px 12px;gap:8px}
+  .detail-actions{display:flex;align-items:stretch;gap:12px;margin-top:8px}
+  .detail-actions .btn{min-height:48px;justify-content:center;white-space:normal}
+  .detail-description,.detail-episodes,.detail-watch-order{margin-top:32px;gap:16px}
+  .detail-page h2{font-size:22px;line-height:1.3}
+  .detail-description p,.detail-credits dd,.detail-update p{font-size:16px;line-height:1.65}
+  .detail-update,.detail-credits{margin-top:24px}
+  .detail-update .detail-publication-date,.detail-credits dt{font-size:16px}
+  .detail-credits dl{grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+  .watch-order-list{--od-gap:12px;align-items:stretch}
+  .watch-order-list>li{width:100%}
+  .watch-order-link{width:100%;padding:12px;min-height:48px;font-size:16px;gap:8px}
+  .watch-order-current{font-size:16px}
+  .detail-episodes .section-head{gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  .detail-episodes .count{font-size:16px}
+  .episode-card-grid{--od-cols:3;--od-gap:16px}
+  .episode-picker{--od-cols:2;--od-gap:16px;padding:4px}
+  /* Вход: системная клавиатура устройства; не фокусировать input автоматически
+     при открытии, чтобы экран не прыгал. Форма прокручивается вместе с клавиатурой. */
+  .tv-login{--login-text:16px;--login-control:52px;grid-template-columns:minmax(0,1fr);align-content:center;align-items:start;gap:32px;padding:max(32px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(32px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));min-height:100dvh}
+  .tv-login .login-copy .brand{flex-direction:row;font-size:28px;gap:16px}
+  .tv-login .brand img{width:64px}
+  .tv-login .login-form{max-width:440px;justify-self:center}
+  .tv-login .login-form h1{font-size:28px;margin-bottom:24px}
+  .tv-login .field{gap:8px;margin-bottom:20px}
+  .tv-login .field input{padding:12px 16px;font-size:16px}
+  .tv-login .password-field{gap:8px}
+  .tv-login .password-visibility{padding:12px;--od-icon-size:24px}
+  .tv-login .field .error,.tv-login .auth-feedback p{font-size:16px}
+  .tv-login .auth-feedback{padding:16px;gap:12px}
+  .tv-login .login-actions{margin-top:24px;--od-gap:12px}
+  .tv-login .login-actions .btn{font-size:16px;padding:12px 16px}
+  /* Панели: крестик доступен только handheld, сохраняем Отмену/Остаться.
+     На ТВ тот же options.showClose:false продолжает скрывать крестик. */
+  .side-sheet{width:min(440px,100%);padding:24px;gap:24px;overscroll-behavior:contain;scroll-padding-block:24px}
+  .side-sheet .sheet-head{gap:16px;align-items:flex-start}
+  .side-sheet .sheet-head h2{flex:1;font-size:22px;line-height:1.35;padding-top:8px}
+  .side-sheet .sheet-dismiss{display:flex;flex:none;min-width:48px;width:48px;min-height:48px;padding:12px;margin:0;--od-icon-size:24px}
+  .sheet-dismiss>span{display:none}
+  .side-sheet .btn,.side-sheet .sheet-option{font-size:16px;min-height:48px;padding:12px 16px;gap:12px;white-space:normal;text-align:left}
+  .side-sheet .sheet-dismiss{padding:12px}
+  .side-sheet .favorite-action{font-size:16px}
+  .browse-sort-draft{gap:24px}
+  .browse-sort-draft .sheet-option{font-size:16px;min-height:48px;padding:12px}
+  .sort-order-title{font-size:18px}
+  .sort-panel-actions .btn{font-size:16px;min-height:48px}
+  .compact-profile .account-summary{display:flex;gap:16px;padding:0;align-items:center}
+  .compact-profile .account-picture{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:var(--radius-card);background:var(--color-menu-control);color:var(--text)}
+  .compact-profile .account-name,.compact-profile .account-initials{display:block}
+  .compact-profile .account-name{font-size:16px;white-space:normal}
+  .toast{bottom:calc(var(--compact-nav-height) + env(safe-area-inset-bottom) + 16px);max-width:calc(100vw - 32px);width:max-content;padding:12px 16px;font-size:16px;line-height:1.5;text-align:center}
+  body:has(.tv-player) .toast,body:has(.tv-login) .toast{bottom:max(24px,env(safe-area-inset-bottom))}
+  /* Плеер вынесен в HandheldPlayer ниже: роль переживает смену ориентации/fullscreen. */
+  /* На touch не оставлять ложный «выбор» после тапа; клавиатурный focus-visible
+     сохраняется. Никакого уменьшения контраста или скрытия функциональных значков. */
+}
+
+@media(max-width:767px){
+  :root{--compact-inset:16px;--compact-title:24px}
+  .home-grid-wrap .poster-grid,.home-grid{--od-cols:2;--od-gap:24px 16px}
+  .genre-card-grid{--od-cols:2;--od-gap:16px}
+  .genre-card-grid .poster-title{padding:24px 12px 8px}
+  .episode-card-grid{--od-cols:2;--od-gap:16px}
+  /* MobileDetail / UI Kit: телефон использует самостоятельную вертикальную
+     компоновку. Постер под шапкой с одинаковыми отступами сверху и по бокам
+     через --compact-inset. Все четыре угла берут общий Shape.card (12px).
+     Для будущих ИИ: НЕ возвращать маленький постер и факты справа на телефоне.
+     Ниже изображения — рейтинг/год, жанры, режиссёр, просмотр/избранное.
+     Полный кадр и пропорции исходного постера сохраняем: width:100%, height:auto;
+     не фиксировать высоту и не растягивать изображение по двум осям.
+     Постер и текст выравнивать по общему --compact-inset: одинаковые боковые поля.
+     Не растягивать постер до краёв экрана и не задавать отдельные числа отступов.
+     >=768 остаётся планшетная компоновка; >=1024 исходный ТВ не затрагивается.
+     Во Flutter вынести этот вариант в общий адаптивный AnimeDetailHeader UI Kit. */
+  .detail-page{padding:0 0 32px}
+  .detail-intro{--detail-poster-width:100%;display:flex;flex-direction:column;align-items:stretch;gap:24px}
+  .detail-poster{width:100%;max-width:none;align-self:stretch;padding:var(--compact-inset) var(--compact-inset) 0}
+  .detail-poster .od-media{display:block;width:100%;height:auto;border-radius:var(--radius-card)}
+  .detail-overview{display:flex;flex-direction:column;--od-gap:16px;gap:16px;padding-inline:var(--compact-inset)}
+  .detail-filters{display:flex;flex-direction:column;--od-gap:16px;gap:16px}
+  .detail-meta{--od-gap:12px;align-items:center}
+  .detail-filter-row .metadata-chip{max-width:100%}
+  .detail-page>.detail-description,
+  .detail-page>.detail-update,
+  .detail-page>.detail-credits,
+  .detail-page>.detail-watch-order,
+  .detail-page>.detail-episodes{margin-inline:var(--compact-inset)}
+  .detail-actions{display:grid;grid-template-columns:minmax(0,1fr);justify-items:stretch}
+  .detail-actions .btn{width:100%;min-height:52px;white-space:nowrap}
+  .detail-credits dl{grid-template-columns:minmax(0,1fr)}
+  .watch-order-link{flex-wrap:wrap;justify-content:flex-start}
+  .watch-order-link>span:first-of-type{flex:1;min-width:0}
+  .watch-order-current{padding-left:32px}
+  .overlay{align-items:flex-end;justify-content:center}
+  .side-sheet{width:100%;max-height:var(--compact-sheet-max);padding:24px 20px max(24px,env(safe-area-inset-bottom));border-radius:var(--radius-card) var(--radius-card) 0 0;gap:24px}
+  .episode-picker{--od-cols:2;--od-gap:16px}
+}
+@media(max-width:374px){
+  :root{--compact-inset:12px;--compact-gap:12px}
+  .genre-card-grid,.episode-card-grid{--od-cols:1}
+  .compact-header{gap:8px}
+  .compact-heading{font-size:18px}
+  .compact-nav{padding-inline:8px}
+}
+/* Горизонтальный телефон/планшет: компактнее chrome, тот же видеокадр.
+   Не трогать TV 1024+: этот запрос намеренно ограничен компактным диапазоном. */
+@media(max-width:1023px) and (max-height:500px) and (orientation:landscape){
+  .compact-header{padding-block:4px}
+  .compact-header .brand img{width:32px}
+  .compact-nav{min-height:56px;padding-block:4px}
+  .compact-nav button{min-height:48px;flex-direction:row;gap:8px}
+  .home-grid-wrap .poster-grid,.home-grid{--od-cols:4}
+  .genre-card-grid{--od-cols:3}
+  .tv-login{align-content:start;gap:24px;padding-block:24px}
+  .tv-login .login-copy .brand img{width:40px}
+  .tv-login .login-copy .brand{font-size:24px}
+  .side-sheet{max-height:96dvh;padding-block:16px;gap:16px}
+}
+@media(max-width:1023px) and (hover:none){
+  .home-main button:focus:not(:focus-visible),button:focus:not(:focus-visible),a:focus:not(:focus-visible),input:focus:not(:focus-visible){outline:none}
+  .home-main .ui-media-card:focus:not(:focus-visible){transform:none;background:none}
+}
+
+/* HandheldPlayer / UI Kit — source: Flutter MobilePlayerControls.
+   48px targets / 26px glyphs; главный Play 64px / 36px. Общие AppColors и AppMotion.
+   Класс назначает arrangePlayerControls(): только compact layout или fullscreen,
+   запрошенный с телефона. CSS вне width-query нужен, чтобы при повороте/fullscreen
+   телефон не превратился в ТВ из-за большого viewport. У настоящего ТВ класса нет.
+   Не возвращать мобильные series/quality в нижний transport и не дублировать узлы.
+   Зоны layout в обычном grid: header / center ИЛИ feedback / footer. */
+.tv-player.handheld-player{
+  --player-control:48px;
+  --player-main-control:64px;
+  --player-glyph:26px;
+  --player-main-glyph:36px;
+  --player-gap:8px;
+  --player-body:16px;
+  --player-title:18px;
+  --player-edge:16px;
+  --player-central-gap:24px;
+  height:100dvh;min-height:280px;color:var(--color-player-text);
+}
+.tv-player.handheld-player .player-chrome{
+  display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;
+  gap:8px;padding:max(8px,env(safe-area-inset-top)) max(var(--player-edge),env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(var(--player-edge),env(safe-area-inset-left));
+}
+.tv-player.handheld-player .player-top{
+  grid-row:1;display:grid;grid-template-columns:48px minmax(0,1fr) 48px;
+  gap:8px;align-items:center;
+}
+.tv-player.handheld-player .player-top>.od-field{grid-column:2;grid-row:1;min-width:0;gap:0}
+.tv-player.handheld-player .player-title{
+  font-size:var(--player-title);line-height:1.35;font-weight:600;letter-spacing:-.02em;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+}
+.tv-player.handheld-player .player-episode{font-size:16px;line-height:1.5;color:var(--color-player-muted)}
+.tv-player.handheld-player .player-back,.tv-player.handheld-player .player-rotate{
+  display:flex;align-items:center;justify-content:center;width:48px;min-width:48px;min-height:48px;
+  padding:12px;gap:0;border:0;background:var(--color-player-control);color:var(--color-player-text);
+  --od-icon-size:var(--player-glyph);
+}
+.tv-player.handheld-player .player-back{grid-column:1;grid-row:1}
+.tv-player.handheld-player .player-rotate{grid-column:3;grid-row:1}
+.tv-player.handheld-player .player-back>span,.tv-player.handheld-player .player-rotate>span{display:none}
+.tv-player.handheld-player .mobile-player-tools{
+  grid-column:2/4;grid-row:2;display:flex;align-items:center;justify-content:flex-end;gap:8px;
+}
+.tv-player.handheld-player .mobile-player-center{
+  grid-row:2;display:flex;justify-content:center;align-items:center;align-self:center;
+  gap:var(--player-central-gap);min-height:var(--player-main-control);padding-block:8px;
+}
+.tv-player.handheld-player .player-control{
+  display:flex;align-items:center;justify-content:center;flex:none;width:var(--player-control);
+  min-width:var(--player-control);height:var(--player-control);min-height:var(--player-control);
+  padding:12px;border:0;gap:0;background:var(--color-player-control);color:var(--color-player-text);
+}
+.tv-player.handheld-player .player-control .od-icon{--od-icon-size:var(--player-glyph)}
+.tv-player.handheld-player .mobile-player-center [data-action=toggle]{
+  width:var(--player-main-control);height:var(--player-main-control);min-height:var(--player-main-control);
+  background:var(--accent);color:var(--on-accent);padding:12px;
+}
+.tv-player.handheld-player .mobile-player-center [data-action=toggle] .od-icon{--od-icon-size:var(--player-main-glyph)}
+.tv-player.handheld-player .player-quality{
+  min-height:48px;min-width:56px;padding:8px 12px;font-size:16px;line-height:1.5;
+  background:var(--color-player-control);color:var(--color-player-text);
+}
+.tv-player.handheld-player .playback{grid-row:3;display:flex;flex-direction:column;gap:0;min-width:0}
+.tv-player.handheld-player .timeline{display:block;height:44px;min-height:44px;width:100%;margin:0;padding:0}
+.tv-player.handheld-player .controls{display:block;margin:0;min-width:0}
+.tv-player.handheld-player .player-transport{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:nowrap}
+.tv-player.handheld-player .player-settings{display:none}
+.tv-player.handheld-player .player-time{display:flex;align-items:center;gap:0;margin:0 0 0 auto;font-size:16px;line-height:1.5;white-space:nowrap}
+.tv-player.handheld-player .player-stage{grid-row:2;display:grid;align-items:center;justify-items:center;padding:0;min-height:0}
+.tv-player.handheld-player[data-media-state=ready] .player-stage{display:none}
+.tv-player.handheld-player:not([data-media-state=ready]) .mobile-player-center{display:none}
+.tv-player.handheld-player.has-video-error .player-chrome{grid-template-rows:auto minmax(0,1fr)}
+.tv-player.handheld-player.has-video-error .playback{display:none}
+.tv-player.handheld-player .playback-feedback{display:flex;flex-direction:column;align-items:center;text-align:center;width:min(100%,480px);padding:16px;gap:16px}
+.tv-player.handheld-player .playback-feedback>.od-icon{--od-icon-size:32px}
+.tv-player.handheld-player .playback-feedback h2{font-size:22px;line-height:1.3}
+.tv-player.handheld-player .playback-feedback p{font-size:16px;line-height:1.5}
+.tv-player.handheld-player .playback-failure .btn{font-size:16px;min-height:48px;min-width:0;width:auto;margin-top:0;padding:12px 16px}
+.tv-player.handheld-player .player-control:focus-visible,
+.tv-player.handheld-player .player-back:focus-visible,
+.tv-player.handheld-player .player-rotate:focus-visible,
+.tv-player.handheld-player .player-quality:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+/* Fullscreen запрашивается у documentElement: панели остаются поверх плеера,
+   используют тот же общий renderer и крестик handheld, включая широкий планшет. */
+body.handheld-playback .sheet-dismiss.touch-only{display:flex}
+body.handheld-playback .side-sheet{max-width:100vw;max-height:100dvh;overflow-y:auto;padding-bottom:max(24px,env(safe-area-inset-bottom))}
+body.handheld-playback .toast{bottom:max(16px,env(safe-area-inset-bottom));font-size:16px;line-height:1.5;max-width:calc(100vw - 32px);padding:12px 16px}
+@media(orientation:landscape){
+  .tv-player.handheld-player .player-top{grid-template-columns:48px minmax(0,1fr) auto 48px}
+  .tv-player.handheld-player .mobile-player-tools{grid-column:3;grid-row:1}
+  .tv-player.handheld-player .player-rotate{grid-column:4}
+  .tv-player.handheld-player .player-title{-webkit-line-clamp:1}
+}
+@media(max-height:420px) and (orientation:landscape){
+  .tv-player.handheld-player{--player-title:16px;--player-edge:12px;--player-central-gap:24px}
+  .tv-player.handheld-player .player-chrome{gap:0}
+  .tv-player.handheld-player .mobile-player-center{padding:0}
+  .tv-player.handheld-player .playback-feedback{flex-direction:row;flex-wrap:wrap;justify-content:center;gap:8px 12px;padding:8px}
+  .tv-player.handheld-player .playback-feedback h2{font-size:18px}
+  .tv-player.handheld-player .playback-feedback>.od-icon{--od-icon-size:24px}
+}
+
+@media(max-width:1023px) and (prefers-reduced-motion:reduce){
+  .main>.compact-header,.main>.compact-header.is-scroll-hidden{transition:none;transform:none;opacity:1}
+}

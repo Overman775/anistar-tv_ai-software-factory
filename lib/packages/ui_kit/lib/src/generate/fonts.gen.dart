@@ -13,4 +13,7 @@ abstract final class FontFamily {
 
   /// Font family: Inter
   static const String inter = 'packages/$package/Inter';
+
+  /// Font family: Manrope
+  static const String manrope = 'packages/$package/Manrope';
 }

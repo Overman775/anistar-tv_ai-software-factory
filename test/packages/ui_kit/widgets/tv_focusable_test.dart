@@ -99,4 +99,67 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
     expect(calls, 0);
   });
+
+  testWidgets('pointer cancellation clears pressed state without activation', (tester) async {
+    var calls = 0;
+    TvFocusState? state;
+    await pumpTvApp(
+      tester,
+      Center(
+        child: TvFocusable(
+          onPressed: () => calls++,
+          stateBuilder: (_, value) {
+            state = value;
+
+            return const SizedBox(width: 200, height: 100, child: Text('Нажать'));
+          },
+        ),
+      ),
+    );
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Нажать')));
+    await tester.pump();
+    expect(state?.pressed, isTrue);
+    await gesture.cancel();
+    await tester.pump();
+    expect(state?.pressed, isFalse);
+    expect(calls, 0);
+  });
+
+  testWidgets('first repeat consumes the held key tail after focus moves to a menu', (tester) async {
+    final card = FocusNode();
+    final menu = FocusNode();
+    addTearDown(card.dispose);
+    addTearDown(menu.dispose);
+    var opens = 0;
+    var activations = 0;
+    await pumpTvApp(
+      tester,
+      Column(
+        children: [
+          TvFocusable(
+            focusNode: card,
+            autofocus: true,
+            onPressed: () => fail('Unexpected short action'),
+            onLongPressed: () {
+              opens++;
+              menu.requestFocus();
+            },
+            builder: (_, focused) => const Text('Карточка'),
+          ),
+          TvFocusable(focusNode: menu, onPressed: () => activations++, builder: (_, focused) => const Text('Меню')),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    expect(opens, 1);
+    expect(menu.hasFocus, isTrue);
+    expect(activations, 0);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(activations, 1);
+  });
 }

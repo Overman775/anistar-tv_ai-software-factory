@@ -1,0 +1,326 @@
+{
+  "schema": "open-design.design-manifest.v1",
+  "title": "anistar-tv-prototype",
+  "entryFile": "index.html",
+  "sourceFiles": {
+    "all": [
+      "app.css",
+      "app.js",
+      "assets/anistar-logo.png",
+      "assets/attack.jpg",
+      "assets/chainsaw.jpg",
+      "assets/demon.jpg",
+      "assets/frieren.jpg",
+      "assets/frieren2.jpg",
+      "assets/genres/boevik.jpg",
+      "assets/genres/detektiv.jpg",
+      "assets/genres/drama.jpg",
+      "assets/genres/echi.jpg",
+      "assets/genres/fantastika.jpg",
+      "assets/genres/fentesy.jpg",
+      "assets/genres/istoriya.jpg",
+      "assets/genres/kiberpank.jpg",
+      "assets/genres/komediya.jpg",
+      "assets/genres/maho_sedze.jpg",
+      "assets/genres/maho.jpg",
+      "assets/genres/mistika.jpg",
+      "assets/genres/musik.jpg",
+      "assets/genres/parodii.jpg",
+      "assets/genres/povsednrvnost.jpg",
+      "assets/genres/priklucheniya.jpg",
+      "assets/genres/romantika.jpg",
+      "assets/genres/school.jpg",
+      "assets/genres/sedze.jpg",
+      "assets/genres/senen_ay.jpg",
+      "assets/genres/senen.jpg",
+      "assets/genres/sport.jpg",
+      "assets/genres/triller.jpg",
+      "assets/genres/uzhasy.jpg",
+      "assets/genres/vampiry.jpg",
+      "assets/jujutsu.jpg",
+      "assets/lucide/arrow-left.svg",
+      "assets/lucide/check.svg",
+      "assets/lucide/chevron-right.svg",
+      "assets/lucide/circle-alert.svg",
+      "assets/lucide/eye-off.svg",
+      "assets/lucide/eye.svg",
+      "assets/lucide/fast-forward.svg",
+      "assets/lucide/funnel.svg",
+      "assets/lucide/heart-minus.svg",
+      "assets/lucide/heart-off.svg",
+      "assets/lucide/heart-plus.svg",
+      "assets/lucide/heart.svg",
+      "assets/lucide/house.svg",
+      "assets/lucide/info.svg",
+      "assets/lucide/layout-grid.svg",
+      "assets/lucide/LICENSE",
+      "assets/lucide/list-filter.svg",
+      "assets/lucide/list-video.svg",
+      "assets/lucide/list.svg",
+      "assets/lucide/loader-circle.svg",
+      "assets/lucide/log-out.svg",
+      "assets/lucide/pause.svg",
+      "assets/lucide/play.svg",
+      "assets/lucide/refresh-cw.svg",
+      "assets/lucide/rewind.svg",
+      "assets/lucide/rotate-ccw.svg",
+      "assets/lucide/rotate-cw-square.svg",
+      "assets/lucide/rotate-cw.svg",
+      "assets/lucide/search.svg",
+      "assets/lucide/skip-back.svg",
+      "assets/lucide/skip-forward.svg",
+      "assets/lucide/smartphone.svg",
+      "assets/lucide/star.svg",
+      "assets/lucide/user.svg",
+      "assets/lucide/x.svg",
+      "assets/manrope-400.ttf",
+      "assets/manrope-500.ttf",
+      "assets/manrope-600.ttf",
+      "assets/manrope-700.ttf",
+      "assets/manrope-800.ttf",
+      "assets/sources.json",
+      "assets/spy.jpg",
+      "index.html",
+      "responsive.css"
+    ],
+    "html": [
+      "index.html"
+    ],
+    "css": [
+      "app.css",
+      "responsive.css"
+    ],
+    "scriptsAndComponents": [
+      "app.js"
+    ],
+    "assets": [
+      "assets/anistar-logo.png",
+      "assets/attack.jpg",
+      "assets/chainsaw.jpg",
+      "assets/demon.jpg",
+      "assets/frieren.jpg",
+      "assets/frieren2.jpg",
+      "assets/genres/boevik.jpg",
+      "assets/genres/detektiv.jpg",
+      "assets/genres/drama.jpg",
+      "assets/genres/echi.jpg",
+      "assets/genres/fantastika.jpg",
+      "assets/genres/fentesy.jpg",
+      "assets/genres/istoriya.jpg",
+      "assets/genres/kiberpank.jpg",
+      "assets/genres/komediya.jpg",
+      "assets/genres/maho_sedze.jpg",
+      "assets/genres/maho.jpg",
+      "assets/genres/mistika.jpg",
+      "assets/genres/musik.jpg",
+      "assets/genres/parodii.jpg",
+      "assets/genres/povsednrvnost.jpg",
+      "assets/genres/priklucheniya.jpg",
+      "assets/genres/romantika.jpg",
+      "assets/genres/school.jpg",
+      "assets/genres/sedze.jpg",
+      "assets/genres/senen_ay.jpg",
+      "assets/genres/senen.jpg",
+      "assets/genres/sport.jpg",
+      "assets/genres/triller.jpg",
+      "assets/genres/uzhasy.jpg",
+      "assets/genres/vampiry.jpg",
+      "assets/jujutsu.jpg",
+      "assets/lucide/arrow-left.svg",
+      "assets/lucide/check.svg",
+      "assets/lucide/chevron-right.svg",
+      "assets/lucide/circle-alert.svg",
+      "assets/lucide/eye-off.svg",
+      "assets/lucide/eye.svg",
+      "assets/lucide/fast-forward.svg",
+      "assets/lucide/funnel.svg",
+      "assets/lucide/heart-minus.svg",
+      "assets/lucide/heart-off.svg",
+      "assets/lucide/heart-plus.svg",
+      "assets/lucide/heart.svg",
+      "assets/lucide/house.svg",
+      "assets/lucide/info.svg",
+      "assets/lucide/layout-grid.svg",
+      "assets/lucide/LICENSE",
+      "assets/lucide/list-filter.svg",
+      "assets/lucide/list-video.svg",
+      "assets/lucide/list.svg",
+      "assets/lucide/loader-circle.svg",
+      "assets/lucide/log-out.svg",
+      "assets/lucide/pause.svg",
+      "assets/lucide/play.svg",
+      "assets/lucide/refresh-cw.svg",
+      "assets/lucide/rewind.svg",
+      "assets/lucide/rotate-ccw.svg",
+      "assets/lucide/rotate-cw-square.svg",
+      "assets/lucide/rotate-cw.svg",
+      "assets/lucide/search.svg",
+      "assets/lucide/skip-back.svg",
+      "assets/lucide/skip-forward.svg",
+      "assets/lucide/smartphone.svg",
+      "assets/lucide/star.svg",
+      "assets/lucide/user.svg",
+      "assets/lucide/x.svg",
+      "assets/manrope-400.ttf",
+      "assets/manrope-500.ttf",
+      "assets/manrope-600.ttf",
+      "assets/manrope-700.ttf",
+      "assets/manrope-800.ttf",
+      "assets/sources.json",
+      "assets/spy.jpg"
+    ]
+  },
+  "screens": [
+    {
+      "file": "index.html",
+      "role": "screen",
+      "implementationNote": "Preserve visual hierarchy, responsive behavior, and interactive states from this screen."
+    }
+  ],
+  "screenFilePolicy": {
+    "mode": "screen-file-first",
+    "entryFileRole": "primary-screen",
+    "rules": [
+      "Each distinct user-facing screen or surface must be delivered and implemented as its own file/route.",
+      "If a landing page is present or requested, keep it in landing.html and do not merge it into the product app screen.",
+      "When multiple HTML screens exist, index.html is a launcher/overview only; it must not be treated as the combined final UI.",
+      "Keep product app screens, landing pages, platform screens, and OS widget surfaces separate in production code."
+    ]
+  },
+  "appModules": [
+    "Identify domain-specific in-app modules from the exported UI; do not reduce them to generic cards.",
+    "For each major module, implement purpose, default/loading/empty/error/success states, and responsive behavior.",
+    "Keep app modules separate from OS home-screen widgets in the production component model."
+  ],
+  "osWidgets": [
+    "If the export includes home-screen, lock-screen, Live Activity, tablet glance, or Android widget surfaces, implement them as platform quick-access surfaces outside the app UI.",
+    "If none are present, do not invent OS widgets unless the product requirements request them."
+  ],
+  "landingPage": {
+    "detection": "Inspect files and screen names for a marketing/landing page surface. If present, keep it separate from product app screens.",
+    "requiredSections": [
+      "hero",
+      "value props",
+      "product proof/screenshots",
+      "feature proof",
+      "CTA"
+    ]
+  },
+  "tokens": {
+    "source": [
+      "app.css",
+      "responsive.css"
+    ],
+    "required": [
+      "background",
+      "surface",
+      "foreground",
+      "muted text",
+      "border",
+      "accent",
+      "radius",
+      "shadow",
+      "spacing",
+      "type scale",
+      "motion"
+    ],
+    "note": "Extract/freeze tokens before framework implementation so coding tools do not substitute default theme colors or typography."
+  },
+  "interactions": {
+    "source": [
+      "app.js"
+    ],
+    "requiredStates": [
+      "default",
+      "hover",
+      "focus",
+      "active",
+      "disabled",
+      "loading",
+      "empty",
+      "error",
+      "success"
+    ],
+    "requiredBehaviors": [
+      "forms/validation where present",
+      "tabs/filters where present",
+      "dialogs/sheets/drawers where present",
+      "copy/generate/share actions where present",
+      "player or quick controls where present"
+    ],
+    "note": "If the prototype is static, derive missing behavior from visible controls and document it before coding."
+  },
+  "responsiveViewports": [
+    {
+      "name": "mobile-compact",
+      "width": 360,
+      "height": 800,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "mobile-standard",
+      "width": 390,
+      "height": 844,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "mobile-large",
+      "width": 430,
+      "height": 932,
+      "category": "mobile",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "foldable-small-tablet",
+      "width": 600,
+      "height": 960,
+      "category": "foldable-tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "tablet-portrait",
+      "width": 820,
+      "height": 1180,
+      "category": "tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "tablet-landscape",
+      "width": 1024,
+      "height": 768,
+      "category": "tablet",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "laptop",
+      "width": 1366,
+      "height": 768,
+      "category": "desktop",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "category": "desktop",
+      "mustAvoidHorizontalScroll": true
+    },
+    {
+      "name": "wide",
+      "width": 1920,
+      "height": 1080,
+      "category": "wide",
+      "mustAvoidHorizontalScroll": true
+    }
+  ],
+  "implementationChecklist": [
+    "Open entryFile first and map screens, modules, tokens, and interactions.",
+    "Extract tokens before writing framework components.",
+    "Implement app-specific modules with real states instead of generic card grids.",
+    "Preserve or rebuild JS interactions for meaningful UX actions.",
+    "Validate screenshots at desktop/tablet/mobile viewports with no horizontal overflow.",
+    "Keep landing pages, in-app modules, and OS widgets as separate implementation surfaces."
+  ]
+}

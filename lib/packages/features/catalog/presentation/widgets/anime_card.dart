@@ -3,6 +3,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
 import 'anime_rating_badge.dart';
+import 'favorite_ribbon.dart';
 
 class AnimeCard extends StatelessWidget {
   const AnimeCard({
@@ -13,88 +14,30 @@ class AnimeCard extends StatelessWidget {
     this.onFocusChanged,
     this.onLongPressed,
     this.isFavorite,
+    this.showFavorite = true,
   });
 
   final AnimeSummary anime;
   final bool autofocus;
   final bool? isFavorite;
+  final bool showFavorite;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback onTap;
   final VoidCallback? onLongPressed;
 
   @override
-  Widget build(BuildContext context) {
-    final posterUri = anime.posterUri;
-    final posterUrl = posterUri?.toString();
-
-    return TvFocusTile(
-      autofocus: autofocus,
-      onFocusChanged: onFocusChanged,
-      onPressed: onTap,
-      onLongPressed: onLongPressed,
-      semanticLabel: anime.title,
-      builder: (context, focused) => Stack(
-        fit: StackFit.expand,
-        children: [
-          TvPosterHero(
-            tag: 'anime-poster-${anime.id}',
-            imageUrl: posterUri?.hasScheme == true ? posterUrl : null,
-            semanticLabel: anime.title,
-          ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x00000000), Color(0x18000000), Color(0xF7080B14)],
-                stops: [0, 0.48, 1],
-              ),
-            ),
-          ),
-          Positioned(
-            left: AppSpacing.md,
-            right: AppSpacing.md,
-            bottom: AppSpacing.md,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (anime.year case final year?)
-                  Text(year, style: AppContentTypography.cardCaptionOf(context)?.copyWith(color: AppPalette.secondary)),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  anime.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppContentTypography.cardTitleOf(context)
-                      ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: AppSpacing.sm,
-            right: AppSpacing.sm,
-            child: AnimeRatingBadge(rating: anime.rating),
-          ),
-          Positioned(
-            top: AppSpacing.sm,
-            left: AppSpacing.sm,
-            child: AnimatedSwitcher(
-              duration: AppMotion.durationOf(context, AppMotion.fast),
-              switchInCurve: AppMotion.enterCurve,
-              switchOutCurve: AppMotion.exitCurve,
-              child: (isFavorite ?? anime.isFavorite ?? false)
-                  ? AppMetadataBadge(
-                      key: ValueKey('favorite-${anime.id}'),
-                      icon: Icons.star_rounded,
-                      semanticLabel: 'В избранном',
-                    )
-                  : const SizedBox.shrink(key: ValueKey(false)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => MediaCard(
+    label: anime.title,
+    caption: anime.year,
+    imageUrl: anime.posterUri?.toString(),
+    heroTag: 'anime-poster-${anime.id}',
+    autofocus: autofocus,
+    onFocusChanged: onFocusChanged,
+    onPressed: onTap,
+    onLongPressed: onLongPressed,
+    badges: [
+      AnimeRatingBadge(rating: anime.rating),
+      if (showFavorite && (isFavorite ?? anime.isFavorite) == true) const FavoriteRibbon(),
+    ],
+  );
 }

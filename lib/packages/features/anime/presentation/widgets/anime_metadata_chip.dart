@@ -19,7 +19,7 @@ class AnimeMetadataChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (iconValue != null) ...[
-              Icon(iconValue, size: 15, color: AppPalette.success),
+              AppIcon.fromMaterial(iconValue, size: 15, color: AppPalette.success),
               const SizedBox(width: AppSpacing.xs),
             ],
             Flexible(

@@ -11,6 +11,7 @@ class TvPosterHero extends StatelessWidget {
     required this.imageUrl,
     required this.semanticLabel,
     this.fallbackImageUrl,
+    this.fit = BoxFit.cover,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class TvPosterHero extends StatelessWidget {
   final String? imageUrl;
   final String semanticLabel;
   final String? fallbackImageUrl;
+  final BoxFit fit;
 
   @override
   Widget build(BuildContext context) => Skeleton.ignore(
@@ -37,6 +39,7 @@ class TvPosterHero extends StatelessWidget {
             imageUrl: imageUrl,
             semanticLabel: semanticLabel,
             fallbackImageUrl: fallbackImageUrl,
+            fit: fit,
             animateLoading: fallbackImageUrl != null && fallbackImageUrl != imageUrl,
             resizeToLayout: false,
           ),

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'anistar_auth_html.dart';
 import 'anistar_failure.dart';
 import 'anistar_session.dart';
+import 'contract/anistar_client_exception.dart';
 import 'html_decoder.dart';
 
 final class AnistarAuthService {
@@ -58,8 +59,15 @@ final class AnistarAuthService {
     final body = AnistarAuthHtml.encodeForm(fields, contentType);
     final cp1251 = RegExp('windows-1251|cp1251', caseSensitive: false).hasMatch(contentType ?? '');
     final response = await _page(action, body: body, referer: page.requestOptions.uri, cp1251: cp1251);
-    if (!AnistarAuthHtml.isAuthenticated(_html(response), session.origin)) {
+    final responseHtml = _html(response);
+    if (!AnistarAuthHtml.isAuthenticated(responseHtml, session.origin)) {
       await session.clear();
+      if (AnistarAuthHtml.isGuest(responseHtml)) {
+        throw const AnistarClientException(
+          AnistarClientErrorCategory.invalidCredentials,
+          'Вход не выполнен. Проверьте логин и пароль.',
+        );
+      }
       throw const AnistarFailure(message: 'Вход не выполнен. Проверьте логин и пароль.');
     }
     if (await session.cookieHeader(pageUri) == null) {

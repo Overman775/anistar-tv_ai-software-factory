@@ -8,6 +8,14 @@ final class AnistarAnimeSummaryDto {
   final String? year;
   final double? rating;
   final bool? isFavorite;
+  final String? genreText;
+  final String? description;
+  final String? updateMessage;
+  final String? publicationDate;
+
+  List<String> get genres => List.unmodifiable(
+    genreText?.split(',').map((genre) => genre.trim()).where((genre) => genre.isNotEmpty) ?? const <String>[],
+  );
 
   const AnistarAnimeSummaryDto({
     required this.id,
@@ -17,5 +25,9 @@ final class AnistarAnimeSummaryDto {
     this.year,
     this.rating,
     this.isFavorite,
+    this.genreText,
+    this.description,
+    this.updateMessage,
+    this.publicationDate,
   });
 }

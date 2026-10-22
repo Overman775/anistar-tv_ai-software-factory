@@ -14,11 +14,13 @@ import '../../../favorites/presentation/favorite_button.dart';
 import '../../../watch_history/watched_episodes.dart';
 import '../../anime_providers.dart';
 import '../../domain/models/anime_episode.dart';
+import '../../domain/models/anime_part.dart';
 import '../../domain/models/anime_screen_data.dart';
 import '../widgets/anime_filter_row.dart';
 import '../widgets/anime_hero.dart';
 import '../widgets/anime_layout.dart';
 import '../widgets/anime_skeleton.dart';
+import '../widgets/anime_watch_order.dart';
 import '../widgets/episode_card.dart';
 import '../widgets/mobile_anime_content.dart';
 import '../widgets/mobile_anime_skeleton.dart';
@@ -31,11 +33,17 @@ class AnimeScreen extends ConsumerStatefulWidget {
     required this.onEpisodeTap,
     this.fallbackPosterUri,
     this.onFilterTap,
+    this.onPartTap,
+    this.embedded = false,
+    this.onOpenNavigation,
     super.key,
   });
 
   final int animeId;
+  final bool embedded;
+  final VoidCallback? onOpenNavigation;
   final ValueChanged<CatalogFilter>? onFilterTap;
+  final ValueChanged<AnimePart>? onPartTap;
   final String fallbackTitle;
   final Uri? fallbackPosterUri;
   final ValueChanged<AnimeEpisode> onEpisodeTap;
@@ -52,6 +60,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
   final _favoriteFocus = FocusNode(debugLabel: 'Избранное сериала');
   final Map<int, FocusNode> _episodeFocus = {};
   List<int> _episodeNumbers = [];
+  final Map<int, FocusNode> _partFocus = {};
+  List<AnimePart> _parts = [];
   final Map<String, FocusNode> _filterFocus = {};
   List<CatalogFilter> _filters = [];
   int _lastFilterIndex = 0;
@@ -136,9 +146,12 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     _filters = widget.onFilterTap == null ? [] : data.details.filters;
     final watched = ref.watch(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final ascending = data.episodes.toList()..sort((a, b) => a.number.compareTo(b.number));
-    final playEpisode =
-        ascending.where((episode) => !episode.isWatched && !watched.contains(episode.number)).firstOrNull ??
-        ascending.firstOrNull;
+    final confirmed = {...watched, ...ascending.where((episode) => episode.isWatched).map((episode) => episode.number)};
+    final maxWatched = confirmed.isEmpty ? null : confirmed.reduce((left, right) => left > right ? left : right);
+    final nextEpisode = ascending.where((episode) => maxWatched == null || episode.number > maxWatched).firstOrNull;
+    final rewatch = ascending.isNotEmpty && nextEpisode == null;
+    final playEpisode = nextEpisode ?? ascending.firstOrNull;
+    _parts = data.details.parts;
     final episodes = ascending.reversed.toList();
     _episodeNumbers = episodes.map((episode) => episode.number).toList(growable: false);
     if (_focusedEpisodeNumber != null && !_episodeNumbers.contains(_focusedEpisodeNumber)) {
@@ -159,6 +172,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         episodes: episodes,
         watched: watched,
         playEpisode: playEpisode,
+        rewatch: rewatch,
+        onPartTap: widget.onPartTap,
         fallbackPosterUri: widget.fallbackPosterUri,
         controller: _scrollController,
         onEpisodeTap: _openEpisode,
@@ -199,9 +214,22 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
               initialFavorite: data.details.isFavorite,
             ),
             playEpisode: playEpisode,
+            rewatch: rewatch,
             onPlayFirstEpisode: playEpisode == null ? null : () => _openEpisode(playEpisode),
           ),
         ),
+        if (_parts.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
+            sliver: SliverToBoxAdapter(
+              child: AnimeWatchOrder(
+                parts: _parts,
+                currentId: animeId,
+                onSelected: widget.onPartTap,
+                focusNodes: _partFocus,
+              ),
+            ),
+          ),
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.sm),
           sliver: SliverToBoxAdapter(
@@ -231,7 +259,11 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
                 _episodeColumns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
-                _episodeHeight = AnimeLayout.episodeHeight(context, constraints.crossAxisExtent);
+                _episodeHeight = AnimeLayout.episodeHeight(
+                  context,
+                  constraints.crossAxisExtent,
+                  viewportExtent: constraints.viewportMainAxisExtent,
+                );
 
                 return SliverGrid.builder(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -341,8 +373,23 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     final key = event.logicalKey;
     FocusNode? target;
     final firstAction = _episodeNumbers.isEmpty ? _favoriteFocus : _playFocus;
+    final partIndex = _partFocus.keys.where((index) => _partFocus[index] == current).firstOrNull;
+    final partIndices = _partFocus.keys.where((index) => _partFocus[index]?.context != null).toList()..sort();
     final filterIndex = _filters.indexWhere((filter) => _filterFocus[filter.path] == current);
     final index = _episodeNumbers.indexWhere((number) => identical(_episodeFocus[number], current));
+    if (key == LogicalKeyboardKey.arrowLeft &&
+        widget.onOpenNavigation != null &&
+        (current == firstAction ||
+            current == _backFocus ||
+            filterIndex == 0 ||
+            partIndex != null ||
+            index >= 0 && index % _episodeColumns == 0)) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        widget.onOpenNavigation?.call();
+      }
+
+      return KeyEventResult.handled;
+    }
     if (index >= 0 && !(key == LogicalKeyboardKey.arrowUp && index < _episodeColumns)) {
       final column = index % _episodeColumns;
       final next = switch (key) {
@@ -361,7 +408,20 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         return KeyEventResult.handled;
       }
     }
-    if (key == LogicalKeyboardKey.arrowUp && (current == _playFocus || current == _favoriteFocus)) {
+    if (partIndex != null && (key == LogicalKeyboardKey.arrowLeft || key == LogicalKeyboardKey.arrowRight)) {
+      return KeyEventResult.handled;
+    }
+    if (partIndex != null && (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown)) {
+      final position = partIndices.indexOf(partIndex);
+      final next = position + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+      if (next < 0) {
+        target = firstAction;
+      } else if (next >= partIndices.length) {
+        target = _episodeNumbers.isEmpty ? firstAction : _episodeFocus[_episodeNumbers.first];
+      } else {
+        target = _partFocus[partIndices[next]];
+      }
+    } else if (key == LogicalKeyboardKey.arrowUp && (current == _playFocus || current == _favoriteFocus)) {
       target = _backFocus.context == null ? null : _backFocus;
       if (_filters.isNotEmpty) {
         target = _filterFocus[_filters[_lastFilterIndex.clamp(0, _filters.length - 1)].path];
@@ -379,14 +439,24 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
       target = _filterFocus[_filters[next].path];
     } else if (key == LogicalKeyboardKey.arrowDown &&
         (current == _playFocus || current == _favoriteFocus) &&
-        _episodeNumbers.isNotEmpty) {
-      target = _episodeFocus[_episodeNumbers.first];
+        (_episodeNumbers.isNotEmpty || partIndices.isNotEmpty)) {
+      target = partIndices.isEmpty ? _episodeFocus[_episodeNumbers.first] : _partFocus[partIndices.first];
     } else if (key == LogicalKeyboardKey.arrowUp && index >= 0 && index < _episodeColumns) {
-      target = firstAction;
+      target = partIndices.isEmpty ? firstAction : _partFocus[partIndices.last];
     } else if (key == LogicalKeyboardKey.arrowRight && current == _playFocus) {
       target = _favoriteFocus;
     } else if (key == LogicalKeyboardKey.arrowLeft && current == _favoriteFocus) {
       target = firstAction;
+    }
+    if (target == null &&
+        key == LogicalKeyboardKey.arrowDown &&
+        _episodeNumbers.isNotEmpty &&
+        (current == _playFocus || current == _favoriteFocus || partIndex != null)) {
+      if (event is KeyDownEvent || event is KeyRepeatEvent) {
+        unawaited(_focusEpisode(-_episodeColumns, 0));
+      }
+
+      return KeyEventResult.handled;
     }
     if (target?.canRequestFocus != true || target?.context == null) {
       return KeyEventResult.ignored;
@@ -514,6 +584,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     _playFocus.removeListener(_revealFocusedAction);
     _favoriteFocus.removeListener(_revealFocusedAction);
     _scrollController.dispose();
+    for (final node in _partFocus.values) {
+      node.dispose();
+    }
     _backFocus.dispose();
     _playFocus.dispose();
     _favoriteFocus.dispose();
@@ -533,24 +606,28 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     child: TvBackdrop(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          leading: ModalRoute.of(context)?.canPop == true
-              ? IconButton(
-                  focusNode: _backFocus,
-                  tooltip: 'Назад к каталогу',
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back),
-                )
-              : null,
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          flexibleSpace: const TvHeaderSurface(),
-          toolbarHeight: AppLayoutScope.isTvOf(context) ? 80 : 56,
-          titleSpacing: AppSpacing.lg,
-          title: Text(widget.fallbackTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
+        appBar: widget.embedded && !AppLayoutScope.isTvOf(context)
+            ? null
+            : AppBar(
+                leading: ModalRoute.of(context)?.canPop == true
+                    ? IconButton(
+                        focusNode: _backFocus,
+                        tooltip: 'Назад к каталогу',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                        icon: const AppIcon.fromMaterial(Icons.arrow_back),
+                      )
+                    : null,
+                backgroundColor: Colors.transparent,
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                flexibleSpace: const TvHeaderSurface(),
+                toolbarHeight: AppLayoutScope.isTvOf(context) ? 80 : 56,
+                titleSpacing: AppSpacing.lg,
+                title: AppLayoutScope.isTvOf(context)
+                    ? null
+                    : Text(widget.fallbackTitle, maxLines: 2, overflow: TextOverflow.ellipsis),
+              ),
         body: SafeArea(
           top: false,
           child: FutureBuilder<AnimeScreenData>(future: _future, builder: _buildFuture),

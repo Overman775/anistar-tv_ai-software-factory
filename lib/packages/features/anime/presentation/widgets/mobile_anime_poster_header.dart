@@ -19,32 +19,35 @@ class MobileAnimePosterHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: (constraints.maxWidth * 0.32).clamp(88.0, constraints.maxWidth >= 568 ? 104.0 : 144.0),
-          child: AspectRatio(
-            aspectRatio: 2 / 3,
-            child: ClipRRect(
-              borderRadius: AppRadii.large,
-              child: posterUri == null
-                  ? const ColoredBox(
-                      color: AppPalette.surfaceElevated,
-                      child: Center(child: Icon(Icons.image_outlined, color: AppPalette.textSecondary)),
-                    )
-                  : TvPosterHero(
-                      tag: 'anime-poster-$animeId',
-                      imageUrl: posterUri.toString(),
-                      fallbackImageUrl: fallbackPosterUri?.toString(),
-                      semanticLabel: title,
-                    ),
-            ),
-          ),
+    builder: (context, constraints) {
+      final poster = AspectRatio(
+        aspectRatio: AppSizes.posterRatio,
+        child: TvPosterHero(
+          tag: 'anime-poster-$animeId',
+          imageUrl: posterUri?.toString(),
+          fallbackImageUrl: fallbackPosterUri?.toString(),
+          semanticLabel: title,
         ),
-        const SizedBox(width: 16),
-        Expanded(child: metadata),
-      ],
-    ),
+      );
+      if (constraints.maxWidth < 720) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            poster,
+            const SizedBox(height: AppSpacing.lg),
+            metadata,
+          ],
+        );
+      }
+
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 200, child: poster),
+          const SizedBox(width: AppSpacing.lg),
+          Expanded(child: metadata),
+        ],
+      );
+    },
   );
 }

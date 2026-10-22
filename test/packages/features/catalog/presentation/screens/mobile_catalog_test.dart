@@ -179,7 +179,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('reduced motion collapses header immediately at doubled landscape text', (tester) async {
+  testWidgets('reduced motion keeps header visible at doubled landscape text', (tester) async {
     await pumpMobileApp(
       tester,
       const HomeScreen(onAnimeTap: ignoreAnimeTap),
@@ -196,8 +196,8 @@ void main() {
     await tester.drag(scroll, const Offset(0, -100));
     await tester.pump();
     // ignore: prefer-moving-to-variable
-    expect(tester.getTopLeft(scroll).dy, top - kToolbarHeight);
-    expect(visibleAccount, findsNothing);
+    expect(tester.getTopLeft(scroll).dy, top);
+    expect(visibleAccount, findsOneWidget);
     expect(navigationBar.hitTestable(), findsOneWidget);
     await tester.drag(scroll, const Offset(0, 30));
     await tester.pump();

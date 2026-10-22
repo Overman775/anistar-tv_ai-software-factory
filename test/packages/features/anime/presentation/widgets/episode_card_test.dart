@@ -2,12 +2,13 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.d
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../support/test_app.dart';
 
 void main() {
   testWidgets('only watched episodes show a check; the semantic label includes status', (tester) async {
-    final check = find.byIcon(Icons.check_circle_rounded);
+    final check = find.byWidgetPredicate((widget) => widget is AppIcon && widget.color == AppPalette.success);
     Widget card({bool watched = false, bool siteWatched = false}) => SizedBox(
       width: 360,
       height: 220,

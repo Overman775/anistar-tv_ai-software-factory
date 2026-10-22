@@ -40,7 +40,7 @@ final class AnistarSource {
   Future<List<AnistarCatalogFilterDto>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
 
   Future<AnistarAnimeDetailsDto> details(String slug) async {
-    if (!RegExp(r'^\d+-[^/?#]+$').hasMatch(slug)) {
+    if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug)) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
     final source = await _html('$slug.html');
@@ -68,7 +68,7 @@ final class AnistarSource {
   }
 
   Future<bool> setFavorite({required int animeId, required String slug, required bool favorite}) async {
-    if (!RegExp(r'^\d+-[^/?#]+$').hasMatch(slug) || int.tryParse(slug.split('-').first) != animeId) {
+    if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug) || int.tryParse(slug.split('-').first) != animeId) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
     final page = await _html('$slug.html');

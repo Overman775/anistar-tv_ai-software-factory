@@ -45,10 +45,21 @@ RouteBase get $homeRoute => GoRouteData.$route(
 );
 
 mixin $HomeRoute on GoRouteData {
-  static HomeRoute _fromState(GoRouterState state) => const HomeRoute();
+  static HomeRoute _fromState(GoRouterState state) => HomeRoute(
+    destination:
+        _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
+        HomeDestination.home,
+  );
+
+  HomeRoute get _self => this as HomeRoute;
 
   @override
-  String get location => GoRouteData.$location('/home');
+  String get location => GoRouteData.$location(
+    '/home',
+    queryParams: {
+      if (_self.destination != HomeDestination.home) 'destination': _$HomeDestinationEnumMap[_self.destination],
+    },
+  );
 
   @override
   void go(BuildContext context) => context.go(location);
@@ -63,11 +74,20 @@ mixin $HomeRoute on GoRouteData {
   void replace(BuildContext context) => context.replace(location);
 }
 
+const _$HomeDestinationEnumMap = {
+  HomeDestination.home: 'home',
+  HomeDestination.favorites: 'favorites',
+  HomeDestination.genres: 'genres',
+};
+
 mixin $AnimeRoute on GoRouteData {
   static AnimeRoute _fromState(GoRouterState state) => AnimeRoute(
     animeId: int.parse(state.uri.queryParameters['anime-id']!),
     slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
+    destination:
+        _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
+        HomeDestination.home,
     $extra: state.extra as AnimeSummary?,
   );
 
@@ -76,7 +96,12 @@ mixin $AnimeRoute on GoRouteData {
   @override
   String get location => GoRouteData.$location(
     '/home/anime',
-    queryParams: {'anime-id': _self.animeId.toString(), 'slug': _self.slug, 'title': _self.title},
+    queryParams: {
+      'anime-id': _self.animeId.toString(),
+      'slug': _self.slug,
+      'title': _self.title,
+      if (_self.destination != HomeDestination.home) 'destination': _$HomeDestinationEnumMap[_self.destination],
+    },
   );
 
   @override
@@ -96,6 +121,9 @@ mixin $PlayerRoute on GoRouteData {
   static PlayerRoute _fromState(GoRouterState state) => PlayerRoute(
     animeId: int.parse(state.uri.queryParameters['anime-id']!),
     episodeNumber: int.parse(state.uri.queryParameters['episode-number']!),
+    destination:
+        _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
+        HomeDestination.home,
     slug: state.uri.queryParameters['slug']!,
     title: state.uri.queryParameters['title']!,
     $extra: state.extra as AnimeSummary?,
@@ -109,6 +137,7 @@ mixin $PlayerRoute on GoRouteData {
     queryParams: {
       'anime-id': _self.animeId.toString(),
       'episode-number': _self.episodeNumber.toString(),
+      if (_self.destination != HomeDestination.home) 'destination': _$HomeDestinationEnumMap[_self.destination],
       'slug': _self.slug,
       'title': _self.title,
     },
@@ -125,6 +154,15 @@ mixin $PlayerRoute on GoRouteData {
 
   @override
   void replace(BuildContext context) => context.replace(location, extra: _self.$extra);
+}
+
+T? _$convertMapValue<T>(String key, Map<String, String> map, T? Function(String) converter) {
+  final value = map[key];
+  return value == null ? null : converter(value);
+}
+
+extension<T extends Enum> on Map<T, String> {
+  T? _$fromName(String? value) => entries.where((element) => element.value == value).firstOrNull?.key;
 }
 
 RouteBase get $genresRoute =>
@@ -153,13 +191,25 @@ RouteBase get $filterRoute =>
     GoRouteData.$route(path: '/browse', hasOverriddenOnExit: false, factory: $FilterRoute._fromState);
 
 mixin $FilterRoute on GoRouteData {
-  static FilterRoute _fromState(GoRouterState state) =>
-      FilterRoute(path: state.uri.queryParameters['path']!, title: state.uri.queryParameters['title']!);
+  static FilterRoute _fromState(GoRouterState state) => FilterRoute(
+    path: state.uri.queryParameters['path']!,
+    title: state.uri.queryParameters['title']!,
+    destination:
+        _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
+        HomeDestination.genres,
+  );
 
   FilterRoute get _self => this as FilterRoute;
 
   @override
-  String get location => GoRouteData.$location('/browse', queryParams: {'path': _self.path, 'title': _self.title});
+  String get location => GoRouteData.$location(
+    '/browse',
+    queryParams: {
+      'path': _self.path,
+      'title': _self.title,
+      if (_self.destination != HomeDestination.genres) 'destination': _$HomeDestinationEnumMap[_self.destination],
+    },
+  );
 
   @override
   void go(BuildContext context) => context.go(location);

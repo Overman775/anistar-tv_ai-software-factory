@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/auth/auth_providers.dart';
@@ -11,11 +12,16 @@ import '../packages/features/catalog/domain/models/catalog_filter.dart';
 import '../packages/features/catalog/presentation/screens/catalog_screen.dart';
 import '../packages/features/catalog/presentation/screens/genres_screen.dart';
 import '../packages/features/common/presentation/widgets/error_screen.dart';
+import '../packages/features/home/presentation/home_destination.dart';
+import '../packages/features/home/presentation/mobile/mobile_home_shell.dart';
 import '../packages/features/home/presentation/screens/home_screen.dart';
+import '../packages/features/home/presentation/screens/tv_route_shell.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
 import 'app_config.dart';
+import 'app_confirmation.dart';
 import 'app_navigation_page.dart';
+part 'app_mobile_route_shell.dart';
 part 'app_routes.g.dart';
 
 /// Routes for the application
@@ -56,18 +62,29 @@ class LogViewerRoute extends GoRouteData with $LogViewerRoute {
   ],
 )
 class HomeRoute extends GoRouteData with $HomeRoute {
-  const HomeRoute();
+  final HomeDestination destination;
+
+  const HomeRoute({this.destination = HomeDestination.home});
 
   @override
   Widget build(BuildContext context, GoRouterState state) => Consumer(
     builder: (context, ref, _) => HomeScreen(
+      destination: destination,
+      onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
       accountName: ref.watch(authControllerProvider).value,
       onOpenGenres: () => const GenresRoute().push<void>(context),
       onGenreSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
       onSignOut: () => unawaited(_signOut(context, ref)),
+      onRootBack: supportsAppExit ? () => unawaited(confirmAppExit(context)) : null,
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) {
-        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title, $extra: anime).go(context);
+        AnimeRoute(
+          animeId: anime.id,
+          slug: anime.slug,
+          title: anime.title,
+          destination: destination,
+          $extra: anime,
+        ).go(context);
       },
     ),
   );
@@ -78,35 +95,59 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
   final String slug;
   final String title;
   final AnimeSummary? $extra;
+  final HomeDestination destination;
 
-  const AnimeRoute({required this.animeId, required this.slug, required this.title, this.$extra});
+  const AnimeRoute({
+    required this.animeId,
+    required this.slug,
+    required this.title,
+    this.destination = HomeDestination.home,
+    this.$extra,
+  });
 
   @override
   Page<void> buildPage(BuildContext context, GoRouterState state) =>
       AppNavigationPage(context: context, key: state.pageKey, child: build(context, state));
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => AnimeScreen(
-    animeId: animeId,
-    slug: slug,
-    fallbackTitle: title,
-    fallbackPosterUri: $extra?.id == animeId ? $extra?.posterUri : null,
-    onFilterTap: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
-    onEpisodeTap: (episode) {
-      unawaited(
-        PlayerRoute(
-          animeId: animeId,
-          episodeNumber: episode.number,
-          slug: slug,
-          title: title,
-          $extra: $extra,
-        ).push<void>(context),
-      );
-    },
+  Widget build(BuildContext context, GoRouterState state) => _RouteShell(
+    destination: destination,
+    title: title,
+    builder: (onOpenNavigation) => AnimeScreen(
+      embedded: !AppLayoutScope.isTvOf(context),
+      onOpenNavigation: onOpenNavigation,
+      animeId: animeId,
+      slug: slug,
+      fallbackTitle: title,
+      fallbackPosterUri: $extra?.id == animeId ? $extra?.posterUri : null,
+      onFilterTap: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
+      onPartTap: (part) {
+        final id = part.id;
+        final partSlug = part.slug;
+        if (id != null && partSlug != null && id != animeId) {
+          unawaited(
+            AnimeRoute(animeId: id, slug: partSlug, title: part.label, destination: destination).push<void>(context),
+          );
+        }
+      },
+      onEpisodeTap: (episode) {
+        unawaited(
+          PlayerRoute(
+            animeId: animeId,
+            episodeNumber: episode.number,
+            destination: destination,
+            slug: slug,
+            title: title,
+            $extra: $extra,
+          ).push<void>(context),
+        );
+      },
+    ),
   );
 }
 
 class PlayerRoute extends GoRouteData with $PlayerRoute {
+  final HomeDestination destination;
   final int animeId;
   final int episodeNumber;
   final String slug;
@@ -118,6 +159,7 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
     required this.episodeNumber,
     required this.slug,
     required this.title,
+    this.destination = HomeDestination.home,
     this.$extra,
   });
 
@@ -131,6 +173,18 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
 }
 
 Future<void> _signOut(BuildContext context, WidgetRef ref) async {
+  if (ModalRoute.of(context)?.isCurrent != true) {
+    return;
+  }
+  final confirmed = await showAppConfirmation(
+    context,
+    title: 'Выйти из аккаунта?',
+    message: 'Для следующего просмотра понадобится снова войти в аккаунт AniStar.',
+    confirmLabel: 'Выйти из аккаунта',
+  );
+  if (!confirmed || !context.mounted) {
+    return;
+  }
   final failure = await ref.read(authControllerProvider.notifier).signOut();
   if (failure != null && context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
@@ -142,8 +196,14 @@ class GenresRoute extends GoRouteData with $GenresRoute {
   const GenresRoute();
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => GenresScreen(
-    onSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
+  Widget build(BuildContext context, GoRouterState state) => _RouteShell(
+    destination: HomeDestination.genres,
+    title: 'Жанры',
+    builder: (onOpenNavigation) => GenresScreen(
+      embedded: true,
+      onOpenNavigation: onOpenNavigation,
+      onSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
+    ),
   );
 }
 
@@ -151,16 +211,63 @@ class GenresRoute extends GoRouteData with $GenresRoute {
 class FilterRoute extends GoRouteData with $FilterRoute {
   final String path;
   final String title;
+  final HomeDestination destination;
 
-  const FilterRoute({required this.path, required this.title});
+  const FilterRoute({required this.path, required this.title, this.destination = HomeDestination.genres});
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => CatalogScreen(
-    key: ValueKey(path),
-    filter: CatalogFilter(label: title, path: path),
-    onBack: () => context.pop(),
-    onOpenGenres: () => const GenresRoute().push<void>(context),
-    onAnimeTap: (anime) =>
-        AnimeRoute(animeId: anime.id, slug: anime.slug, title: anime.title, $extra: anime).push<void>(context),
+  Widget build(BuildContext context, GoRouterState state) => Consumer(
+    builder: (context, ref, _) {
+      final mobile = !AppLayoutScope.isTvOf(context);
+      final catalog = CatalogScreen(
+        key: ValueKey(path),
+        embedded: mobile,
+        accountName: ref.watch(authControllerProvider).value,
+        filter: CatalogFilter(label: title, path: path),
+        onTabSelected: (favorite) =>
+            HomeRoute(destination: favorite ? HomeDestination.favorites : HomeDestination.home).go(context),
+        onOpenGenres: () => const HomeRoute(destination: HomeDestination.genres).go(context),
+        onSignOut: () => unawaited(_signOut(context, ref)),
+        onOpenLogs: _logsAction(context),
+        onAnimeTap: (anime) => _openAnime(context, anime, destination),
+      );
+
+      return mobile ? _AppMobileRouteShell(destination: destination, title: title, content: catalog) : catalog;
+    },
   );
+}
+
+VoidCallback? _logsAction(BuildContext context) =>
+    AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null;
+
+void _openAnime(BuildContext context, AnimeSummary anime, HomeDestination destination) {
+  unawaited(
+    AnimeRoute(
+      animeId: anime.id,
+      slug: anime.slug,
+      title: anime.title,
+      destination: destination,
+      $extra: anime,
+    ).push<void>(context),
+  );
+}
+
+class _RouteShell extends ConsumerWidget {
+  const _RouteShell({required this.destination, required this.title, required this.builder});
+
+  final HomeDestination destination;
+  final String title;
+  final Widget Function(VoidCallback? onOpenNavigation) builder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => AppLayoutScope.isTvOf(context)
+      ? TvRouteShell(
+          destination: destination,
+          accountName: ref.watch(authControllerProvider).value,
+          onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
+          onSignOut: () => unawaited(_signOut(context, ref)),
+          onOpenLogs: _logsAction(context),
+          builder: builder,
+        )
+      : _AppMobileRouteShell(destination: destination, title: title, content: builder(null));
 }

@@ -1,0 +1,51 @@
+{
+  "posters": {
+    "frieren": "https://cdn.myanimelist.net/images/anime/1015/138006.jpg",
+    "jujutsu": "https://cdn.myanimelist.net/images/anime/1171/109222.jpg",
+    "demon": "https://cdn.myanimelist.net/images/anime/1286/99889.jpg",
+    "chainsaw": "https://cdn.myanimelist.net/images/anime/1806/126216.jpg",
+    "attack": "https://cdn.myanimelist.net/images/anime/10/47347.jpg",
+    "spy": "https://cdn.myanimelist.net/images/anime/1441/122795.jpg"
+  },
+  "brand": "AniStar TV source project / lib/packages/ui_kit/assets/images/anistar_logo.png",
+  "font": "Manrope / Google Fonts",
+  "ratingSnapshots": {
+    "frieren": {
+      "value": 9.2,
+      "url": "https://anistar.org/9576-provozhayuschaya-v-posledniy-put-friren-sousou-no-frieren.html"
+    },
+    "jujutsu": {
+      "value": 9.5,
+      "url": "https://www154.anistar.org/index.php?cstart=6&do=status-anime&status=2&user_id=268637"
+    },
+    "demon": {
+      "value": 9.7,
+      "url": "https://www154.anistar.org/index.php?cstart=15&do=xfsearch&r=anime&type=year&xf=2019"
+    },
+    "attack": {
+      "value": 9.7,
+      "url": "https://anistar.org/2998-attack_on_titan.html"
+    },
+    "spy": {
+      "value": 9.5,
+      "url": "https://anistar.org/8643-semya-shpiona-spy-x-family.html"
+    }
+  },
+  "catalogMetadataSnapshots": {
+    "frieren": {
+      "url": "https://anistar.org/9576-provozhayuschaya-v-posledniy-put-friren-sousou-no-frieren.html",
+      "publicationDate": "22-03-2024, 19:05",
+      "dateMeaning": "Article publication/update date, not torrent file date"
+    },
+    "spy": {
+      "url": "https://anistar.org/8643-semya-shpiona-spy-x-family.html",
+      "publicationDate": "24-12-2022, 20:22"
+    },
+    "jujutsu": {
+      "url": "https://www154.anistar.org/index.php?cstart=6&do=status-anime&status=2&user_id=268637"
+    },
+    "attack": {
+      "url": "https://anistar.org/2998-attack_on_titan.html"
+    }
+  }
+}
