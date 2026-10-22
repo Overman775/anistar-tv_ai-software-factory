@@ -51,12 +51,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    final reload = find.widgetWithText(FilledButton, 'Обновить серии');
+    final reload = find.widgetWithText(AppButton, 'Обновить серии');
     expect(reload.hitTestable(), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(calls, 2);
-    expect(find.widgetWithText(FilledButton, 'Смотреть серию 1'), findsOneWidget);
+    expect(find.widgetWithText(AppButton, 'Смотреть серию 1'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
     expect(find.byType(EpisodeCard), findsAtLeastNWidgets(1));
     expect(tester.takeException(), isNull);
   });
@@ -113,10 +115,12 @@ void main() {
     await tester.pumpAndSettle();
     final container = ProviderScope.containerOf(tester.element(find.byType(AnimeScreen)));
     final latestKnown = container.read(favoritesControllerProvider).known;
-    expect(find.text('Добавить в избранное'), findsOneWidget);
+    expect(find.text('В избранное'), findsOneWidget);
     pending.complete(Result.success(data(true)));
     await tester.pumpAndSettle();
     expect(container.read(favoritesControllerProvider).known, latestKnown);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
     expect(find.text('Серии не найдены'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -160,8 +164,28 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        final play = find.widgetWithText(FilledButton, 'Смотреть серию 1');
-        expect(tester.getRect(play).bottom, lessThanOrEqualTo(size.height));
+        final play = find.widgetWithText(AppButton, 'Смотреть серию 1');
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Смотреть первую серию');
+        final initialPlayRect = tester.getRect(play);
+        final focusContext = FocusManager.instance.primaryFocus?.context;
+        final focusTarget = find.byElementPredicate((element) => identical(element, focusContext));
+        final focusRect = tester.getRect(focusTarget);
+        final viewportRect = tester.getRect(find.byType(Viewport).first);
+        final playContext = tester.element(play);
+        final scrollPosition = Scrollable.of(playContext).position;
+        final initialPixels = scrollPosition.pixels;
+        final minimum = scrollPosition.minScrollExtent;
+        final maximum = scrollPosition.maxScrollExtent;
+        final viewportExtent = scrollPosition.viewportDimension;
+        final media = MediaQuery.of(playContext);
+        expect(
+          initialPlayRect.bottom,
+          lessThanOrEqualTo(size.height),
+          reason:
+              'initial=$initialPlayRect focus=$focusRect viewport=$viewportRect '
+              'scroll=$initialPixels min=$minimum max=$maximum extent=$viewportExtent '
+              'media=${media.size} scaled18=${media.textScaler.scale(18)}',
+        );
         expect(tester.getRect(play).top, greaterThanOrEqualTo(0));
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pumpAndSettle();
@@ -170,11 +194,25 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         expect(find.byType(EpisodeCard), findsOneWidget);
-        expect(tester.getRect(find.byType(EpisodeCard)).bottom, lessThanOrEqualTo(size.height));
+        final episodeRect = tester.getRect(find.byType(EpisodeCard));
+        final episodeFocus = FocusManager.instance.primaryFocus;
+        final episodeFocusTarget = find.byElementPredicate((element) => identical(element, episodeFocus?.context));
+        final episodeFocusRect = tester.getRect(episodeFocusTarget);
+        final episodePixels = scrollPosition.pixels;
+        final episodeMaximum = scrollPosition.maxScrollExtent;
+        expect(
+          episodeRect.bottom,
+          lessThanOrEqualTo(size.height),
+          reason:
+              'initialWatch=$initialPlayRect focus=$focusRect viewport=$viewportRect '
+              'initialScroll=$initialPixels min=$minimum max=$maximum extent=$viewportExtent '
+              'media=${media.size} scaled18=${media.textScaler.scale(18)} '
+              'episode=$episodeRect focusLabel=${episodeFocus?.debugLabel} focusRect=$episodeFocusRect '
+              'episodeScroll=$episodePixels max=$episodeMaximum',
+        );
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
         await tester.pumpAndSettle();
         // Recheck visibility after returning Up from the episode grid.
-        // ignore: avoid-duplicate-test-assertions
         expect(tester.getRect(play).bottom, lessThanOrEqualTo(size.height));
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         expect(opened, 1);
@@ -227,7 +265,7 @@ void main() {
     expect(opened, 5);
     await container.read(watchedEpisodesProvider(1).notifier).markStarted(5);
     await tester.pumpAndSettle();
-    expect(find.text('Смотреть серию 1'), findsOneWidget);
+    expect(find.text('Посмотреть снова'), findsOneWidget);
   });
 
   for (final size in [compactTvSize, wideTvSize, const Size(390, 844)]) {
@@ -402,7 +440,7 @@ void main() {
     final pumpAndSettle = tester.pumpAndSettle;
     final sendKeyEvent = tester.sendKeyEvent;
     await pumpAndSettle();
-    final playButton = find.widgetWithText(FilledButton, 'Смотреть серию 1');
+    final playButton = find.widgetWithText(AppButton, 'Смотреть серию 1');
     expect(playButton, findsOneWidget);
     expect(tester.getBottomRight(playButton).dy, lessThanOrEqualTo(540));
     expect(tester.takeException(), isNull);

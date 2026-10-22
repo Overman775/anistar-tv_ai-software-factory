@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'player_control_button.dart';
+
 /// Transfers remote focus from playback to its recovery action.
 class PlayerRetryView extends StatefulWidget {
   const PlayerRetryView({
@@ -63,11 +65,11 @@ class _PlayerRetryViewState extends State<PlayerRetryView> {
           top: 8,
           left: 8,
           child: SafeArea(
-            child: IconButton(
-              key: const ValueKey('player-back'),
-              tooltip: 'К сериям',
+            child: PlayerControlButton(
+              buttonKey: 'player-back',
+              label: 'К сериям',
               onPressed: widget.onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
+              child: const AppIcon(AppIconType.arrowLeft),
             ),
           ),
         ),

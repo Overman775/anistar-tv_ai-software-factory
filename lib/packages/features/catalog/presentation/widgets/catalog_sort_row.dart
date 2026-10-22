@@ -22,7 +22,7 @@ class CatalogSortRow extends StatelessWidget {
       ? ListTile(
           title: Text(label),
           selected: selected,
-          trailing: selected ? const Icon(Icons.check) : null,
+          trailing: selected ? const AppIcon.fromMaterial(Icons.check) : null,
           onTap: onPressed,
         )
       : TvChoiceTile(

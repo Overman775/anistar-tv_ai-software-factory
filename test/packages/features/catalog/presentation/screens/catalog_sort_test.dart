@@ -61,7 +61,7 @@ void main() {
       await _key(tester, LogicalKeyboardKey.arrowDown);
       await _key(tester, LogicalKeyboardKey.select);
       expect(repository.requests.length, 1);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
       expect(find.text('По дате · Сначала новые'), findsOneWidget);

@@ -263,7 +263,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final retry = FocusManager.instance.primaryFocus;
-    expect(retry?.context?.findAncestorWidgetOfExactType<FilledButton>(), isNotNull);
+    expect(retry?.context?.findAncestorWidgetOfExactType<AppButton>(), isNotNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Главная');
@@ -366,7 +366,7 @@ void main() {
     await sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await pumpAndSettle();
     await sendKeyEvent(LogicalKeyboardKey.select);
-    expect(openedAnimeId, 12);
+    expect(openedAnimeId, 10);
   });
 
   testWidgets('returning to the first row reveals the whole focused card below the tabs', (tester) async {

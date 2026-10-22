@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_icon.dart';
 
 /// Non-interactive card metadata with a shared contour and readable surface.
 class AppMetadataBadge extends StatelessWidget {
@@ -16,7 +17,7 @@ class AppMetadataBadge extends StatelessWidget {
     excludeSemantics: true,
     child: DecoratedBox(
       decoration: const BoxDecoration(
-        color: Color(0xEE080B14),
+        color: AppPalette.badge,
         borderRadius: AppRadii.small,
         border: Border.fromBorderSide(BorderSide(color: AppPalette.outline)),
       ),
@@ -25,7 +26,7 @@ class AppMetadataBadge extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: AppPalette.secondary, size: 20),
+            AppIcon.fromMaterial(icon, color: AppPalette.primary, size: 20),
             if (label case final text?) ...[
               const SizedBox(width: AppSpacing.xs),
               Text(

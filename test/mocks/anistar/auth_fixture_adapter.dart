@@ -16,6 +16,7 @@ final class AuthFixtureAdapter implements HttpClientAdapter {
   String? redirect;
   String? formAction;
   String? authenticatedBody;
+  String? postBody;
 
   @override
   Future<ResponseBody> fetch(
@@ -25,6 +26,9 @@ final class AuthFixtureAdapter implements HttpClientAdapter {
   ) async {
     requests.add(options);
     if (options.method == 'POST') {
+      if (postBody case final body?) {
+        return _body(body);
+      }
       if (rejectLogin) {
         return _body('$guestAuthHtml Ошибка авторизации');
       }

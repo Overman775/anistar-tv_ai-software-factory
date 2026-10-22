@@ -5,7 +5,8 @@ import '../../domain/models/anime_page.dart';
 import '../../domain/models/anime_summary.dart';
 import '../../domain/models/catalog_filter.dart';
 
-CatalogFilter mapCatalogFilter(AnistarCatalogFilterDto item) => CatalogFilter(label: item.label, path: item.path);
+CatalogFilter mapCatalogFilter(AnistarCatalogFilterDto item) =>
+    CatalogFilter(label: item.label, path: item.path, imageUri: item.imageUri);
 
 AnimeSummary mapAnimeSummary(AnistarAnimeSummaryDto item, {bool favoriteList = false}) {
   if (item.id <= 0 || item.slug.isEmpty || item.title.trim().isEmpty) {
@@ -21,6 +22,10 @@ AnimeSummary mapAnimeSummary(AnistarAnimeSummaryDto item, {bool favoriteList = f
     year: item.year,
     rating: rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null,
     isFavorite: favoriteList ? true : item.isFavorite,
+    genreText: item.genreText,
+    description: item.description,
+    updateMessage: item.updateMessage,
+    publicationDate: item.publicationDate,
   );
 }
 

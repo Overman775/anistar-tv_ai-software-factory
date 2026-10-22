@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_icon.dart';
 import 'tv_focus_tile.dart';
 
 class TvChoiceTile extends StatelessWidget {
@@ -13,6 +14,8 @@ class TvChoiceTile extends StatelessWidget {
     this.focusNode,
     this.selected = false,
     this.autofocus = false,
+    this.enabled = true,
+    this.busy = false,
     super.key,
   });
 
@@ -21,7 +24,7 @@ class TvChoiceTile extends StatelessWidget {
     final style = Theme.of(context).textTheme.bodyMedium;
     final textHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 16) * (style?.height ?? 1.4);
 
-    return math.max(56, textHeight + 28) + 8;
+    return math.max(56, textHeight * 2 + 28) + 8;
   }
 
   final FocusNode? focusNode;
@@ -29,6 +32,8 @@ class TvChoiceTile extends StatelessWidget {
   final VoidCallback onPressed;
   final bool selected;
   final bool autofocus;
+  final bool enabled;
+  final bool busy;
 
   void _reveal(BuildContext context, bool focused) {
     if (focused) {
@@ -46,6 +51,8 @@ class TvChoiceTile extends StatelessWidget {
       child: TvFocusTile(
         variant: TvFocusTileVariant.row,
         selected: selected,
+        enabled: enabled,
+        busy: busy,
         focusNode: focusNode,
         autofocus: autofocus,
         semanticLabel: label,
@@ -59,12 +66,15 @@ class TvChoiceTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textPrimary),
                 ),
               ),
-              if (selected) const Icon(Icons.check, color: AppPalette.textPrimary),
+              if (busy)
+                const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              else if (selected)
+                const AppIcon(AppIconType.check, color: AppPalette.primary),
             ],
           ),
         ),

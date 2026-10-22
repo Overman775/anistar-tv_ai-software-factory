@@ -59,6 +59,29 @@ void main() {
     expect(adapter.requests.where((request) => request.method == 'POST'), hasLength(1));
   });
 
+  test('explicit guest POST is invalidCredentials, but unknown POST markup remains request', () async {
+    adapter.rejectLogin = true;
+    await expectLater(
+      service.signIn('test', 'wrong'),
+      throwsA(
+        isA<AnistarClientException>().having(
+          (error) => error.category,
+          'category',
+          AnistarClientErrorCategory.invalidCredentials,
+        ),
+      ),
+    );
+    adapter.postBody = '<html><body>Unknown response</body></html>';
+    await expectLater(
+      service.signIn('test', 'wrong'),
+      throwsA(
+        isA<AnistarClientException>().having((error) => error.category, 'category', AnistarClientErrorCategory.request),
+      ),
+    );
+    expect(session.account, isNull);
+    expect(storage.values, isEmpty);
+  });
+
   test('CP1251 form encodes Cyrillic and preserves password spaces and punctuation', () {
     expect(
       AnistarAuthHtml.encodeForm({'login_name': 'тест', 'login_password': ' п+а& '}, 'windows-1251'),

@@ -67,6 +67,12 @@ void main() {
     expect(find.byType(BottomSheet), findsOneWidget);
     expect(find.text('тест'), findsOneWidget);
     await MobileControls.tap(tester, find.text('Выйти из аккаунта'), 'touch logout');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.text('Выйти из аккаунта?').evaluate().isNotEmpty,
+      'logout confirmation',
+    );
+    await MobileControls.tap(tester, find.widgetWithText(AppButton, 'Выйти из аккаунта'), 'confirm touch logout');
     await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'mobile logout gate');
     await tester.pumpWidget(const SizedBox.shrink());
     await launch(tester, login: false, resetSession: false);
@@ -143,7 +149,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'mobile genres');
     await MobileControls.tap(tester, find.text('Комедия'), 'comedy genre');
     await _waitFilter(tester);
-    await MobileControls.tap(tester, find.byIcon(Icons.sort), 'touch sort');
+    await MobileControls.tap(tester, find.widgetWithText(TextButton, 'По дате · Сначала новые'), 'touch sort');
     expect(find.byType(BottomSheet), findsOneWidget);
     await MobileControls.tap(tester, find.text('По алфавиту'), 'alphabetical criterion');
     await MobileControls.tap(tester, find.text('Я → А'), 'descending titles');
@@ -151,13 +157,17 @@ void main() {
     await E2eHarness.waitFor(tester, () => MobileControls.card(10961).evaluate().isNotEmpty, 'sorted mobile catalog');
     final sorted = _events(await fixture.state()).where((event) => event['path'] == '/anime/comedy/').last;
     expect(sorted['sort'], {'dle_sort_cat': 'title', 'dle_direction_cat': 'desc'});
-    await MobileControls.tap(tester, find.byIcon(Icons.sort), 'reopen sort');
+    await MobileControls.tap(tester, find.widgetWithText(TextButton, 'По алфавиту · Я → А'), 'reopen sort');
     await MobileControls.tap(tester, find.text('По дате'), 'draft date sort');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.byType(BottomSheet).evaluate().isEmpty, 'cancel draft with Back');
     expect(find.text('По алфавиту · Я → А'), findsOneWidget);
     await tester.binding.handlePopRoute();
-    await E2eHarness.waitFor(tester, () => find.byType(GenresScreen).evaluate().isNotEmpty, 'Back to genre tab');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.byType(GenresScreen).evaluate().isNotEmpty && find.byType(NavigationBar).evaluate().length == 1,
+      'Back to single genre navigation',
+    );
     expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
   });
 
@@ -214,18 +224,29 @@ void main() {
     );
     await MobileControls.tab(tester, 'Главная');
     await MobileControls.openAnime(tester);
+    final animeScroll = find.descendant(of: find.byType(AnimeScreen), matching: find.byType(ListView));
+    final detailController = tester.widget<ListView>(animeScroll).controller;
+    if (detailController == null) {
+      fail('Mobile detail has no scroll controller.');
+    }
+    detailController.jumpTo(0);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(detailController.offset, 0, reason: 'pull refresh starts at the actual detail top');
     final beforeDetail = (await fixture.state())['player_pages'];
     if (beforeDetail is! int) {
       fail('Missing fixture episode-page count');
     }
     await fixture.configure(reset: false, favorites: '10938');
-    final animeScroll = find.descendant(of: find.byType(AnimeScreen), matching: find.byType(ListView));
     await tester.drag(animeScroll, const Offset(0, 350));
     await E2eHarness.waitFor(
       tester,
-      () =>
-          find.text('Удалить из избранного').evaluate().isNotEmpty &&
-          find.byType(RefreshProgressIndicator).evaluate().isEmpty,
+      () => find.byType(RefreshProgressIndicator).evaluate().isEmpty,
+      'detail refresh finishes before scrolling',
+    );
+    await MobileControls.revealAnimeAction(tester, 'В избранном');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.text('В избранном').evaluate().isNotEmpty && find.byType(RefreshProgressIndicator).evaluate().isEmpty,
       'pull reloads anime details and episodes',
     );
     expect((await fixture.state())['player_pages'], beforeDetail + 1);
@@ -246,12 +267,9 @@ void main() {
     expect((await fixture.state())['favorites'], [10938]);
     await MobileControls.tab(tester, 'Избранное');
     await MobileControls.openAnime(tester);
-    await MobileControls.tap(tester, find.text('Удалить из избранного'), 'detail favorite removal');
-    await E2eHarness.waitFor(
-      tester,
-      () => find.text('Добавить в избранное').evaluate().isNotEmpty,
-      'removal confirmed',
-    );
+    await MobileControls.revealAnimeAction(tester, 'В избранном');
+    await MobileControls.tap(tester, find.text('В избранном'), 'detail favorite removal');
+    await E2eHarness.waitFor(tester, () => find.text('В избранное').evaluate().isNotEmpty, 'removal confirmed');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
     final removed = await fixture.state();
@@ -266,7 +284,8 @@ void main() {
     await fixture.configure();
     await launch(tester);
     await MobileControls.openAnime(tester);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-header')), findsOneWidget);
     await MobileControls.openVideo(tester);
     expect(find.descendant(of: find.byType(PlayerScreen), matching: find.byType(RefreshIndicator)), findsNothing);
     var player = E2eHarness.requirePlayer(tester);

@@ -11,20 +11,56 @@ class CatalogSkeleton extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => TvSkeleton(
       isLoading: true,
-      child: CustomScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 72),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: CatalogLayout.columnCount(constraints.maxWidth),
-                childAspectRatio: 0.68,
-                crossAxisSpacing: AppSpacing.lg,
-                mainAxisSpacing: AppSpacing.xl,
+      child: Column(
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: CatalogLayout.inspectorHeight(
+                MediaQuery.sizeOf(context).height,
+                MediaQuery.textScalerOf(context).scale(16) / 16,
               ),
-              itemCount: CatalogLayout.columnCount(constraints.maxWidth) * 2,
-              itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
+                vertical: MediaQuery.sizeOf(context).width <= 768 ? AppSpacing.lg : AppSpacing.xl,
+              ),
+              child: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TvSkeletonBox(height: 32),
+                  SizedBox(height: AppSpacing.md),
+                  TvSkeletonBox(height: 20),
+                  SizedBox(height: AppSpacing.md),
+                  Flexible(child: TvSkeletonBox(height: 32)),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: CustomScrollView(
+              physics: const NeverScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
+                    AppSpacing.md,
+                    CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
+                    72,
+                  ),
+                  sliver: SliverGrid.builder(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: CatalogLayout.columnCount(constraints.maxWidth),
+                      childAspectRatio: 0.68,
+                      crossAxisSpacing: AppSpacing.lg,
+                      mainAxisSpacing: AppSpacing.xl,
+                    ),
+                    itemCount: CatalogLayout.columnCount(constraints.maxWidth) * 2,
+                    itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

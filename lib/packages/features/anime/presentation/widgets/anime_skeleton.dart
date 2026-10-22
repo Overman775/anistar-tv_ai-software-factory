@@ -19,62 +19,49 @@ class AnimeSkeleton extends StatelessWidget {
         physics: const NeverScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: AnimeLayout.heroHeight(
-                constraints.maxWidth,
-                textScale: MediaQuery.textScalerOf(context).scale(18) / 18,
-              ),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
-                  AppSpacing.lg,
-                  constraints.maxWidth < 600 ? AppSpacing.md : AppSpacing.xxl,
-                  AppSpacing.xl,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (constraints.maxWidth >= 600)
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppContentTypography.detailTitleOf(context)),
+                  const SizedBox(height: AppSpacing.lg),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       SizedBox(
-                        height: AnimeLayout.baseHeroHeight(constraints.maxWidth) - AppSpacing.lg - AppSpacing.xl,
+                        width: (MediaQuery.sizeOf(context).width * 0.22).clamp(140.0, 240.0),
                         child: AspectRatio(
-                          aspectRatio: 2 / 3,
+                          aspectRatio: AppSizes.posterRatio,
                           child: animeId != null && posterUri != null
-                              ? ClipRRect(
-                                  borderRadius: AppRadii.large,
-                                  child: TvPosterHero(
-                                    tag: 'anime-poster-$animeId',
-                                    imageUrl: posterUri.toString(),
-                                    semanticLabel: title,
-                                  ),
+                              ? TvPosterHero(
+                                  tag: 'anime-poster-$animeId',
+                                  imageUrl: posterUri.toString(),
+                                  semanticLabel: title,
                                 )
                               : const TvSkeletonBox(borderRadius: AppRadii.large),
                         ),
                       ),
-                    if (constraints.maxWidth >= 600) const SizedBox(width: AppSpacing.xl),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          TvSkeletonBox(width: 220, height: 34, borderRadius: AppRadii.pill),
-                          SizedBox(height: AppSpacing.md),
-                          TvSkeletonBox(height: 38, borderRadius: AppRadii.small),
-                          SizedBox(height: AppSpacing.sm),
-                          TvSkeletonBox(width: 260, height: 24, borderRadius: AppRadii.small),
-                          SizedBox(height: AppSpacing.md),
-                          TvSkeletonBox(height: 22, borderRadius: AppRadii.small),
-                          SizedBox(height: AppSpacing.sm),
-                          FractionallySizedBox(
-                            widthFactor: 0.8,
-                            child: TvSkeletonBox(height: 22, borderRadius: AppRadii.small),
-                          ),
-                          Spacer(),
-                          TvSkeletonBox(width: 260, height: 56),
-                        ],
+                      const SizedBox(width: AppSpacing.xl),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            TvSkeletonBox(height: 28),
+                            SizedBox(height: AppSpacing.md),
+                            TvSkeletonBox(height: 24),
+                            SizedBox(height: AppSpacing.lg),
+                            TvSkeletonBox(height: 56),
+                            SizedBox(height: AppSpacing.sm),
+                            TvSkeletonBox(height: 56),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  const TvSkeletonBox(height: 80),
+                ],
               ),
             ),
           ),
@@ -98,7 +85,11 @@ class AnimeSkeleton extends StatelessWidget {
                     crossAxisCount: columns,
                     mainAxisSpacing: AppSpacing.xl,
                     crossAxisSpacing: AppSpacing.lg,
-                    mainAxisExtent: AnimeLayout.episodeHeight(context, constraints.crossAxisExtent),
+                    mainAxisExtent: AnimeLayout.episodeHeight(
+                      context,
+                      constraints.crossAxisExtent,
+                      viewportExtent: constraints.viewportMainAxisExtent,
+                    ),
                   ),
                   itemCount: columns * 2,
                   itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),

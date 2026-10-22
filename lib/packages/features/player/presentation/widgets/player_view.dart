@@ -175,6 +175,7 @@ class _PlayerViewState extends State<PlayerView> {
                             onSelectQuality: widget.onSelectQuality,
                             onSelectEpisode: widget.onSelectEpisode,
                             onSeek: widget.onSeek,
+                            onSeekRelative: widget.onSeekRelative,
                             onSeekKeyEvent: widget.onSeekKeyEvent,
                             previewPosition: widget.previewPosition,
                           ),
@@ -184,12 +185,21 @@ class _PlayerViewState extends State<PlayerView> {
             ),
           ),
           if (value.isBuffering)
-            const Center(
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: Color(0xB8000000), shape: BoxShape.circle),
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpacing.md),
-                  child: SizedBox.square(dimension: 48, child: CircularProgressIndicator(strokeWidth: 4)),
+            Center(
+              child: Semantics(
+                label: 'Буферизация видео',
+                liveRegion: true,
+                child: const ExcludeSemantics(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(color: AppPalette.playerShadeTop, shape: BoxShape.circle),
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.md),
+                      child: SizedBox.square(
+                        dimension: AppSizes.touchControl,
+                        child: CircularProgressIndicator(strokeWidth: 4),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

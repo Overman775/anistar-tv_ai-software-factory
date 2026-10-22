@@ -156,7 +156,7 @@ void main() {
     for (final path in Assets.fonts.values) {
       expect((await rootBundle.load(path)).lengthInBytes, greaterThan(0));
     }
-    expect(TvTypography.fontFamily, 'packages/ui_kit/Inter');
+    expect(TvTypography.fontFamily, 'packages/ui_kit/Manrope');
   });
 
   testWidgets('shared logo decodes the package image without an extra semantic label', (tester) async {

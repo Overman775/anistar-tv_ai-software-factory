@@ -8,6 +8,7 @@ import 'package:app_logging/app_logging.dart';
 import 'package:app_logging/providers.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,18 +83,27 @@ final class E2eHarness {
     addTearDown(() => Bloc.observer = previousObserver);
     await tester.binding.setSurfaceSize(size);
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    await runApplication(
-      deviceProfile: deviceProfile,
-      logger: AppLogger.initForTest(),
-      overrides: [
-        dioProvider.overrideWith((ref) {
-          final dio = _transport(ref.watch(loggerProvider));
-          ref.onDispose(() => dio.close(force: true));
+    final previousFrameworkError = FlutterError.onError;
+    final previousPlatformError = PlatformDispatcher.instance.onError;
+    try {
+      await runApplication(
+        deviceProfile: deviceProfile,
+        logger: AppLogger.initForTest(),
+        overrides: [
+          dioProvider.overrideWith((ref) {
+            final dio = _transport(ref.watch(loggerProvider));
+            ref.onDispose(() => dio.close(force: true));
 
-          return dio;
-        }),
-      ],
-    );
+            return dio;
+          }),
+        ],
+      );
+    } finally {
+      // The runner installs logging handlers; framework failures must remain
+      // visible to the integration binding rather than a silent test logger.
+      FlutterError.onError = previousFrameworkError;
+      PlatformDispatcher.instance.onError = previousPlatformError;
+    }
     await tester.pump();
     if (autoLogin) {
       await login(tester);
@@ -102,11 +112,7 @@ final class E2eHarness {
 
   static Future<void> login(WidgetTester tester, {String password = 'пароль'}) async {
     final submit = find.byKey(const ValueKey('login_submit'));
-    await waitFor(
-      tester,
-      () => submit.evaluate().isNotEmpty && tester.widget<FilledButton>(submit).onPressed != null,
-      'login ready',
-    );
+    await waitFor(tester, () => submit.evaluate().isNotEmpty && !tester.widget<AppButton>(submit).busy, 'login ready');
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
     await tester.enterText(find.byKey(const ValueKey('login_password')), password);
     if (await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile) {
@@ -120,7 +126,7 @@ final class E2eHarness {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pump();
     expect(
-      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>()?.key,
       const ValueKey('login_submit'),
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);

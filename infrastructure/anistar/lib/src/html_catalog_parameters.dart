@@ -17,7 +17,7 @@ final class HtmlCatalogParameters {
   const HtmlCatalogParameters(this.sort);
 
   Map<String, String> cookies(String path) {
-    final suffix = path.startsWith('/filter/janrs/') ? 'xfsearch' : 'cat';
+    final suffix = path.startsWith('/filter/') ? 'xfsearch' : 'cat';
 
     return {'dle_sort_$suffix': field, 'dle_direction_$suffix': sort.ascending ? 'asc' : 'desc', 'dle_no_cache': '1'};
   }
@@ -31,6 +31,6 @@ final class HtmlCatalogParameters {
   }
 
   static bool isValidPath(String path) => RegExp(
-    r'^/(?:[a-z][a-z0-9-]*/|anime/[a-z][a-z0-9-]*/|filter/janrs/(?:[a-zA-Z0-9+_-]|%(?:[89a-fA-F][a-fA-F0-9]|20))+/)$',
+    r'^/(?:[a-z][a-z0-9-]*/|anime/[a-z][a-z0-9-]*/|filter/(?:janrs|year|director)/(?:[a-zA-Z0-9+_-]|%(?:[89a-fA-F][a-fA-F0-9]|20))+/)$',
   ).hasMatch(path);
 }

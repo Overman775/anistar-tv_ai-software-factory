@@ -39,7 +39,7 @@ class CatalogTail extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.refresh_rounded, color: AppPalette.warning, size: 38),
+                const AppIcon.fromMaterial(Icons.refresh_rounded, color: AppPalette.warning, size: 38),
                 const SizedBox(height: AppSpacing.sm),
                 Flexible(
                   child: Semantics(

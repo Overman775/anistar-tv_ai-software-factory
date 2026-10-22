@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:core/data.dart';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -12,10 +11,18 @@ import '../../catalog_providers.dart';
 import '../../domain/models/catalog_filter.dart';
 
 class GenresScreen extends ConsumerStatefulWidget {
-  const GenresScreen({required this.onSelected, this.embedded = false, super.key});
+  const GenresScreen({
+    required this.onSelected,
+    this.embedded = false,
+    this.autofocus = true,
+    this.onOpenNavigation,
+    super.key,
+  });
 
   final ValueChanged<CatalogFilter> onSelected;
   final bool embedded;
+  final bool autofocus;
+  final VoidCallback? onOpenNavigation;
 
   @override
   ConsumerState<GenresScreen> createState() => _GenresScreenState();
@@ -30,6 +37,18 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
   List<CatalogFilter> _items = [];
   bool _focusedInitial = false;
 
+  bool get _shouldFocusContent => widget.autofocus || widget.embedded && FocusScope.of(context).hasPrimaryFocus;
+
+  void _focusReadyTarget(FocusNode? target) {
+    if (mounted &&
+        ModalRoute.of(context)?.isCurrent == true &&
+        _shouldFocusContent &&
+        target?.context != null &&
+        target?.canRequestFocus == true) {
+      target?.requestFocus();
+    }
+  }
+
   KeyEventResult _navigate(FocusNode node, KeyEvent event) {
     final current = FocusManager.instance.primaryFocus;
     final index = _items.indexWhere((item) => _nodes[item.path] == current);
@@ -41,13 +60,20 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
       var next = index;
       if (key == LogicalKeyboardKey.arrowUp) {
         if (index < _columns) {
-          target = _back;
+          target = widget.embedded ? current : _back;
         } else {
           next -= _columns;
         }
       } else if (key == LogicalKeyboardKey.arrowDown) {
         next = (index + _columns).clamp(0, _items.length - 1);
       } else if (key == LogicalKeyboardKey.arrowLeft) {
+        if (index % _columns == 0 && widget.onOpenNavigation != null) {
+          if (event is KeyDownEvent || event is KeyRepeatEvent) {
+            widget.onOpenNavigation?.call();
+          }
+
+          return KeyEventResult.handled;
+        }
         next = index % _columns == 0 ? index : index - 1;
       } else if (key == LogicalKeyboardKey.arrowRight) {
         next = index % _columns == _columns - 1 ? index : (index + 1).clamp(0, _items.length - 1);
@@ -69,13 +95,9 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
   Widget _stateView(String title, String message) {
     _items = [];
     _focusedInitial = false;
-    if (AppLayoutScope.isTvOf(context) && !_stateActionFocused) {
+    if (_shouldFocusContent && AppLayoutScope.isTvOf(context) && !_stateActionFocused) {
       _stateActionFocused = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && ModalRoute.of(context)?.isCurrent == true) {
-          _retry.requestFocus();
-        }
-      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _focusReadyTarget(_retry));
     }
 
     return Padding(
@@ -88,6 +110,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
         message: message,
         actionLabel: 'Повторить',
         actionFocusNode: _retry,
+        autofocusAction: widget.autofocus,
         onAction: _reload,
       ),
     );
@@ -141,7 +164,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                   autofocus: AppLayoutScope.isTvOf(context),
                   tooltip: 'Назад',
                   onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const AppIcon.fromMaterial(Icons.arrow_back),
                 ),
               ),
         body: SafeArea(
@@ -158,13 +181,9 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                 ),
                 data: (items) {
                   _items = items;
-                  if (AppLayoutScope.isTvOf(context) && !_focusedInitial && items.isNotEmpty) {
+                  if (_shouldFocusContent && AppLayoutScope.isTvOf(context) && !_focusedInitial && items.isNotEmpty) {
                     _focusedInitial = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
-                        _nodes[items.first.path]?.requestFocus();
-                      }
-                    });
+                    WidgetsBinding.instance.addPostFrameCallback((_) => _focusReadyTarget(_nodes[items.first.path]));
                   }
                   if (items.isEmpty) {
                     return _stateView('Жанры не найдены', 'Обновите список жанров.');
@@ -174,28 +193,6 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
-                      if (!AppLayoutScope.isTvOf(context)) {
-                        return RefreshIndicator(
-                          onRefresh: _refreshMobile,
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            padding: EdgeInsets.fromLTRB(
-                              AppLayoutScope.horizontalPaddingOf(context),
-                              8,
-                              AppLayoutScope.horizontalPaddingOf(context),
-                              (widget.embedded ? MediaQuery.paddingOf(context).bottom : 0) + 8,
-                            ),
-                            itemCount: items.length,
-                            separatorBuilder: (_, _) => const Divider(height: 1),
-                            itemBuilder: (context, index) => ListTile(
-                              contentPadding: const EdgeInsets.all(8),
-                              title: Text(items[index].label),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () => widget.onSelected(items[index]),
-                            ),
-                          ),
-                        );
-                      }
                       final textScale = MediaQuery.textScalerOf(context).scale(19) / 19;
                       _columns = switch (constraints.maxWidth / textScale) {
                         < 300 => 1,
@@ -208,7 +205,8 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                       final lineHeight =
                           MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 19) * (style?.height ?? 1.5);
 
-                      return SingleChildScrollView(
+                      final content = SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.all(24),
                         child: Wrap(
                           spacing: 16,
@@ -217,37 +215,25 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
                             for (final item in items)
                               SizedBox(
                                 width: width,
-                                height: math.max(72, lineHeight * 2 + 12),
+                                height: math.max(width / AppSizes.landscapeRatio, lineHeight * 2 + 64),
                                 child: Builder(
-                                  builder: (tileContext) => TvFocusable(
+                                  builder: (tileContext) => MediaCard(
+                                    variant: MediaCardVariant.landscape,
+                                    label: item.label,
+                                    imageUrl: item.imageUri?.toString(),
                                     focusNode: _nodes.putIfAbsent(item.path, () => FocusNode(debugLabel: item.label)),
-                                    semanticLabel: item.label,
                                     onPressed: () => widget.onSelected(item),
                                     onFocusChanged: (focused) => _onTileFocus(tileContext, focused),
-                                    builder: (context, focused) => AnimatedContainer(
-                                      duration: AppMotion.durationOf(context, AppMotion.fast),
-                                      decoration: AppFocusStyle.decoration(
-                                        focused: focused,
-                                        restingColor: AppPalette.surfaceElevated,
-                                      ),
-                                      child: Center(
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          child: Text(
-                                            item.label,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: style?.copyWith(color: AppPalette.textPrimary),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ),
                           ],
                         ),
                       );
+
+                      return AppLayoutScope.isTvOf(context)
+                          ? content
+                          : RefreshIndicator(onRefresh: _refreshMobile, child: content);
                     },
                   );
                 },

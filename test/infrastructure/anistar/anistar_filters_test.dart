@@ -51,11 +51,19 @@ void main() {
       '/anime/',
       '/anime/comedy/',
       '/filter/janrs/%F8%EA%EE%EB%E0/',
+      '/filter/year/2026/',
     ]);
     expect(anime.genres, ['Приключения', 'Комедия']);
   });
 
-  for (final path in ['/anime/comedy/', '/comedy/', '/new/', '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/']) {
+  for (final path in [
+    '/anime/comedy/',
+    '/comedy/',
+    '/new/',
+    '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/',
+    '/filter/year/2023/',
+    '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/',
+  ]) {
     test('filtered pagination keeps the original path $path and recognizes site navigation', () async {
       final navigationPath = path == '/comedy/' ? '/anime/comedy/' : path;
       final html = catalogHtml.replaceAll('/anime/page/', '${navigationPath}page/');
@@ -78,7 +86,8 @@ void main() {
       '//other.test/',
       '/anime/../logout/',
       '/anime/?do=logout',
-      '/filter/year/2026/',
+      '/filter/year/%2F/',
+      '/filter/director/%25EF/',
       '/filter/janrs/%2F/',
       '/filter/janrs/%2E%2E/',
     ]) {

@@ -10,7 +10,7 @@
 
 ## Проверка доступности
 
-На стартовом экране, перед проверкой сохранённой сессии, выполняется anonymous GET `/anime/`. Dedicated Dio не использует session interceptor, cookies или credentials. Connect/receive/send timeout каждого probe — по 4 секунды; redirects выключены, TLS-проверка включена.
+На стартовом экране, перед проверкой сохранённой сессии, выполняется anonymous GET `/anime/`. Dedicated Dio не использует session interceptor, cookies или credentials. Connect/receive/send timeout каждого probe — по 4 секунды; redirects выключены, TLS-проверка включена. Внешний вид стартового состояния не меняет сетевой порядок и описан в [визуальной системе](11_visual_system.md) и [спецификации входа](01_authentication.md).
 
 Зеркало подтверждается только при HTTP 200, отсутствии cf challenge и успешном парсинге непустого каталога. HTML с ошибкой, реклама без пригодных карточек, пустая HTML и redirect не подтверждают зеркало. После успеха `ensureAvailable` не выполняет HTTP при каждом обращении.
 

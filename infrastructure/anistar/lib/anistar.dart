@@ -2,6 +2,7 @@
 library;
 
 export 'src/contract/anistar_anime_details_dto.dart';
+export 'src/contract/anistar_anime_part_dto.dart';
 export 'src/contract/anistar_anime_summary_dto.dart';
 export 'src/contract/anistar_catalog_filter_dto.dart';
 export 'src/contract/anistar_catalog_page_dto.dart';

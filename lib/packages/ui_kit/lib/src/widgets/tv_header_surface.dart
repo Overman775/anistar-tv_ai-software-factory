@@ -2,6 +2,9 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/app_palette.dart';
+
+/// Blur is restricted to the header rectangle, never the entire page.
 class TvHeaderSurface extends StatelessWidget {
   const TvHeaderSurface({super.key});
 
@@ -11,12 +14,8 @@ class TvHeaderSurface extends StatelessWidget {
       filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
       child: const DecoratedBox(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0x8C24183D), Color(0x730D1220)],
-          ),
-          border: Border(bottom: BorderSide(color: Color(0x267C3AED))),
+          color: AppPalette.inspector,
+          border: Border(bottom: BorderSide(color: AppPalette.outline)),
         ),
         child: SizedBox.expand(),
       ),

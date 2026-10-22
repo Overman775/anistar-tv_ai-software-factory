@@ -52,6 +52,12 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
     }
   }
 
+  void _requestChange(bool? favorite) {
+    if (favorite != null) {
+      unawaited(_change(!favorite));
+    }
+  }
+
   Widget _content(BuildContext context, AsyncSnapshot<Result<bool, Failure>> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
       return const SizedBox(height: 64, child: Center(child: CircularProgressIndicator()));
@@ -73,11 +79,13 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
     }
     final favorite = result.successOrNull;
 
-    return FilledButton.icon(
+    return AppButton(
       autofocus: true,
-      onPressed: _busy || favorite == null ? null : () => unawaited(_change(!favorite)),
-      icon: Icon(favorite == true ? Icons.star_border_rounded : Icons.star_rounded),
-      label: Text(_label(favorite)),
+      busy: _busy,
+      enabled: favorite != null,
+      onPressed: () => _requestChange(favorite),
+      icon: AppIcon(favorite == true ? AppIconType.heartMinus : AppIconType.heartPlus),
+      label: _label(favorite),
     );
   }
 
@@ -102,7 +110,7 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
           const SizedBox(height: AppSpacing.md),
           TextButton.icon(
             onPressed: () => Navigator.of(context).pop(false),
-            icon: const Icon(Icons.close_rounded),
+            icon: const AppIcon.fromMaterial(Icons.close_rounded),
             label: const Text('Закрыть'),
           ),
         ],

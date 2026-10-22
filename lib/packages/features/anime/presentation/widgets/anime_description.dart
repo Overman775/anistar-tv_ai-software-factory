@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-/// Keeps ellipsis on the last visible line above the hero actions.
+/// The scrollable details page shows the complete story when height is unbounded.
 class AnimeDescription extends StatelessWidget {
   const AnimeDescription({required this.description, super.key});
 
@@ -20,8 +20,8 @@ class AnimeDescription extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: TvTypography.proseMaxWidth),
           child: Text(
             description,
-            maxLines: constraints.hasBoundedHeight ? (constraints.maxHeight / lineHeight).floor().clamp(1, 7) : 7,
-            overflow: TextOverflow.ellipsis,
+            maxLines: constraints.hasBoundedHeight ? (constraints.maxHeight / lineHeight).floor().clamp(1, 7) : null,
+            overflow: constraints.hasBoundedHeight ? TextOverflow.ellipsis : TextOverflow.clip,
             style: style,
           ),
         ),

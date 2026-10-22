@@ -24,6 +24,37 @@ import '../../../../../support/test_app.dart';
 const _longTitle = 'Очень длинное собственное название серии о путешествии друзей через незнакомые города';
 
 void main() {
+  for (final size in [const Size(640, 360), compactTvSize]) {
+    for (final scale in [1.0, 1.3, 2.0]) {
+      testWidgets('actual TV episode grid has no layout error at $size text $scale', (tester) async {
+        final pending = Completer<Result<AnimeScreenData, Failure>>();
+        await pumpTvApp(
+          tester,
+          MediaQuery(
+            data: MediaQueryData(size: size, textScaler: TextScaler.linear(scale), disableAnimations: true),
+            child: const AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Аниме', onEpisodeTap: _unexpected),
+          ),
+          size: size,
+          wrapInScaffold: false,
+          overrides: [
+            animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
+          ],
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: 'loading layout');
+        final position = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+        final extent = position.maxScrollExtent;
+        position.jumpTo(extent);
+        await tester.pumpAndSettle();
+        pending.complete(Result.success(_data(8)));
+        await tester.pumpAndSettle();
+        await _key(tester, LogicalKeyboardKey.arrowDown);
+        expect(find.byType(EpisodeCard), findsWidgets);
+        expect(tester.takeException(), isNull, reason: 'actual production episode grid must fit the full caption');
+      });
+    }
+  }
+
   for (final mobile in [false, true]) {
     for (final title in ['Серия 7', '  сЕрИя\t 7 \n', _longTitle, 'Серия 7: начало', 'Серия 8', '7']) {
       testWidgets('${mobile ? 'mobile' : 'TV'} preserves only descriptive title: $title', (tester) async {
@@ -46,7 +77,7 @@ void main() {
         final template = title == 'Серия 7' || title == '  сЕрИя\t 7 \n';
         final tile = find.byType(mobile ? MobileEpisodeRow : EpisodeCard);
         final texts = tester.widgetList<Text>(find.descendant(of: tile, matching: find.byType(Text)));
-        var visibleTitle = 'СЕРИЯ 7';
+        var visibleTitle = 'Серия 7';
         if (mobile) {
           visibleTitle = template ? 'Серия 7' : title;
         }
@@ -117,12 +148,12 @@ void main() {
         expect(rects.map((rect) => rect.width), everyElement(closeTo(rects.first.width, 0.001)));
         expect(rects[0].right, lessThan(rects[1].left));
         expect(rects[1].right, lessThan(rects[2].left));
-        final caption = find.descendant(of: first, matching: find.text('СЕРИЯ 8'));
+        final caption = find.descendant(of: first, matching: find.text('Серия 8'));
         final title = find.descendant(of: first, matching: find.text(_longTitle));
         expect(tester.getRect(caption).bottom, lessThan(tester.getRect(title).top));
         final context = tester.element(first);
-        expect(tester.widget<Text>(title).style?.fontSize, 18);
-        expect(tester.widget<Text>(caption).style?.fontSize, 14);
+        expect(tester.widget<Text>(title).style?.fontSize, 14);
+        expect(tester.widget<Text>(caption).style?.fontSize, 18);
         expect(MediaQuery.textScalerOf(context).scale(20), closeTo(scale * 20, 0.001));
         final visited = <int>{};
         for (var row = 0; row < 3; row++) {
@@ -212,7 +243,7 @@ void main() {
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное сериала');
     expect(find.byType(EpisodeCard), findsNothing);
     await _key(tester, LogicalKeyboardKey.arrowDown);
-    expect(find.widgetWithText(FilledButton, 'Обновить серии').hitTestable(), findsOneWidget);
+    expect(find.widgetWithText(AppButton, 'Обновить серии').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -257,7 +288,7 @@ void main() {
     expect(AppLayoutScope.isTvOf(tester.element(content)), isFalse);
     await tester.scrollUntilVisible(row, -100, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
-    final node = tester.getSemantics(row);
+    final node = tester.semantics.simulatedAccessibilityTraversal().singleWhere((node) => node.label == 'Серия 20');
     node.owner?.performAction(node.id, SemanticsAction.tap);
     await tester.pump();
     expect(opened, [20]);
@@ -295,9 +326,9 @@ void main() {
           expect(rect.width, greaterThan(size.width * 0.8));
           if (number == 8) {
             final title = find.descendant(of: row, matching: find.text(_longTitle));
-            expect(tester.widget<Text>(title).style?.fontSize, 15);
+            expect(tester.widget<Text>(title).style?.fontSize, 14);
             final caption = find.descendant(of: row, matching: find.text('Серия 8'));
-            expect(tester.widget<Text>(caption).style?.fontSize, 14);
+            expect(tester.widget<Text>(caption).style?.fontSize, 15);
           }
         }
         expect(lefts.toSet(), hasLength(1));

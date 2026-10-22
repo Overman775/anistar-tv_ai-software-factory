@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../mocks/features/auth/fake_auth_repository.dart';
 import '../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
@@ -76,7 +77,7 @@ void main() {
       final retry = find.byKey(const ValueKey('startup_retry'));
       expect(repository.restoreCalls, 1);
       expect(
-        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FilledButton>()?.key,
+        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>()?.key,
         const ValueKey('startup_retry'),
       );
       final nextSite = Completer<void>();

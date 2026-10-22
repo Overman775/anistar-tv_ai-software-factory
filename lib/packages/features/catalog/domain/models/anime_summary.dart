@@ -6,6 +6,14 @@ final class AnimeSummary {
   final String slug;
   final String title;
   final String? year;
+  final String? genreText;
+  final String? description;
+  final String? updateMessage;
+  final String? publicationDate;
+
+  List<String> get genres => List.unmodifiable(
+    genreText?.split(',').map((genre) => genre.trim()).where((genre) => genre.isNotEmpty) ?? const <String>[],
+  );
 
   const AnimeSummary({
     required this.id,
@@ -15,5 +23,9 @@ final class AnimeSummary {
     this.rating,
     this.year,
     this.isFavorite,
+    this.genreText,
+    this.description,
+    this.updateMessage,
+    this.publicationDate,
   });
 }

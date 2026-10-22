@@ -6,12 +6,14 @@
 
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/startup_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/favorite_ribbon.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
 import 'package:anistar_tv/packages/features/player/presentation/widgets/player_view.dart';
 import 'package:flutter/services.dart';
@@ -45,6 +47,7 @@ void main() {
     await fixture.launch(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog');
     await _selectRail(tester, 'catalog-genres');
+    await _enterGenres(tester);
     await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Комедия', 'genre');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await _waitFilter(tester, '/anime/comedy/');
@@ -101,6 +104,7 @@ void main() {
     await tester.pump();
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Жанры');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await _enterGenres(tester);
     await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Комедия', 'first genre');
     expect(find.byType(GenresScreen), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -233,6 +237,17 @@ void main() {
     await E2eHarness.login(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'second login');
     await _selectRail(tester, 'catalog-account');
+    await E2eHarness.waitFor(
+      tester,
+      () => FocusManager.instance.primaryFocus?.debugLabel == 'Отмена подтверждения',
+      'logout defaults to cancel',
+    );
+    await RemoteControls.activate(
+      tester,
+      find.widgetWithText(AppButton, 'Выйти из аккаунта'),
+      step: 'confirm account logout',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
     await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'logout gate');
     await tester.pumpWidget(const SizedBox.shrink());
     await fixture.launch(tester, autoLogin: false, resetSession: false);
@@ -240,7 +255,7 @@ void main() {
       tester,
       () =>
           find.byKey(const ValueKey('login_submit')).evaluate().isNotEmpty &&
-          tester.widget<FilledButton>(find.byKey(const ValueKey('login_submit'))).onPressed != null,
+          !tester.widget<AppButton>(find.byKey(const ValueKey('login_submit'))).busy,
       'logout survives restart',
     );
     // Verify the gate again after this separate session transition.
@@ -262,7 +277,10 @@ void main() {
     expect(find.byType(AnimeScreen), findsNothing);
     expect((await fixture.state())['favorite_writes'], 0);
     await _selectSheetAction(tester, 'Добавить в избранное');
-    final marker = find.byKey(const ValueKey('favorite-10938'));
+    final marker = find.descendant(
+      of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
+      matching: find.byType(FavoriteRibbon),
+    );
     await E2eHarness.waitFor(tester, () => marker.evaluate().isNotEmpty, 'confirmed catalog star');
     final added = await fixture.state();
     expect(added['favorites'], [10938]);
@@ -279,22 +297,14 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await E2eHarness.waitFor(
-      tester,
-      () => find.text('Удалить из избранного').evaluate().isNotEmpty,
-      'detail removal action',
-    );
+    await E2eHarness.waitFor(tester, () => find.text('В избранном').evaluate().isNotEmpty, 'detail removal action');
     await RemoteControls.activate(
       tester,
       find.byKey(const ValueKey('favorite-button-10938')),
       step: 'detail favorite removal',
       direction: LogicalKeyboardKey.arrowRight,
     );
-    await E2eHarness.waitFor(
-      tester,
-      () => find.text('Добавить в избранное').evaluate().isNotEmpty,
-      'confirmed detail removal',
-    );
+    await E2eHarness.waitFor(tester, () => find.text('В избранное').evaluate().isNotEmpty, 'confirmed detail removal');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(
       tester,
@@ -324,7 +334,13 @@ void main() {
     );
     await _selectSheetAction(tester, 'Добавить в избранное');
     await E2eHarness.waitFor(tester, () => find.text('Обновить статус').evaluate().isNotEmpty, 'favorite rejection');
-    expect(find.byKey(const ValueKey('favorite-10938')), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
+        matching: find.byType(FavoriteRibbon),
+      ),
+      findsNothing,
+    );
     expect((await fixture.state())['favorites'], isEmpty);
     await fixture.configure(reset: false);
     await _selectSheetAction(tester, 'Обновить статус');
@@ -336,7 +352,13 @@ void main() {
     await _selectSheetAction(tester, 'Добавить в избранное');
     await E2eHarness.waitFor(
       tester,
-      () => find.byKey(const ValueKey('favorite-10938')).evaluate().isNotEmpty,
+      () => find
+          .descendant(
+            of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
+            matching: find.byType(FavoriteRibbon),
+          )
+          .evaluate()
+          .isNotEmpty,
       'manual favorite retry',
     );
     expect((await fixture.state())['favorite_writes'], 2);
@@ -514,7 +536,10 @@ void main() {
     await fixture.configure();
     await fixture.launch(tester);
     await _openAnime(tester);
-    expect(find.byIcon(Icons.check_circle_rounded), findsNothing);
+    expect(
+      find.byWidgetPredicate((widget) => widget is EpisodeCard && (widget.isWatched || widget.episode.isWatched)),
+      findsNothing,
+    );
     await _openVideo(tester);
     var player = E2eHarness.requirePlayer(tester);
     expect(player.formatHint, VideoFormat.hls);
@@ -584,9 +609,15 @@ void main() {
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'back to anime');
     expect(find.byType(AnimeScreen), findsOneWidget);
+    await _revealEpisodes(tester);
     await E2eHarness.waitFor(
       tester,
-      () => find.byIcon(Icons.check_circle_rounded).evaluate().length == 2,
+      () =>
+          find
+              .byWidgetPredicate((widget) => widget is EpisodeCard && (widget.isWatched || widget.episode.isWatched))
+              .evaluate()
+              .length ==
+          2,
       'watched checks after playback',
     );
     final positionAfterBack = player.value.position;
@@ -607,10 +638,16 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await fixture.launch(tester, autoLogin: false, resetSession: false);
-    await _openAnime(tester);
+    await _openAnime(tester, watchLabel: 'Посмотреть снова');
+    await _revealEpisodes(tester);
     await E2eHarness.waitFor(
       tester,
-      () => find.byIcon(Icons.check_circle_rounded).evaluate().length == 2,
+      () =>
+          find
+              .byWidgetPredicate((widget) => widget is EpisodeCard && (widget.isWatched || widget.episode.isWatched))
+              .evaluate()
+              .length ==
+          2,
       'watched history after client restart',
     );
     await tester.pumpWidget(const SizedBox.shrink());
@@ -696,6 +733,27 @@ void main() {
       'manual video retry',
     );
     expect((await fixture.state())['player_pages'], greaterThanOrEqualTo(5));
+    await E2eHarness.waitFor(
+      tester,
+      () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,
+      'manual retry advances native playback',
+    );
+    await RemoteControls.backToEpisodes(tester);
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'retry returns to anime');
+    await _revealEpisodes(tester);
+    await E2eHarness.waitFor(
+      tester,
+      () =>
+          find
+              .byWidgetPredicate((widget) => widget is EpisodeCard && (widget.isWatched || widget.episode.isWatched))
+              .evaluate()
+              .length ==
+          1,
+      'manual retry has one app-confirmed watched episode',
+    );
+    final recovered = await fixture.state();
+    expect(recovered['watched'], [1]);
+    expect(_events(recovered).where((event) => _path(event).startsWith('/engine/ajax/ns.php')), hasLength(1));
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }
@@ -703,21 +761,17 @@ void main() {
 void _tvTest(String name, Future<void> Function(WidgetTester) body) =>
     E2eHarness.testCase(name, body, profile: AppDeviceProfile.tv);
 
-Future<void> _openAnime(WidgetTester tester) async {
+Future<void> _openAnime(WidgetTester tester, {String watchLabel = 'Смотреть серию 1'}) async {
   final card = find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938);
   await E2eHarness.waitFor(tester, () => card.evaluate().isNotEmpty, 'catalog');
   expect(find.text('Реклама'), findsNothing);
   await RemoteControls.activate(tester, card, step: 'catalog anime 10938');
-  await E2eHarness.waitFor(
-    tester,
-    () => find.textContaining('Смотреть серию ').evaluate().isNotEmpty,
-    'details and sorted episodes',
-  );
+  await E2eHarness.waitFor(tester, () => find.text(watchLabel).evaluate().isNotEmpty, 'details and sorted episodes');
 }
 
 Future<void> _pressPlay(WidgetTester tester) async {
   final button = find.textContaining('Смотреть серию ');
-  final action = find.ancestor(of: button, matching: find.byWidgetPredicate((widget) => widget is ButtonStyleButton));
+  final action = find.ancestor(of: button, matching: find.byType(AppButton));
   await RemoteControls.activate(tester, action, step: 'first episode play');
 }
 
@@ -801,3 +855,18 @@ Future<void> _waitFilter(WidgetTester tester, String path) async {
 }
 
 bool _controlsVisible(WidgetTester tester) => tester.widget<PlayerView>(find.byType(PlayerView)).controlsVisible;
+
+Future<void> _enterGenres(WidgetTester tester) async {
+  await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'inline genre tile ready');
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+  await tester.pump();
+}
+
+Future<void> _revealEpisodes(WidgetTester tester) async {
+  await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+  await E2eHarness.waitFor(
+    tester,
+    () => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EpisodeCard>() != null,
+    'confirmed episodes revealed by remote',
+  );
+}

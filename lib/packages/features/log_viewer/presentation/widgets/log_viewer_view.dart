@@ -45,7 +45,7 @@ class _LogViewerViewState extends State<LogViewerView> {
           backgroundColor: AppPalette.surfaceElevated,
           onPressed: _scrollToTop,
           tooltip: 'В начало',
-          child: const Icon(Icons.keyboard_arrow_up_rounded),
+          child: const AppIcon(AppIconType.arrowUp),
         ),
         const SizedBox(height: 8),
         FloatingActionButton(
@@ -54,7 +54,7 @@ class _LogViewerViewState extends State<LogViewerView> {
           backgroundColor: AppPalette.surfaceElevated,
           onPressed: _scrollToBottom,
           tooltip: 'В конец',
-          child: const Icon(Icons.keyboard_arrow_down_rounded),
+          child: const AppIcon(AppIconType.arrowDown),
         ),
       ],
     );
@@ -70,7 +70,7 @@ class _LogViewerViewState extends State<LogViewerView> {
         children: [
           if (state.logFiles.isNotEmpty)
             DropdownButtonFormField<String>(
-              decoration: const InputDecoration(labelText: 'Файл лога', prefixIcon: Icon(Icons.description_outlined)),
+              decoration: const InputDecoration(labelText: 'Файл лога', prefixIcon: AppIcon(AppIconType.list)),
               initialValue: state.selectedLogFile,
               hint: const Text('Выберите файл'),
               isExpanded: true,
@@ -113,7 +113,7 @@ class _LogViewerViewState extends State<LogViewerView> {
           width: double.infinity,
           margin: const EdgeInsets.only(top: AppSpacing.md),
           decoration: BoxDecoration(
-            color: const Color(0xE6080B14),
+            color: AppPalette.background,
             borderRadius: AppRadii.large,
             border: Border.fromBorderSide(BorderSide(color: AppPalette.outline.withValues(alpha: 0.72))),
           ),
@@ -122,7 +122,12 @@ class _LogViewerViewState extends State<LogViewerView> {
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: SelectableText(
               content,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.55, color: Color(0xFFD5E2F7)),
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                height: 1.55,
+                color: AppPalette.textPrimary,
+              ),
             ),
           ),
         ),
@@ -133,7 +138,7 @@ class _LogViewerViewState extends State<LogViewerView> {
     }
 
     return TvStateView(
-      icon: isLogListEmpty ? Icons.note_add_outlined : Icons.touch_app_outlined,
+      icon: Icons.description_outlined,
       title: isLogListEmpty ? 'Создайте несколько логов' : 'Выберите файл',
       message: isLogListEmpty ? null : 'Содержимое выбранного лога появится здесь.',
     );
@@ -145,7 +150,7 @@ class _LogViewerViewState extends State<LogViewerView> {
     }
 
     return IconButton(
-      icon: const Icon(Icons.ios_share_rounded),
+      icon: const AppIcon(AppIconType.share),
       tooltip: 'Поделиться логом',
       onPressed: () => _shareLog(context, state),
     );
@@ -169,8 +174,8 @@ class _LogViewerViewState extends State<LogViewerView> {
     unawaited(
       _scrollController.animateTo(
         _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
+        duration: AppMotion.durationOf(context, AppMotion.fast),
+        curve: AppMotion.enterCurve,
       ),
     );
   }
@@ -180,7 +185,13 @@ class _LogViewerViewState extends State<LogViewerView> {
       return;
     }
 
-    unawaited(_scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut));
+    unawaited(
+      _scrollController.animateTo(
+        0,
+        duration: AppMotion.durationOf(context, AppMotion.fast),
+        curve: AppMotion.enterCurve,
+      ),
+    );
   }
 
   void _selectLog(BuildContext context, String? fileName) {
@@ -213,6 +224,11 @@ class _LogViewerViewState extends State<LogViewerView> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       toolbarHeight: 76,
+      leading: IconButton(
+        tooltip: 'Назад',
+        icon: const AppIcon(AppIconType.arrowLeft),
+        onPressed: () => unawaited(Navigator.of(context).maybePop()),
+      ),
       title: Text('Логи приложения', style: Theme.of(context).textTheme.headlineSmall),
       actions: [
         BlocBuilder<LogViewerBloc, LogViewerState>(
@@ -220,7 +236,7 @@ class _LogViewerViewState extends State<LogViewerView> {
           builder: _buildShareAction,
         ),
         IconButton(
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const AppIcon(AppIconType.refresh),
           tooltip: 'Обновить логи',
           onPressed: () => _refreshLogs(context),
         ),

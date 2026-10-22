@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_icon.dart';
 import 'tv_skeleton_box.dart';
 
 /// Shared cached remote image with TV-appropriate loading and error states.
@@ -57,12 +58,16 @@ class AppNetworkImage extends StatelessWidget {
           errorWidget ??
           const ColoredBox(
             color: AppPalette.surfaceElevated,
-            child: Center(child: Icon(Icons.broken_image_outlined, color: AppPalette.textSecondary, size: 48)),
+            child: Center(child: AppIcon(AppIconType.circleAlert, color: AppPalette.textSecondary, size: 48)),
           ),
     );
 
     if (url == null || !_hasValidUrl(url)) {
-      return Semantics(label: semanticLabel, image: true, child: previous ?? fallback);
+      return Semantics(
+        label: semanticLabel,
+        image: true,
+        child: ClipRRect(borderRadius: borderRadius, child: previous ?? fallback),
+      );
     }
 
     return Semantics(

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import 'app_focus_style.dart';
 import 'app_palette.dart';
 import 'tv_typography.dart';
 
@@ -29,23 +30,72 @@ abstract final class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: base.iconButtonTheme.style?.copyWith(minimumSize: const WidgetStatePropertyAll(Size.square(48))),
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: base.filledButtonTheme.style?.copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, AppSizes.touchControl)),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: base.textButtonTheme.style?.copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, AppSizes.touchControl)),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: base.outlinedButtonTheme.style?.copyWith(
+          minimumSize: const WidgetStatePropertyAll(Size(0, AppSizes.touchControl)),
+        ),
+      ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppPalette.backgroundElevated,
-        indicatorColor: AppPalette.focusSurface,
-        labelTextStyle: WidgetStatePropertyAll(text.labelMedium?.copyWith(fontWeight: FontWeight.w500)),
+        indicatorColor: AppPalette.menuControl,
+        indicatorShape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? AppPalette.primary : AppPalette.textSecondary,
+          ),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => text.labelMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: states.contains(WidgetState.selected) ? AppPalette.primary : AppPalette.textSecondary,
+          ),
+        ),
       ),
     );
   }
 
   static ThemeData _createTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    final baseScheme = ColorScheme.fromSeed(
-      seedColor: AppPalette.primary,
-      brightness: brightness,
-      primary: isDark ? AppPalette.primary : AppPalette.primarySoft,
-      secondary: AppPalette.secondary,
-      surface: isDark ? AppPalette.surface : const Color(0xFFF7F5FC),
-    ).copyWith(onPrimary: isDark ? AppPalette.background : null);
+    final baseScheme =
+        ColorScheme.fromSeed(
+          seedColor: AppPalette.primary,
+          brightness: brightness,
+          primary: isDark ? AppPalette.primary : AppPalette.primarySoft,
+          secondary: AppPalette.secondary,
+          surface: isDark ? AppPalette.surface : AppPalette.textPrimary,
+        ).copyWith(
+          primary: AppPalette.primary,
+          onPrimary: AppPalette.onPrimary,
+          primaryContainer: AppPalette.accentSubtle,
+          onPrimaryContainer: isDark ? AppPalette.textPrimary : AppPalette.background,
+          secondary: AppPalette.primary,
+          onSecondary: AppPalette.onPrimary,
+          surface: isDark ? AppPalette.surface : AppPalette.textPrimary,
+          surfaceDim: isDark ? AppPalette.background : AppPalette.textPrimary,
+          surfaceBright: isDark ? AppPalette.surfaceElevated : Colors.white,
+          surfaceContainerLowest: isDark ? AppPalette.background : Colors.white,
+          surfaceContainerLow: isDark ? AppPalette.backgroundElevated : AppPalette.textPrimary,
+          surfaceContainer: isDark ? AppPalette.surface : AppPalette.textPrimary,
+          surfaceContainerHigh: isDark ? AppPalette.surfaceElevated : Colors.white,
+          surfaceContainerHighest: isDark ? AppPalette.focusSurface : Colors.white,
+          onSurface: isDark ? AppPalette.textPrimary : AppPalette.background,
+          onSurfaceVariant: isDark ? AppPalette.textSecondary : AppPalette.focusSurface,
+          outline: AppPalette.outline,
+          outlineVariant: AppPalette.outline,
+          error: AppPalette.danger,
+          onError: AppPalette.onPrimary,
+          scrim: AppPalette.scrim,
+        );
     final baseTextTheme = ThemeData(brightness: brightness).textTheme;
     final primaryColor = baseScheme.primary;
     final primaryHoverColor = primaryColor.withValues(alpha: 0.12);
@@ -64,25 +114,35 @@ abstract final class AppTheme {
 
       return BorderSide(color: focused ? baseScheme.onPrimary : Colors.transparent, width: focused ? 3 : 0);
     });
-    final textTheme = TvTypography.apply(baseTextTheme);
+    final textTheme = TvTypography.apply(baseTextTheme)
+        .apply(bodyColor: baseScheme.onSurface, displayColor: baseScheme.onSurface);
 
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: baseScheme,
-      scaffoldBackgroundColor: isDark ? AppPalette.background : const Color(0xFFF7F5FC),
+      scaffoldBackgroundColor: isDark ? AppPalette.background : AppPalette.textPrimary,
       focusColor: primaryColor.withValues(alpha: 0.2),
       splashColor: primaryHoverColor,
       textTheme: textTheme,
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: AppPalette.primary,
+        selectionColor: AppPalette.primary.withValues(alpha: 0.3),
+        selectionHandleColor: AppPalette.primary,
+      ),
+      textButtonTheme: TextButtonThemeData(style: AppFocusStyle.button()),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: AppFocusStyle.button().copyWith(
+          side: const WidgetStatePropertyAll(BorderSide(color: AppPalette.outline)),
+        ),
+      ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: isDark ? AppPalette.textPrimary : const Color(0xFF171124),
+        foregroundColor: isDark ? AppPalette.textPrimary : AppPalette.background,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: textTheme.titleLarge?.copyWith(
-          color: isDark ? AppPalette.textPrimary : const Color(0xFF171124),
-        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: isDark ? AppPalette.textPrimary : AppPalette.background),
       ),
       cardTheme: CardThemeData(
         margin: EdgeInsets.zero,
@@ -109,12 +169,27 @@ abstract final class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style:
             FilledButton.styleFrom(
-              minimumSize: const Size(0, 56),
+              minimumSize: const Size(0, AppSizes.tvControl),
+              foregroundColor: AppPalette.onPrimary,
+              backgroundColor: AppPalette.primary,
+              disabledBackgroundColor: AppPalette.surfaceElevated,
+              disabledForegroundColor: AppPalette.textSecondary.withValues(alpha: 0.45),
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
               shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
               textStyle: textTheme.labelLarge,
             ).copyWith(
               side: filledButtonSide,
+              backgroundColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.disabled)) {
+                  return AppPalette.surfaceElevated;
+                }
+
+                if (states.contains(WidgetState.pressed)) {
+                  return AppPalette.primary.withValues(alpha: 0.82);
+                }
+
+                return AppFocusStyle.active(states) ? AppPalette.primarySoft : AppPalette.primary;
+              }),
               overlayColor: isDark
                   ? WidgetStateProperty.resolveWith<Color?>((states) {
                       if (states.contains(WidgetState.pressed) || states.contains(WidgetState.focused)) {
@@ -130,12 +205,33 @@ abstract final class AppTheme {
       ),
       iconButtonTheme: IconButtonThemeData(
         style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size.square(56)),
-          backgroundColor: WidgetStatePropertyAll(isDark ? AppPalette.surface.withValues(alpha: 0.75) : Colors.white),
-          foregroundColor: WidgetStatePropertyAll(isDark ? AppPalette.textPrimary : const Color(0xFF171124)),
+          minimumSize: const WidgetStatePropertyAll(Size.square(AppSizes.tvControl)),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return AppPalette.surfaceElevated;
+            }
+            if (AppFocusStyle.active(states)) {
+              return AppPalette.focusSurface;
+            }
+
+            return isDark ? AppPalette.menuControl : Colors.white;
+          }),
+          foregroundColor: WidgetStatePropertyAll(isDark ? AppPalette.textPrimary : AppPalette.background),
           overlayColor: iconOverlayColor,
           side: iconSide,
+          shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: AppRadii.medium)),
         ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: AppPalette.backgroundElevated,
+        modalBackgroundColor: AppPalette.backgroundElevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.large),
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: AppPalette.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: AppRadii.large),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(
         color: primaryColor,

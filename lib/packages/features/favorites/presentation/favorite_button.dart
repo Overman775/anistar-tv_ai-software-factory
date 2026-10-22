@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../favorites_providers.dart';
-import 'favorite_actions_sheet.dart';
 
-class FavoriteButton extends ConsumerWidget {
+class FavoriteButton extends ConsumerStatefulWidget {
   const FavoriteButton({
     required this.animeId,
     required this.slug,
@@ -24,44 +24,72 @@ class FavoriteButton extends ConsumerWidget {
   final String slug;
   final String title;
 
-  Future<void> _change(BuildContext context, WidgetRef ref, bool? favorite) async {
+  @override
+  ConsumerState<FavoriteButton> createState() => _FavoriteButtonState();
+}
+
+class _FavoriteButtonState extends ConsumerState<FavoriteButton> {
+  bool _reading = false;
+  int _readGeneration = 0;
+
+  Future<void> _change(bool? favorite) async {
+    if (_reading || ref.read(favoritesControllerProvider).updatingAnimeId != null) {
+      return;
+    }
+    final id = widget.animeId;
+    final controller = ref.read(favoritesControllerProvider.notifier);
     if (favorite == null) {
-      await showFavoriteActions(context, animeId: animeId, slug: slug, title: title);
+      final generation = ++_readGeneration;
+      setState(() => _reading = true);
+      final result = await ref.read(favoritesRepositoryProvider).getStatus(animeId: id, slug: widget.slug);
+      if (!mounted || widget.animeId != id || generation != _readGeneration) {
+        return;
+      }
+      setState(() => _reading = false);
+      result.when(
+        success: (confirmed) => controller.observe(id, confirmed),
+        failure: (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
+      );
 
       return;
     }
-    final failure = await ref
-        .read(favoritesControllerProvider.notifier)
-        .setFavorite(animeId: animeId, slug: slug, favorite: !favorite);
-    if (failure != null && context.mounted) {
+    final failure = await controller.setFavorite(animeId: id, slug: widget.slug, favorite: !favorite);
+    if (failure != null && mounted && widget.animeId == id) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
     }
   }
 
-  String _label(bool? favorite, bool updating) {
-    if (updating) {
-      return 'Обновляем избранное…';
+  @override
+  void didUpdateWidget(covariant FavoriteButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animeId != widget.animeId || oldWidget.slug != widget.slug) {
+      ++_readGeneration;
+      _reading = false;
     }
-
-    return switch (favorite) {
-      true => 'Удалить из избранного',
-      false => 'Добавить в избранное',
-      null => 'Избранное',
-    };
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final state = ref.watch(favoritesControllerProvider);
-    final favorite = state.known[animeId] ?? initialFavorite;
+    final favorite = state.known[widget.animeId] ?? widget.initialFavorite;
+    final busy = _reading || state.updatingAnimeId == widget.animeId;
 
-    return FilledButton.tonalIcon(
-      key: ValueKey('favorite-button-$animeId'),
-      focusNode: focusNode,
-      autofocus: autofocus,
-      onPressed: state.updatingAnimeId != null ? null : () => unawaited(_change(context, ref, favorite)),
-      icon: Icon(favorite == true ? Icons.star_rounded : Icons.star_border_rounded),
-      label: Text(_label(favorite, state.updatingAnimeId == animeId)),
+    return AppButton(
+      key: ValueKey('favorite-button-${widget.animeId}'),
+      focusNode: widget.focusNode,
+      autofocus: widget.autofocus,
+      busy: busy,
+      enabled: state.updatingAnimeId == null || state.updatingAnimeId == widget.animeId,
+      onPressed: () => unawaited(_change(favorite)),
+      icon: AppIcon(favorite == true ? AppIconType.heartMinus : AppIconType.heartPlus),
+      label: busy
+          ? 'Сохраняем…'
+          : switch (favorite) {
+              true => 'В избранном',
+              false => 'В избранное',
+              null => 'Проверить избранное',
+            },
+      variant: AppButtonVariant.neutral,
     );
   }
 }

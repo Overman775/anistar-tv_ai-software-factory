@@ -39,7 +39,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Страница недоступна'), findsOneWidget);
     expect(find.textContaining('private-value'), findsNothing);
-    final recover = find.widgetWithText(FilledButton, 'На главную');
+    final recover = find.widgetWithText(AppButton, 'На главную');
     expect(recover.hitTestable(), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();

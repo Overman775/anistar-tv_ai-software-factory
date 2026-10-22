@@ -9,4 +9,4 @@ final class AnistarClientException implements Exception {
   String toString() => 'AnistarClientException(${category.name}): $message';
 }
 
-enum AnistarClientErrorCategory { timeout, connection, server, request }
+enum AnistarClientErrorCategory { timeout, connection, server, request, invalidCredentials }

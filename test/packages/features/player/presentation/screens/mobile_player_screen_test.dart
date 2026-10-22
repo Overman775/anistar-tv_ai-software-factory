@@ -195,7 +195,7 @@ void main() {
       wrapInScaffold: false,
     );
     await tester.pump();
-    expect(find.byTooltip('К сериям'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-back')), findsOneWidget);
     video.events[1]?.add(
       VideoEvent(
         eventType: VideoEventType.initialized,
@@ -213,7 +213,7 @@ void main() {
     expect(find.text('Видео не запустилось'), findsOneWidget);
     // Return must remain available after failure, as it was during loading.
     // ignore: avoid-duplicate-test-assertions
-    expect(find.byTooltip('К сериям'), findsOneWidget);
+    expect(find.byKey(const ValueKey('player-back')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
     expect(tester.takeException(), isNull);

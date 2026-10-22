@@ -20,29 +20,23 @@ class MobileAnimeSkeleton extends StatelessWidget {
         32,
       ),
       children: [
+        Text(title, style: AppContentTypography.detailTitleOf(context)),
+        const SizedBox(height: AppSpacing.lg),
         MobileAnimePosterHeader(
           animeId: animeId,
           title: title,
           posterUri: posterUri,
-          metadata: Column(
+          metadata: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (MediaQuery.sizeOf(context).width >= 600) ...[
-                Text(title, style: AppContentTypography.detailTitleOf(context)),
-                const SizedBox(height: 12),
-              ],
-              const TvSkeletonBox(height: 20),
-              const SizedBox(height: 12),
-              const TvSkeletonBox(height: 20),
-              const SizedBox(height: 12),
-              const TvSkeletonBox(height: 20),
+              TvSkeletonBox(height: 20),
+              SizedBox(height: 12),
+              TvSkeletonBox(height: 20),
+              SizedBox(height: 12),
+              TvSkeletonBox(height: 20),
             ],
           ),
         ),
-        if (MediaQuery.sizeOf(context).width < 600) ...[
-          const SizedBox(height: 20),
-          Text(title, style: AppContentTypography.detailTitleOf(context)),
-        ],
         const SizedBox(height: 16),
         const TvSkeletonBox(height: 48),
         const SizedBox(height: 8),

@@ -4,7 +4,7 @@ import '../../assets.dart';
 
 /// Typography scale optimised for legibility at TV viewing distance.
 abstract final class TvTypography {
-  static const fontFamily = FontFamily.inter;
+  static const fontFamily = FontFamily.manrope;
   static const proseMaxWidth = 720.0;
 
   static TextTheme apply(TextTheme base) => base
@@ -12,21 +12,21 @@ abstract final class TvTypography {
       .copyWith(
         displaySmall: base.displaySmall?.copyWith(
           fontFamily: fontFamily,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           letterSpacing: -1,
         ),
         headlineLarge: base.headlineLarge?.copyWith(
           fontFamily: fontFamily,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           letterSpacing: -0.6,
         ),
         headlineMedium: base.headlineMedium?.copyWith(
           fontFamily: fontFamily,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           letterSpacing: -0.4,
         ),
-        headlineSmall: base.headlineSmall?.copyWith(fontFamily: fontFamily, fontWeight: FontWeight.w700),
-        titleLarge: base.titleLarge?.copyWith(fontFamily: fontFamily, fontSize: 24, fontWeight: FontWeight.w700),
+        headlineSmall: base.headlineSmall?.copyWith(fontFamily: fontFamily, fontWeight: FontWeight.w800),
+        titleLarge: base.titleLarge?.copyWith(fontFamily: fontFamily, fontSize: 24, fontWeight: FontWeight.w800),
         titleMedium: base.titleMedium?.copyWith(fontFamily: fontFamily, fontSize: 19, fontWeight: FontWeight.w500),
         titleSmall: base.titleSmall?.copyWith(fontFamily: fontFamily, fontSize: 16, fontWeight: FontWeight.w500),
         bodyLarge: base.bodyLarge?.copyWith(fontFamily: fontFamily, fontSize: 18, height: 1.45),
@@ -37,7 +37,7 @@ abstract final class TvTypography {
         labelLarge: base.labelLarge?.copyWith(
           fontFamily: fontFamily,
           fontSize: 16,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           letterSpacing: 0.2,
         ),
       );

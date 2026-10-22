@@ -1,21 +1,29 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_icon.dart';
 import 'app_responsive_root.dart';
 import 'tv_side_sheet.dart';
 
 /// Shared action content, presented according to the active interaction profile.
 class AppActionSheet extends StatelessWidget {
-  const AppActionSheet({required this.title, required this.child, this.mobileHeightFactor = 0.75, super.key});
+  const AppActionSheet({
+    required this.title,
+    required this.child,
+    this.mobileHeightFactor = 0.75,
+    this.closeOnLeft = true,
+    super.key,
+  });
 
   final String title;
   final Widget child;
   final double mobileHeightFactor;
+  final bool closeOnLeft;
 
   @override
   Widget build(BuildContext context) {
     if (AppLayoutScope.isTvOf(context)) {
-      return TvSideSheet(title: title, child: child);
+      return TvSideSheet(title: title, closeOnLeft: closeOnLeft, child: child);
     }
     final media = MediaQuery.of(context);
     final availableHeight = (media.size.height - media.padding.top - media.viewInsets.bottom).clamp(
@@ -61,7 +69,7 @@ class AppActionSheet extends StatelessWidget {
                     IconButton(
                       tooltip: 'Закрыть',
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
+                      icon: const AppIcon(AppIconType.x),
                     ),
                   ],
                 ),
@@ -87,8 +95,12 @@ Future<T?> showAppActionSheet<T>({required BuildContext context, required Widget
     useSafeArea: true,
     isScrollControlled: true,
     backgroundColor: AppPalette.backgroundElevated,
-    constraints: const BoxConstraints(maxWidth: 640),
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    constraints: const BoxConstraints(maxWidth: AppSizes.bottomSheetMaxWidth),
+    sheetAnimationStyle: AnimationStyle(
+      duration: AppMotion.durationOf(context, AppMotion.panelEnter),
+      reverseDuration: AppMotion.durationOf(context, AppMotion.panelExit),
+    ),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
     builder: builder,
   );
 }

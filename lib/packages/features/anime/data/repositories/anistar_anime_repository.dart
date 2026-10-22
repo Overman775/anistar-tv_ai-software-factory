@@ -6,6 +6,7 @@ import '../../../catalog/data/mapping/anistar_catalog_mapping.dart';
 import '../../../common/data/anistar_errors.dart';
 import '../../domain/models/anime_details.dart';
 import '../../domain/models/anime_episode.dart';
+import '../../domain/models/anime_part.dart';
 import '../../domain/models/anime_screen_data.dart';
 import '../../domain/repositories/anime_repository.dart';
 
@@ -34,6 +35,7 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
         throw const RequestFailure(message: 'Некорректные номера серий.');
       }
       final ordered = episodes.toList()..sort((a, b) => a.number.compareTo(b.number));
+      final rating = detail.rating;
 
       return AnimeScreenData(
         details: AnimeDetails(
@@ -49,6 +51,13 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
           seriesInfo: detail.seriesInfo,
           voiceover: detail.voiceover,
           year: detail.year,
+          rating: rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null,
+          director: detail.director,
+          updateMessage: detail.updateMessage,
+          publicationDate: detail.publicationDate,
+          parts: detail.parts
+              .map((part) => AnimePart(label: part.label, uri: part.uri, id: part.id, slug: part.slug))
+              .toList(growable: false),
         ),
         episodes: ordered
             .map(

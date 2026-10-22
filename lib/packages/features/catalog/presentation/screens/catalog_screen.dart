@@ -19,6 +19,7 @@ import '../bloc/catalog_event.dart';
 import '../bloc/catalog_state.dart';
 import '../mobile/mobile_anime_card.dart';
 import '../widgets/anime_card.dart';
+import '../widgets/catalog_inspector.dart';
 import '../widgets/catalog_layout.dart';
 import '../widgets/catalog_navigation_rail.dart';
 import '../widgets/catalog_skeleton.dart';
@@ -32,22 +33,28 @@ class CatalogScreen extends ConsumerStatefulWidget {
     this.onOpenGenres,
     this.filter,
     this.onBack,
+    this.onRootBack,
     this.onSignOut,
     this.accountName,
     this.onTabSelected,
     this.favoritesOnly = false,
     this.autofocusTab = false,
     this.embedded = false,
+    this.genresActive = false,
+    this.sectionBuilder,
     super.key,
   });
 
   final String? accountName;
   final VoidCallback? onOpenGenres;
   final VoidCallback? onBack;
+  final VoidCallback? onRootBack;
   final CatalogFilter? filter;
   final bool favoritesOnly;
   final bool autofocusTab;
   final bool embedded;
+  final bool genresActive;
+  final Widget Function(VoidCallback onOpenNavigation)? sectionBuilder;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onSignOut;
@@ -78,6 +85,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   bool _keepSortFocus = false;
   FocusNode? _lastCardFocus;
   int _selectedIndex = 0;
+  final _inspected = ValueNotifier<AnimeSummary?>(null);
 
   @override
   void initState() {
@@ -108,7 +116,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   void _focusContent() {
     final previous = _lastCardFocus;
-    if (previous?.context != null && previous?.canRequestFocus == true) {
+    if (!widget.genresActive && previous?.context != null && previous?.canRequestFocus == true) {
       previous?.requestFocus();
     } else {
       (_contentFocus.traversalDescendants.where((node) => node.canRequestFocus && node.context != null).firstOrNull ??
@@ -119,7 +127,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   void _focusRail() {
     _keepSortFocus = false;
-    if (widget.onTabSelected == null) {
+    if (widget.genresActive || widget.filter != null && widget.onOpenGenres != null) {
+      _genresFocus.requestFocus();
+    } else if (widget.onTabSelected == null) {
       if (widget.onBack != null) {
         _backFocus.requestFocus();
       } else if (widget.onOpenGenres != null) {
@@ -137,8 +147,15 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _onPopInvoked(bool didPop, Object? result) {
-    if (!didPop) {
+    if (didPop) {
+      return;
+    }
+    if (_railExpanded) {
       _focusContent();
+    } else if (widget.onBack == null && widget.favoritesOnly && widget.onTabSelected != null) {
+      widget.onTabSelected?.call(false);
+    } else if (widget.onBack == null) {
+      widget.onRootBack?.call();
     }
   }
 
@@ -190,7 +207,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     if (state.items.isEmpty) {
       return TvStateView(
-        icon: widget.favoritesOnly ? Icons.star_border_rounded : Icons.video_library_outlined,
+        icon: widget.favoritesOnly ? Icons.favorite_border_rounded : Icons.video_library_outlined,
         title: widget.favoritesOnly ? 'Избранное пусто' : 'Каталог пуст',
         message: widget.favoritesOnly
             ? 'Добавьте сериал с главной страницы или из его карточки.'
@@ -209,48 +226,72 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
 
     final showTail = state is CatalogReady && state.isLoadingMore || state is CatalogFailure;
+    final viewport = MediaQuery.sizeOf(context);
+    final horizontalInset = CatalogLayout.horizontalInset(viewport.width);
 
-    return LayoutBuilder(
-      builder: (context, constraints) => Focus(
-        canRequestFocus: false,
-        onKeyEvent: (_, event) => _handleCatalogKey(event, _columnCount(constraints.maxWidth)),
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 72),
-              sliver: SliverGrid.builder(
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _columnCount(constraints.maxWidth),
-                  childAspectRatio: 0.68,
-                  crossAxisSpacing: AppSpacing.lg,
-                  mainAxisSpacing: AppSpacing.xl,
-                ),
-                itemCount: state.items.length + (showTail ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == state.items.length) {
-                    return CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore);
-                  }
-                  final anime = state.items[index];
+    return Column(
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: CatalogLayout.inspectorHeight(viewport.height, MediaQuery.textScalerOf(context).scale(16) / 16),
+          ),
+          child: ValueListenableBuilder<AnimeSummary?>(
+            valueListenable: _inspected,
+            builder: (context, selected, child) => CatalogInspector(
+              anime: state.items.where((item) => item.id == selected?.id).firstOrNull ?? state.items.first,
+            ),
+          ),
+        ),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) => Focus(
+              canRequestFocus: false,
+              onKeyEvent: (_, event) => _handleCatalogKey(event, _columnCount(constraints.maxWidth)),
+              child: CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(horizontalInset, AppSpacing.md, horizontalInset, 72),
+                    sliver: SliverGrid.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: _columnCount(constraints.maxWidth),
+                        childAspectRatio: 0.68,
+                        crossAxisSpacing: AppSpacing.lg,
+                        mainAxisSpacing: AppSpacing.xl,
+                      ),
+                      itemCount: state.items.length + (showTail ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == state.items.length) {
+                          return CatalogTail(
+                            error: state is CatalogFailure ? state.message : null,
+                            onRetry: _requestMore,
+                          );
+                        }
+                        final anime = state.items[index];
 
-                  return Builder(
-                    key: ValueKey(anime.id),
-                    builder: (cardContext) => AnimeCard(
-                      anime: anime,
-                      isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
-                      onLongPressed: () => unawaited(_favoriteActions(anime)),
-                      autofocus: !widget.autofocusTab && !_railExpanded && !_keepSortFocus && index == _selectedIndex,
-                      onFocusChanged: (focused) =>
-                          _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
-                      onTap: () => _selectAndOpen(anime, index),
+                        return Builder(
+                          key: ValueKey(anime.id),
+                          builder: (cardContext) => AnimeCard(
+                            anime: anime,
+                            isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                            showFavorite: !widget.favoritesOnly,
+                            onLongPressed: () => unawaited(_favoriteActions(anime)),
+                            autofocus:
+                                !widget.autofocusTab && !_railExpanded && !_keepSortFocus && index == _selectedIndex,
+                            onFocusChanged: (focused) =>
+                                _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
+                            onTap: () => _selectAndOpen(anime, index),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -291,8 +332,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       final columns = (constraints.maxWidth / (scale > 1.5 ? 220 : 160)).floor().clamp(1, 6);
       final horizontalPadding = AppLayoutScope.horizontalPaddingOf(context);
       final width = (constraints.maxWidth - horizontalPadding * 2 - (columns - 1) * 12) / columns;
-      final titleHeight = MediaQuery.textScalerOf(context).scale(14) * 2.6;
-      final metadataHeight = MediaQuery.textScalerOf(context).scale(12) * 1.6;
       final tail = state is CatalogFailure && !state.isRefreshFailure || state is CatalogReady && state.isLoadingMore;
 
       return CustomScrollView(
@@ -305,7 +344,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
             sliver: SliverGrid.builder(
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisExtent: width / 0.68 + titleHeight + metadataHeight + 18,
+                mainAxisExtent: width / AppSizes.posterRatio,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 20,
               ),
@@ -317,6 +356,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   key: ValueKey(anime.id),
                   anime: anime,
                   isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
+                  showFavorite: !widget.favoritesOnly,
                   onTap: () => _selectAndOpen(anime, index),
                   onActions: () => unawaited(_favoriteActions(anime)),
                 );
@@ -343,7 +383,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               title: Text(widget.filter?.label ?? (widget.favoritesOnly ? 'Избранное' : 'Главная')),
               leading: widget.onBack == null
                   ? null
-                  : IconButton(tooltip: 'Назад', onPressed: widget.onBack, icon: const Icon(Icons.arrow_back)),
+                  : IconButton(
+                      tooltip: 'Назад',
+                      onPressed: widget.onBack,
+                      icon: const AppIcon.fromMaterial(Icons.arrow_back),
+                    ),
             ),
       body: SafeArea(
         top: !widget.embedded,
@@ -357,7 +401,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
                     onPressed: () => unawaited(_chooseSort()),
-                    icon: const Icon(Icons.sort),
+                    icon: const AppIcon.fromMaterial(Icons.sort),
                     label: Text(catalogSortLabel(_sort), maxLines: 2),
                   ),
                 ),
@@ -456,7 +500,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _onCatalogStateChanged(BuildContext context, CatalogState state) {
-    if (!AppLayoutScope.isTvOf(context)) {
+    if (!AppLayoutScope.isTvOf(context) || widget.genresActive) {
       return;
     }
     if (_keepSortFocus && state is CatalogReady && state.items.isNotEmpty) {
@@ -484,7 +528,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   int _columnCount(double width) => CatalogLayout.columnCount(width);
 
   void _loadMoreNearEnd() {
-    if (_scrollController.hasClients && _scrollController.position.extentAfter < 500 && _canPreload) {
+    if (!widget.genresActive &&
+        _scrollController.hasClients &&
+        _scrollController.position.extentAfter < 500 &&
+        _canPreload) {
       _bloc.add(const CatalogMoreRequested());
     }
   }
@@ -499,8 +546,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     if (!focused) {
       return;
     }
+    final state = _bloc.state;
     _keepSortFocus = false;
     _selectedIndex = index;
+    _inspected.value = state.items.elementAtOrNull(index);
     _lastCardFocus = FocusManager.instance.primaryFocus;
     if (index == 0 && _scrollController.hasClients) {
       unawaited(
@@ -521,7 +570,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       );
     }
     final preloadDistance = columns * 2;
-    if (index >= _bloc.state.items.length - preloadDistance && _canPreload) {
+    if (index >= state.items.length - preloadDistance && _canPreload) {
       _bloc.add(const CatalogMoreRequested());
     }
   }
@@ -595,7 +644,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.sort, color: AppPalette.textPrimary),
+            const AppIcon.fromMaterial(Icons.sort, color: AppPalette.textPrimary),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -648,6 +697,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   void dispose() {
     _disposed.complete();
+    _inspected.dispose();
     _sortFocus.dispose();
     _contentFocus.dispose();
     _homeTabFocus.dispose();
@@ -690,17 +740,17 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           label: 'Главная',
           focusNode: _homeTabFocus,
           onPressed: () => widget.onTabSelected?.call(false),
-          selected: !widget.favoritesOnly,
-          autofocus: widget.autofocusTab && !widget.favoritesOnly,
+          selected: widget.filter == null && !widget.genresActive && !widget.favoritesOnly,
+          autofocus: widget.autofocusTab && !widget.genresActive && !widget.favoritesOnly,
         ),
         (
           key: const ValueKey('catalog-tab-true'),
-          icon: Icons.star_border_rounded,
+          icon: Icons.favorite_border_rounded,
           label: 'Избранное',
           focusNode: _favoritesTabFocus,
           onPressed: () => widget.onTabSelected?.call(true),
-          selected: widget.favoritesOnly,
-          autofocus: widget.autofocusTab && widget.favoritesOnly,
+          selected: widget.filter == null && !widget.genresActive && widget.favoritesOnly,
+          autofocus: widget.autofocusTab && !widget.genresActive && widget.favoritesOnly,
         ),
       ],
       if (widget.onBack case final onBack?)
@@ -720,7 +770,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           label: 'Жанры',
           focusNode: _genresFocus,
           onPressed: onOpenGenres,
-          selected: widget.filter != null,
+          selected: widget.genresActive || widget.filter != null,
           autofocus: false,
         ),
       if (widget.onSignOut case final onSignOut?)
@@ -748,7 +798,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     return BlocProvider.value(
       value: _bloc,
       child: PopScope(
-        canPop: !_railExpanded,
+        canPop:
+            !_railExpanded &&
+            !(widget.onBack == null &&
+                (widget.onRootBack != null || widget.favoritesOnly && widget.onTabSelected != null)),
         onPopInvokedWithResult: _onPopInvoked,
         child: TvBackdrop(
           child: Scaffold(
@@ -786,9 +839,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                                       );
                               },
                             ),
-                          )
-                        else
-                          const SizedBox(height: 32),
+                          ),
                         Expanded(
                           child: FocusScope(
                             node: _contentFocus,
@@ -799,11 +850,32 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                               duration: AppMotion.durationOf(context, AppMotion.fast),
                               curve: AppMotion.enterCurve,
                               builder: (context, value, child) => Opacity(opacity: value, child: child),
-                              child: BlocConsumer<CatalogBloc, CatalogState>(
-                                bloc: _bloc,
-                                listener: _onCatalogStateChanged,
-                                buildWhen: (previous, current) => previous != current,
-                                builder: _buildState,
+                              child: IndexedStack(
+                                index: widget.genresActive ? 1 : 0,
+                                children: [
+                                  HeroMode(
+                                    enabled: !widget.genresActive,
+                                    child: TickerMode(
+                                      enabled: !widget.genresActive,
+                                      child: ExcludeFocus(
+                                        excluding: widget.genresActive,
+                                        child: BlocConsumer<CatalogBloc, CatalogState>(
+                                          bloc: _bloc,
+                                          listener: _onCatalogStateChanged,
+                                          buildWhen: (previous, current) => previous != current,
+                                          builder: _buildState,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  ExcludeFocus(
+                                    excluding: !widget.genresActive,
+                                    child: TickerMode(
+                                      enabled: widget.genresActive,
+                                      child: widget.sectionBuilder?.call(_focusRail) ?? const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
