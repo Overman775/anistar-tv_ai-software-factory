@@ -114,6 +114,25 @@ void main() {
     expect(client.calls, isEmpty);
   });
 
+  test('guest favorites and watched operations reject valid inputs without client calls', () async {
+    final favorites = AnistarFavoritesRepository(client, null, () => null);
+    final history = AnistarWatchedEpisodesRepository(client, null, () => null);
+    final operations = <String, Future<Result<Object?, Failure>> Function()>{
+      'favorites page': () => favorites.getPage(1),
+      'favorite status': () => favorites.getStatus(animeId: 1, slug: '1-anime'),
+      'set favorite': () => favorites.setFavorite(animeId: 1, slug: '1-anime', favorite: true),
+      'watched episodes': () => history.getWatched(1),
+      'mark started': () => history.markStarted(animeId: 1, episodeNumber: 1),
+    };
+    for (final operation in operations.entries) {
+      final result = await operation.value();
+      expect(result.failureOrNull, isA<RequestFailure>(), reason: operation.key);
+      expect(result.isFailure, isTrue, reason: operation.key);
+      expect(result.successOrNull, isNull, reason: operation.key);
+      expect(client.calls, isEmpty, reason: operation.key);
+    }
+  });
+
   test('anime starts both branches concurrently and requires their complete success', () async {
     final details = Completer<AnistarAnimeDetailsDto>();
     final episodes = Completer<List<AnistarEpisodeDto>>();
