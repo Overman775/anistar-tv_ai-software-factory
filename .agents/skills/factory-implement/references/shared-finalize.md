@@ -50,6 +50,10 @@ tree and any check evidence, report cancellation, and create/clean no Factory Im
    - static, test, review, and source-drift verdicts;
    - agent chain, skipped gates, blockers, unrelated failures;
 
+   When PR preparation is also requested, capture its relevant evidence, tested
+   revision/file hashes and limitations in parent context before cleanup for
+   `factory-pr`. This does not start PR publication or archive temporary reports.
+
    Do not copy `execution-brief.md`, analysis, or gate reports into `docs/`,
    `docs/tasks/`, source files, tests, or another archive.
 
@@ -87,8 +91,10 @@ Cleanup: FAIL
 Notes: CLEANUP FAIL — {remaining paths or living agents}
 ```
 
-8. Do not stage or commit automatically. Use `factory-github` only for explicitly requested GitHub actions; commits,
-   push, PR publication, merge, and release require explicit request. Offer docs work when public contract, setup, or developer
+8. Do not stage or commit automatically. Use `factory-pr` for explicitly requested
+   PR work and associated Git actions; commits, push, PR publication and merge
+   require explicit request. Release follows `docs/vcs_guidelines.md` under its own
+   explicit scope. Offer docs work when public contract, setup, or developer
    workflow changed; do not invoke either without explicit request.
 
 Stateful report uses `State: STATEFUL`; use `Execution: FULL_TEAM` for a

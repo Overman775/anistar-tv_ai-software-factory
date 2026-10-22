@@ -1,6 +1,12 @@
 ---
 name: factory-meta-retro
 description: "Review how the agent factory works as a whole. Use retrospectives to identify improvements to its environment, instructions, tools, and agent collaboration for future runs."
+metadata:
+  credits:
+    - skill: retro
+      author: Matt Pocock
+      url: "https://github.com/mattpocock/skills/blob/main/skills/engineering/retro/SKILL.md"
+      description: "Session retrospectives that identify improvements to the coding agent's environment for future runs."
 ---
 
 # Factory Meta Retro
@@ -64,10 +70,22 @@ disconnected from the workflow, or broken. Inspect the actual command and availa
 results before recommending a duplicate. Repairing or connecting an existing check
 may address the problem better than adding another.
 
+Read the repository's check commands and their actual hook/CI configuration.
+Check whether relevant checks run through pre-commit, pre-push or CI and whether
+those runs cover the changed scope. If neither hooks nor CI run them, treat the
+missing routine execution as an improvement candidate even before an error
+escapes. Choose an integration point that fits the existing workflow; the
+presence of a command alone does not establish automatic coverage.
+
 Distinguish responsibility for following rules from independent verification.
 The agent doing the work needs to know and follow the constraints relevant to its task.
 A reviewer independently evaluates the result and decisions that require judgment.
-Use automated checks for mechanical violations where practical.
+Classify rule violations before proposing a remedy. For mechanical violations
+(such as a banned API, import pattern or file-location rule), prefer a deterministic
+check in the existing linter, hook or CI over adding another prose instruction.
+Keep standards that require judgment in the relevant review guidance. If a
+mechanical check is impractical, explain the limitation and recommend a proportionate
+alternative.
 Apply this principle to the actual workflow rather than prescribing a fixed set of roles.
 
 When responsibility is unclear, ask which participant lacked information or feedback,
@@ -88,3 +106,8 @@ Concluding that no changes are needed is a valid outcome.
 
 By default, finish with recommendations. Apply changes when the user requests them.
 Respond in the user's language.
+
+## Attribution
+
+See [CREDITS.md](CREDITS.md) for Matt Pocock's original `retro` skill and the
+Factory adaptation details.

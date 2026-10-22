@@ -10,7 +10,7 @@ impeccable → UI/UX
 graphify → architecture/flow
 
 factory-planning → factory-decompose → factory-implement
-factory-code-review / factory-code-simplify / factory-github → focused workflows
+factory-code-review / factory-code-simplify / factory-pr → focused workflows
 factory-meta-retro → session retrospective and factory improvements
 
 ## BLOCK

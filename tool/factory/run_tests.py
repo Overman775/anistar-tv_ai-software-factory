@@ -29,7 +29,7 @@ def main():
     if args.suite:
         suites = [(Path(path), args.pattern) for path in args.suite]
     else:
-        required = ('factory-code-review', 'factory-implement', 'factory-planning', 'factory-decompose', 'factory-github')
+        required = ('factory-code-review', 'factory-implement', 'factory-planning', 'factory-decompose', 'factory-pr')
         suites = [(root / '.agents/skills' / name / 'scripts', 'test_*.py') for name in required]
         suites.append((root / 'tool/factory', '*_test.py'))
     failed = False
