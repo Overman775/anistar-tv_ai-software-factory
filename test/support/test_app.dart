@@ -81,3 +81,24 @@ Future<void> pumpMobileApp(
     () => precacheImage(Assets.images.anistarLogo.provider(), tester.element(find.byType(MaterialApp).first)),
   );
 }
+
+/// Match the focused rail control by its public FocusNode identity.
+String? focusedControlLabel(WidgetTester tester) {
+  final primary = FocusManager.instance.primaryFocus;
+  const labels = {
+    'catalog-tab-false': 'Главная',
+    'catalog-search': 'Поиск',
+    'catalog-tab-true': 'Избранное',
+    'catalog-genres': 'Жанры',
+    'catalog-account': 'Выйти из аккаунта',
+    'catalog-sign-in': 'Войти',
+  };
+  for (final entry in labels.entries) {
+    final control = find.byKey(ValueKey(entry.key));
+    if (control.evaluate().isNotEmpty && tester.widget<TextButton>(control).focusNode == primary) {
+      return entry.value;
+    }
+  }
+
+  return primary?.debugLabel;
+}

@@ -23,7 +23,7 @@ final class HtmlAnistarClient implements AnistarClient {
   Stream<void> get expired => _auth.session.expired;
 
   HtmlAnistarClient(Dio dio, AnistarSession session, {Future<void> Function()? ensureMirror})
-    : _source = AnistarSource(dio),
+    : _source = AnistarSource(dio, accessGeneration: () => session.accessGeneration),
       _auth = AnistarAuthService(dio, session, ensureMirror: ensureMirror);
 
   @override
@@ -31,7 +31,11 @@ final class HtmlAnistarClient implements AnistarClient {
       _safe(() => _auth.restore(onSessionCheck: onSessionCheck));
 
   @override
-  Future<String> signIn(String username, String password) => _safe(() => _auth.signIn(username, password));
+  Future<String> signIn(String username, String password, {RequestCancellation? cancellation}) =>
+      _safe(() => _auth.signIn(username, password, cancellation: cancellation));
+
+  @override
+  Future<void> cancelSignIn(RequestCancellation cancellation) => _safe(() => _auth.cancelSignIn(cancellation));
 
   @override
   Future<void> signOut() => _safe(_auth.signOut);
@@ -39,6 +43,10 @@ final class HtmlAnistarClient implements AnistarClient {
   @override
   Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort}) =>
       _safe(() => _source.catalog(page, filterPath: filterPath, sort: sort));
+
+  @override
+  Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation}) =>
+      _safe(() => _source.search(query, page: page, cancellation: cancellation));
 
   @override
   Future<List<AnistarCatalogFilterDto>> genres() => _safe(_source.genres);

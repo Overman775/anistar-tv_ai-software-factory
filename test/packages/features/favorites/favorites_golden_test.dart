@@ -1,6 +1,7 @@
 // Each pump and snapshot observes a distinct navigation state.
 // ignore_for_file: prefer-moving-to-variable
 
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -44,7 +45,11 @@ void main() {
         HomeScreen(onAnimeTap: (_) => fail('Unexpected navigation'), onOpenGenres: () => fail('Unexpected genres')),
         size: size,
         wrapInScaffold: false,
-        overrides: [catalogRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
+          catalogRepositoryProvider.overrideWithValue(repository),
+        ],
       );
       await tester.pumpAndSettle();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/main_$name.png'));
@@ -63,6 +68,8 @@ void main() {
         size: size,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
           favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
         ],
@@ -93,7 +100,11 @@ void main() {
         ),
         size: size,
         wrapInScaffold: false,
-        overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+        overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
+          favoritesRepositoryProvider.overrideWithValue(repository),
+        ],
       );
       await tester.pumpAndSettle();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/favorites_$name.png'));

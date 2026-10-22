@@ -10,9 +10,10 @@ sealed class CatalogEvent {
 @immutable
 final class CatalogStarted extends CatalogEvent {
   final bool preserveContent;
+  final bool preservePages;
   final CatalogRepository? repository;
 
-  const CatalogStarted({this.preserveContent = false, this.repository});
+  const CatalogStarted({this.preserveContent = false, this.preservePages = false, this.repository});
 }
 
 @immutable

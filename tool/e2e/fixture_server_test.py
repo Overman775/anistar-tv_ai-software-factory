@@ -3,6 +3,7 @@ import ssl
 import threading
 import unittest
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from fixture_server import CERT, FixtureServer
@@ -37,6 +38,29 @@ class FixtureServerTest(unittest.TestCase):
             self.assertIn('/9493-ad.html', html)
         with self.get('/anime/page/2/') as response:
             self.assertNotIn('/anime/page/2/', response.read().decode('cp1251'))
+
+    def test_public_search_uses_home_post_then_confirmed_continuation(self):
+        with self.get('/') as response:
+            self.assertEqual(response.headers.get_content_charset(), 'windows-1251')
+            self.assertTrue('action="/"' in response.read().decode('cp1251'))
+        fields = {'do': 'search', 'subaction': 'search', 'story': 'Наруто'}
+        for page, path in ((1, '/'), (2, '/index.php?do=search')):
+            if page == 2:
+                fields.update(full_search='0', search_start='2', result_from='13')
+            request = Request(self.server.origin + path,
+                              data=urlencode(fields, encoding='cp1251').encode('ascii'),
+                              headers={'Content-Type': 'application/x-www-form-urlencoded; charset=windows-1251'})
+            with urlopen(request, context=self.context, timeout=3) as response:
+                html = response.read().decode('cp1251')
+                self.assertTrue('id="fullsearch"' in html)
+                self.assertTrue('action="/index.php?do=search"' in html)
+                self.assertTrue('name="full_search" value="0"' in html)
+                self.assertTrue('name="story" value="Наруто"' in html)
+                self.assertTrue(f'name="search_start" value="{page}"' in html)
+                self.assertTrue(f'Аниме {10938 + (page - 1) * 12}' in html)
+                self.assertEqual('list_submit(2)' in html, page == 1)
+        self.assertEqual(self.server.favorite_writes, 0)
+        self.assertEqual(self.server.watched, set())
 
     def test_favorites_are_authenticated_site_state(self):
         root = '/engine/ajax/favorites.php?fav_id=10938&skin=new36&alert=0&action='

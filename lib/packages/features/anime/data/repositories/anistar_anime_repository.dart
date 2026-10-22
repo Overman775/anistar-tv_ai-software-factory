@@ -12,8 +12,10 @@ import '../../domain/repositories/anime_repository.dart';
 
 final class AnistarAnimeRepository extends BaseRepository implements AnimeRepository {
   final AnistarClient _client;
+  final bool Function() _canUseAccount;
 
-  AnistarAnimeRepository(this._client, [super.logger]);
+  AnistarAnimeRepository(this._client, [super.logger, bool Function()? canUseAccount])
+    : _canUseAccount = canUseAccount ?? (() => false);
 
   @override
   Future<Result<AnimeScreenData, Failure>> getAnime({required int id, required String slug}) => makeApiCall(
@@ -40,7 +42,7 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
       return AnimeScreenData(
         details: AnimeDetails(
           id: detail.id,
-          isFavorite: detail.isFavorite,
+          isFavorite: _canUseAccount() ? detail.isFavorite : null,
           slug: detail.slug,
           title: detail.title,
           genres: detail.genres,
@@ -65,7 +67,7 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
                 number: episode.number,
                 title: episode.title,
                 previewUri: episode.previewUri,
-                isWatched: episode.isWatched,
+                isWatched: _canUseAccount() && episode.isWatched,
               ),
             )
             .toList(growable: false),

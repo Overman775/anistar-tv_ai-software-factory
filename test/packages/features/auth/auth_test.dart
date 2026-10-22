@@ -26,6 +26,74 @@ void main() {
   setUp(() => repository = FakeAuthRepository());
   tearDown(() => repository.close());
 
+  testWidgets('guest cancellation keeps the form open until cleanup retry succeeds', (tester) async {
+    final login = Completer<Result<String, Failure>>();
+    final cleanup = Completer<Result<void, Failure>>();
+    repository
+      ..pendingLogin = login
+      ..pendingCancellation = cleanup;
+    await pumpTvApp(
+      tester,
+      const App(),
+      wrapInScaffold: false,
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repository),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
+    );
+    final settle = tester.pumpAndSettle;
+    await settle();
+    final container = ProviderScope.containerOf(tester.element(find.byType(LoginScreen)));
+    final guest = find.byKey(const ValueKey('login_guest'));
+    await tester.tap(guest);
+    await settle();
+    await tester.tap(find.byKey(const ValueKey('catalog-sign-in')));
+    await settle();
+    final username = find.byKey(const ValueKey('login_username'));
+    final submit = find.byKey(const ValueKey('login_submit'));
+    await tester.enterText(username, 'abandoned');
+    await tester.enterText(find.byKey(const ValueKey('login_password')), 'fixture-password');
+    await tester.tap(submit);
+    await tester.pump();
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    final pending = container.read(authControllerProvider).value;
+    expect(pending?.isCancellingSignIn, isTrue);
+    expect(pending?.loginRequested, isTrue);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(tester.widget<AppButton>(guest).busy, isTrue);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(repository.cancellationCalls, 1);
+    login.complete(const Result.success('late-account'));
+    await tester.pump();
+    cleanup.complete(const Result.failure(ConnectionFailure()));
+    await settle();
+    final failed = container.read(authControllerProvider).value;
+    expect(failed?.operation, AuthOperation.cancellationFailed);
+    expect(failed?.access, isA<AnonymousAccess>());
+    expect(failed?.loginRequested, isTrue);
+    expect(failed?.cancellationFailure, isA<ConnectionFailure>());
+    expect(find.text('Повторить отмену'), findsOneWidget);
+    expect(find.byKey(const ValueKey('login_error')), findsOneWidget);
+    expect(tester.widget<AppButton>(guest).focusNode?.hasFocus, isTrue);
+    expect(tester.widget<AppButton>(submit).enabled, isFalse);
+    expect(tester.widget<TextFormField>(username).enabled, isFalse);
+    final token = repository.lastCancelledToken;
+    repository.pendingCancellation = null;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle();
+    final finished = container.read(authControllerProvider).value;
+    expect(finished?.loginRequested, isFalse);
+    expect(finished?.requiresCancellation, isFalse);
+    expect(finished?.access, isA<AnonymousAccess>());
+    expect(repository.lastCancelledToken, same(token));
+    expect(repository.cancellationCalls, 2);
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(find.byType(CatalogScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('portrait login at 200% reveals remote fields and submit', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -285,7 +353,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     repository.pendingLogin?.complete(const Result.success('test'));
     await first;
-    expect(container.read(authControllerProvider).asData?.value, isNull);
+    expect(container.read(authAccessProvider), isA<UnauthenticatedAccess>());
   });
 
   test('failed secure deletion keeps the authenticated gate and returns an error', () async {
@@ -296,6 +364,6 @@ void main() {
     addTearDown(container.dispose);
     await container.read(authControllerProvider.future);
     expect(await container.read(authControllerProvider.notifier).signOut(), isA<Failure>());
-    expect(container.read(authControllerProvider).asData?.value, 'test');
+    expect(container.read(authAccessProvider).account, 'test');
   });
 }

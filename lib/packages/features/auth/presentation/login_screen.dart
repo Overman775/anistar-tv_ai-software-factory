@@ -11,7 +11,9 @@ import '../domain/auth_invalid_credentials_failure.dart';
 import 'login_brand.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({this.canCancel = false, super.key});
+
+  final bool canCancel;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -25,12 +27,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordFocus = FocusNode(debugLabel: 'Пароль');
   final _submitFocus = FocusNode(debugLabel: 'Войти');
   final _visibilityFocus = FocusNode(debugLabel: 'Видимость пароля');
+  final _guestFocus = FocusNode(debugLabel: 'Продолжить без входа');
   bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    for (final node in [_usernameFocus, _passwordFocus, _visibilityFocus, _submitFocus]) {
+    for (final node in [_usernameFocus, _passwordFocus, _visibilityFocus, _submitFocus, _guestFocus]) {
       node.addListener(_revealFocus);
     }
   }
@@ -45,6 +48,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _passwordFocus,
         _visibilityFocus,
         _submitFocus,
+        _guestFocus,
       ].where((node) => node.hasFocus).firstOrNull;
       final targetContext = target?.context;
       if (targetContext != null) {
@@ -94,7 +98,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _focusAfterLoading() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || ref.read(authControllerProvider).isLoading) {
+      if (!mounted) {
+        return;
+      }
+      final auth = ref.read(authControllerProvider);
+      if (auth.isLoading || auth.value?.isSigningIn == true || auth.value?.requiresCancellation == true) {
         return;
       }
       (_username.text.isEmpty ? _usernameFocus : _passwordFocus).requestFocus();
@@ -102,11 +110,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    if (ref.read(authControllerProvider).isLoading || !(_formKey.currentState?.validate() ?? false)) {
+    final auth = ref.read(authControllerProvider);
+    if (auth.isLoading ||
+        auth.value?.isSigningIn == true ||
+        auth.value?.requiresCancellation == true ||
+        !(_formKey.currentState?.validate() ?? false)) {
       return;
     }
     _submitFocus.requestFocus();
     await ref.read(authControllerProvider.notifier).signIn(_username.text, _password.text);
+  }
+
+  void _continueAnonymous() {
+    final controller = ref.read(authControllerProvider.notifier);
+    if (widget.canCancel) {
+      unawaited(controller.cancelSignIn());
+    } else {
+      controller.enterAnonymous();
+    }
+  }
+
+  void _onPop(bool didPop, Object? result) {
+    if (!didPop && widget.canCancel) {
+      unawaited(ref.read(authControllerProvider.notifier).cancelSignIn());
+    }
   }
 
   @override
@@ -115,6 +142,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _passwordFocus.dispose();
     _submitFocus.dispose();
     _visibilityFocus.dispose();
+    _guestFocus.dispose();
     _username.dispose();
     _password.dispose();
     super.dispose();
@@ -123,15 +151,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     ref.listen(authControllerProvider, (previous, next) {
-      if (previous?.isLoading == true && !next.isLoading) {
-        if (next.error is AuthInvalidCredentialsFailure) {
+      final restored = previous?.isLoading == true && !next.isLoading && AppLayoutScope.isTvOf(context);
+      final signInFinished = previous?.value?.isSigningIn == true && next.value?.isSigningIn != true;
+      if (next.value?.operation == AuthOperation.cancellationFailed) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _guestFocus.requestFocus();
+          }
+        });
+      }
+      if (restored || signInFinished) {
+        if (next.value?.signInFailure is AuthInvalidCredentialsFailure) {
           _password.clear();
         }
         _focusAfterLoading();
       }
     });
     final auth = ref.watch(authControllerProvider);
-    final error = auth.error;
+    final snapshot = auth.value;
+    final busy = auth.isLoading || snapshot?.isSigningIn == true;
+    final cancellationRequired = snapshot?.requiresCancellation == true;
+    final blocked = busy || cancellationRequired;
+    final error = snapshot?.cancellationFailure ?? snapshot?.signInFailure ?? auth.error;
     final textTheme = Theme.of(context).textTheme;
     final fieldLabelStyle = textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600);
     final isTv = AppLayoutScope.isTvOf(context);
@@ -155,18 +196,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Focus(
               canRequestFocus: false,
               onKeyEvent: (_, event) => _moveFieldFocus(event, _passwordFocus, _usernameFocus),
-              child: TextFormField(
-                key: const ValueKey('login_username'),
-                controller: _username,
+              child: AppFocusBorder(
                 focusNode: _usernameFocus,
-                onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
-                autofocus: isTv,
-                enabled: !auth.isLoading,
-                autocorrect: false,
-                enableSuggestions: false,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(fillColor: AppPalette.surface),
-                validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
+                restingColor: AppPalette.outline,
+                child: TextFormField(
+                  key: const ValueKey('login_username'),
+                  controller: _username,
+                  focusNode: _usernameFocus,
+                  onFieldSubmitted: (_) => _passwordFocus.requestFocus(),
+                  autofocus: isTv,
+                  enabled: !blocked,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    fillColor: AppPalette.surface,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty ? 'Введите логин' : null,
+                ),
               ),
             ),
           ),
@@ -185,18 +238,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Expanded(
                     child: Semantics(
                       label: 'Пароль',
-                      child: TextFormField(
-                        key: const ValueKey('login_password'),
-                        controller: _password,
+                      child: AppFocusBorder(
                         focusNode: _passwordFocus,
-                        enabled: !auth.isLoading,
-                        obscureText: _obscurePassword,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(fillColor: AppPalette.surface),
-                        validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
-                        onFieldSubmitted: (_) => unawaited(_submit()),
+                        restingColor: AppPalette.outline,
+                        child: TextFormField(
+                          key: const ValueKey('login_password'),
+                          controller: _password,
+                          focusNode: _passwordFocus,
+                          enabled: !blocked,
+                          obscureText: _obscurePassword,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          textInputAction: TextInputAction.done,
+                          decoration: const InputDecoration(
+                            fillColor: AppPalette.surface,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            errorBorder: InputBorder.none,
+                            focusedErrorBorder: InputBorder.none,
+                          ),
+                          validator: (value) => value == null || value.isEmpty ? 'Введите пароль' : null,
+                          onFieldSubmitted: (_) => unawaited(_submit()),
+                        ),
                       ),
                     ),
                   ),
@@ -206,7 +271,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: IconButton(
                       focusNode: _visibilityFocus,
                       tooltip: _obscurePassword ? 'Показать пароль' : 'Скрыть пароль',
-                      onPressed: auth.isLoading ? null : () => setState(() => _obscurePassword = !_obscurePassword),
+                      onPressed: blocked ? null : () => setState(() => _obscurePassword = !_obscurePassword),
                       icon: AppIcon(_obscurePassword ? AppIconType.eye : AppIconType.eyeOff),
                     ),
                   ),
@@ -235,61 +300,84 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: AppSpacing.xl),
           Focus(
             canRequestFocus: false,
-            onKeyEvent: (_, event) => _moveFieldFocus(event, _submitFocus, _passwordFocus),
+            onKeyEvent: (_, event) => _moveFieldFocus(event, _guestFocus, _passwordFocus),
             child: AppButton(
               key: const ValueKey('login_submit'),
               focusNode: _submitFocus,
-              busy: auth.isLoading,
-              label: auth.isLoading ? 'Проверяем вход…' : 'Войти',
+              busy: busy,
+              enabled: !cancellationRequired,
+              label: busy ? 'Проверяем вход…' : 'Войти',
               onPressed: () => unawaited(_submit()),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) => _moveFieldFocus(event, _guestFocus, _submitFocus),
+            child: AppButton(
+              key: const ValueKey('login_guest'),
+              focusNode: _guestFocus,
+              variant: AppButtonVariant.neutral,
+              enabled: widget.canCancel || !busy,
+              busy: snapshot?.isCancellingSignIn == true,
+              label: switch (snapshot?.operation) {
+                AuthOperation.cancellingSignIn => 'Отменяем вход…',
+                AuthOperation.cancellationFailed => 'Повторить отмену',
+                _ => 'Продолжить без входа',
+              },
+              onPressed: _continueAnonymous,
             ),
           ),
         ],
       ),
     );
 
-    return Scaffold(
-      backgroundColor: AppPalette.background,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final padding = isTv ? (constraints.maxWidth * 0.05).clamp(24.0, 96.0) : AppSpacing.lg;
-            final horizontal = isTv && constraints.maxWidth >= 760;
-            final brand = LoginBrand(vertical: horizontal);
+    return PopScope(
+      canPop: !widget.canCancel,
+      onPopInvokedWithResult: _onPop,
+      child: Scaffold(
+        backgroundColor: AppPalette.background,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final padding = isTv ? (constraints.maxWidth * 0.05).clamp(24.0, 96.0) : AppSpacing.lg;
+              final horizontal = isTv && constraints.maxWidth >= 760;
+              final brand = LoginBrand(vertical: horizontal);
 
-            return SingleChildScrollView(
-              padding: EdgeInsets.all(padding),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: (constraints.maxHeight - padding * 2).clamp(0.0, double.infinity),
-                ),
-                child: Center(
-                  child: horizontal
-                      ? Row(
-                          children: [
-                            Expanded(child: brand),
-                            const SizedBox(width: AppSpacing.xxxl),
-                            Expanded(
-                              child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: form),
-                            ),
-                          ],
-                        )
-                      : ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 440),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+              return SingleChildScrollView(
+                padding: EdgeInsets.all(padding),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: (constraints.maxHeight - padding * 2).clamp(0.0, double.infinity),
+                  ),
+                  child: Center(
+                    child: horizontal
+                        ? Row(
                             children: [
-                              brand,
-                              const SizedBox(height: AppSpacing.xl),
-                              form,
+                              Expanded(child: brand),
+                              const SizedBox(width: AppSpacing.xxxl),
+                              Expanded(
+                                child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 560), child: form),
+                              ),
                             ],
+                          )
+                        : ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 440),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                brand,
+                                const SizedBox(height: AppSpacing.xl),
+                                form,
+                              ],
+                            ),
                           ),
-                        ),
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

@@ -84,9 +84,13 @@ void main() {
   test('common AniStar library transitively exposes only transport independent contract types', () {
     for (final (file, uri) in projectLibraryEdges(File('infrastructure/anistar/lib/anistar.dart'), roots)) {
       final resolved = resolveProjectLibrary(file, uri, roots);
-      expect(uri.startsWith('package:'), isFalse, reason: '${file.path}: $uri');
+      expect(!uri.startsWith('package:') || uri == 'package:core/data.dart', isTrue, reason: '${file.path}: $uri');
       if (resolved != null) {
-        expect(resolved.path.contains('/anistar/lib/src/contract/'), isTrue, reason: '${file.path}: $uri');
+        expect(
+          resolved.path.contains('/anistar/lib/src/contract/') || resolved.path.contains('/infrastructure/core/lib/'),
+          isTrue,
+          reason: '${file.path}: $uri',
+        );
       }
     }
   });
@@ -94,7 +98,7 @@ void main() {
   test('domain imports and re-exports stay within Dart Core and feature domain', () {
     for (final file in _dartFiles(Directory('lib/packages/features')).where((file) => file.path.contains('/domain/'))) {
       for (final (owner, uri) in projectLibraryEdges(file, roots)) {
-        if (uri.startsWith('dart:')) {
+        if (uri.startsWith('dart:') || uri == 'package:meta/meta.dart') {
           continue;
         }
         final resolved = resolveProjectLibrary(owner, uri, roots);

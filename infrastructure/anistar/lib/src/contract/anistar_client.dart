@@ -1,3 +1,5 @@
+import 'package:core/data.dart';
+
 import 'anistar_anime_details_dto.dart';
 import 'anistar_catalog_filter_dto.dart';
 import 'anistar_catalog_page_dto.dart';
@@ -15,10 +17,12 @@ abstract interface class AnistarClient {
   Stream<void> get expired;
 
   Future<String?> restore({void Function()? onSessionCheck});
-  Future<String> signIn(String username, String password);
+  Future<String> signIn(String username, String password, {RequestCancellation? cancellation});
+  Future<void> cancelSignIn(RequestCancellation cancellation);
   Future<void> signOut();
 
   Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort});
+  Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation});
   Future<List<AnistarCatalogFilterDto>> genres();
   Future<AnistarAnimeDetailsDto> details(String slug);
   Future<AnistarCatalogPageDto> favorites(int page);

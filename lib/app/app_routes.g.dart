@@ -78,6 +78,7 @@ const _$HomeDestinationEnumMap = {
   HomeDestination.home: 'home',
   HomeDestination.favorites: 'favorites',
   HomeDestination.genres: 'genres',
+  HomeDestination.search: 'search',
 };
 
 mixin $AnimeRoute on GoRouteData {
@@ -121,11 +122,11 @@ mixin $PlayerRoute on GoRouteData {
   static PlayerRoute _fromState(GoRouterState state) => PlayerRoute(
     animeId: int.parse(state.uri.queryParameters['anime-id']!),
     episodeNumber: int.parse(state.uri.queryParameters['episode-number']!),
+    slug: state.uri.queryParameters['slug']!,
+    title: state.uri.queryParameters['title']!,
     destination:
         _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
         HomeDestination.home,
-    slug: state.uri.queryParameters['slug']!,
-    title: state.uri.queryParameters['title']!,
     $extra: state.extra as AnimeSummary?,
   );
 
@@ -137,9 +138,9 @@ mixin $PlayerRoute on GoRouteData {
     queryParams: {
       'anime-id': _self.animeId.toString(),
       'episode-number': _self.episodeNumber.toString(),
-      if (_self.destination != HomeDestination.home) 'destination': _$HomeDestinationEnumMap[_self.destination],
       'slug': _self.slug,
       'title': _self.title,
+      if (_self.destination != HomeDestination.home) 'destination': _$HomeDestinationEnumMap[_self.destination],
     },
   );
 

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../widgets/app_focus_border.dart';
 import 'app_palette.dart';
 
 /// Shared focus and hover treatment for menus, choices and controls.
@@ -37,14 +38,18 @@ abstract final class AppFocusStyle {
       ).copyWith(
         side: const WidgetStatePropertyAll(BorderSide.none),
         overlayColor: const WidgetStatePropertyAll(AppPalette.accentSubtle),
-        backgroundBuilder: (context, states, child) => DecoratedBox(
-          decoration: decoration(
-            focused: active(states),
-            selected: selected,
-            pressed: states.contains(WidgetState.pressed),
-            radius: radius,
+        backgroundBuilder: (context, states, child) => AppFocusBorder(
+          focused: states.contains(WidgetState.focused),
+          radius: radius,
+          child: DecoratedBox(
+            decoration: decoration(
+              focused: active(states),
+              selected: selected,
+              pressed: states.contains(WidgetState.pressed),
+              radius: radius,
+            ).copyWith(border: const Border()),
+            child: child,
           ),
-          child: child,
         ),
       );
 }

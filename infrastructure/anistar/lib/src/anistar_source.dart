@@ -1,9 +1,11 @@
+import 'package:core/data.dart';
 import 'package:dio/dio.dart';
 import 'package:networking/networking.dart';
 
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'anistar_html_parser.dart';
+import 'anistar_search_source.dart';
 import 'contract/anistar_anime_details_dto.dart';
 import 'contract/anistar_catalog_filter_dto.dart';
 import 'contract/anistar_catalog_page_dto.dart';
@@ -16,8 +18,14 @@ import 'parsed_episode.dart';
 final class AnistarSource {
   final Uri baseUri;
   final Dio _dio;
+  final AnistarSearchSource _search;
 
-  AnistarSource(this._dio) : baseUri = Uri.parse(_dio.options.baseUrl);
+  AnistarSource(this._dio, {int Function()? accessGeneration})
+    : baseUri = Uri.parse(_dio.options.baseUrl),
+      _search = AnistarSearchSource(_dio, accessGeneration);
+
+  Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation}) =>
+      _search.search(query, page: page, cancellation: cancellation);
 
   Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort}) async {
     if (page < 1) {

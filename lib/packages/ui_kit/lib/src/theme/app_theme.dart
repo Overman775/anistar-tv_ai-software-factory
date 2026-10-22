@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../widgets/app_focus_border.dart';
 import 'app_focus_style.dart';
 import 'app_palette.dart';
 import 'tv_typography.dart';
@@ -104,16 +105,6 @@ abstract final class AppTheme {
 
       return focused ? primaryColor.withValues(alpha: 0.3) : primaryHoverColor;
     });
-    final iconSide = WidgetStateProperty.resolveWith<BorderSide?>((states) {
-      final focused = states.contains(WidgetState.focused);
-
-      return BorderSide(color: focused ? primaryColor : Colors.transparent, width: focused ? 3 : 0);
-    });
-    final filledButtonSide = WidgetStateProperty.resolveWith<BorderSide?>((states) {
-      final focused = states.contains(WidgetState.focused);
-
-      return BorderSide(color: focused ? baseScheme.onPrimary : Colors.transparent, width: focused ? 3 : 0);
-    });
     final textTheme = TvTypography.apply(baseTextTheme)
         .apply(bodyColor: baseScheme.onSurface, displayColor: baseScheme.onSurface);
 
@@ -178,7 +169,12 @@ abstract final class AppTheme {
               shape: const RoundedRectangleBorder(borderRadius: AppRadii.medium),
               textStyle: textTheme.labelLarge,
             ).copyWith(
-              side: filledButtonSide,
+              side: const WidgetStatePropertyAll(BorderSide.none),
+              backgroundBuilder: (context, states, child) => AppFocusBorder(
+                focused: states.contains(WidgetState.focused),
+                color: AppPalette.onPrimary,
+                child: child ?? const SizedBox.shrink(),
+              ),
               backgroundColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.disabled)) {
                   return AppPalette.surfaceElevated;
@@ -218,7 +214,9 @@ abstract final class AppTheme {
           }),
           foregroundColor: WidgetStatePropertyAll(isDark ? AppPalette.textPrimary : AppPalette.background),
           overlayColor: iconOverlayColor,
-          side: iconSide,
+          side: const WidgetStatePropertyAll(BorderSide.none),
+          backgroundBuilder: (context, states, child) =>
+              AppFocusBorder(focused: states.contains(WidgetState.focused), child: child ?? const SizedBox.shrink()),
           shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: AppRadii.medium)),
         ),
       ),

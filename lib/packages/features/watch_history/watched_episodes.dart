@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'watch_history_providers.dart';
 
-/// The application supplies the signed-in account, independent of mirror origin.
+/// The application supplies an account/origin identity; null denies account operations.
 final watchHistoryAccountProvider = Provider<String?>((ref) => null);
 
 final watchedEpisodesProvider = AsyncNotifierProvider.family<WatchedEpisodes, Set<int>, int>(

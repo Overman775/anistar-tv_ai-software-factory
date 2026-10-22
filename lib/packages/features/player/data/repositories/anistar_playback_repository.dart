@@ -10,8 +10,10 @@ import '../../domain/repositories/playback_repository.dart';
 
 final class AnistarPlaybackRepository extends BaseRepository implements PlaybackRepository {
   final AnistarClient _client;
+  final bool Function() _canUseAccount;
 
-  AnistarPlaybackRepository(this._client, [super.logger]);
+  AnistarPlaybackRepository(this._client, [super.logger, bool Function()? canUseAccount])
+    : _canUseAccount = canUseAccount ?? (() => false);
 
   @override
   Future<Result<PlaybackSession, Failure>> createSession({
@@ -48,7 +50,9 @@ final class AnistarPlaybackRepository extends BaseRepository implements Playback
         selectedQuality: selected,
         availableQualities: available,
         episodeNumbers: numbers.toList()..sort(),
-        watchedEpisodes: episodes.where((episode) => episode.isWatched).map((episode) => episode.number).toSet(),
+        watchedEpisodes: _canUseAccount()
+            ? episodes.where((episode) => episode.isWatched).map((episode) => episode.number).toSet()
+            : const {},
         httpHeaders: source.httpHeaders,
         expiresAt: source.expiresAt,
       );

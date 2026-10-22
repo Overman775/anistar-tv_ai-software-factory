@@ -53,16 +53,20 @@ class AnimeFilterRow extends StatelessWidget {
                       semanticLabel: 'Аниме: ${filter.label}',
                       onPressed: () => onSelected(filter),
                       onFocusChanged: (focused) => _focusChanged(chipContext, i, focused),
-                      builder: (context, focused) => AnimatedContainer(
-                        duration: AppMotion.durationOf(context, AppMotion.fast),
-                        decoration: AppFocusStyle.decoration(
-                          focused: focused,
-                          restingColor: AppPalette.surfaceElevated,
-                          radius: AppRadii.pill,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          child: Text(filter.label, style: style?.copyWith(color: AppPalette.textPrimary)),
+                      builder: (context, focused) => AppFocusBorder(
+                        focused: focused,
+                        radius: AppRadii.pill,
+                        child: AnimatedContainer(
+                          duration: AppMotion.durationOf(context, AppMotion.fast),
+                          decoration: AppFocusStyle.decoration(
+                            focused: focused,
+                            restingColor: AppPalette.surfaceElevated,
+                            radius: AppRadii.pill,
+                          ).copyWith(border: const Border()),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                            child: Text(filter.label, style: style?.copyWith(color: AppPalette.textPrimary)),
+                          ),
                         ),
                       ),
                     );

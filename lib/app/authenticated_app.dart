@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../packages/features/auth/auth_providers.dart';
+import '../packages/features/auth/presentation/login_screen.dart';
 import 'app_router.dart';
 
 class AuthenticatedApp extends ConsumerStatefulWidget {
@@ -18,11 +20,41 @@ class AuthenticatedApp extends ConsumerStatefulWidget {
 class _AuthenticatedAppState extends ConsumerState<AuthenticatedApp> {
   late final AppRouter _appRouter;
   AppDeviceProfile? _appliedProfile;
+  bool _loginOpen = false;
 
   @override
   void initState() {
     super.initState();
     _appRouter = AppRouter(ref.read(loggerProvider));
+  }
+
+  void _syncLogin(bool requested) {
+    if (requested == _loginOpen) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final navigator = _appRouter.rootNavigatorKey.currentState;
+      if (navigator == null) {
+        return;
+      }
+      if (requested && !_loginOpen) {
+        _loginOpen = true;
+        unawaited(
+          navigator.push<void>(MaterialPageRoute<void>(builder: (_) => const LoginScreen(canCancel: true))).then((_) {
+            _loginOpen = false;
+            if (mounted && ref.read(authControllerProvider).value?.loginRequested == true) {
+              unawaited(ref.read(authControllerProvider.notifier).cancelSignIn());
+            }
+          }),
+        );
+      } else if (!requested && _loginOpen) {
+        _loginOpen = false;
+        navigator.pop();
+      }
+    });
   }
 
   @override
@@ -48,12 +80,16 @@ class _AuthenticatedAppState extends ConsumerState<AuthenticatedApp> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
-    title: 'Anistar TV',
-    debugShowCheckedModeBanner: false,
-    theme: AppLayoutScope.isTvOf(context) ? AppTheme.lightTheme : AppTheme.mobileLightTheme,
-    darkTheme: AppLayoutScope.isTvOf(context) ? AppTheme.darkTheme : AppTheme.mobileDarkTheme,
-    themeMode: ThemeMode.dark,
-    routerConfig: _appRouter.router,
-  );
+  Widget build(BuildContext context) {
+    ref.listen(authControllerProvider, (_, next) => _syncLogin(next.value?.loginRequested ?? false));
+
+    return MaterialApp.router(
+      title: 'Anistar TV',
+      debugShowCheckedModeBanner: false,
+      theme: AppLayoutScope.isTvOf(context) ? AppTheme.lightTheme : AppTheme.mobileLightTheme,
+      darkTheme: AppLayoutScope.isTvOf(context) ? AppTheme.darkTheme : AppTheme.mobileDarkTheme,
+      themeMode: ThemeMode.dark,
+      routerConfig: _appRouter.router,
+    );
+  }
 }

@@ -37,7 +37,7 @@ void main() {
         expect(exits, 0);
       } else {
         expect(title, findsOneWidget);
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Отмена подтверждения');
+        expect(focusedControlLabel(tester), 'Отмена подтверждения');
         await sendKey(LogicalKeyboardKey.select);
         await settle();
         expect(exits, 0);

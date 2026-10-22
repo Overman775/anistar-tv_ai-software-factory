@@ -19,6 +19,7 @@ import 'package:ui_kit/ui_kit.dart';
 | `AppMotion` | Длительности, кривые и учёт системного уменьшения движения |
 | `AppIcon`, `AppIconType` | Типизированные Lucide-иконки из локальных SVG |
 | `AppButton`, `MediaCard` | Общие действия и варианты карточек для постера, широкого изображения и эпизода |
+| `AppFocusBorder` | Общая цветовая анимация рамки фокуса с неизменной шириной и геометрией |
 | `TvFocusable`, `TvFocusTile`, `TvChoiceTile` | Ввод, focus и выбор с пульта |
 
 Согласованные цвета, роли текста, геометрия и состояния описаны в [спецификации визуальной системы](../../../docs/specs/11_visual_system.md). Длительности и кривые принадлежат [спецификации анимаций](../../../docs/specs/08_motion.md); feature использует AppMotion вместо локальных duration/curve.
@@ -39,6 +40,8 @@ AppButton(
 ```
 
 `AppButton` сохраняет focus во время `busy` и отклоняет повторную активацию. `AppIcon.fromMaterial` остаётся совместимым входом для имеющихся Material `IconData`. `AppIconType` включает 37 локальных Lucide SVG, в том числе стрелки сортировки и `share`.
+
+`AppFocusBorder` доступен из публичного `package:ui_kit/ui_kit.dart`. Он рисует перед дочерним содержимым рамку постоянной толщины, анимируя только её цвет. `focusBorderEnter` задаёт 280 мс с `easeOutCubic`; `focusBorderExit` — 200 мс с `easeInCubic`. Рамка не задерживает перенос focus и не меняет размеры layout. `durationOf` превращает длительность в ноль при `disableAnimations` или `accessibleNavigation`; карточный scale остаётся отдельным состоянием.
 
 ## 2. Общие компоненты
 

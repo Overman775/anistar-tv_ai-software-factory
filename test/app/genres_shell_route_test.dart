@@ -39,6 +39,8 @@ void main() {
         MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           authRepositoryProvider.overrideWithValue(auth),
           catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
           catalogBrowseRepositoryProvider.overrideWithValue(FakeCatalogBrowseRepository(genres: () => pending.future)),
@@ -49,11 +51,13 @@ void main() {
       final settle = tester.pumpAndSettle;
       await settle();
       await key(LogicalKeyboardKey.arrowLeft);
+      await settle();
+      await key(LogicalKeyboardKey.arrowDown);
       await key(LogicalKeyboardKey.arrowDown);
       await key(LogicalKeyboardKey.arrowDown);
       await pump();
       final genresFocus = FocusManager.instance.primaryFocus;
-      expect(genresFocus?.debugLabel, 'Жанры');
+      expect(focusedControlLabel(tester), 'Жанры');
       await key(LogicalKeyboardKey.select);
       await pump();
       expect(find.byType(GenresScreen), findsOneWidget);
@@ -71,6 +75,7 @@ void main() {
         if (outcome == 'home') {
           await key(LogicalKeyboardKey.arrowUp);
           await key(LogicalKeyboardKey.arrowUp);
+          await key(LogicalKeyboardKey.arrowUp);
           await key(LogicalKeyboardKey.select);
           await pump();
         }
@@ -84,17 +89,16 @@ void main() {
             : Result.success(outcome == 'empty' ? const [] : const [comedyFilter]),
       );
       await settle();
-      if (outcome == 'ready') {
+      if (outcome == 'ready' || outcome == 'no entry') {
         expect(comedyTile, findsOneWidget);
         expect(
-          FocusManager.instance.primaryFocus?.debugLabel,
+          focusedControlLabel(tester),
           comedyFilter.label,
-          reason:
-              'Right entered pending content at ${pendingFocus?.debugLabel}; ready content needs an actionable tile',
+          reason: 'OK entered pending content at ${pendingFocus?.debugLabel}; ready content needs an actionable tile',
         );
         expect(comedyTile.hitTestable(), findsOneWidget);
       } else if (outcome == 'error' || outcome == 'empty') {
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить загрузку жанров');
+        expect(focusedControlLabel(tester), 'Повторить загрузку жанров');
       } else if (outcome != 'dispose') {
         expect(FocusManager.instance.primaryFocus, same(retainedFocus));
       }
@@ -178,6 +182,8 @@ void main() {
       MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         authRepositoryProvider.overrideWithValue(auth),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         catalogBrowseRepositoryProvider.overrideWithValue(browse),
@@ -187,12 +193,13 @@ void main() {
     final key = tester.sendKeyEvent;
     final popRoute = tester.binding.handlePopRoute;
     final genresScreen = find.byType(GenresScreen);
-    String? focusedLabel() => FocusManager.instance.primaryFocus?.debugLabel;
+    String? focusedLabel() => focusedControlLabel(tester);
     String routePath() => router.router.state.uri.path;
     await settle();
     final rail = find.byType(CatalogNavigationRail);
     final originalRail = tester.element(rail);
     await key(LogicalKeyboardKey.arrowLeft);
+    await key(LogicalKeyboardKey.arrowDown);
     await key(LogicalKeyboardKey.arrowDown);
     await key(LogicalKeyboardKey.arrowDown);
     await settle();
@@ -221,6 +228,11 @@ void main() {
     await settle();
     final restoredFocus = focusedLabel();
     expect(restoredFocus, comedyFilter.label, reason: 'filter return restores the source object');
+    await popRoute();
+    await settle();
+    // First root Back opens the menu while keeping the current section mounted.
+    // ignore: avoid-duplicate-test-assertions
+    expect(genresScreen, findsOneWidget);
     await popRoute();
     await settle();
     expect(genresScreen, findsNothing);

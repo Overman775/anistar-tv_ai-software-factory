@@ -42,6 +42,65 @@ void main() {
   setUp(() => fixture = E2eHarness());
   tearDown(() => fixture.close());
 
+  _tvTest('guest search native playback and cancelled login preserve public context', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester, autoLogin: false);
+    await RemoteControls.activate(
+      tester,
+      find.byKey(const ValueKey('login_guest')),
+      step: 'enter guest',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'guest home');
+    expect(find.byKey(const ValueKey('catalog-tab-true')), findsNothing);
+    await _selectRail(tester, 'catalog-search');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+    await tester.enterText(find.byKey(const ValueKey('search-query')), 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    final first = find.byKey(const ValueKey('search-card-10938'));
+    await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'public search cards');
+    await RemoteControls.activate(
+      tester,
+      first,
+      step: 'open public search detail',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
+    await E2eHarness.waitFor(tester, () => find.text('Смотреть серию 1').evaluate().isNotEmpty, 'guest detail');
+    await _openVideo(tester);
+    await E2eHarness.waitFor(
+      tester,
+      () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,
+      'guest native video advances',
+    );
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'guest player Back');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'restore guest search');
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('search-query'))).controller?.text, 'Наруто');
+    await _selectRail(tester, 'catalog-sign-in');
+    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'guest login overlay');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isEmpty, 'cancel guest login');
+    expect(first, findsOneWidget);
+    final state = await fixture.state();
+    expect(state['favorite_writes'], 0);
+    expect(state['watched'], isEmpty);
+    final events = _events(state);
+    expect(events.any((event) => event['method'] == 'POST' && event['path'] == '/'), isTrue);
+    expect(events.any((event) => event['authenticated'] == true), isFalse);
+    expect(
+      events.where((event) {
+        final path = event['path']?.toString() ?? '';
+
+        return path.contains('do=favorites') ||
+            path.startsWith('/engine/ajax/favorites.php') ||
+            path.startsWith('/engine/ajax/ns.php');
+      }),
+      isEmpty,
+    );
+  });
+
   _tvTest('genre sorting applies per request, paginates and restores focus after detail', (tester) async {
     await fixture.configure();
     await fixture.launch(tester);
@@ -96,14 +155,7 @@ void main() {
     await fixture.configure();
     await fixture.launch(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pump();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Жанры');
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await _selectRail(tester, 'catalog-genres');
     await _enterGenres(tester);
     await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Комедия', 'first genre');
     expect(find.byType(GenresScreen), findsOneWidget);
@@ -377,35 +429,22 @@ void main() {
       const ValueKey('catalog-tab-false'),
     );
     final rail = tester.element(find.byType(CatalogNavigationRail));
-    final menuFocus = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-true'))).focusNode;
     for (var transition = 0; transition < 3; transition++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pump(const Duration(milliseconds: 250));
-      await tester.sendKeyEvent(LogicalKeyboardKey.select);
-      await tester.pump();
-      expect(tester.element(find.byType(CatalogNavigationRail)), same(rail));
-      expect(FocusManager.instance.primaryFocus, same(menuFocus));
-      expect(
-        tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width,
-        CatalogNavigationRail.expandedWidth,
-      );
+      await _selectRail(tester, 'catalog-tab-true');
       await E2eHarness.waitFor(tester, () => find.text('Избранное пусто').evaluate().isNotEmpty, 'empty favorites');
-      if (transition < 2) {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-        await tester.pump();
-        await tester.sendKeyEvent(LogicalKeyboardKey.select);
-        await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'repeated home');
-      }
+      expect(tester.element(find.byType(CatalogNavigationRail)), same(rail));
+      expect(tester.widget<CatalogNavigationRail>(find.byType(CatalogNavigationRail)).expanded, isFalse);
+      await tester.binding.handlePopRoute();
+      await E2eHarness.waitFor(
+        tester,
+        () => tester.widget<CatalogNavigationRail>(find.byType(CatalogNavigationRail)).expanded,
+        'root Back opens active menu',
+      );
+      final menuFocus = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-true'))).focusNode;
+      expect(FocusManager.instance.primaryFocus, same(menuFocus));
+      await _selectRail(tester, 'catalog-tab-false', direction: LogicalKeyboardKey.arrowUp);
+      await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'repeated home');
     }
-    expect(
-      FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key,
-      const ValueKey('catalog-tab-true'),
-    );
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-    await tester.sendKeyEvent(LogicalKeyboardKey.select);
-    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'remote home tab');
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-    await tester.pump(const Duration(milliseconds: 500));
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'remote detail');
     await tester.binding.handlePopRoute();
@@ -832,6 +871,15 @@ Future<void> _selectRail(
   String key, {
   LogicalKeyboardKey direction = LogicalKeyboardKey.arrowDown,
 }) async {
+  await E2eHarness.waitFor(tester, () {
+    final rails = find.byType(CatalogNavigationRail).evaluate().toList();
+    if (rails.length != 1) {
+      return false;
+    }
+    final route = ModalRoute.of(rails.single);
+
+    return route == null || route.isCurrent && route.animation?.status == AnimationStatus.completed;
+  }, 'current catalog rail after route transition');
   if (!tester.widget<CatalogNavigationRail>(find.byType(CatalogNavigationRail)).expanded) {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await E2eHarness.waitFor(
@@ -858,8 +906,10 @@ bool _controlsVisible(WidgetTester tester) => tester.widget<PlayerView>(find.byT
 
 Future<void> _enterGenres(WidgetTester tester) async {
   await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'inline genre tile ready');
-  await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-  await tester.pump();
+  if (FocusManager.instance.primaryFocus?.debugLabel != 'Комедия') {
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+  }
 }
 
 Future<void> _revealEpisodes(WidgetTester tester) async {

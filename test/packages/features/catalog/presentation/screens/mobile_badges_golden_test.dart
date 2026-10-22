@@ -1,3 +1,4 @@
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -29,6 +30,8 @@ void main() {
         disableAnimations: true,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(
             FakeCatalogScreenRepository(load: (_) async => Result.success(page)),
           ),
@@ -39,7 +42,7 @@ void main() {
       // ignore: prefer-moving-to-variable
       await tester.pumpAndSettle();
       if (favorites) {
-        await tester.tap(find.byType(NavigationDestination).at(1));
+        await tester.tap(find.byType(NavigationDestination).at(2));
         // Each pump observes the preceding navigation state.
         // ignore: prefer-moving-to-variable
         await tester.pumpAndSettle();

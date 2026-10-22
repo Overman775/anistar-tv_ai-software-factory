@@ -55,6 +55,7 @@ const relatedTitles=[{id:'frieren2',sourceId:'10686',title:'Провожающа
 // Не использовать heartCrack (разбитое сердце) для обычного удаления из коллекции.
 // Фильтры года/жанра/режиссёра используют общую Lucide list-filter (Flutter: listFilter).
 const lucideIcons={
+  search:{"name": "search", "flutter": "search", "svg": "<path d=\"m21 21-4.34-4.34\" />\n  <circle cx=\"11\" cy=\"11\" r=\"8\" />"},
   "rotateScreen": {
     "name":"rotate-cw-square",
     "flutter":"rotateCwSquare",
@@ -231,6 +232,213 @@ let fav=new Set(read('anistar-tv-favorites',['frieren','spy'])),watched=new Set(
 function save(){try{localStorage.setItem('anistar-tv-favorites',JSON.stringify([...fav]));localStorage.setItem('anistar-tv-watched',JSON.stringify([...watched]))}catch{}}
 let route={name:'home'},history=[],sort='default',playing=false,position=0,quality='480p',timer,toastTimer,lastContent='card-frieren',returnFromSheet=null,held=null;
 const app=$('#app');
+// Search / общая логика телефона и ТВ. Для будущих ИИ: в исходном Flutter
+// есть кнопка поиска, но операции поиска в клиенте/репозитории пока НЕТ.
+// searchCatalog() ниже — локальный адаптер прототипа, не API сайта.
+// При переносе: исследовать настоящую HTML-форму сайта и её параметры, добавить
+// поиск в общий клиент и репозиторий, разбирать выдачу тем же парсером карточек.
+// Не придумывать URL/параметры и не скачивать detail каждого результата.
+// Запрос только по submit/IME Search/OK, никогда на каждую букву. Для нового
+// запроса отменять предыдущий через AbortController и проверять requestId;
+// пагинация относится к запросу и сбрасывается при его изменении.
+// Route хранит экран, searchState — запрос/выдачу; go()/back() сохраняют scroll
+// и focus key. Не повторять запрос при возврате из тайтла и повороте телефона.
+const searchState={draft:'',query:'',status:'idle',items:[],selectedId:null,requestId:0};
+let recentSearches=(()=>{const stored=read('anistar-search-history',[]);return Array.isArray(stored)?[...new Set(stored.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim().slice(0,120)))].slice(0,8):[]})();
+const normalizeSearch=text=>String(text).toLocaleLowerCase('ru').replace(/ё/g,'е').replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+function persistSearchHistory(){try{localStorage.setItem('anistar-search-history',JSON.stringify(recentSearches))}catch{/* История необязательна: поиск доступен и без localStorage. */}}
+function rememberSearch(query){recentSearches=[query,...recentSearches.filter(x=>normalizeSearch(x)!==normalizeSearch(query))].slice(0,8);persistSearchHistory();}
+async function searchCatalog(query,retry=false){
+  await new Promise(resolve=>setTimeout(resolve,500));
+  // Для будущих ИИ: по просьбе пользователя это ИМИТАЦИЯ выдачи для просмотра UI.
+  // Пустой запрос (или только пробелы) → успешная пустая выдача «Ничего не найдено».
+  // Любой непустой текст → та же локальная подборка из шести аниме.
+  // Не фильтровать её по введённому тексту и не включать прежний тест ошибки.
+  // query/retry оставлены в контракте адаптера для будущего настоящего запроса.
+  // В Flutter заменить этот адаптер поиском сайта: результаты/пустая выдача/Failure
+  // должны приходить из репозитория, а не из этого демонстрационного сценария.
+  return query.trim()?data.map(catalogRecord):[];
+}
+function searchMessage(title,copy,action,label,ic='search'){
+  return `<div class="search-feedback catalog-feedback od-stack">${icon(ic)}<h2>${esc(title)}</h2>${copy?`<p>${esc(copy)}</p>`:''}${action?`<div class="catalog-feedback-actions od-cluster">${button(action,label,action==='search-retry'?'refresh':'search','btn')}</div>`:''}</div>`;
+}
+function searchBody(){
+  if(searchState.status==='loading')return `<p class="search-status" role="status">Ищем аниме…</p>${catalogSkeleton()}`;
+  // Для будущих ИИ / Flutter: ошибку поиска оформлять тем же SearchFeedback,
+  // что «Ничего не найдено»: иконка, заголовок, сообщение по центру, без кнопок.
+  // Отличать сбой от успешной пустой выдачи текстом, не выдавать ошибку за 0 результатов.
+  // Фокус сохранять в строке поиска; повтор — через существующую кнопку «Найти».
+  if(searchState.status==='error')return searchMessage('Поиск недоступен','Не удалось загрузить результаты. Попробуйте ещё раз.',null,null,'alert');
+  if(searchState.status==='ready'){
+    if(!searchState.items.length)return searchMessage('Ничего не найдено','Попробуйте другое название или проверьте написание.');
+    return `<p class="search-status" role="status">${searchState.query?`Результаты для «${esc(searchState.query)}» · `:''}Найдено: ${searchState.items.length}</p><section class="search-results home-catalog"><section id="catalog-inspector" class="catalog-inspector od-row-top" aria-label="О выбранном аниме">${inspectorContent()}</section><div class="home-grid-wrap">${grid(searchState.items)}</div></section>`;
+  }
+  if(!recentSearches.length)return searchMessage('Что будем смотреть?','');
+  return `<div class="search-history"><div class="search-history-heading od-row"><h2 class="od-fill">Последние запросы</h2><button type="button" class="btn" data-action="search-clear-history" data-focus="search-clear-history">Очистить</button></div><div class="od-stack">${recentSearches.map((q,i)=>`<div class="search-history-row od-row"><button type="button" class="search-recent od-fill" data-action="search-recent" data-index="${i}" data-focus="search-recent-${i}"><span class="od-clamp-2">${esc(q)}</span></button><button type="button" class="btn search-icon-button od-fixed" data-action="search-remove-history" data-index="${i}" data-focus="search-remove-${i}" aria-label="Удалить запрос ${esc(q)}">${icon('close')}</button></div>`).join('')}</div></div>`;
+}
+// SearchField / UI Kit: видимая подсказка внутри поля — placeholder.
+// По просьбе пользователя она скрывается при фокусе, возвращается при blur,
+// если поле пустое. Связанный label остаётся для доступного имени, визуально скрыт.
+// Flutter: hintText + FocusNode.hasFocus; не удалять semanticsLabel при фокусе.
+// Крестик внутри поля справа (Flutter suffixIcon) очищает ввод; Back — отдельная навигация.
+// TV SearchFocus / для будущих ИИ: два разных режима, НЕ геометрический поиск
+// ближайшей кнопки. Navigation: поле → очистка → «Найти» (и обратно).
+// Если поле пустое, disabled-очистку пропускать. Вниз из формы — к результатам
+// или истории; вверх из первого ряда карточек — в поле; влево из поля — в меню.
+// Editing включается OK/Enter или кликом: стрелки принадлежат курсору/системной
+// IME и НЕ вызывают spatial(). Back завершает ввод, сохраняя запрос; следующий
+// Back переводит фокус в левое меню. Ещё Back возвращает к предыдущему экрану.
+// Во Flutter: FocusNode/FocusTraversalPolicy + Shortcuts/Actions; OK вызывает
+// requestKeyboard, Back сначала отдаётся IME. Не перехватывать D-pad самой IME.
+// HTML readonly здесь моделирует navigation, это НЕ замена нативной ТВ-клавиатуры.
+// На телефоне поле всегда редактируемо: эти перехваты только для TV-layout.
+let searchEditing=false,searchInputNode=null;
+function syncSearchInputMode(){
+  const input=$('#search-query');
+  // Resize/появление экранной клавиатуры не завершают уже начатый ввод.
+  // Новый узел означает новый экран; compact всегда использует обычное поле.
+  if(input!==searchInputNode||isCompactUI())searchEditing=false;
+  searchInputNode=input;if(input)input.readOnly=!isCompactUI()&&!searchEditing;
+}
+function beginSearchEditing(){
+  const input=$('#search-query');if(!input||isCompactUI())return;
+  searchEditing=true;input.readOnly=false;input.focus({preventScroll:true});
+}
+function endSearchEditing(){
+  searchEditing=false;
+  const input=$('#search-query');if(input)input.readOnly=!isCompactUI();
+}
+function focusSearchBody(){
+  const target=$('#search-body .anime-card, #search-body [data-action="search-recent"], #search-body [data-action="search-retry"], #search-body [data-action="search-edit"]');
+  if(target)focus(target.dataset.focus);
+}
+document.addEventListener('click',e=>{if(e.target.id==='search-query'&&!isCompactUI())beginSearchEditing();});
+document.addEventListener('focusout',e=>{if(e.target.id==='search-query')endSearchEditing();});
+document.addEventListener('keydown',e=>{
+  if(route.name!=='search'||isCompactUI()||$('.overlay'))return;
+  const active=document.activeElement,key=e.key,query=active?.id==='search-query';
+  const consume=()=>{e.preventDefault();e.stopImmediatePropagation();held=null;};
+  // Не подтверждать промежуточный составной символ как запрос (IME/composition).
+  if(query&&(e.isComposing||e.keyCode===229)){e.stopImmediatePropagation();return;}
+  if(query&&searchEditing){
+    if(['Escape','BrowserBack'].includes(key)){consume();endSearchEditing();return;}
+    if(['Enter','Select','Accept'].includes(key)){consume();endSearchEditing();void runSearch();return;}
+    // Нативное редактирование и IME получают стрелки без preventDefault.
+    if(key.startsWith('Arrow'))e.stopImmediatePropagation();
+    return;
+  }
+  if(['Escape','BrowserBack'].includes(key)||(key==='Backspace'&&!query)){
+    consume();back();return; // Тот же корневой контракт, что у остальных разделов.
+  }
+  if(query&&['Enter','Select','Accept'].includes(key)){consume();beginSearchEditing();return;}
+  // Физическая клавиатура также может начать ввод без лишнего Enter.
+  if(query&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(key.length===1||key==='Backspace')){beginSearchEditing();return;}
+  if(!key.startsWith('Arrow'))return;
+  const clear=$('[data-action="search-clear"]');
+  if(active?.closest('#search-form')){
+    consume();const current=active.dataset.focus;
+    if(key==='ArrowDown'){focusSearchBody();return;}
+    if(key==='ArrowUp'){if(!query)focus('search-query');return;}
+    if(key==='ArrowLeft')focus(current==='search-query'?'nav-search':current==='search-clear'?'search-query':clear&&!clear.disabled?'search-clear':'search-query');
+    if(key==='ArrowRight'&&current!=='search-submit')focus(query&&clear&&!clear.disabled?'search-clear':'search-submit');
+    return;
+  }
+  const row=active?.closest('.search-history-row');
+  if(row){
+    consume();const rows=[...document.querySelectorAll('.search-history-row')],index=rows.indexOf(row);
+    const remove=active.dataset.action==='search-remove-history';
+    if(key==='ArrowLeft')focus(remove?'search-recent-'+index:'nav-search');
+    if(key==='ArrowRight'&&!remove)focus('search-remove-'+index);
+    if(key==='ArrowUp'){if(!index)focus('search-query');else focus((remove?'search-remove-':'search-recent-')+(index-1));}
+    if(key==='ArrowDown'&&index+1<rows.length)focus((remove?'search-remove-':'search-recent-')+(index+1));
+    return;
+  }
+  if(active?.closest('#search-body')&&!active.closest('[data-grid]')){
+    consume();if(key==='ArrowUp')focus('search-query');else if(key==='ArrowLeft')focus('nav-search');else if(key==='ArrowDown')focusSearchBody();
+  }
+},true);
+
+function search(){
+  return `<section class="search-page" aria-labelledby="search-title"><h1 class="section-title search-title" id="search-title">Поиск</h1><form id="search-form" class="search-form" role="search"><div class="search-field od-field od-fill"><label class="sr-only" for="search-query">Название аниме</label><div class="search-input-row od-row"><input class="od-fill" id="search-query" name="query" type="search" ${isCompactUI()?'':'readonly'} placeholder="Название аниме" maxlength="120" autocomplete="off" enterkeyhint="search" data-focus="search-query" aria-describedby="search-input-error" value="${esc(searchState.draft)}"><button type="button" class="btn search-icon-button od-fixed" data-action="search-clear" data-focus="search-clear" aria-label="Очистить запрос" ${searchState.draft?'':'disabled'}>${icon('close')}</button></div><span id="search-input-error" class="search-input-error" role="alert"></span></div><button type="button" class="btn primary search-submit" data-action="search-submit" data-focus="search-submit">${icon('search')}<span>Найти</span></button></form><div id="search-body" aria-busy="${searchState.status==='loading'}">${searchBody()}</div></section>`;
+}
+function syncSearchBody(){
+  if(route.name!=='search'||!$('#search-body'))return;
+  cancelInspectorUpdate();cancelInspectorAnimations();
+  const body=$('#search-body');body.innerHTML=searchBody();body.setAttribute('aria-busy',String(searchState.status==='loading'));
+  setupCatalogObserver();
+}
+function resetSearch(){
+  searchState.requestId++;Object.assign(searchState,{draft:'',query:'',status:'idle',items:[],selectedId:null});
+  const input=$('#search-query');if(input){input.value='';input.removeAttribute('aria-invalid');}
+  if($('#search-input-error'))$('#search-input-error').textContent='';
+  if($('[data-action="search-clear"]'))$('[data-action="search-clear"]').disabled=true;
+  syncSearchBody();focus('search-query');
+}
+async function runSearch(value=searchState.draft,retry=false){
+  endSearchEditing();
+  const query=String(value).trim().slice(0,120),input=$('#search-query');
+  // ДЕМО для будущих ИИ: пустой запрос намеренно проходит в адаптер и показывает
+  // «Ничего не найдено» после загрузки; любой текст показывает сетку аниме.
+  // Это два тестовых сценария UI, не поведение настоящего поискового сервиса.
+  // В реальном поиске восстановить проверку пустого запроса до обращения к сайту.
+  // Не добавлять пустую строку в историю; не подставлять выдуманное название.
+  input?.removeAttribute('aria-invalid');if($('#search-input-error'))$('#search-input-error').textContent='';
+  if(input)input.value=query;
+  Object.assign(searchState,{draft:query,query,status:'loading',items:[],selectedId:null});
+  if($('[data-action="search-clear"]'))$('[data-action="search-clear"]').disabled=!query;
+  const requestId=++searchState.requestId;if(query)rememberSearch(query);
+  // На телефоне закрываем системную клавиатуру после подтверждения. Во Flutter
+  // использовать TextInputAction.search/unfocus; на ТВ — нативный ввод платформы.
+  // Никакой самодельной клавиатуры и запроса при изменении текста.
+  if(isCompactUI()){$('#main')?.focus({preventScroll:true});}else focus('search-query',true);
+  if($('#main'))$('#main').scrollTop=0;
+  syncSearchBody();
+  try{
+    const results=await searchCatalog(query,retry);if(requestId!==searchState.requestId)return;
+    searchState.items=results;searchState.status='ready';searchState.selectedId=results[0]?.id||null;
+  }catch(error){if(requestId!==searchState.requestId)return;searchState.status='error';}
+  if(route.name!=='search')return;
+  // Если пользователь уже редактирует новый запрос, результаты старого не крадут
+  // фокус. Клавиатурный/пультовый переход к выдаче — только после завершения ввода.
+  const mayFocus=!isCompactUI()&&!searchEditing&&currentKey()==='search-query'&&searchState.draft===query&&document.activeElement?.value===query;
+  syncSearchBody();
+  // Для будущих ИИ: и пустая выдача, и ошибка сохраняют фокус в поле поиска.
+  // Не добавлять кнопки в SearchFeedback и не переводить фокус на сообщение.
+  // Если пользователь уже ушёл с поля, завершение запроса не перехватывает фокус.
+  if(mayFocus&&searchState.items.length)focus('card-'+searchState.items[0].id);
+  // Handheld тоже возвращает пустую выдачу/ошибку в поле, если пользователь
+  // остался на поиске. Не красть фокус у другого контрола или нового запроса.
+  if(isCompactUI()&&!searchState.items.length&&searchState.draft===query&&document.activeElement?.id==='main')focus('search-query',true);
+
+}
+// История локальная, максимум 8 запросов, без фиктивных подсказок. Хранить только
+// запросы, не личные данные. Удаление одного пункта и всей истории доступны касанием
+// и пультом. Возврат из detail не меняет историю и не очищает поисковое поле.
+document.addEventListener('submit',e=>{if(e.target.id==='search-form'){e.preventDefault();void runSearch($('#search-query')?.value??searchState.draft);}});
+document.addEventListener('input',e=>{
+  if(e.target.id!=='search-query')return;
+  searchState.draft=e.target.value;
+  $('[data-action="search-clear"]').disabled=!e.target.value;
+  e.target.removeAttribute('aria-invalid');$('#search-input-error').textContent='';
+});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-action]');if(!b||b.disabled||b.closest('.overlay'))return;
+  switch(b.dataset.action){
+    // Прямое действие кнопки: клик/касание/OK не зависят от default submit
+    // HTML-формы в контейнере превью. type=button исключает второй запуск.
+    // IME Search/Enter отдельно обрабатывает submit этой же формы.
+    // Всегда читать фактическое поле: внешняя клавиатура/автозаполнение могут
+    // изменить value без input. Во Flutter все способы ведут в один onSearch.
+    case 'search-submit':void runSearch($('#search-query')?.value??searchState.draft);break;
+    case 'search-clear':resetSearch();break;
+    case 'search-edit':focus('search-query');break;
+    case 'search-retry':void runSearch(searchState.query,true);break;
+    case 'search-recent':if(recentSearches[Number(b.dataset.index)])void runSearch(recentSearches[Number(b.dataset.index)]);break;
+    case 'search-remove-history':{const index=Number(b.dataset.index);recentSearches.splice(index,1);persistSearchHistory();syncSearchBody();if(!focus('search-recent-'+Math.min(index,recentSearches.length-1)))focus('search-query');break;}
+    case 'search-clear-history':recentSearches=[];persistSearchHistory();syncSearchBody();focus('search-query');break;
+  }
+});
+
 // UI Kit / AppMotion — общий слой анимации прототипа, переиспользовать на новых экранах.
 // Источник кривых: Flutter Curves.easeOutCubic (вход) и Curves.easeInCubic (выход),
 // переведённые в CSS cubic-bezier. Длительности — настройки этого прототипа, не Flutter defaults.
@@ -306,7 +514,15 @@ reducedMotion.addEventListener('change',e=>{
 
 const item=id=>[...data,...relatedTitles].find(a=>a.id===id)||data[0];
 const poster=a=>`<img class="od-media" src="assets/${a.id}.jpg" width="${a.w||225}" height="${a.h}" alt="Постер аниме «${esc(a.title)}»">`;
-function button(action,label,ic='',cls='btn',attrs=''){return `<button class="${cls}" data-action="${action}" data-focus="${action}" ${attrs}>${ic?icon(ic):''}<span>${label}</span></button>`;}
+// UI Kit / ActionButton: один уникальный focus key на узел. Явный ключ
+// важнее action: у ссылок сезонов и пунктов панелей ключи различаются.
+// Не дублировать data-focus в HTML — браузер сохраняет первый атрибут.
+// Flutter: один стабильный FocusNode/ValueKey для конкретного действия.
+function button(action,label,ic='',cls='btn',attrs=''){
+  const key=attrs.match(/\bdata-focus="([^"]*)"/)?.[1]??action;
+  const rest=attrs.replace(/\s*\bdata-focus="[^"]*"/g,'');
+  return `<button type="button" class="${cls}" data-action="${action}" data-focus="${esc(key)}" ${rest}>${ic?icon(ic):''}<span>${label}</span></button>`;
+}
 // ВРЕМЕННО / только тестирование прототипа: кликабельный логотип бокового меню
 // открывает подтверждение закрытия приложения. НЕ переносить эту привязку
 // в мобильное или ТВ Flutter-приложение: настоящий логотип не является кнопкой выхода.
@@ -336,7 +552,7 @@ function accountSummary(profile){
 }
 // Ошибка фото возвращает инициалы, не оставляя битую картинку. Capture нужен для error img.
 document.addEventListener('error',event=>{if(event.target.matches?.('[data-account-photo]'))event.target.remove();},true);
-function menu(){return `<aside class="sidebar ${menuExpanded?'is-expanded':''}" aria-label="Основная навигация"><div class="menu-inner">${brand(true)}<nav class="menu">${[['home','Главная','home'],['favorites','Избранное','heart'],['genres','Жанры','grid']].map(([n,t,ic])=>`<button data-action="nav" data-name="${n}" data-focus="nav-${n}" aria-label="${t}" ${(route.name===n||(route.name==='browse'&&n==='genres'))?'aria-current="page"':''}>${icon(ic)}<span>${t}</span></button>`).join('')}</nav><div class="account">${accountSummary(accountProfile)}<div class="menu"><button data-action="signout" data-focus="nav-signout" aria-label="Выйти из аккаунта">${icon('logout')}<span>Выйти из аккаунта</span></button></div></div></div></aside>`;}
+function menu(){return `<aside class="sidebar ${menuExpanded?'is-expanded':''}" aria-label="Основная навигация"><div class="menu-inner">${brand(true)}<nav class="menu">${[['home','Главная','home'],['search','Поиск','search'],['favorites','Избранное','heart'],['genres','Жанры','grid']].map(([n,t,ic])=>`<button data-action="nav" data-name="${n}" data-focus="nav-${n}" aria-label="${t}" ${(route.name===n||(route.name==='browse'&&n==='genres'))?'aria-current="page"':''}>${icon(ic)}<span>${t}</span></button>`).join('')}</nav><div class="account">${accountSummary(accountProfile)}<div class="menu"><button data-action="signout" data-focus="nav-signout" aria-label="Выйти из аккаунта">${icon('logout')}<span>Выйти из аккаунта</span></button></div></div></div></aside>`;}
 // AdaptiveNavigation: одна route и одна история для ТВ и телефона, без копии приложения.
 // Скрытая навигация inert; одинаковые focus keys допустимы только у взаимоисключающих
 // вариантов. focus() ниже выбирает видимый элемент. Логотип телефона НЕ запускает exit.
@@ -349,7 +565,7 @@ function compactHeader(){
   // Одинаково для заполненной/пустой выдачи, ошибки и истёкшей сессии.
   // Дубли заголовков внутри контента скрыты ТОЛЬКО responsive.css до 1024px.
   // На ТВ исходные заголовки остаются; во Flutter переиспользовать ContextHeading UI Kit.
-  const label=route.name==='detail'?item(route.id).title:route.name==='browse'?route.genre:({home:'Главная',favorites:'Избранное',genres:'Жанры'})[route.name]||'AniStar';
+  const label=route.name==='detail'?item(route.id).title:route.name==='browse'?route.genre:({home:'Главная',search:'Поиск',favorites:'Избранное',genres:'Жанры'})[route.name]||'AniStar';
   // ContextHeading: максимум 2 строки с многоточием — только мобильная шапка.
   // Исходное имя в модели сохранять целиком; в шапке обычный текст, без действия по тапу.
   // Flutter: Text(maxLines:2, overflow:TextOverflow.ellipsis), без кнопки и дополнительной панели.
@@ -359,13 +575,14 @@ function compactHeader(){
 }
 function compactNavigation(){
   const active=route.name==='browse'?'genres':route.name;
-  return `<nav class="compact-nav" aria-label="Основная навигация">${[['home','Главная','home'],['favorites','Избранное','heart'],['genres','Жанры','grid']].map(([name,label,ic])=>`<button type="button" data-action="nav" data-name="${name}" data-focus="nav-${name}" ${active===name?'aria-current="page"':''}>${icon(ic)}<span>${label}</span></button>`).join('')}</nav>`;
+  return `<nav class="compact-nav" aria-label="Основная навигация">${[['home','Главная','home'],['search','Поиск','search'],['favorites','Избранное','heart'],['genres','Жанры','grid']].map(([name,label,ic])=>`<button type="button" data-action="nav" data-name="${name}" data-focus="nav-${name}" ${active===name?'aria-current="page"':''}>${icon(ic)}<span>${label}</span></button>`).join('')}</nav>`;
 }
 function compactAccount(){
   sheet('Аккаунт',`<div class="compact-profile">${accountSummary(accountProfile)}</div>${button('signout','Выйти из аккаунта','logout','btn')}`,{showClose:false});
 }
 function syncAdaptiveLayout(){
   const compact=isCompactUI();
+  syncSearchInputMode();
   arrangePlayerControls();
   const sidebar=$('.sidebar');if(sidebar)sidebar.inert=compact;
   for(const node of document.querySelectorAll('.compact-header,.compact-nav'))node.inert=!compact;
@@ -549,11 +766,13 @@ function card(a){
   // не отдельная кнопка: добавление/удаление доступно в панели действий.
   // В избранном сердечки не показывать:
   // сохранённый статус очевиден из раздела, на остальных экранах он полезен.
-  return mediaCard({title:a.title,image:'assets/'+a.id+'.jpg',imageWidth:225,imageHeight:a.h,
+  return mediaCard({title:a.title,image:'assets/'+a.id+'.jpg',imageWidth:a.w||225,imageHeight:a.h,
     id:a.id,focusKey:'card-'+a.id,saved:route.name!=='favorites'&&fav.has(a.id)});
 }
 function grid(items){return `<div class="od-grid poster-grid" data-grid>${items.map(card).join('')}</div>`;}
-function catalogSkeleton(){return `<div class="od-grid poster-grid home-grid" aria-hidden="true">${Array.from({length:4},()=>'<div class="catalog-skeleton"><div class="skeleton-poster"></div><div class="skeleton-line"></div><div class="skeleton-line short"></div></div>').join('')}</div>`;}
+// Loading повторяет геометрию постера: подписи у MediaCard внутри картинки.
+// Не возвращать внешние полоски-подписи, иначе выдача скачет при загрузке.
+function catalogSkeleton(){return `<div class="od-grid poster-grid home-grid" aria-hidden="true">${Array.from({length:4},()=>'<div class="catalog-skeleton"><div class="skeleton-poster"></div></div>').join('')}</div>`;}
 const selectedGenreIds=new Map();
 // UI Kit / CatalogSort: общий механизм для CatalogFilter года/жанра/режиссёра.
 // Источник Flutter: catalog_sort_sheet.dart + CatalogSortCriterion + CatalogSort.
@@ -627,20 +846,14 @@ function openBrowseSort(){
   if(route.name!=='browse'||genreCatalogError()||genreSessionExpired())return;
   browseSortDraft={...currentBrowseSort()};browseSortOrigin=route;
   sheet('Сортировка','<div id="browse-sort-draft" class="browse-sort-draft">'+browseSortPanel()+'</div>',{showClose:false});
-  // В button() default data-focus имеет приоритет над дополнительным атрибутом:
-  // отдельные ключи назначаем на самих узлах, сохраняя единый renderer кнопки.
-  syncBrowseSortKeys();focus('criterion-'+browseSortDraft.criterion,true);
-}
-function syncBrowseSortKeys(){
-  document.querySelectorAll('#browse-sort-draft [data-action="draft-sort-criterion"]').forEach(b=>b.dataset.focus='criterion-'+b.dataset.value);
-  document.querySelectorAll('#browse-sort-draft [data-action="draft-sort-direction"]').forEach(b=>b.dataset.focus='direction-'+b.dataset.value);
+  focus('criterion-'+browseSortDraft.criterion,true);
 }
 function changeBrowseSortDraft(action,value){
   if(!browseSortDraft||route!==browseSortOrigin)return;
   if(action==='draft-sort-criterion'){if(!canSortBy(value))return;browseSortDraft.criterion=value;}
   else browseSortDraft.ascending=value==='true';
   const panel=$('#browse-sort-draft');if(!panel)return;
-  panel.innerHTML=browseSortPanel();syncBrowseSortKeys();
+  panel.innerHTML=browseSortPanel();
   focus((action==='draft-sort-criterion'?'criterion-':'direction-')+value,true);
 }
 function applyBrowseSort(){
@@ -654,12 +867,13 @@ function applyBrowseSort(){
   closeSheet(true,()=>{if(route===origin)render('browse-sort',0);});
 }
 function activeCatalogItems(){
+  if(route.name==='search')return searchState.items;
   if(route.name==='favorites')return [...data,...relatedTitles].filter(a=>fav.has(a.id)).map(catalogRecord);
   if(route.name==='browse')return sortedBrowseRecords(filteredCatalogRecords());
   return homeFeed.items;
 }
-function selectedInspectorId(){return route.name==='favorites'?selectedFavoritesId:route.name==='browse'?selectedGenreIds.get((route.filterType||'genre')+':'+route.genre):selectedCatalogId;}
-function selectInspectorId(id){if(route.name==='favorites')selectedFavoritesId=id;else if(route.name==='browse')selectedGenreIds.set((route.filterType||'genre')+':'+route.genre,id);else selectedCatalogId=id;}
+function selectedInspectorId(){if(route.name==='search')return searchState.selectedId;return route.name==='favorites'?selectedFavoritesId:route.name==='browse'?selectedGenreIds.get((route.filterType||'genre')+':'+route.genre):selectedCatalogId;}
+function selectInspectorId(id){if(route.name==='search'){searchState.selectedId=id;return;}if(route.name==='favorites')selectedFavoritesId=id;else if(route.name==='browse')selectedGenreIds.set((route.filterType||'genre')+':'+route.genre,id);else selectedCatalogId=id;}
 // Общий заголовок для избранного и выбранного жанра. Главная остаётся без заголовка раздела.
 function catalogSectionHeading(){return route.name==='favorites'?'<h1 id="favorites-title" class="section-title">Избранное</h1>':route.name==='browse'?`<div class="browse-heading"><h1 id="browse-title" class="section-title">${esc(route.genre)}</h1>${browseSortControl()}</div>`:'';}
 // UI Kit / AnimeTitle: .anime-title общий с detail(); меняется только уровень h1/h2.
@@ -717,7 +931,7 @@ function cancelInspectorAnimations(){
 }
 function updateInspector(id){
   if(isCompactUI())return; // На телефоне нет hover-панели и скрытых CrossFade-анимаций.
-  if(!['home','favorites','browse'].includes(route.name)||!activeCatalogItems().some(a=>a.id===id))return;
+  if(!['home','favorites','browse','search'].includes(route.name)||!activeCatalogItems().some(a=>a.id===id))return;
   if(pendingInspectorId===id)return;
   cancelInspectorUpdate();
   // Повторный pointerover от дочерних узлов той же карточки НЕ обрывает fade.
@@ -779,7 +993,7 @@ function syncCatalogStatus(){
 }
 function setupCatalogObserver(){
   catalogObserver?.disconnect();catalogObserver=null;inspectorResizeObserver?.disconnect();inspectorResizeObserver=null;
-  if(!['home','favorites','browse'].includes(route.name))return;
+  if(!['home','favorites','browse','search'].includes(route.name))return;
   const main=$('#main'),sentinel=$('#catalog-sentinel'),inspector=$('#catalog-inspector');
   if(main&&inspector){
     const reserve=()=>main.style.setProperty('--catalog-sticky-offset',isCompactUI()?'16px':(inspector.offsetHeight+24)+'px');
@@ -1230,7 +1444,7 @@ async function toggleDetailFavorite(id){
   }finally{
     pendingFavorites.delete(id);
     syncDetailFavorite(id);
-    if(['home','favorites','browse'].includes(route.name)&&!$('.overlay')){
+    if(['home','favorites','browse','search'].includes(route.name)&&!$('.overlay')){
       render(currentKey(),$('#main')?.scrollTop||0);
     }
   }
@@ -1661,9 +1875,49 @@ document.addEventListener('visibilitychange',()=>{
 // Выбирать видимый вариант навигации: скрытый sidebar не получает фокус на телефоне.
 function focus(key,prevent=false){const el=[...document.querySelectorAll('[data-focus]')].find(b=>b.dataset.focus===key&&!b.disabled&&b.getClientRects().length&&getComputedStyle(b).visibility!=='hidden');if(el){el.focus({preventScroll:true});if(!prevent)el.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});return true}return false;}
 function currentKey(){return document.activeElement?.dataset.focus||''}
-function render(key='',scroll=0){clearTimeout(playerControlsTimer);playerScrubbing=false;playerControlsVisible=true;cancelInspectorUpdate();cancelInspectorAnimations();const previousRoute=renderedRoute;clearInterval(timer);closeSheet(false);const view=({home,favorites,genres,browse,detail,login,player}[route.name]||home)();app.innerHTML=['login','player'].includes(route.name)?view:`<div class="shell ${['home','favorites','genres','browse','detail'].includes(route.name)?'home-shell':''} ${menuExpanded?'menu-is-open':''}">${menu()}${compactHeader()}<div class="menu-scrim" aria-hidden="true"></div><main class="main ${['home','favorites','genres','browse','detail'].includes(route.name)?'home-main':''} ${route.name==='favorites'?'favorites-main':route.name==='genres'?'genres-main':route.name==='detail'?'detail-main':''}" id="main" tabindex="-1">${view}</main>${compactNavigation()}</div>`;if($('#main'))$('#main').scrollTop=scroll;const initial=route.name==='detail'?'play':route.name==='player'?'toggle':route.name==='login'?'username':route.name==='genres'?'genre-0':'card-'+(['favorites','browse'].includes(route.name)?activeCatalogItems()[0]?.id||'':data[0].id);syncAdaptiveLayout();if(isCompactUI()&&!key){($('#main')||$('.tv-player'))?.focus({preventScroll:true});}else if(!focus(key||initial,!!scroll)){focusables(app)[0]?.focus({preventScroll:true});}if(route.name==='browse'&&(genreCatalogError()||!activeCatalogItems().length))focus(genreCatalogError()?'retry-genre':'choose-genres',true);if(genreSessionExpired())focus('session-login',true);mountTestVideo();armPlayerControls();setupCatalogObserver();syncMenuFocus();animateRoute(previousRoute);renderedRoute=route.name+':'+(route.id||(route.filterType?route.filterType+':'+route.genre:route.genre)||'');}
+function render(key='',scroll=0){clearTimeout(playerControlsTimer);playerScrubbing=false;playerControlsVisible=true;cancelInspectorUpdate();cancelInspectorAnimations();const previousRoute=renderedRoute;clearInterval(timer);closeSheet(false);const view=({home,search,favorites,genres,browse,detail,login,player}[route.name]||home)();app.innerHTML=['login','player'].includes(route.name)?view:`<div class="shell ${['home','search','favorites','genres','browse','detail'].includes(route.name)?'home-shell':''} ${menuExpanded?'menu-is-open':''}">${menu()}${compactHeader()}<div class="menu-scrim" aria-hidden="true"></div><main class="main ${['home','search','favorites','genres','browse','detail'].includes(route.name)?'home-main':''} ${route.name==='favorites'?'favorites-main':route.name==='genres'?'genres-main':route.name==='detail'?'detail-main':''}" id="main" tabindex="-1">${view}</main>${compactNavigation()}</div>`;if($('#main'))$('#main').scrollTop=scroll;const initial=route.name==='search'?'search-query':route.name==='detail'?'play':route.name==='player'?'toggle':route.name==='login'?'username':route.name==='genres'?'genre-0':'card-'+(['favorites','browse'].includes(route.name)?activeCatalogItems()[0]?.id||'':data[0].id);syncAdaptiveLayout();if($('#main'))$('#main').scrollTop=scroll;if(isCompactUI()&&!key){($('#main')||$('.tv-player'))?.focus({preventScroll:true});}else if(!focus(key||initial,!!scroll)){focusables(app)[0]?.focus({preventScroll:true});}if(route.name==='browse'&&(genreCatalogError()||!activeCatalogItems().length))focus(genreCatalogError()?'retry-genre':'choose-genres',true);if(genreSessionExpired())focus('session-login',true);mountTestVideo();armPlayerControls();setupCatalogObserver();syncMenuFocus();animateRoute(previousRoute);renderedRoute=route.name+':'+(route.id||(route.filterType?route.filterType+':'+route.genre:route.genre)||'');}
+// TV / SectionNavigation — общий контракт для будущих ИИ и Flutter UI Kit.
+// Up/Down в раскрытом меню ТОЛЬКО выбирают пункт фокусом, не меняют экран.
+// Только OK/Select/клик подтверждает раздел: открыть его с начала и передать фокус
+// первому аниме/жанру. В поиске — полю без открытия клавиатуры. Меню сворачивается
+// существующим syncMenuFocus(), когда фокус уходит из sidebar, без таймера/дубликата.
+// Пустое избранное: действие «Перейти на главную». Если содержимого/действий нет,
+// фокус остаётся на выбранном пункте меню; скелетоны не получают фокус.
+// На handheld не переносить ТВ-фокус на карточку: render() оставляет обычный
+// touch-сценарий, без прыжка прокрутки и вызова клавиатуры.
+// Flutter: после появления содержимого requestFocus первого доступного FocusNode;
+// selected destination и focused item — независимы, не выбирать route на onFocus.
+// Это ТОЛЬКО подтверждение корневого раздела. Возврат из detail по-прежнему
+// восстанавливает конкретный focus key и scroll из history, не вызывает эту функцию.
+function activateSection(name){
+  if(!['home','favorites','genres','search'].includes(name))return;
+  history=[];playing=false;route={name};
+  let target='nav-'+name;
+  if(name==='search')target='search-query';
+  else if(name==='genres'&&siteGenres.length)target='genre-0';
+  else if(name==='home')target=homeFeed.items.length?'card-'+homeFeed.items[0].id:homeFeed.error?'retry-catalog':target;
+  else if(name==='favorites')target=activeCatalogItems().length?'card-'+activeCatalogItems()[0].id:'home';
+  render(isCompactUI()?'':target);
+}
 function go(next,push=true){if(push)history.push({route:{...route},key:currentKey(),scroll:$('#main')?.scrollTop||0});playing=false;position=0;route=next;render();}
-function back(){if($('.overlay')){closeSheet();return}if(document.activeElement?.closest('.sidebar')){focus(lastContent);return}if(route.name==='home'){focus('nav-home');return}const old=history.pop();playing=false;route=old?.route||{name:'home'};render(old?.key,old?.scroll||0);}
+function back(){
+  if($('.overlay')){closeSheet();return;}
+  // TV: Back из корневого содержимого сначала раскрывает меню на АКТИВНОМ
+  // разделе. Не бросать пользователя с избранного/жанров сразу на главную.
+  // Back из меню другого корневого раздела ведёт на главную, без цикла
+  // «меню → тот же контент → меню». На корневой главной нативный Flutter
+  // должен передать дальнейший Back платформе; HTML не закрывает браузер.
+  if(!isCompactUI()&&['home','favorites','genres','search'].includes(route.name)){
+    if(!document.activeElement?.closest('.sidebar')){focus('nav-'+route.name);return;}
+    if(route.name!=='home')activateSection('home');
+    else focus('nav-home',true);
+    return;
+  }
+  // Для вложенной карточки, фильтра и плеера сохраняется прежняя история.
+  if(document.activeElement?.closest('.sidebar')){focus(lastContent);return;}
+  if(route.name==='home'){focus('nav-home');return;}
+  const old=history.pop();playing=false;route=old?.route||{name:'home'};render(old?.key,old?.scroll||0);
+}
 function toast(message){$('.toast')?.remove();clearTimeout(toastTimer);const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');el.textContent=message;document.body.append(el);toastTimer=setTimeout(()=>el.remove(),2800);}
 function closeSheet(restore=true,onClosed=null){
   const el=$('.overlay');if(!el)return;
@@ -1704,7 +1958,7 @@ function sheet(title,content,options={}){
     animateUI(child,[{opacity:0},{opacity:1}],motion.fast);
     animateUI(child,[{transform:'translateX(8px)'},{transform:'translateX(0)'}],motion.menuEnter);
   }
-  (el.querySelector('button:not([data-action="close"])')||el.querySelector('button'))?.focus();
+  (el.querySelector('button:not(:disabled):not([data-action="close"])')||el.querySelector('button:not(:disabled)'))?.focus();
 }
 // Для будущих ИИ: это ТВ-панель по долгому нажатию на карточку.
 // На ТВ НЕ показывать крестик (showClose:false): закрытие пультом Back/Escape/влево.
@@ -1740,6 +1994,9 @@ function appExitSheet(){
 }
 function signoutSheet(){
   sheet('Выйти из аккаунта?',`${button('confirm-signout','Выйти','logout','btn danger')}${button('close','Остаться')}`,{showClose:false});
+  // Как в подтверждении закрытия: безопасное действие получает первый фокус.
+  // Во Flutter переиспользовать ConfirmDialog UI Kit с initialFocus на «Остаться».
+  focus('close',true);
 }
 
 // UI Kit / PlayerChoices: оформление панелей общее с меню, Lucide и AppMotion.
@@ -1754,7 +2011,17 @@ function openPlayerEpisodes(){
   const cards=episodeNumbersDescending(a).map(n=>episode(a,n).replace('data-action="play"','data-action="select-player-episode"')).join('');
   sheet('Выбрать серию',`<div class="od-grid episode-picker" data-grid>${cards}</div>`,{showClose:false});
   const current=document.querySelector(`.episode-picker [data-episode="${route.episode}"]`);
-  if(current){current.setAttribute('aria-current','step');current.setAttribute('aria-label','Серия '+route.episode+', текущая');current.classList.add('is-current-episode');current.querySelector('.poster-wrap')?.insertAdjacentHTML('beforeend',`<span class="episode-current-mark" aria-hidden="true">${icon('check')}</span>`);current.focus();current.scrollIntoView({block:'center',behavior:'instant'});}
+  if(current){
+    current.setAttribute('aria-current','step');current.setAttribute('aria-label','Серия '+route.episode+', текущая');current.classList.add('is-current-episode');
+    // Сохранять выбранную компоновку EpisodeCard: сейчас это MediaCard landscape
+    // с изображением. Галочка — декоративная отметка внутри poster-wrap.
+    // Текстовый preset тоже поддержан, если появится позже; не заменять им картинки
+    // при полировке. Selected/текущая серия и keyboard focus независимы.
+    const poster=current.querySelector('.poster-wrap');
+    if(poster)poster.insertAdjacentHTML('beforeend',`<span class="episode-current-mark" aria-hidden="true">${icon('check')}</span>`);
+    else{const glyph=current.querySelector(':scope > .od-icon');if(glyph)glyph.outerHTML=icon('check');}
+    current.focus();current.scrollIntoView({block:'center',behavior:'instant'});
+  }
 }
 function selectPlayerEpisode(n){
   n=Number(n);const a=item(route.id);
@@ -1776,7 +2043,7 @@ document.addEventListener('focusin',e=>{
   if(e.target.closest('#main')&&e.target.dataset.focus)lastContent=e.target.dataset.focus;
   const card=e.target.closest('.home-grid-wrap .anime-card');
   if(!card){cancelInspectorUpdate();cancelInspectorAnimations();}
-  if(card&&['home','favorites','browse'].includes(route.name)){
+  if(card&&['home','favorites','browse','search'].includes(route.name)){
     updateInspector(card.dataset.id);
     if(route.name!=='home')return;
     const grid=card.closest('[data-grid]'),cells=[...grid.children];
@@ -1786,9 +2053,9 @@ document.addEventListener('focusin',e=>{
 });
 document.addEventListener('focusout',()=>queueMicrotask(syncMenuFocus));
 document.addEventListener('pointerover',e=>{const card=e.target.closest('.home-grid-wrap .anime-card');if(card)updateInspector(card.dataset.id)});
-document.addEventListener('click',e=>{if(e.target.closest('.overlay[data-closing="true"]'))return;if(e.target.matches('.menu-scrim')){if(!focus(lastContent))document.querySelector('#main button')?.focus();syncMenuFocus();return}const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const action=b.dataset.action,id=b.dataset.id;switch(action){case'rotate-player':void rotatePlayer();break;case'account':compactAccount();break;case'browse-sort':openBrowseSort();break;case'draft-sort-criterion':case'draft-sort-direction':changeBrowseSortDraft(action,b.dataset.value);break;case'apply-browse-sort':applyBrowseSort();break;case'session-login':go({name:'login'});break;case'app-exit':appExitSheet();break;case'confirm-app-exit':closeSheet();toast('Выход подтверждён');break;case'retry-genre':retryGenreCatalog();break;case'choose-genres':chooseAnotherGenre();break;case'retry-video':retryVideo();break;case'toggle-password':togglePasswordVisibility();break;case'nav':history=[];route={name:b.dataset.name};playing=false;render('nav-'+b.dataset.name);break;case'home':history=[];go({name:'home'},false);break;case'retry-catalog':void loadCatalog();break;case'detail':go({name:'detail',id});break;case'genre':go({name:'browse',genre:b.dataset.genre});break;case'filter':go({name:'browse',filterType:b.dataset.filterType,genre:b.dataset.filterValue});break;case'back':back();break;case'close':closeSheet();break;case'favorite-toggle':void toggleDetailFavorite(id);break;case'favorite-sheet':favoriteSheet(id);break;case'favorite':{const origin=returnFromSheet,scroll=$('#main')?.scrollTop||0;fav.has(id)?fav.delete(id):fav.add(id);save();render(origin,scroll);if(route.name==='favorites'&&!fav.size)focus('nav-favorites');toast(fav.has(id)?'Добавлено в избранное':'Удалено из избранного');break}case'play':play(id,b.dataset.episode||1);break;case'sort':sheet('Порядок аниме',`<p class="sheet-copy">Сортировка демонстрационной подборки</p>${[['default','По умолчанию'],['year','Сначала новые'],['name','По названию']].map(([v,t])=>button('set-sort',t,sort===v?'check':'','sheet-option',`data-value="${v}" aria-pressed="${sort===v}" data-focus="sort-${v}"`)).join('')}`);break;case'set-sort':sort=b.dataset.value;render('sort');break;case'signout':signoutSheet();break;case'confirm-signout':history=[];go({name:'login'},false);break;case'toggle':toggleMedia();break;case'rewind':case'forward':seekMedia(position+(action==='rewind'?-10:10));break;case'quality':sheet('Качество видео',`${[quality].map(q=>button('set-quality',q,'check','sheet-option',`data-value="${q}" aria-pressed="true" data-focus="quality-${q}"`)).join('')}`,{showClose:false});break;case'set-quality':quality=b.dataset.value;closeSheet();break;case'episodes':openPlayerEpisodes();break;case'select-player-episode':selectPlayerEpisode(b.dataset.episode);break;case'previous':case'next':{const a=item(route.id),nextEpisode=Number(route.episode)+(action==='previous'?-1:1);if(nextEpisode>=1&&nextEpisode<=a.episodes){route.episode=nextEpisode;position=0;testVideo.pause();watched.add(route.id+':'+route.episode);save();render('toggle')}break}}});
+document.addEventListener('click',e=>{if(e.target.closest('.overlay[data-closing="true"]'))return;if(e.target.matches('.menu-scrim')){if(!focus(lastContent))document.querySelector('#main button')?.focus();syncMenuFocus();return}const b=e.target.closest('[data-action]');if(!b||b.disabled)return;const action=b.dataset.action,id=b.dataset.id;switch(action){case'rotate-player':void rotatePlayer();break;case'account':compactAccount();break;case'browse-sort':openBrowseSort();break;case'draft-sort-criterion':case'draft-sort-direction':changeBrowseSortDraft(action,b.dataset.value);break;case'apply-browse-sort':applyBrowseSort();break;case'session-login':go({name:'login'});break;case'app-exit':appExitSheet();break;case'confirm-app-exit':closeSheet();toast('Выход подтверждён');break;case'retry-genre':retryGenreCatalog();break;case'choose-genres':chooseAnotherGenre();break;case'retry-video':retryVideo();break;case'toggle-password':togglePasswordVisibility();break;case'nav':activateSection(b.dataset.name);break;case'home':history=[];go({name:'home'},false);break;case'retry-catalog':void loadCatalog();break;case'detail':go({name:'detail',id});break;case'genre':go({name:'browse',genre:b.dataset.genre});break;case'filter':go({name:'browse',filterType:b.dataset.filterType,genre:b.dataset.filterValue});break;case'back':back();break;case'close':closeSheet();break;case'favorite-toggle':void toggleDetailFavorite(id);break;case'favorite-sheet':favoriteSheet(id);break;case'favorite':{const origin=returnFromSheet,scroll=$('#main')?.scrollTop||0;fav.has(id)?fav.delete(id):fav.add(id);save();render(origin,scroll);if(route.name==='favorites'&&!fav.size)focus('nav-favorites');toast(fav.has(id)?'Добавлено в избранное':'Удалено из избранного');break}case'play':play(id,b.dataset.episode||1);break;case'sort':sheet('Порядок аниме',`<p class="sheet-copy">Сортировка демонстрационной подборки</p>${[['default','По умолчанию'],['year','Сначала новые'],['name','По названию']].map(([v,t])=>button('set-sort',t,sort===v?'check':'','sheet-option',`data-value="${v}" aria-pressed="${sort===v}" data-focus="sort-${v}"`)).join('')}`);break;case'set-sort':sort=b.dataset.value;render('sort');break;case'signout':signoutSheet();break;case'confirm-signout':history=[];go({name:'login'},false);break;case'toggle':toggleMedia();break;case'rewind':case'forward':seekMedia(position+(action==='rewind'?-10:10));break;case'quality':sheet('Качество видео',`${[quality].map(q=>button('set-quality',q,'check','sheet-option',`data-value="${q}" aria-pressed="true" data-focus="quality-${q}"`)).join('')}`,{showClose:false});break;case'set-quality':quality=b.dataset.value;closeSheet();break;case'episodes':openPlayerEpisodes();break;case'select-player-episode':selectPlayerEpisode(b.dataset.episode);break;case'previous':case'next':{const a=item(route.id),nextEpisode=Number(route.episode)+(action==='previous'?-1:1);if(nextEpisode>=1&&nextEpisode<=a.episodes){route.episode=nextEpisode;position=0;testVideo.pause();watched.add(route.id+':'+route.episode);save();render('toggle')}break}}});
 function focusables(root){return [...root.querySelectorAll('button:not(:disabled),input,a[href]')].filter(x=>x.getClientRects().length)}
-function spatial(key){const overlay=$('.overlay'),active=document.activeElement,root=overlay||app;if(overlay&&key==='ArrowLeft'){closeSheet();return}if(active?.matches('input:not([type=range])')){if(key==='ArrowLeft'||key==='ArrowRight')return;}if(active?.matches('input[type=range]')&&(key==='ArrowLeft'||key==='ArrowRight')){seekMedia(position+(key==='ArrowLeft'?-10:10));return}if(active?.closest('.sidebar')){if(key==='ArrowRight'){if(!focus(lastContent))document.querySelector('#main button')?.focus();return}const list=focusables($('.sidebar')),index=list.indexOf(active);if(key==='ArrowUp')list[Math.max(0,index-1)]?.focus();if(key==='ArrowDown')list[Math.min(list.length-1,index+1)]?.focus();return;}const grid=active?.closest('[data-grid]');if(grid){const cells=[...grid.children],index=cells.indexOf(active),cols=getComputedStyle(grid).gridTemplateColumns.split(' ').length;if(key==='ArrowLeft'&&index%cols===0){focus('nav-'+(route.name==='browse'?'genres':['home','favorites','genres'].includes(route.name)?route.name:'home'));return}if(key==='ArrowRight'&&(index%cols===cols-1||index===cells.length-1))return;if(key==='ArrowLeft'){cells[index-1]?.focus();return}if(key==='ArrowRight'){cells[index+1]?.focus();return}if(key==='ArrowDown'){if(index+cols<cells.length){cells[index+cols].focus();cells[index+cols].scrollIntoView({block:'nearest'})}else if(route.name==='home'){if(homeFeed.error)focus('retry-catalog');else if(homeFeed.hasNext){pendingCatalogFocus={origin:currentKey(),cols};maybeLoadCatalog();}}return}if(key==='ArrowUp'&&index>=cols){cells[index-cols].focus();cells[index-cols].scrollIntoView({block:'nearest'});return}if(key==='ArrowUp'&&route.name==='home')return;if(key==='ArrowUp'&&route.name==='favorites')return;if(key==='ArrowUp'&&route.name==='detail'){focus('play');return}if(key==='ArrowUp'&&route.name==='browse'){focus('browse-sort',true);return;}}
+function spatial(key){const overlay=$('.overlay'),active=document.activeElement,root=overlay||app;if(overlay&&key==='ArrowLeft'){closeSheet();return}if(active?.matches('input:not([type=range])')){if(key==='ArrowLeft'||key==='ArrowRight')return;}if(active?.matches('input[type=range]')&&(key==='ArrowLeft'||key==='ArrowRight')){seekMedia(position+(key==='ArrowLeft'?-10:10));return}if(active?.closest('.sidebar')){if(key==='ArrowRight'){if(route.name==='search'){focus('search-query');return;}if(!focus(lastContent))document.querySelector('#main button')?.focus();return}const list=focusables($('.sidebar')),index=list.indexOf(active);if(key==='ArrowUp')list[Math.max(0,index-1)]?.focus();if(key==='ArrowDown')list[Math.min(list.length-1,index+1)]?.focus();return;}if(!overlay&&route.name==='search'&&key==='ArrowDown'&&active?.closest('#search-form')){const first=$('.search-results [data-grid] button,[data-action=search-recent],[data-action=search-retry],[data-action=search-edit]');if(first){first.focus();first.scrollIntoView({block:'nearest'});}return;}const grid=active?.closest('[data-grid]');if(grid){const cells=[...grid.children],index=cells.indexOf(active),cols=getComputedStyle(grid).gridTemplateColumns.split(' ').length;if(key==='ArrowLeft'&&index%cols===0){focus('nav-'+(route.name==='browse'?'genres':['home','search','favorites','genres'].includes(route.name)?route.name:'home'));return}if(key==='ArrowRight'&&(index%cols===cols-1||index===cells.length-1))return;if(key==='ArrowLeft'){cells[index-1]?.focus();return}if(key==='ArrowRight'){cells[index+1]?.focus();return}if(key==='ArrowDown'){if(index+cols<cells.length){cells[index+cols].focus();cells[index+cols].scrollIntoView({block:'nearest'})}else if(route.name==='home'){if(homeFeed.error)focus('retry-catalog');else if(homeFeed.hasNext){pendingCatalogFocus={origin:currentKey(),cols};maybeLoadCatalog();}}return}if(key==='ArrowUp'&&index>=cols){cells[index-cols].focus();cells[index-cols].scrollIntoView({block:'nearest'});return}if(key==='ArrowUp'&&route.name==='search'){focus('search-query');return;}if(key==='ArrowUp'&&route.name==='home')return;if(key==='ArrowUp'&&route.name==='favorites')return;if(key==='ArrowUp'&&route.name==='detail'){focus('play');return}if(key==='ArrowUp'&&route.name==='browse'){focus('browse-sort',true);return;}}
 const r=active.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2,horizontal=key==='ArrowLeft'||key==='ArrowRight',sign=key==='ArrowLeft'||key==='ArrowUp'?-1:1;const candidates=focusables(root).filter(el=>el!==active&&(!el.closest('.sidebar')||key==='ArrowLeft')).map(el=>{const b=el.getBoundingClientRect(),dx=b.x+b.width/2-x,dy=b.y+b.height/2-y,forward=(horizontal?dx:dy)*sign,cross=Math.abs(horizontal?dy:dx);return {el,forward,score:forward+cross*2}}).filter(v=>v.forward>8).sort((a,b)=>a.score-b.score);if(candidates[0]){candidates[0].el.focus({preventScroll:true});candidates[0].el.scrollIntoView({block:'nearest',inline:'nearest'})}}
 document.addEventListener('keydown',e=>{if($('.overlay[data-closing="true"]')){e.preventDefault();return;}if(['Escape','BrowserBack'].includes(e.key)||e.key==='Backspace'&&!e.target.matches('input')){e.preventDefault();held=null;back();return}if(e.key.startsWith('Arrow')){if(e.target.matches('input:not([type=range])')&&['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();spatial(e.key);return}if(e.key==='Tab'&&$('.overlay')){const list=focusables($('.overlay')),i=list.indexOf(document.activeElement);e.preventDefault();list[(i+(e.shiftKey?-1:1)+list.length)%list.length]?.focus();return}if(['Enter',' ','Select','Accept'].includes(e.key)&&!e.target.matches('input:not([type=range])')){e.preventDefault();const b=document.activeElement;if(!held)held={key:e.key,target:b,long:false};if(e.repeat&&held.target===b&&b.dataset.action==='detail'&&!held.long){held.long=true;favoriteSheet(b.dataset.id)}}});
 document.addEventListener('keyup',e=>{if(!held||e.key!==held.key)return;e.preventDefault();const state=held;held=null;if(!state.long&&state.target===document.activeElement)state.target.click()});

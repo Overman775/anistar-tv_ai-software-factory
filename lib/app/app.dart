@@ -8,15 +8,17 @@ import '../packages/features/auth/presentation/login_screen.dart';
 import '../packages/features/auth/presentation/startup_screen.dart';
 import 'authenticated_app.dart';
 
-/// The protected router only exists while AniStar confirms an authenticated session.
+/// Browsing routes exist only for explicit guest access or a confirmed account.
 class App extends ConsumerWidget {
   const App({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final account = ref.watch(authControllerProvider).asData?.value;
-    if (account != null) {
-      return AuthenticatedApp(key: ValueKey((account, ref.watch(anistarActiveMirrorProvider))));
+    final access = ref.watch(authAccessProvider);
+    if (access.canBrowse) {
+      return AuthenticatedApp(
+        key: ValueKey((access.runtimeType, access.account, ref.watch(anistarActiveMirrorProvider))),
+      );
     }
 
     return MaterialApp(

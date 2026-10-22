@@ -71,10 +71,13 @@ class HomeRoute extends GoRouteData with $HomeRoute {
     builder: (context, ref, _) => HomeScreen(
       destination: destination,
       onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
-      accountName: ref.watch(authControllerProvider).value,
+      accountName: ref.watch(authAccessProvider).account,
       onOpenGenres: () => const GenresRoute().push<void>(context),
       onGenreSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
-      onSignOut: () => unawaited(_signOut(context, ref)),
+      onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
+      onSignIn: ref.watch(authAccessProvider).canUseAccount
+          ? null
+          : ref.read(authControllerProvider.notifier).requestSignIn,
       onRootBack: supportsAppExit ? () => unawaited(confirmAppExit(context)) : null,
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) {
@@ -181,6 +184,7 @@ Future<void> _signOut(BuildContext context, WidgetRef ref) async {
     title: 'Выйти из аккаунта?',
     message: 'Для следующего просмотра понадобится снова войти в аккаунт AniStar.',
     confirmLabel: 'Выйти из аккаунта',
+    cancelLabel: 'Остаться',
   );
   if (!confirmed || !context.mounted) {
     return;
@@ -221,18 +225,29 @@ class FilterRoute extends GoRouteData with $FilterRoute {
       final mobile = !AppLayoutScope.isTvOf(context);
       final catalog = CatalogScreen(
         key: ValueKey(path),
-        embedded: mobile,
-        accountName: ref.watch(authControllerProvider).value,
+        embedded: true,
+        accountName: ref.watch(authAccessProvider).account,
         filter: CatalogFilter(label: title, path: path),
         onTabSelected: (favorite) =>
             HomeRoute(destination: favorite ? HomeDestination.favorites : HomeDestination.home).go(context),
         onOpenGenres: () => const HomeRoute(destination: HomeDestination.genres).go(context),
-        onSignOut: () => unawaited(_signOut(context, ref)),
         onOpenLogs: _logsAction(context),
         onAnimeTap: (anime) => _openAnime(context, anime, destination),
       );
 
-      return mobile ? _AppMobileRouteShell(destination: destination, title: title, content: catalog) : catalog;
+      return mobile
+          ? _AppMobileRouteShell(destination: destination, title: title, content: catalog)
+          : _RouteShell(
+              destination: destination,
+              title: title,
+              builder: (onNavigation) => CatalogScreen(
+                key: ValueKey(path),
+                embedded: true,
+                filter: CatalogFilter(label: title, path: path),
+                onOpenNavigation: onNavigation,
+                onAnimeTap: (anime) => _openAnime(context, anime, destination),
+              ),
+            );
     },
   );
 }
@@ -263,9 +278,12 @@ class _RouteShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => AppLayoutScope.isTvOf(context)
       ? TvRouteShell(
           destination: destination,
-          accountName: ref.watch(authControllerProvider).value,
+          accountName: ref.watch(authAccessProvider).account,
           onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
-          onSignOut: () => unawaited(_signOut(context, ref)),
+          onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
+          onSignIn: ref.watch(authAccessProvider).canUseAccount
+              ? null
+              : ref.read(authControllerProvider.notifier).requestSignIn,
           onOpenLogs: _logsAction(context),
           builder: builder,
         )

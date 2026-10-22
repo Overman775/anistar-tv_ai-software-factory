@@ -6,7 +6,7 @@
 | --- | --- |
 | [🔐 Вход и сессия](01_authentication.md) | DLE-форма, charset, cookies, restore, expiry и logout |
 | [⭐ Избранное](02_favorites.md) | Статус сайта, изменение, подтверждение и синхронизация UI |
-| [📄 Загрузка страниц](03_page_loading.md) | Каталог, пагинация, карточка и список серий |
+| [📄 Загрузка страниц](03_page_loading.md) | Каталог, реальный поиск, история и пагинация, карточка и список серий |
 | [▶️ Воспроизведение](04_playback.md) | Native HLS, Referer, качества, refresh и lifecycle |
 | [🌐 Зеркала](05_mirrors.md) | Номер версии, поиск, cooldown и смена origin |
 | [🎮 TV-взаимодействие](06_tv_interaction.md) | Focus, короткое/долгое OK, touch и закрытие экранов |

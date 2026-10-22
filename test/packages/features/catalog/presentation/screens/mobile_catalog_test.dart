@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -53,8 +54,8 @@ void main() {
   final bottomSheet = find.byType(BottomSheet);
   final destinations = find.byType(NavigationDestination);
   final homeDestination = destinations.at(0);
-  final favoritesDestination = destinations.at(1);
-  final genresDestination = destinations.at(2);
+  final favoritesDestination = destinations.at(2);
+  final genresDestination = destinations.at(3);
   final app = find.byType(MaterialApp);
   final firstCardActions = find.byKey(const ValueKey('anime-actions-1'));
   final longCatalogOverride = catalogRepositoryProvider.overrideWithValue(longMobileCatalog());
@@ -67,7 +68,11 @@ void main() {
       tester,
       const HomeScreen(onAnimeTap: ignoreAnimeTap, onSignOut: ignoreSignOut),
       wrapInScaffold: false,
-      overrides: [longCatalogOverride],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        longCatalogOverride,
+      ],
     );
     // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
@@ -103,6 +108,8 @@ void main() {
       const HomeScreen(onAnimeTap: ignoreAnimeTap),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (_) async => Result.success(
@@ -130,7 +137,11 @@ void main() {
       tester,
       const HomeScreen(onAnimeTap: ignoreAnimeTap),
       wrapInScaffold: false,
-      overrides: [longCatalogOverride],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        longCatalogOverride,
+      ],
     );
     // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
@@ -168,7 +179,11 @@ void main() {
         ),
       ),
       wrapInScaffold: false,
-      overrides: [longCatalogOverride],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        longCatalogOverride,
+      ],
     );
     // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
@@ -187,7 +202,11 @@ void main() {
       size: const Size(844, 390),
       textScale: 2,
       disableAnimations: true,
-      overrides: [longCatalogOverride],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        longCatalogOverride,
+      ],
     );
     await tester.pumpAndSettle();
     final scroll = catalogScroll;
@@ -213,6 +232,8 @@ void main() {
       const CatalogScreen(onAnimeTap: ignoreAnimeTap),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (page) {
@@ -254,6 +275,8 @@ void main() {
       ),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         catalogBrowseRepositoryProvider.overrideWithValue(
           FakeCatalogBrowseRepository(genres: () async => const Result.success([genre])),
@@ -278,7 +301,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mobile tabs retain catalog scroll and loaded data; system Back returns home', (tester) async {
+  testWidgets('mobile tabs retain catalog scroll while section return refreshes site state', (tester) async {
     final requests = <int>[];
     final favorites = FakeFavoritesRepository()..ids.add(101);
     await pumpMobileApp(
@@ -286,6 +309,8 @@ void main() {
       const HomeScreen(onAnimeTap: ignoreAnimeTap),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (page) async {
@@ -329,8 +354,67 @@ void main() {
     // System Back must also reveal the header on the restored destination.
     // ignore: avoid-duplicate-test-assertions
     expect(visibleAccount, findsOneWidget);
-    expect(requests, [1]);
+    expect(requests, [1, 1]);
     expect(favorites.pages, [1]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('two mobile catalog pages keep their scroll and fresh favorite flags after section return', (
+    tester,
+  ) async {
+    var favoriteOnSite = false;
+    final requests = <int>[];
+    await pumpMobileApp(
+      tester,
+      const HomeScreen(onAnimeTap: ignoreAnimeTap),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (page) async {
+              requests.add(page);
+
+              return Result.success(
+                AnimePage(
+                  items: List.generate(12, (index) {
+                    final id = (page - 1) * 12 + index + 1;
+
+                    return AnimeSummary(id: id, slug: '$id-anime', title: 'Аниме $id', isFavorite: favoriteOnSite);
+                  }),
+                  page: page,
+                  hasNext: page == 1,
+                ),
+              );
+            },
+          ),
+        ),
+        favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+      ],
+    );
+    final settle = tester.pumpAndSettle;
+    await settle();
+    final controller = mobileCatalogController(tester, catalogScroll);
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await settle();
+    expect(requests, [1, 2]);
+    final offset = controller.offset;
+    final readMetrics = controller.position.copyWith;
+    final initialMetrics = readMetrics();
+    final contentExtent = initialMetrics.maxScrollExtent + initialMetrics.viewportDimension;
+    expect(offset, greaterThan(0));
+    favoriteOnSite = true;
+    await tester.tap(favoritesDestination);
+    await settle();
+    await tester.binding.handlePopRoute();
+    await settle();
+    expect(controller.offset, offset);
+    final returnedMetrics = readMetrics();
+    expect(returnedMetrics.maxScrollExtent + returnedMetrics.viewportDimension, contentExtent);
+    expect(requests, [1, 2, 1, 2]);
+    final secondPage = tester.widget<MobileAnimeCard>(find.byKey(const ValueKey(13)));
+    expect(secondPage.anime.isFavorite, isTrue);
     expect(tester.takeException(), isNull);
   });
 
@@ -342,6 +426,8 @@ void main() {
       CatalogScreen(onAnimeTap: (anime) => opened = anime.id),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
@@ -372,7 +458,11 @@ void main() {
         size: size,
         textScale: 2,
         wrapInScaffold: false,
-        overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+        overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
+          catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        ],
       );
       await tester.pumpAndSettle();
       expect(find.byType(MobileAnimeCard), findsWidgets);
@@ -387,6 +477,8 @@ void main() {
       wrapInScaffold: false,
       disableAnimations: true,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
         catalogBrowseRepositoryProvider.overrideWithValue(FakeCatalogBrowseRepository()),

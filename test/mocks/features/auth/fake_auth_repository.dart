@@ -6,6 +6,10 @@ import 'package:core/data.dart';
 final class FakeAuthRepository implements AuthRepository {
   Result<String?, Failure> restoreResult = const Result.success(null);
   Result<String, Failure> loginResult = const Result.success('test');
+  Result<void, Failure> cancellationResult = const Result.success(null);
+  Completer<Result<void, Failure>>? pendingCancellation;
+  int cancellationCalls = 0;
+  RequestCancellation? lastCancelledToken;
   Result<void, Failure> logoutResult = const Result.success(null);
   Completer<Result<String, Failure>>? pendingLogin;
   Completer<void>? pendingSiteCheck;
@@ -13,6 +17,7 @@ final class FakeAuthRepository implements AuthRepository {
   Failure? siteFailure;
   int restoreCalls = 0;
   int loginCalls = 0;
+  RequestCancellation? lastLoginCancellation;
   final StreamController<void> _expired = StreamController<void>.broadcast();
 
   @override
@@ -31,10 +36,20 @@ final class FakeAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<Result<String, Failure>> signIn(String username, String password) {
+  Future<Result<String, Failure>> signIn(String username, String password, {RequestCancellation? cancellation}) {
     loginCalls++;
+    lastLoginCancellation = cancellation;
 
     return pendingLogin?.future ?? Future.value(loginResult);
+  }
+
+  @override
+  Future<Result<void, Failure>> cancelSignIn(RequestCancellation cancellation) {
+    cancellationCalls++;
+    lastCancelledToken = cancellation;
+    cancellation.cancel();
+
+    return pendingCancellation?.future ?? Future.value(cancellationResult);
   }
 
   @override
