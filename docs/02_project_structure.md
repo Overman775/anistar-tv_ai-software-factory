@@ -22,6 +22,7 @@ AniStar TV построен как Flutter-приложение с Dart pub work
 │   └── main_prod.dart
 ├── test/                 # Unit, widget, golden и architecture tests
 ├── integration_test/     # Android fixtures, optional iOS fixture и явные live scenarios
+├── prototype/            # Адаптивный HTML/CSS/JS прототип и DESIGN-HANDOFF
 ├── android/              # Android и Android TV конфигурация
 ├── ios/                  # iOS Runner, flavors dev/prod и Simulator-конфигурации
 ├── env/                  # Dart define JSON и шаблоны
@@ -30,6 +31,8 @@ AniStar TV построен как Flutter-приложение с Dart pub work
 ```
 
 Workspace пакеты перечислены в `pubspec.yaml` и используют общий `pubspec.lock`. App и features остаются в корневом Flutter-пакете. Не создавайте для них отдельные package boundaries без архитектурного решения.
+
+`prototype/index.html`, `prototype/app.js`, `prototype/app.css` и `prototype/responsive.css` показывают адаптивный UI; `prototype/DESIGN-HANDOFF.md` содержит визуальные требования. Это справочный прототип. Производственная Flutter-реализация находится в `lib/`.
 
 ---
 
