@@ -34,7 +34,7 @@ void main() {
     expect(live.loginPosts, 1, reason: 'Restore must use encrypted cookies without another login POST');
     // ignore: prefer-moving-to-variable
     final restoredContainer = ProviderScope.containerOf(tester.element(find.byType(App)));
-    expect(restoredContainer.read(authControllerProvider).value == LiveHarness.username, isTrue);
+    expect(restoredContainer.read(authAccessProvider).account == LiveHarness.username, isTrue);
     await restoredContainer.read(authControllerProvider.notifier).signOut();
     await tester.pumpWidget(const SizedBox.shrink());
   }, profile: null);

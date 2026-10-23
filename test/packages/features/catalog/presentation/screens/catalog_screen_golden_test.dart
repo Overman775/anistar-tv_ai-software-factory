@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
+import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,6 +29,8 @@ void main() {
         size: size,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(FakeCatalogScreenRepository(load: (_) => pending.future)),
         ],
       );
@@ -41,6 +45,8 @@ void main() {
         size: size,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(
             FakeCatalogScreenRepository(
               load: (_) async => Result.success(

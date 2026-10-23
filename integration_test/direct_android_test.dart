@@ -56,7 +56,7 @@ void main() {
     await _wait(tester, () => find.byType(CatalogScreen).evaluate().isNotEmpty, 'encrypted session restoration');
     expect(live.loginPosts, 1, reason: 'restore must not submit credentials again');
     final container = ProviderScope.containerOf(tester.element(find.byType(App)));
-    expect(container.read(authControllerProvider).value, LiveHarness.username);
+    expect(container.read(authAccessProvider).account, LiveHarness.username);
     final card = find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938);
     await _showCatalogCard(tester, card, 'anime 10938 in live catalog');
     await tester.ensureVisible(card);

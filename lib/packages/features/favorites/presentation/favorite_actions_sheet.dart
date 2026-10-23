@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../auth/auth_providers.dart';
 import '../favorites_providers.dart';
 
 class FavoriteActionsSheet extends ConsumerStatefulWidget {
@@ -26,7 +27,9 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
   @override
   void initState() {
     super.initState();
-    _load();
+    if (ref.read(authAccessProvider).canUseAccount) {
+      _load();
+    }
   }
 
   void _load() {
@@ -99,6 +102,17 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    if (!ref.watch(authAccessProvider).canUseAccount) {
+      return AppActionSheet(
+        title: widget.title,
+        child: AppButton(
+          autofocus: true,
+          label: 'Войти, чтобы добавить в избранное',
+          icon: const AppIcon(AppIconType.logIn),
+          onPressed: ref.read(authControllerProvider.notifier).requestSignIn,
+        ),
+      );
+    }
     ref.watch(favoritesControllerProvider);
 
     return AppActionSheet(

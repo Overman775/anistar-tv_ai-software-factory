@@ -20,6 +20,9 @@ import '../packages/features/log_viewer/data/repositories/file_log_repository.da
 import '../packages/features/log_viewer/log_viewer_providers.dart';
 import '../packages/features/player/data/repositories/anistar_playback_repository.dart';
 import '../packages/features/player/player_providers.dart';
+import '../packages/features/search/data/anistar_search_repository.dart';
+import '../packages/features/search/data/local_search_history_repository.dart';
+import '../packages/features/search/search_providers.dart';
 import '../packages/features/watch_history/data/repositories/anistar_watched_episodes_repository.dart';
 import '../packages/features/watch_history/watch_history_providers.dart';
 import '../packages/features/watch_history/watched_episodes.dart';
@@ -47,15 +50,47 @@ List<Override> createAppOverrides({
     ),
   sharedPreferencesStorageProvider.overrideWithValue(preferences),
   secureStorageProvider.overrideWithValue(secureStorage),
-  watchHistoryAccountProvider.overrideWith((ref) => ref.watch(authControllerProvider).value),
+  favoritesAccountProvider.overrideWith((ref) {
+    final account = ref.watch(authAccessProvider).account;
+    final origin = ref.watch(anistarActiveMirrorProvider).origin;
+
+    return account == null ? null : '$origin|$account';
+  }),
+  watchHistoryAccountProvider.overrideWith((ref) {
+    final account = ref.watch(authAccessProvider).account;
+    final origin = ref.watch(anistarActiveMirrorProvider).origin;
+
+    return account == null ? null : '$origin|$account';
+  }),
   watchedEpisodesRepositoryProvider.overrideWith(
-    (ref) => AnistarWatchedEpisodesRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarWatchedEpisodesRepository(
+      ref.watch(anistarClientProvider),
+      ref.watch(loggerProvider),
+      () => ref.read(authAccessProvider).account,
+    ),
   ),
+  searchRepositoryProvider.overrideWith(
+    (ref) => AnistarSearchRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+  ),
+  searchHistoryRepositoryProvider.overrideWith((ref) {
+    final origin = ref.watch(anistarActiveMirrorProvider).origin;
+    final account = ref.watch(authAccessProvider).account;
+    final identity = account == null ? 'guest' : 'account:$account';
+
+    return LocalSearchHistoryRepository(
+      preferences,
+      scope: '${Uri.encodeComponent(origin)}.${Uri.encodeComponent(identity)}',
+    );
+  }),
   authRepositoryProvider.overrideWith(
     (ref) => AnistarAuthRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   favoritesRepositoryProvider.overrideWith(
-    (ref) => AnistarFavoritesRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarFavoritesRepository(
+      ref.watch(anistarClientProvider),
+      ref.watch(loggerProvider),
+      () => ref.read(authAccessProvider).account,
+    ),
   ),
   catalogBrowseRepositoryProvider.overrideWith(
     (ref) => AnistarCatalogRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
@@ -64,9 +99,17 @@ List<Override> createAppOverrides({
     (ref) => AnistarCatalogRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
   ),
   animeRepositoryProvider.overrideWith(
-    (ref) => AnistarAnimeRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarAnimeRepository(
+      ref.watch(anistarClientProvider),
+      ref.watch(loggerProvider),
+      () => ref.read(authAccessProvider).canUseAccount,
+    ),
   ),
   playbackRepositoryProvider.overrideWith(
-    (ref) => AnistarPlaybackRepository(ref.watch(anistarClientProvider), ref.watch(loggerProvider)),
+    (ref) => AnistarPlaybackRepository(
+      ref.watch(anistarClientProvider),
+      ref.watch(loggerProvider),
+      () => ref.read(authAccessProvider).canUseAccount,
+    ),
   ),
 ];

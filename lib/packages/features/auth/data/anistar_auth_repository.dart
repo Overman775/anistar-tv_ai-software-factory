@@ -18,8 +18,12 @@ final class AnistarAuthRepository extends BaseRepository implements AuthReposito
       makeApiCall(() => mapAnistarErrors(() => _client.restore(onSessionCheck: onSessionCheck)));
 
   @override
-  Future<Result<String, Failure>> signIn(String username, String password) =>
-      makeApiCall(() => mapAnistarErrors(() => _client.signIn(username, password)));
+  Future<Result<String, Failure>> signIn(String username, String password, {RequestCancellation? cancellation}) =>
+      makeApiCall(() => mapAnistarErrors(() => _client.signIn(username, password, cancellation: cancellation)));
+
+  @override
+  Future<Result<void, Failure>> cancelSignIn(RequestCancellation cancellation) =>
+      makeApiCall(() => mapAnistarErrors(() => _client.cancelSignIn(cancellation)));
 
   @override
   Future<Result<void, Failure>> signOut() => makeApiCall(() => mapAnistarErrors(_client.signOut));

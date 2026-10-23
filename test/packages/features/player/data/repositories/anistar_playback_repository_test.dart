@@ -14,8 +14,11 @@ void main() {
     final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'))
       ..httpClientAdapter = HtmlFixtureAdapter({'/test/player2/videoas_p2p_new.php': source});
     addTearDown(() => dio.close(force: true));
-    final result = await AnistarPlaybackRepository(createTestAnistarClient(dio))
-        .createSession(animeId: 10938, episodeNumber: 1);
+    final result = await AnistarPlaybackRepository(
+      createTestAnistarClient(dio),
+      null,
+      () => true,
+    ).createSession(animeId: 10938, episodeNumber: 1);
     expect(result.isSuccess, isTrue);
     expect(result.successOrNull?.expiresAt, isNull);
     expect(result.successOrNull?.manifestUri.toString(), contains('end=9999999999999999999999999'));
@@ -26,7 +29,7 @@ void main() {
     addTearDown(() => dio.close(force: true));
     final adapter = HtmlFixtureAdapter({'/test/player2/videoas_p2p_new.php': playerHtml});
     dio.httpClientAdapter = adapter;
-    final repository = AnistarPlaybackRepository(createTestAnistarClient(dio));
+    final repository = AnistarPlaybackRepository(createTestAnistarClient(dio), null, () => true);
     final session = (await repository.createSession(
       animeId: 10938,
       episodeNumber: 1,

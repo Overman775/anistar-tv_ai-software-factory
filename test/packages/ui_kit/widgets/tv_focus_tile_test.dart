@@ -38,7 +38,7 @@ void main() {
         find.descendant(of: tile, matching: find.byType(AnimatedContainer)),
       );
       final clip = tester.widget<ClipRRect>(find.descendant(of: tile, matching: find.byType(ClipRRect)));
-      final outline = _requireBoxDecoration(surface.foregroundDecoration);
+      final outline = _focusDecoration(tester, tile);
       expect(scale.scale, variant == TvFocusTileVariant.card ? 1.025 : 1);
       expect(scale.duration, AppMotion.fast);
       expect(surface.duration, AppMotion.fast);
@@ -68,7 +68,7 @@ void main() {
     expect(scale.duration, Duration.zero);
     expect(surface.duration, Duration.zero);
     expect(
-      _requireBoxDecoration(surface.foregroundDecoration).border,
+      _focusDecoration(tester, find.byType(TvFocusTile)).border,
       const Border.fromBorderSide(BorderSide(color: AppPalette.focusOutline, width: 2)),
     );
   });
@@ -186,3 +186,12 @@ BoxDecoration _requireBoxDecoration(Decoration? decoration) => switch (decoratio
   final BoxDecoration box => box,
   _ => throw StateError('Expected a non-null BoxDecoration'),
 };
+
+BoxDecoration _focusDecoration(WidgetTester tester, Finder tile) {
+  final painted = tester.widgetList<DecoratedBox>(find.descendant(of: tile, matching: find.byType(DecoratedBox)));
+
+  return painted
+      .where((box) => box.position == DecorationPosition.foreground)
+      .map((box) => _requireBoxDecoration(box.decoration))
+      .singleWhere((decoration) => decoration.border != null);
+}

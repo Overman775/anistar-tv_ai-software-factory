@@ -40,6 +40,7 @@ factory-meta-retro → session retrospective and factory improvements
 
 ## Docs
 
+- **UI prototype (visual reference):** `prototype/index.html`, `prototype/app.js`, `prototype/app.css`, `prototype/responsive.css`; handoff: `prototype/DESIGN-HANDOFF.md`. Flutter production code belongs in `lib/`.
 - **Product:** `PRODUCT.md`
 - **Arch/DI:** `docs/01_architecture_principles.md`
 - **Decisions:** `docs/adr/README.md`

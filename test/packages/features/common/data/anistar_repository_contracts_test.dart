@@ -40,7 +40,7 @@ void main() {
     ];
     client.pageResult = AnistarCatalogPageDto(items: summaries, page: 1, hasNext: true);
     final catalog = _success(await AnistarCatalogRepository(client).getPage(1));
-    final favorites = _success(await AnistarFavoritesRepository(client).getPage(1));
+    final favorites = _success(await AnistarFavoritesRepository(client, null, _account).getPage(1));
     expect(catalog.items.map((item) => item.isFavorite), [null, false, true]);
     expect(catalog.items.map((item) => item.rating), [0, null, null]);
     expect(catalog.items.map((item) => item.posterUri), [null, null, null]);
@@ -50,7 +50,7 @@ void main() {
 
   test('empty successes differ from failures and response page must match request', () async {
     final catalog = AnistarCatalogRepository(client);
-    final favorites = AnistarFavoritesRepository(client);
+    final favorites = AnistarFavoritesRepository(client, null, _account);
     // Re-read after changing the fake response; caching would hide the behavior under test.
     // ignore: prefer-moving-to-variable
     final emptyCatalog = await catalog.getPage(1);
@@ -93,10 +93,10 @@ void main() {
 
   test('all numeric repository inputs fail without invoking the client', () async {
     final catalog = AnistarCatalogRepository(client);
-    final favorites = AnistarFavoritesRepository(client);
-    final anime = AnistarAnimeRepository(client);
-    final playback = AnistarPlaybackRepository(client);
-    final history = AnistarWatchedEpisodesRepository(client);
+    final favorites = AnistarFavoritesRepository(client, null, _account);
+    final anime = AnistarAnimeRepository(client, null, _canUseAccount);
+    final playback = AnistarPlaybackRepository(client, null, _canUseAccount);
+    final history = AnistarWatchedEpisodesRepository(client, null, _account);
     final results = await Future.wait([
       catalog.getPage(0),
       catalog.getFilteredPage(const CatalogFilter(label: 'x', path: '/comedy/'), -1),
@@ -114,13 +114,32 @@ void main() {
     expect(client.calls, isEmpty);
   });
 
+  test('guest favorites and watched operations reject valid inputs without client calls', () async {
+    final favorites = AnistarFavoritesRepository(client, null, () => null);
+    final history = AnistarWatchedEpisodesRepository(client, null, () => null);
+    final operations = <String, Future<Result<Object?, Failure>> Function()>{
+      'favorites page': () => favorites.getPage(1),
+      'favorite status': () => favorites.getStatus(animeId: 1, slug: '1-anime'),
+      'set favorite': () => favorites.setFavorite(animeId: 1, slug: '1-anime', favorite: true),
+      'watched episodes': () => history.getWatched(1),
+      'mark started': () => history.markStarted(animeId: 1, episodeNumber: 1),
+    };
+    for (final operation in operations.entries) {
+      final result = await operation.value();
+      expect(result.failureOrNull, isA<RequestFailure>(), reason: operation.key);
+      expect(result.isFailure, isTrue, reason: operation.key);
+      expect(result.successOrNull, isNull, reason: operation.key);
+      expect(client.calls, isEmpty, reason: operation.key);
+    }
+  });
+
   test('anime starts both branches concurrently and requires their complete success', () async {
     final details = Completer<AnistarAnimeDetailsDto>();
     final episodes = Completer<List<AnistarEpisodeDto>>();
     client
       ..loadDetails = ((_) => details.future)
       ..loadEpisodes = ((_) => episodes.future);
-    final pending = AnistarAnimeRepository(client).getAnime(id: 1, slug: '1-anime');
+    final pending = AnistarAnimeRepository(client, null, _canUseAccount).getAnime(id: 1, slug: '1-anime');
     await Future<void>.delayed(Duration.zero);
     expect(client.calls, ['details', 'episodes']);
     details.complete(client.detailResult);
@@ -141,7 +160,7 @@ void main() {
       client
         ..loadDetails = ((_) => details.future)
         ..loadEpisodes = ((_) => episodes.future);
-      final pending = AnistarAnimeRepository(client).getAnime(id: 1, slug: '1-anime');
+      final pending = AnistarAnimeRepository(client, null, _canUseAccount).getAnime(id: 1, slug: '1-anime');
       await Future<void>.delayed(Duration.zero);
       const failure = AnistarClientException(AnistarClientErrorCategory.timeout, 'Safe timeout');
       if (branch != 'episodes') {
@@ -161,7 +180,7 @@ void main() {
   }
 
   test('inconsistent detail identity and invalid mandatory values fail in release code', () async {
-    final repository = AnistarAnimeRepository(client);
+    final repository = AnistarAnimeRepository(client, null, _canUseAccount);
     client.detailResult = AnistarAnimeDetailsDto(id: 2, slug: '2-anime', title: 'Anime');
     // Re-read after changing the fake response; caching would hide the behavior under test.
     // ignore: prefer-moving-to-variable
@@ -202,7 +221,7 @@ void main() {
         sources: [AnistarVideoSourceDto(height: 1080, manifestUri: Uri.parse('https://cdn.test/unsupported'))],
       ),
     ];
-    final repository = AnistarPlaybackRepository(client);
+    final repository = AnistarPlaybackRepository(client, null, _canUseAccount);
     final session = _success(await repository.createSession(animeId: 1, episodeNumber: 1));
     expect(session.manifestUri, same(high.manifestUri));
     expect(session.httpHeaders, {'Token': 'high'});
@@ -229,17 +248,27 @@ void main() {
       client.episodeResult = [
         for (final number in numbers) AnistarEpisodeDto(number: number, title: 'Episode', sources: []),
       ];
-      expect((await AnistarPlaybackRepository(client).createSession(animeId: 1, episodeNumber: 1)).isFailure, isTrue);
-      expect((await AnistarAnimeRepository(client).getAnime(id: 1, slug: '1-anime')).isFailure, isTrue);
+      expect(
+        (await AnistarPlaybackRepository(
+          client,
+          null,
+          _canUseAccount,
+        ).createSession(animeId: 1, episodeNumber: 1)).isFailure,
+        isTrue,
+      );
+      expect(
+        (await AnistarAnimeRepository(client, null, _canUseAccount).getAnime(id: 1, slug: '1-anime')).isFailure,
+        isTrue,
+      );
     }
   });
 
   test('favorites and history use confirmed values and protect returned watched sets', () async {
-    final favorites = AnistarFavoritesRepository(client);
+    final favorites = AnistarFavoritesRepository(client, null, _account);
     expect((await favorites.getStatus(animeId: 1, slug: '1-anime')).successOrNull, isFalse);
     expect((await favorites.setFavorite(animeId: 1, slug: '1-anime', favorite: true)).successOrNull, isTrue);
     client.watchedResult = {1, 3};
-    final history = AnistarWatchedEpisodesRepository(client);
+    final history = AnistarWatchedEpisodesRepository(client, null, _account);
     final watched = _success(await history.getWatched(1));
     // Re-read after changing the fake response; caching would hide the behavior under test.
     // ignore: prefer-moving-to-variable
@@ -280,16 +309,17 @@ void main() {
       final operations = <Future<Result<Object?, Failure>> Function()>[
         () => AnistarCatalogRepository(client).getPage(1),
         () => AnistarCatalogRepository(client).getGenres(),
-        () => AnistarAnimeRepository(client).getAnime(id: 1, slug: '1-anime'),
-        () => AnistarPlaybackRepository(client).createSession(animeId: 1, episodeNumber: 1),
-        () => AnistarFavoritesRepository(client).getPage(1),
-        () => AnistarFavoritesRepository(client).getStatus(animeId: 1, slug: '1-anime'),
-        () => AnistarFavoritesRepository(client).setFavorite(animeId: 1, slug: '1-anime', favorite: true),
+        () => AnistarAnimeRepository(client, null, _canUseAccount).getAnime(id: 1, slug: '1-anime'),
+        () => AnistarPlaybackRepository(client, null, _canUseAccount).createSession(animeId: 1, episodeNumber: 1),
+        () => AnistarFavoritesRepository(client, null, _account).getPage(1),
+        () => AnistarFavoritesRepository(client, null, _account).getStatus(animeId: 1, slug: '1-anime'),
+        () =>
+            AnistarFavoritesRepository(client, null, _account).setFavorite(animeId: 1, slug: '1-anime', favorite: true),
         () => AnistarAuthRepository(client).restore(),
         () => AnistarAuthRepository(client).signIn('account', 'password'),
         () => AnistarAuthRepository(client).signOut(),
-        () => AnistarWatchedEpisodesRepository(client).getWatched(1),
-        () => AnistarWatchedEpisodesRepository(client).markStarted(animeId: 1, episodeNumber: 1),
+        () => AnistarWatchedEpisodesRepository(client, null, _account).getWatched(1),
+        () => AnistarWatchedEpisodesRepository(client, null, _account).markStarted(animeId: 1, episodeNumber: 1),
       ];
       for (final operation in operations) {
         final result = await operation();
@@ -316,3 +346,6 @@ void main() {
 
 T _success<T>(Result<T, Failure> result) =>
     result.when(failure: (failure) => fail(failure.message), success: (value) => value);
+
+String _account() => 'test';
+bool _canUseAccount() => true;

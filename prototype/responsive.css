@@ -345,3 +345,45 @@ body.handheld-playback .toast{bottom:max(16px,env(safe-area-inset-bottom));font-
 @media(max-width:1023px) and (prefers-reduced-motion:reduce){
   .main>.compact-header,.main>.compact-header.is-scroll-hidden{transition:none;transform:none;opacity:1}
 }
+
+/* AdaptiveSearch / для будущих ИИ: один экран, одно состояние и одна история
+   для ТВ/телефона. Четвёртый пункт — Поиск. Не дублировать каталог/репозиторий.
+   Телефон: системная клавиатура + Search/«Найти», без автоматического открытия
+   клавиатуры при входе в раздел. Тап в поле открывает её обычным способом.
+   На ТВ первая строка результатов возвращает ArrowUp к вводу; карточки и
+   Inspector используют существующие управление/анимации UI Kit. */
+@media(max-width:1023px){
+  .compact-nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding-inline:max(8px,env(safe-area-inset-left)) max(8px,env(safe-area-inset-right))}
+  .compact-nav button{padding-inline:4px}
+  .search-page{--search-control:48px;--search-space:16px;--search-font:16px;padding-block:16px 32px}
+  .search-title{position:absolute;width:1px;height:1px;padding:0;margin:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+  .search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;margin-bottom:24px}
+  .search-page .search-submit{margin-top:0;font-size:16px;gap:8px;padding-inline:16px}
+  .search-history h2{font-size:24px}
+  .search-history-heading{flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .search-history-heading h2{flex-basis:180px}
+  .search-history-heading .btn{padding:8px 12px}
+  .search-results.home-catalog{padding-top:0}
+  .search-results.home-catalog>.home-grid-wrap{padding-top:8px}
+}
+@media(max-width:767px){
+  /* Телефон: поле и «Найти» всегда в одном ряду, включая 375px.
+     Поле сжимается через minmax(0,1fr), кнопка сохраняет читаемую подпись
+     и touch target. Не переносить submit под поле отдельной строкой. */
+  .search-form{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .search-page .search-submit{margin-top:0;width:auto;padding-inline:12px}
+}
+@media(max-width:374px){.compact-nav button>span{font-size:12px}}
+
+
+/* UI Kit / CompactEpisodeCard: сохранять landscape MediaCard и его изображения.
+   На двухколоночной сетке обычная высокая подложка подписи выходила за верх
+   короткого кадра. Меняем внутренние отступы, не пропорции/порядок/число колонок.
+   Галочка текущей серии компактнее и не перекрывает подпись. TV 1024+ прежний. */
+@media(max-width:1023px){
+  .episode-card-grid .ui-media-card--landscape,
+  .episode-picker .ui-media-card--landscape{--media-card-caption-pad:24px 12px 8px}
+  .episode-picker .is-current-episode .poster-title{padding-right:40px}
+  .episode-picker .episode-current-mark{top:8px;right:8px;padding:4px;--od-icon-size:16px}
+  .side-sheet .sheet-head h2{min-width:0}
+}

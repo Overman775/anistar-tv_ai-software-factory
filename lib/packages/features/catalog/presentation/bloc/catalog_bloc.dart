@@ -1,6 +1,8 @@
 import 'package:app_logging/app_logging.dart';
+import 'package:core/data.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../domain/models/anime_page.dart';
 import '../../domain/repositories/catalog_repository.dart';
 import 'catalog_event.dart';
 import 'catalog_state.dart';
@@ -62,7 +64,8 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
   Future<void> _onStarted(CatalogStarted event, Emitter<CatalogState> emit) async {
     final replacement = event.repository;
     final preserveContent = event.preserveContent && replacement == null;
-    if (preserveContent && state is CatalogRefreshing) {
+    final preservePages = preserveContent && event.preservePages;
+    if (preserveContent && !preservePages && state is CatalogRefreshing) {
       return;
     }
     if (replacement != null) {
@@ -70,6 +73,7 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
     }
     final repository = _repository;
     final previous = state;
+    final pageCount = preservePages ? _page : 1;
     final generation = ++_loadGeneration;
     if (!preserveContent) {
       _page = 1;
@@ -78,7 +82,31 @@ final class CatalogBloc extends Bloc<CatalogEvent, CatalogState> {
       preserveContent ? CatalogRefreshing(items: previous.items, hasMore: previous.hasMore) : const CatalogLoading(),
     );
 
-    final result = await repository.getPage(1);
+    var result = await repository.getPage(1);
+    for (var number = 2; number <= pageCount; number++) {
+      if (isClosed || emit.isDone || generation != _loadGeneration) {
+        return;
+      }
+      final loaded = result.successOrNull;
+      if (loaded == null || !loaded.hasNext) {
+        break;
+      }
+      final next = await repository.getPage(number);
+      result = next.when(
+        success: (page) {
+          final ids = loaded.items.map((item) => item.id).toSet();
+
+          return Result.success(
+            AnimePage(
+              items: [...loaded.items, ...page.items.where((item) => ids.add(item.id))],
+              page: page.page,
+              hasNext: page.hasNext,
+            ),
+          );
+        },
+        failure: Result.failure,
+      );
+    }
     if (isClosed || emit.isDone || generation != _loadGeneration) {
       return;
     }

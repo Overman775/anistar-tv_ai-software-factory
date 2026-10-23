@@ -78,6 +78,8 @@ abstract final class AppMotion {
   static const panelEnter = standard;
   static const panelExit = Duration(milliseconds: 156);
   static const focusExit = Duration(milliseconds: 104);
+  static const focusBorderEnter = Duration(milliseconds: 280);
+  static const focusBorderExit = Duration(milliseconds: 200);
   static const inspectorDwell = Duration(milliseconds: 150);
   static const inspectorContent = page;
   static const shimmer = Duration(milliseconds: 1100);

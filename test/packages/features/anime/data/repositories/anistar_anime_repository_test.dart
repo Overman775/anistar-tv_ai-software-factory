@@ -15,7 +15,7 @@ void main() {
         '/test/player2/videoas_p2p_new.php': playerHtml,
       });
     addTearDown(() => dio.close(force: true));
-    final repository = AnistarAnimeRepository(createTestAnistarClient(dio));
+    final repository = AnistarAnimeRepository(createTestAnistarClient(dio), null, () => true);
     final data = (await repository.getAnime(
       id: 10938,
       slug: '10938-test',

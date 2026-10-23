@@ -6,10 +6,12 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
+import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -101,6 +103,8 @@ void main() {
         size: size,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           animeRepositoryProvider.overrideWithValue(
             FakeAnimeScreenRepository(
               load: (_, _) async => Result.success(

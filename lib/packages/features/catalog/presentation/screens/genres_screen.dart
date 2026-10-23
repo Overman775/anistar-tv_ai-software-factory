@@ -25,10 +25,10 @@ class GenresScreen extends ConsumerStatefulWidget {
   final VoidCallback? onOpenNavigation;
 
   @override
-  ConsumerState<GenresScreen> createState() => _GenresScreenState();
+  ConsumerState<GenresScreen> createState() => GenresScreenState();
 }
 
-class _GenresScreenState extends ConsumerState<GenresScreen> {
+class GenresScreenState extends ConsumerState<GenresScreen> {
   final _retry = FocusNode(debugLabel: 'Повторить загрузку жанров');
   bool _stateActionFocused = false;
   final _back = FocusNode(debugLabel: 'Назад из жанров');
@@ -37,7 +37,21 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
   List<CatalogFilter> _items = [];
   bool _focusedInitial = false;
 
-  bool get _shouldFocusContent => widget.autofocus || widget.embedded && FocusScope.of(context).hasPrimaryFocus;
+  void focusFirst() {
+    final first = _items.firstOrNull;
+    if (first != null) {
+      _nodes[first.path]?.requestFocus();
+    } else if (_retry.context != null) {
+      _retry.requestFocus();
+    } else {
+      setState(() {
+        _focusedInitial = false;
+        _stateActionFocused = false;
+      });
+    }
+  }
+
+  bool get _shouldFocusContent => widget.embedded ? FocusScope.of(context).hasFocus : widget.autofocus;
 
   void _focusReadyTarget(FocusNode? target) {
     if (mounted &&
@@ -110,7 +124,7 @@ class _GenresScreenState extends ConsumerState<GenresScreen> {
         message: message,
         actionLabel: 'Повторить',
         actionFocusNode: _retry,
-        autofocusAction: widget.autofocus,
+        autofocusAction: _shouldFocusContent,
         onAction: _reload,
       ),
     );

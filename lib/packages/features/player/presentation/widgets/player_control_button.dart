@@ -49,23 +49,26 @@ class PlayerControlButton extends StatelessWidget {
     };
     final pressedBackground = primary ? AppPalette.primarySoft : AppPalette.surfaceElevated;
 
-    return AnimatedContainer(
-      duration: AppMotion.durationOf(context, state.focused ? AppMotion.fast : AppMotion.focusExit),
-      curve: state.focused ? AppMotion.enterCurve : AppMotion.exitCurve,
-      constraints: BoxConstraints(minWidth: extent, minHeight: extent),
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      decoration: AppFocusStyle.decoration(
-        focused: active,
-        pressed: state.pressed,
-        restingColor: background,
-      ).copyWith(color: state.pressed ? pressedBackground : background),
-      child: Opacity(
-        opacity: onPressed == null ? 0.45 : 1,
-        child: IconTheme(
-          data: IconThemeData(color: foreground, size: glyphSize),
-          child: DefaultTextStyle.merge(
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(color: foreground, fontWeight: FontWeight.w600),
-            child: Center(widthFactor: 1, heightFactor: 1, child: ExcludeSemantics(child: child)),
+    return AppFocusBorder(
+      focused: state.focused,
+      child: AnimatedContainer(
+        duration: AppMotion.durationOf(context, state.focused ? AppMotion.fast : AppMotion.focusExit),
+        curve: state.focused ? AppMotion.enterCurve : AppMotion.exitCurve,
+        constraints: BoxConstraints(minWidth: extent, minHeight: extent),
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: AppFocusStyle.decoration(
+          focused: active,
+          pressed: state.pressed,
+          restingColor: background,
+        ).copyWith(color: state.pressed ? pressedBackground : background, border: const Border()),
+        child: Opacity(
+          opacity: onPressed == null ? 0.45 : 1,
+          child: IconTheme(
+            data: IconThemeData(color: foreground, size: glyphSize),
+            child: DefaultTextStyle.merge(
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: foreground, fontWeight: FontWeight.w600),
+              child: Center(widthFactor: 1, heightFactor: 1, child: ExcludeSemantics(child: child)),
+            ),
           ),
         ),
       ),

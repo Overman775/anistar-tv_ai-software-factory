@@ -8,6 +8,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_skeleton.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -42,6 +43,8 @@ void main() {
         MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
           favoritesRepositoryProvider.overrideWithValue(favoritesRepository),
           animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
@@ -96,6 +99,8 @@ void main() {
       MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
       ],
@@ -211,6 +216,8 @@ void decodedPosterTests() {
         MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(
             FakeCatalogScreenRepository(
               load: (_) async => Result.success(AnimePage(items: [summary], page: 1, hasNext: false)),

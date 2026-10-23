@@ -38,7 +38,8 @@ void main() {
         expect(contrast, greaterThanOrEqualTo(4.5), reason: '$name $states');
         debugPrint('POLISH $name $states primary text contrast: ${contrast.toStringAsFixed(2)}:1');
       }
-      expect(style.side?.resolve({WidgetState.focused})?.width, 3);
+      // Shared AppFocusBorder owns the outline; native button sides cannot duplicate it.
+      expect(style.side?.resolve({WidgetState.focused})?.width, 0);
       expect(tester.takeException(), isNull);
     });
   }

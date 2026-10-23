@@ -7,6 +7,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
@@ -39,6 +40,7 @@ void main() {
         MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
           catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
           catalogBrowseRepositoryProvider.overrideWithValue(repository),
           animeRepositoryProvider.overrideWithValue(
@@ -73,8 +75,9 @@ void main() {
         await tester.pumpAndSettle();
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Жанры');
+        expect(focusedControlLabel(tester), 'Жанры');
         expect(find.byType(GenresScreen), findsNothing);
         final menu = tester.element(find.byType(CatalogNavigationRail));
         final menuFocus = FocusManager.instance.primaryFocus;
@@ -83,7 +86,7 @@ void main() {
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(tester.element(find.byType(CatalogNavigationRail)), same(menu));
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Комедия');
+        expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).genresActive, isFalse);
@@ -93,11 +96,12 @@ void main() {
         expect(FocusManager.instance.primaryFocus, same(homeFocus));
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
+        // Re-entering the section must restore its original public menu node.
+        // ignore: avoid-duplicate-test-assertions
         expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
-        await tester.pumpAndSettle();
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pumpAndSettle();
       }
       final sourceFocus = FocusManager.instance.primaryFocus;
@@ -106,7 +110,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.requests, [('/anime/comedy/', 1)]);
       expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).filter?.path, comedyFilter.path);
+      final sortText = tester.element(find.text('По дате · Сначала новые'));
+      final inheritedStyle = DefaultTextStyle.of(sortText).style;
+      expect(inheritedStyle.fontFamily, TvTypography.fontFamily);
+      expect(inheritedStyle.decoration ?? TextDecoration.none, TextDecoration.none);
       final cardFocus = FocusManager.instance.primaryFocus;
+      expect(
+        cardFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>(),
+        isNotNull,
+        reason: 'filter starts on first card; focused=${cardFocus?.debugLabel}',
+      );
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       await tester.pumpAndSettle();
       expect(find.byType(AnimeScreen), findsOneWidget);

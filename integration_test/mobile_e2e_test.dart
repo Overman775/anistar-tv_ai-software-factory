@@ -3,6 +3,7 @@
 
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
@@ -39,6 +40,58 @@ void main() {
       await _waitHome(tester);
     }
   }
+
+  _mobileTest('guest search native playback and cancelled login preserve public context', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester, autoLogin: false);
+    await MobileControls.tap(tester, find.byKey(const ValueKey('login_guest')), 'enter guest');
+    await E2eHarness.waitFor(tester, () => find.byType(NavigationBar).evaluate().isNotEmpty, 'guest home');
+    expect(find.text('Избранное'), findsNothing);
+    await MobileControls.tab(tester, 'Поиск');
+    await tester.enterText(find.byKey(const ValueKey('search-query')), 'Наруто');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('search-submit')), 'submit public search');
+    final first = find.byKey(const ValueKey('search-card-10938'));
+    await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'public search cards');
+    await MobileControls.tap(tester, first, 'open public search detail');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.byType(AnimeScreen).evaluate().isNotEmpty && find.byType(MobileAnimeContent).evaluate().isNotEmpty,
+      'guest detail',
+    );
+    await MobileControls.revealAnimeAction(tester, 'Смотреть серию 1');
+    await MobileControls.openVideo(tester);
+    await E2eHarness.waitFor(
+      tester,
+      () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,
+      'guest native video advances',
+    );
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'guest player Back');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'restore guest search');
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('search-query'))).controller?.text, 'Наруто');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-account')), 'guest sign in');
+    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'guest login overlay');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isEmpty, 'cancel guest login');
+    expect(first, findsOneWidget);
+    final state = await fixture.state();
+    expect(state['favorite_writes'], 0);
+    expect(state['watched'], isEmpty);
+    final events = _events(state);
+    expect(events.any((event) => event['method'] == 'POST' && event['path'] == '/'), isTrue);
+    expect(events.any((event) => event['authenticated'] == true), isFalse);
+    expect(
+      events.where((event) {
+        final path = event['path']?.toString() ?? '';
+
+        return path.contains('do=favorites') ||
+            path.startsWith('/engine/ajax/favorites.php') ||
+            path.startsWith('/engine/ajax/ns.php');
+      }),
+      isEmpty,
+    );
+  });
 
   _mobileTest('mobile touch login rejection, session restore, expiry and logout', (tester) async {
     await fixture.configure();
@@ -168,7 +221,7 @@ void main() {
       () => find.byType(GenresScreen).evaluate().isNotEmpty && find.byType(NavigationBar).evaluate().length == 1,
       'Back to single genre navigation',
     );
-    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
   });
 
   _mobileTest('mobile pull refresh retains home on refusal, synchronizes empty favorites and anime details', (
@@ -438,11 +491,17 @@ Future<void> _waitHome(WidgetTester tester) => E2eHarness.waitFor(
   'mobile home',
 );
 
-Finder _homeScroll() =>
-    find.descendant(of: find.byKey(const ValueKey('mobile-tab-0')), matching: find.byType(CustomScrollView));
+Finder _homeScroll() => find.descendant(
+  of: find.byWidgetPredicate((widget) => widget is CatalogScreen && !widget.favoritesOnly && widget.filter == null),
+  matching: find.byType(CustomScrollView),
+);
 
-Finder _favoritesScroll() =>
-    find.descendant(of: find.byKey(const ValueKey('mobile-tab-1')), matching: find.byType(Scrollable)).first;
+Finder _favoritesScroll() => find
+    .descendant(
+      of: find.byWidgetPredicate((widget) => widget is CatalogScreen && widget.favoritesOnly),
+      matching: find.byType(Scrollable),
+    )
+    .first;
 
 Future<void> _waitFilter(WidgetTester tester) => E2eHarness.waitFor(
   tester,

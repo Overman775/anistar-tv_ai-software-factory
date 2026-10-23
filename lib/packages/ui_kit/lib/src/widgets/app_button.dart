@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_focus_border.dart';
 import 'app_layout_scope.dart';
 import 'tv_focusable.dart';
 
@@ -56,45 +57,46 @@ class AppButton extends StatelessWidget {
       };
       final focusBorderColor = primary ? AppPalette.onPrimary : AppPalette.primary;
 
-      return AnimatedContainer(
-        duration: AppMotion.durationOf(context, focused ? AppMotion.fast : AppMotion.focusExit),
-        curve: focused ? AppMotion.enterCurve : AppMotion.exitCurve,
-        constraints: BoxConstraints(
-          minWidth: AppSizes.touchControl,
-          minHeight: AppLayoutScope.isTvOf(context) ? AppSizes.tvControl : AppSizes.touchControl,
-        ),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: AppRadii.medium,
-          border: Border.all(color: focused ? focusBorderColor : AppPalette.outline, width: 2),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-        child: Opacity(
-          opacity: enabled ? 1 : 0.45,
-          child: IconTheme(
-            data: IconThemeData(color: foreground, size: 24),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (busy) ...[
-                  SizedBox.square(dimension: 20, child: CircularProgressIndicator(color: foreground, strokeWidth: 2)),
-                  const SizedBox(width: AppSpacing.sm),
-                ] else if (icon case final icon?) ...[
-                  ExcludeSemantics(child: icon),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
-                Flexible(
-                  child: ExcludeSemantics(
-                    child: Text(
-                      label,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.labelLarge
-                          ?.copyWith(color: foreground, fontWeight: primary ? FontWeight.w800 : FontWeight.w600),
+      return AppFocusBorder(
+        focused: focused,
+        color: focusBorderColor,
+        restingColor: AppPalette.outline,
+        child: AnimatedContainer(
+          duration: AppMotion.durationOf(context, focused ? AppMotion.fast : AppMotion.focusExit),
+          curve: focused ? AppMotion.enterCurve : AppMotion.exitCurve,
+          constraints: BoxConstraints(
+            minWidth: AppSizes.touchControl,
+            minHeight: AppLayoutScope.isTvOf(context) ? AppSizes.tvControl : AppSizes.touchControl,
+          ),
+          decoration: BoxDecoration(color: background, borderRadius: AppRadii.medium),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          child: Opacity(
+            opacity: enabled ? 1 : 0.45,
+            child: IconTheme(
+              data: IconThemeData(color: foreground, size: 24),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (busy) ...[
+                    SizedBox.square(dimension: 20, child: CircularProgressIndicator(color: foreground, strokeWidth: 2)),
+                    const SizedBox(width: AppSpacing.sm),
+                  ] else if (icon case final icon?) ...[
+                    ExcludeSemantics(child: icon),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  Flexible(
+                    child: ExcludeSemantics(
+                      child: Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.labelLarge
+                            ?.copyWith(color: foreground, fontWeight: primary ? FontWeight.w800 : FontWeight.w600),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -128,6 +128,9 @@ class $AssetsIconsGen {
   /// File path: assets/icons/loader-circle.svg
   String get loaderCircle => 'packages/ui_kit/assets/icons/loader-circle.svg';
 
+  /// File path: assets/icons/log-in.svg
+  String get logIn => 'packages/ui_kit/assets/icons/log-in.svg';
+
   /// File path: assets/icons/log-out.svg
   String get logOut => 'packages/ui_kit/assets/icons/log-out.svg';
 
@@ -200,6 +203,7 @@ class $AssetsIconsGen {
     listVideo,
     list,
     loaderCircle,
+    logIn,
     logOut,
     pause,
     play,

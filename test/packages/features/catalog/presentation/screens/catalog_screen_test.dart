@@ -1,3 +1,4 @@
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -42,7 +43,11 @@ void main() {
       CatalogScreen(onAnimeTap: (anime) => opened = anime.id),
       size: wideTvSize,
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await tester.pumpAndSettle();
     expect(find.byType(AnimeCard).evaluate().length, lessThan(50));
@@ -69,7 +74,11 @@ void main() {
         onOpenLogs: () => fail('Unexpected logs'),
       ),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     await tester.pumpAndSettle();
     final rail = find.byKey(const ValueKey('catalog-navigation-rail'));
@@ -83,17 +92,17 @@ void main() {
     expect(tester.getSize(rail).width, inExclusiveRange(88, 264));
     await tester.pumpAndSettle();
     expect(tester.getSize(rail).width, 264);
-    final labels = <String?>[FocusManager.instance.primaryFocus?.debugLabel];
+    final labels = <String?>[focusedControlLabel(tester)];
     for (var i = 0; i < 3; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
-      labels.add(FocusManager.instance.primaryFocus?.debugLabel);
+      labels.add(focusedControlLabel(tester));
     }
     expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Открыть логи']);
     expect(find.byKey(const ValueKey('catalog-refresh')), findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Открыть логи');
+    expect(focusedControlLabel(tester), 'Открыть логи');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(card));
@@ -112,7 +121,11 @@ void main() {
         onSignOut: () => fail('Unexpected logout'),
       ),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     await tester.pumpAndSettle();
     final card = FocusManager.instance.primaryFocus;
@@ -121,7 +134,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
     }
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Выйти из аккаунта');
+    expect(focusedControlLabel(tester), 'Выйти из аккаунта');
     expect(find.byKey(const ValueKey('catalog-logs')), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -135,6 +148,8 @@ void main() {
       HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
       ],
@@ -143,7 +158,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('catalog-tab-true')));
     await tester.pumpAndSettle();
     expect(find.text('Избранное пусто'), findsOneWidget);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    // Activation already moved into the first content action.
+    final homeAction = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Перейти на главную'));
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>(), same(homeAction));
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
@@ -157,6 +174,8 @@ void main() {
       HomeScreen(onAnimeTap: (_) => fail('Long OK must not open details')),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
@@ -198,6 +217,8 @@ void main() {
       HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
@@ -214,7 +235,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(find.text('Избранное пусто'), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное');
+    expect(focusedControlLabel(tester), 'Избранное');
     expect(find.byType(FavoriteActionsSheet), findsNothing);
     expect(favorites.ids, isEmpty);
     expect(tester.takeException(), isNull);
@@ -228,7 +249,11 @@ void main() {
         child: HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
       ),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     await tester.pumpAndSettle();
     final card = find.byType(AnimeCard).first;
@@ -248,6 +273,8 @@ void main() {
       HomeScreen(onAnimeTap: (_) => fail('Unexpected activation')),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (_) async {
@@ -266,7 +293,7 @@ void main() {
     expect(retry?.context?.findAncestorWidgetOfExactType<AppButton>(), isNotNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Главная');
+    expect(focusedControlLabel(tester), 'Главная');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(retry));
@@ -295,7 +322,11 @@ void main() {
       ),
       size: phoneSize,
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     await tester.pumpAndSettle();
     final grid = tester.widget<SliverGrid>(gridFinder);
@@ -323,7 +354,11 @@ void main() {
       tester,
       CatalogScreen(onAnimeTap: (anime) => expect(anime.id, isPositive)),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await pumpAndSettle();
     for (var i = 0; i < 4; i++) {
@@ -352,7 +387,11 @@ void main() {
       CatalogScreen(onAnimeTap: (anime) => openedAnimeId = anime.id),
       size: wideTvSize,
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     final pumpAndSettle = tester.pumpAndSettle;
     final sendKeyEvent = tester.sendKeyEvent;
@@ -377,7 +416,11 @@ void main() {
         onTabSelected: (_) => fail('Unexpected tab activation'),
       ),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     final settle = tester.pumpAndSettle;
     final key = tester.sendKeyEvent;
@@ -399,13 +442,15 @@ void main() {
     expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).clipBehavior, Clip.hardEdge);
   });
 
-  testWidgets('switching to empty favorites keeps focus on its tab and allows remote return home', (tester) async {
+  testWidgets('empty favorites activation enters content and root Back restores its menu target', (tester) async {
     await pumpTvApp(
       tester,
-      HomeScreen(onAnimeTap: (anime) => expect(anime.id, 1), onSignOut: () => fail('Unexpected logout')),
+      HomeScreen(onAnimeTap: (anime) => expect(anime.id, 1)),
       size: wideTvSize,
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
         favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
       ],
@@ -415,24 +460,27 @@ void main() {
     await settle();
     await key(LogicalKeyboardKey.arrowLeft);
     await settle();
-    await key(LogicalKeyboardKey.arrowDown);
+    for (var step = 0; step < 2; step++) {
+      await key(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+    }
     await key(LogicalKeyboardKey.select);
     await settle();
-    Key? focusedTab() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TextButton>()?.key;
     expect(find.text('Избранное пусто'), findsOneWidget);
-    // Re-read focus after the tab's widget tree has been replaced.
-    expect(focusedTab(), const ValueKey('catalog-tab-true'));
-    await key(LogicalKeyboardKey.arrowUp);
+    final homeAction = tester.widget<AppButton>(find.widgetWithText(AppButton, 'Перейти на главную'));
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>(), same(homeAction));
+    await tester.binding.handlePopRoute();
+    await settle();
+    expect(focusedControlLabel(tester), 'Избранное');
+    for (var step = 0; step < 2; step++) {
+      await key(LogicalKeyboardKey.arrowUp);
+      await tester.pump();
+    }
     await key(LogicalKeyboardKey.select);
     await settle();
-    expect(find.text('Каталог'), findsNothing);
-    expect(find.textContaining('загружено'), findsNothing);
-    expect(find.textContaining('OK —'), findsNothing);
-    // Re-read focus after the tab's widget tree has been replaced.
-    expect(focusedTab(), const ValueKey('catalog-tab-false'));
-    await key(LogicalKeyboardKey.arrowRight);
-    await settle();
-    await key(LogicalKeyboardKey.select);
+    expect(find.byType(AnimeCard), findsWidgets);
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>(), isNotNull);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('keeps the catalog heading and first row visible at 960x540', (tester) async {
@@ -440,7 +488,11 @@ void main() {
       tester,
       CatalogScreen(onAnimeTap: (anime) => expect(anime.id, isPositive)),
       wrapInScaffold: false,
-      overrides: [catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
     );
     await tester.pumpAndSettle();
     expect(find.text('Каталог'), findsNothing);

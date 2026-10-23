@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
@@ -19,7 +20,13 @@ void main() {
     final pending = Completer<Result<bool, Failure>>();
     final repository = FakeFavoritesRepository()..change = (_) => pending.future;
     final transitions = <FavoritesState>[];
-    final container = ProviderContainer(overrides: [favoritesRepositoryProvider.overrideWithValue(repository)]);
+    final container = ProviderContainer(
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
     addTearDown(container.dispose);
     final subscription = container.listen<FavoritesState>(
       favoritesControllerProvider,
@@ -45,8 +52,13 @@ void main() {
     final pending = Completer<Result<bool, Failure>>();
     final repository = FakeFavoritesRepository()..change = (_) => pending.future;
     final transitions = <FavoritesState>[];
-    final container = ProviderContainer(overrides: [favoritesRepositoryProvider.overrideWithValue(repository)])
-      ..listen<FavoritesState>(favoritesControllerProvider, (_, next) => transitions.add(next));
+    final container = ProviderContainer(
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
+    )..listen<FavoritesState>(favoritesControllerProvider, (_, next) => transitions.add(next));
     final change = container
         .read(favoritesControllerProvider.notifier)
         .setFavorite(animeId: 1, slug: '1-test', favorite: true);
@@ -66,7 +78,11 @@ void main() {
     await pumpTvApp(
       tester,
       const FavoriteButton(animeId: 1, slug: '1-test', title: 'Аниме 1'),
-      overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await tester.tap(find.text('Проверить избранное'));
     await settle();
@@ -96,7 +112,11 @@ void main() {
     await pumpTvApp(
       tester,
       const FavoriteActionsSheet(animeId: 1, slug: '1-test', title: 'Аниме 1'),
-      overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await pumpAndSettle();
     expect(add, findsNothing);
@@ -116,7 +136,11 @@ void main() {
     await pumpTvApp(
       tester,
       const FavoriteButton(animeId: 1, slug: '1-test', title: 'Аниме 1'),
-      overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     final settle = tester.pumpAndSettle;
     await tester.tap(find.text('Проверить избранное'));
@@ -136,7 +160,11 @@ void main() {
       tester,
       CatalogScreen(favoritesOnly: true, onAnimeTap: (_) => fail('Unexpected navigation')),
       wrapInScaffold: false,
-      overrides: [favoritesRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await pumpAndSettle();
     expect(cards, findsOneWidget);

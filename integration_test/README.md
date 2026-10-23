@@ -21,9 +21,10 @@ Entry points fixture-наборов запускаются через скрип
 
 Подход сверен с официальной документацией Flutter 11.10.2026. Flutter рекомендует много быстрых unit/widget-тестов и достаточное число интеграционных проверок важных пользовательских сценариев: последние медленнее и дороже в сопровождении. Таблица показывает границы наборов, а не требование переносить каждую widget-проверку на Android. [Рекомендации Flutter](https://docs.flutter.dev/testing/overview), [integration_test](https://docs.flutter.dev/testing/integration-tests).
 
-| Область | TV fixtures: 13 сценариев | Mobile fixtures: 8 сценариев | Что проверять на нижнем уровне |
+| Область | TV fixtures: 14 сценариев | Mobile fixtures: 9 сценариев | Что проверять на нижнем уровне |
 | --- | --- | --- | --- |
 | Вход и сессия | Пульт, отказ входа, encrypted restore после нового клиента, expiry, logout | Touch и ввод в Flutter-поля, отказ входа, restore, expiry, logout | Валидация полей, состояния auth, parser/cookies |
+| Гость и отправленный поиск (HTTP fixtures) | Выбор гостя пультом, submit через IME, выдача → detail/native playback, Back восстанавливает запрос и результаты, отмена входа сохраняет гостевой контекст; нет account mutations | Выбор гостя касанием, submit кнопкой, выдача → detail/native playback, Back восстанавливает запрос и результаты, отмена входа сохраняет гостевой контекст; нет account mutations | Parser/source протокол, сохранение маршрута и выдачи, auth/capability gates |
 | Каталог и маршруты | D-pad, focus restore, pagination, scroll, Back | Scroll, скрытие шапки, сохранение позиции вкладки и Back. Pull refresh главной сохраняет карточки при отказе сети. Также проверяется pull refresh пустого/заполненного избранного и деталей/серий. | Геометрия, размеры, text scaling, golden, жесты, ожидание запроса, повтор, гонка пагинации и локальные переходы |
 | Жанры и сортировка | Фильтр из жанров и metadata, paginated request, отмена draft | Touch sheets, применение и отмена draft | Все варианты сортировки/фильтров, reducer и repository |
 | Избранное | Серверная мутация, новый клиент, отказ и explicit retry, удаление и empty state | Touch mutation, отказ/recovery, удаление и empty-state return | Все состояния кнопок/панелей и ошибки repository |

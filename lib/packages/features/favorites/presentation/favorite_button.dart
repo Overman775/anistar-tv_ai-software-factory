@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../auth/auth_providers.dart';
 import '../favorites_providers.dart';
 
 class FavoriteButton extends ConsumerStatefulWidget {
@@ -70,6 +71,18 @@ class _FavoriteButtonState extends ConsumerState<FavoriteButton> {
 
   @override
   Widget build(BuildContext context) {
+    final access = ref.watch(authAccessProvider);
+    if (!access.canUseAccount) {
+      return AppButton(
+        key: ValueKey('favorite-login-${widget.animeId}'),
+        focusNode: widget.focusNode,
+        autofocus: widget.autofocus,
+        variant: AppButtonVariant.neutral,
+        label: 'Войти, чтобы добавить в избранное',
+        icon: const AppIcon(AppIconType.logIn),
+        onPressed: ref.read(authControllerProvider.notifier).requestSignIn,
+      );
+    }
     final state = ref.watch(favoritesControllerProvider);
     final favorite = state.known[widget.animeId] ?? widget.initialFavorite;
     final busy = _reading || state.updatingAnimeId == widget.animeId;

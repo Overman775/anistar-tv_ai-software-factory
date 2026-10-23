@@ -22,6 +22,7 @@ AniStar TV построен как Flutter-приложение с Dart pub work
 │   └── main_prod.dart
 ├── test/                 # Unit, widget, golden и architecture tests
 ├── integration_test/     # Android fixtures, optional iOS fixture и явные live scenarios
+├── prototype/            # Адаптивный HTML/CSS/JS прототип и DESIGN-HANDOFF
 ├── android/              # Android и Android TV конфигурация
 ├── ios/                  # iOS Runner, flavors dev/prod и Simulator-конфигурации
 ├── env/                  # Dart define JSON и шаблоны
@@ -30,6 +31,8 @@ AniStar TV построен как Flutter-приложение с Dart pub work
 ```
 
 Workspace пакеты перечислены в `pubspec.yaml` и используют общий `pubspec.lock`. App и features остаются в корневом Flutter-пакете. Не создавайте для них отдельные package boundaries без архитектурного решения.
+
+`prototype/index.html`, `prototype/app.js`, `prototype/app.css` и `prototype/responsive.css` показывают адаптивный UI; `prototype/DESIGN-HANDOFF.md` содержит визуальные требования. Это справочный прототип. Производственная Flutter-реализация находится в `lib/`.
 
 ---
 
@@ -67,7 +70,7 @@ lib/packages/features/catalog/
 
 Набор папок соответствует ответственности, а не обязательному шаблону для каждой feature. Не создавайте пустые слои. Domain не импортирует Flutter, Dio или адаптер сайта. Data зависит от публичных контрактов. Presentation не обращается к реализации repository напрямую.
 
-В `lib/packages/features/` сейчас находятся `auth`, `catalog`, `favorites`, `anime`, `player`, `watch_history`, `home`, `log_viewer` и `common`. Это функциональные области корневого приложения, а не отдельные workspace packages.
+В `lib/packages/features/` сейчас находятся `auth`, `catalog`, `search`, `favorites`, `anime`, `player`, `watch_history`, `home`, `log_viewer` и `common`. Это функциональные области корневого приложения, а не отдельные workspace packages.
 
 ```dart
 final catalogRepositoryProvider = Provider<CatalogRepository>(
@@ -85,7 +88,7 @@ Feature объявляет интерфейс и provider-контракт. Ко
 
 `lib/app/app_container.dart` собирает repository implementations и infrastructure providers через Riverpod overrides. `lib/app/app_router.dart` и `app_routes.dart` владеют typed routes. Feature widgets сообщают о пользовательском действии через callback. App выбирает маршрут.
 
-Auth controller восстанавливает и проверяет защищённую сессию на старте. App открывает защищённый router только после успешной проверки. Выход или истечение сессии освобождает protected router вместе с плеером. Поэтому Auth владеет операциями сессии, а App отвечает за границу защищённой навигации.
+Auth владеет единым типизированным состоянием доступа, восстановлением защищённой сессии и входом в явный гостевой режим. Riverpod DI предоставляет это состояние App и features; асинхронная загрузка и ошибки операции остаются отдельными от доступа. App управляет публичной и защищённой навигацией по этому состоянию. Выход или истечение сессии закрывает account-bound маршруты вместе с плеером. Полная матрица переходов и разрешений находится в [спецификации входа](specs/01_authentication.md).
 
 Платформенный профиль определяется до компоновки. TV получает landscape и скрытые системные панели. Телефон использует edge-to-edge системные панели. Ориентация телефона не переключает профиль. Поведение описано в [TV](specs/06_tv_interaction.md) и [mobile](specs/10_mobile_interaction.md) контрактах.
 

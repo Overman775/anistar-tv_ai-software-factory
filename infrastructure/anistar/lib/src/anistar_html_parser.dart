@@ -4,6 +4,7 @@ import 'package:json5/json5.dart';
 
 import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
+import 'anistar_search_html.dart';
 import 'contract/anistar_anime_details_dto.dart';
 import 'contract/anistar_anime_part_dto.dart';
 import 'contract/anistar_anime_summary_dto.dart';
@@ -19,6 +20,34 @@ final class AnistarHtmlParser {
   final Uri baseUri;
 
   const AnistarHtmlParser(this.baseUri);
+
+  AnistarCatalogPageDto search(String source, int page) {
+    if (page < 1) {
+      throw const AnistarFailure(message: 'Некорректный номер страницы поиска.');
+    }
+    final document = _document(source);
+    final items = <AnistarAnimeSummaryDto>[];
+    final ids = <int>{};
+    final content = document.querySelector('#dle-content') ?? document;
+    for (final card in content.querySelectorAll('.short.news')) {
+      final item = _card(card);
+      if (item != null && item.id != 9493 && ids.add(item.id)) {
+        items.add(item);
+      }
+    }
+    if (items.isEmpty) {
+      if (AnistarSearchHtml.isEmpty(document)) {
+        return AnistarCatalogPageDto(items: const [], page: page, hasNext: false);
+      }
+      throw const AnistarFailure(message: 'Не удалось разобрать результаты поиска AniStar. Попробуйте снова.');
+    }
+    if (document.querySelector('form#fullsearch') == null) {
+      throw const AnistarFailure(message: 'AniStar не подтвердил страницу результатов поиска.');
+    }
+    final hasNext = AnistarSearchHtml.hasNext(document, page);
+
+    return AnistarCatalogPageDto(items: items, page: page, hasNext: hasNext);
+  }
 
   AnistarCatalogPageDto catalog(String source, int page, {bool favorites = false, String? filterPath}) {
     final document = _document(source);
@@ -198,7 +227,7 @@ final class AnistarHtmlParser {
       rating: _rating(card),
       slug: uri.pathSegments.last.replaceFirst(RegExp(r'\.html$'), ''),
       title: title,
-      posterUri: _uri(card.querySelector('img[itemprop="image"], .poster img')?.attributes['src']),
+      posterUri: _uri(card.querySelector('img[itemprop="image"], .poster img, .news_avatar img')?.attributes['src']),
       year: head == null ? null : _metadata(head, 'Год выпуска'),
       genreText: head == null ? null : _metadata(head, 'Жанр'),
       description: _description(card.querySelector('.news_text .descripts, .descripts')),

@@ -11,8 +11,11 @@ class _AppMobileRouteShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => MobileHomeShell(
     destination: destination,
     onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
-    accountName: ref.watch(authControllerProvider).value,
-    onSignOut: () => unawaited(_signOut(context, ref)),
+    accountName: ref.watch(authAccessProvider).account,
+    onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
+    onSignIn: ref.watch(authAccessProvider).canUseAccount
+        ? null
+        : ref.read(authControllerProvider.notifier).requestSignIn,
     onOpenLogs: _logsAction(context),
     onAnimeTap: (anime) => _openAnime(context, anime, destination),
     contextTitle: title,

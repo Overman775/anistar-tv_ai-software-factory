@@ -36,6 +36,7 @@ void main() {
           secureStorage: MemorySecureStorage(),
         ),
         anistarClientProvider.overrideWithValue(client),
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
       ],
     );
     addTearDown(container.dispose);

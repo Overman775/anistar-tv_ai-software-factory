@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -51,6 +52,8 @@ void main() {
             const HomeScreen(onAnimeTap: ignoreAnime),
             wrapInScaffold: false,
             overrides: [
+              authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+              favoritesAccountProvider.overrideWithValue('test'),
               catalogRepositoryProvider.overrideWithValue(FakeCatalogScreenRepository(load: load)),
               favoritesRepositoryProvider.overrideWithValue(favorites),
             ],
@@ -59,10 +62,10 @@ void main() {
           if (favoritesOnly) {
             // The unvisited tab makes its own first request.
             requests.clear();
-            await tester.tap(find.byType(NavigationDestination).at(1));
+            await tester.tap(find.byType(NavigationDestination).at(2));
             await tester.pumpAndSettle();
           }
-          final tab = find.byKey(ValueKey('mobile-tab-${favoritesOnly ? 1 : 0}'));
+          final tab = find.byType(CatalogScreen);
           final scroll = find.descendant(of: tab, matching: find.byType(Scrollable)).first;
           final chrome = find.byKey(const ValueKey('mobile-account'));
           final navigation = find.byType(NavigationBar);
@@ -114,6 +117,8 @@ void main() {
       const CatalogScreen(onAnimeTap: ignoreAnime),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (number) {
@@ -161,6 +166,8 @@ void main() {
       const CatalogScreen(onAnimeTap: ignoreAnime),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (number) async {
@@ -189,6 +196,8 @@ void main() {
       const CatalogScreen(onAnimeTap: ignoreAnime),
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         catalogRepositoryProvider.overrideWithValue(
           FakeCatalogScreenRepository(
             load: (number) {

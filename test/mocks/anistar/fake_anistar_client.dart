@@ -1,4 +1,5 @@
 import 'package:anistar/anistar.dart';
+import 'package:core/data.dart';
 
 /// Contract-only fake: no HTML, transport, session or provider dependencies.
 final class FakeAnistarClient implements AnistarClient {
@@ -28,7 +29,14 @@ final class FakeAnistarClient implements AnistarClient {
   });
 
   @override
-  Future<String> signIn(String username, String password) => _reply('signIn', () => account = username);
+  Future<String> signIn(String username, String password, {RequestCancellation? cancellation}) =>
+      _reply('signIn', () => account = username);
+
+  @override
+  Future<void> cancelSignIn(RequestCancellation cancellation) => _reply('cancelSignIn', () {
+    cancellation.cancel();
+    account = null;
+  });
 
   @override
   Future<void> signOut() => _reply('signOut', () => account = null);
@@ -41,6 +49,10 @@ final class FakeAnistarClient implements AnistarClient {
 
         return pageResult ?? AnistarCatalogPageDto(items: [], page: page, hasNext: false);
       });
+
+  @override
+  Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation}) =>
+      _reply('search', () => pageResult ?? AnistarCatalogPageDto(items: [], page: page, hasNext: false));
 
   @override
   Future<AnistarCatalogPageDto> favorites(int page) =>

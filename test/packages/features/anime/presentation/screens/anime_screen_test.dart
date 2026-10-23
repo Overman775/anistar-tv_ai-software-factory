@@ -7,6 +7,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_da
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/watch_history/watch_history_providers.dart';
@@ -46,7 +47,11 @@ void main() {
       tester,
       AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode')),
       wrapInScaffold: false,
-      overrides: [animeRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        animeRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -78,7 +83,11 @@ void main() {
       tester,
       AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode')),
       wrapInScaffold: false,
-      overrides: [animeRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        animeRepositoryProvider.overrideWithValue(repository),
+      ],
     );
     await tester.pumpAndSettle();
     expect(find.text('Не удалось загрузить данные аниме. Повторите попытку.'), findsOneWidget);
@@ -108,7 +117,11 @@ void main() {
     );
     AnimeScreen screen(String slug) =>
         AnimeScreen(animeId: 1, slug: slug, fallbackTitle: 'Тест', onEpisodeTap: (_) => fail('Unexpected episode'));
-    final overrides = [animeRepositoryProvider.overrideWithValue(repository)];
+    final overrides = [
+      authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+      favoritesAccountProvider.overrideWithValue('test'),
+      animeRepositoryProvider.overrideWithValue(repository),
+    ];
     await pumpTvApp(tester, screen('old'), wrapInScaffold: false, overrides: overrides);
     await tester.pump();
     await pumpTvApp(tester, screen('new'), wrapInScaffold: false, overrides: overrides);
@@ -157,6 +170,8 @@ void main() {
           size: size,
           wrapInScaffold: false,
           overrides: [
+            authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+            favoritesAccountProvider.overrideWithValue('test'),
             animeRepositoryProvider.overrideWithValue(
               FakeAnimeScreenRepository(load: (_, _) async => Result.success(data)),
             ),
@@ -235,6 +250,8 @@ void main() {
         onEpisodeTap: (episode) => opened = episode.number,
       ),
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         watchHistoryAccountProvider.overrideWithValue('tester'),
         watchedEpisodesRepositoryProvider.overrideWithValue(history),
         animeRepositoryProvider.overrideWithValue(
@@ -284,6 +301,8 @@ void main() {
         size: size,
         wrapInScaffold: false,
         overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
           animeRepositoryProvider.overrideWithValue(
             FakeAnimeScreenRepository(
               load: (_, _) async => Result.success(
@@ -350,6 +369,8 @@ void main() {
       size: wideTvSize,
       wrapInScaffold: false,
       overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
         animeRepositoryProvider.overrideWithValue(
           FakeAnimeScreenRepository(
             load: (_, _) async => Result.success(
@@ -413,7 +434,11 @@ void main() {
     final pumpAndSettle = tester.pumpAndSettle;
     final screenFinder = find.byType(AnimeScreen);
     final stateOf = tester.state;
-    final overrides = [animeRepositoryProvider.overrideWithValue(repository)];
+    final overrides = [
+      authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+      favoritesAccountProvider.overrideWithValue('test'),
+      animeRepositoryProvider.overrideWithValue(repository),
+    ];
     await pumpTvApp(tester, screen(1), wrapInScaffold: false, overrides: overrides);
     await pumpAndSettle();
     final state = stateOf(screenFinder);
@@ -435,7 +460,11 @@ void main() {
         onEpisodeTap: (episode) => openedEpisode = episode.number,
       ),
       wrapInScaffold: false,
-      overrides: [animeRepositoryProvider.overrideWithValue(const FakeAnimeScreenRepository())],
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        animeRepositoryProvider.overrideWithValue(const FakeAnimeScreenRepository()),
+      ],
     );
     final pumpAndSettle = tester.pumpAndSettle;
     final sendKeyEvent = tester.sendKeyEvent;

@@ -140,7 +140,7 @@ void main() {
       ..expire();
     await Future<void>.delayed(Duration.zero);
     previous.complete(const Result.success('expired-account'));
-    expect(await container.read(authControllerProvider.future), isNull);
+    expect((await container.read(authControllerProvider.future)).access, isA<UnauthenticatedAccess>());
     expect(container.read(authStartupStageProvider), AuthStartupStage.complete);
   });
 

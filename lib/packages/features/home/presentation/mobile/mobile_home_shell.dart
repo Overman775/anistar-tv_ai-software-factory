@@ -10,6 +10,7 @@ import '../../../catalog/domain/models/catalog_filter.dart';
 import '../../../catalog/presentation/screens/catalog_screen.dart';
 import '../../../catalog/presentation/screens/genres_screen.dart';
 import '../../../common/presentation/widgets/account_identity.dart';
+import '../../../search/presentation/search_screen.dart';
 import '../home_destination.dart';
 
 /// Root destinations keep their controllers and scroll positions across switches.
@@ -20,6 +21,8 @@ class MobileHomeShell extends StatefulWidget {
     this.onOpenGenres,
     this.accountName,
     this.onSignOut,
+    this.onSignIn,
+    this.root = false,
     this.onOpenLogs,
     this.onRootBack,
     this.destination = HomeDestination.home,
@@ -35,6 +38,8 @@ class MobileHomeShell extends StatefulWidget {
   final VoidCallback? onOpenGenres;
   final String? accountName;
   final VoidCallback? onSignOut;
+  final VoidCallback? onSignIn;
+  final bool root;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onRootBack;
   final HomeDestination destination;
@@ -60,10 +65,15 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
     _visited.add(_selected);
   }
 
-  void _select(int index) {
+  List<HomeDestination> get _destinations => homeDestinations(account: widget.onSignIn == null);
+
+  void _select(int index) => _selectDestination(_destinations[index]);
+
+  void _selectDestination(HomeDestination destination) {
+    final index = destination.index;
     final onSelected = widget.onDestinationSelected;
     if (onSelected != null) {
-      onSelected(HomeDestination.values[index]);
+      onSelected(destination);
 
       return;
     }
@@ -127,6 +137,11 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   }
 
   Future<void> _account() async {
+    if (widget.onSignIn != null) {
+      widget.onSignIn?.call();
+
+      return;
+    }
     if (_accountOpen) {
       return;
     }
@@ -173,7 +188,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
 
   void _handleBack(bool didPop, Object? _) {
     if (!didPop && _selected != 0) {
-      _select(0);
+      _selectDestination(HomeDestination.home);
     } else if (!didPop) {
       widget.onRootBack?.call();
     }
@@ -191,7 +206,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['Главная', 'Избранное', 'Жанры'];
+    final label = homeDestinationLabel(HomeDestination.values[_selected]);
     final headerVisible =
         _headerVisible ||
         AppMotion.reducedOf(context) ||
@@ -202,7 +217,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
     final content = widget.content;
 
     return PopScope(
-      canPop: widget.content != null || _selected == 0 && widget.onRootBack == null,
+      canPop: !widget.root && widget.content != null || _selected == 0 && widget.onRootBack == null,
       onPopInvokedWithResult: _handleBack,
       child: Scaffold(
         extendBody: true,
@@ -236,18 +251,18 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                                   onPressed: widget.onBack,
                                   icon: const AppIcon(AppIconType.arrowLeft),
                                 ),
-                          title: Text(
-                            widget.contextTitle ?? labels[_selected],
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          title: Text(widget.contextTitle ?? label, maxLines: 2, overflow: TextOverflow.ellipsis),
                           automaticallyImplyLeading: false,
                           actions: [
                             IconButton(
                               key: const ValueKey('mobile-account'),
-                              tooltip: widget.accountName == null ? 'Аккаунт' : 'Аккаунт: ${widget.accountName}',
+                              tooltip: switch ((widget.onSignIn, widget.accountName)) {
+                                (_?, _) => 'Войти',
+                                (_, null) => 'Аккаунт',
+                                (_, final account) => 'Аккаунт: $account',
+                              },
                               onPressed: () => unawaited(_account()),
-                              icon: const AppIcon(AppIconType.user),
+                              icon: AppIcon(widget.onSignIn != null ? AppIconType.logIn : AppIconType.user),
                             ),
                           ],
                         ),
@@ -262,7 +277,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                     : IndexedStack(
                         index: _selected,
                         children: List.generate(
-                          3,
+                          HomeDestination.values.length,
                           (index) => NotificationListener<ScrollNotification>(
                             onNotification: (notification) => index == _selected && _onScroll(notification),
                             child: HeroMode(
@@ -272,6 +287,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                                 child: !_visited.contains(index)
                                     ? const SizedBox.shrink()
                                     : switch (index) {
+                                        3 => SearchScreen(onAnimeTap: widget.onAnimeTap, active: _selected == 3),
                                         2 => GenresScreen(
                                           embedded: true,
                                           onSelected: widget.onGenreSelected ?? (_) => widget.onOpenGenres?.call(),
@@ -281,7 +297,9 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                                           embedded: true,
                                           favoritesOnly: index == 1,
                                           onAnimeTap: widget.onAnimeTap,
-                                          onTabSelected: (favorite) => _select(favorite ? 1 : 0),
+                                          onTabSelected: (favorite) => _selectDestination(
+                                            favorite ? HomeDestination.favorites : HomeDestination.home,
+                                          ),
                                         ),
                                       },
                               ),
@@ -307,24 +325,21 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
                 height: MediaQuery.textScalerOf(context).scale(12) * 2 + 56,
-                selectedIndex: _selected,
+                selectedIndex: _destinations
+                    .indexOf(HomeDestination.values[_selected])
+                    .clamp(0, _destinations.length - 1),
                 onDestinationSelected: _select,
-                destinations: const [
-                  NavigationDestination(
-                    icon: AppIcon(AppIconType.home),
-                    selectedIcon: AppIcon(AppIconType.home),
-                    label: 'Главная',
-                  ),
-                  NavigationDestination(
-                    icon: AppIcon(AppIconType.heart),
-                    selectedIcon: AppIcon(AppIconType.heart),
-                    label: 'Избранное',
-                  ),
-                  NavigationDestination(
-                    icon: AppIcon(AppIconType.layoutGrid),
-                    selectedIcon: AppIcon(AppIconType.layoutGrid),
-                    label: 'Жанры',
-                  ),
+                destinations: [
+                  for (final destination in _destinations)
+                    NavigationDestination(
+                      icon: AppIcon(switch (destination) {
+                        HomeDestination.home => AppIconType.home,
+                        HomeDestination.search => AppIconType.search,
+                        HomeDestination.favorites => AppIconType.heart,
+                        HomeDestination.genres => AppIconType.layoutGrid,
+                      }),
+                      label: homeDestinationLabel(destination),
+                    ),
                 ],
               ),
             ),

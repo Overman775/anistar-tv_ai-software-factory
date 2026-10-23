@@ -14,6 +14,7 @@ CERT = ROOT / 'android/app/src/debug/res/raw/e2e_localhost.pem'
 MEDIA = ROOT / 'tool/e2e/media'
 GUEST = '<form method="post" action=""><input name="login_name"><input name="login_password" type="password"><input type="hidden" name="formtoken" value="fixture"></form>'
 SETTINGS = '<script>var dle_skin="new36";</script>'
+SEARCH_FORM = '<form method="post" action="/" accept-charset="windows-1251"><input type="hidden" name="do" value="search"><input type="hidden" name="subaction" value="search"><input name="story"></form>'
 MEMBER = '<a href="javascript:void(0)">Профиль</a><a href="/index.php?action=logout">Выход</a>'
 
 
@@ -58,6 +59,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get('Content-Length', '0'))
         fields = parse_qs(self.rfile.read(length).decode('ascii'), encoding='cp1251')
+        if fields.get('do') == ['search']:
+            page = int(fields.get('search_start', ['1'])[0])
+            body = (MEMBER if self.authenticated() else GUEST) + SEARCH_FORM.replace('<form ', '<form id="fullsearch" ', 1).replace('action="/"', 'action="/index.php?do=search"', 1)
+            body = body.replace('<input name="story">', f'<input type="hidden" name="full_search" value="0"><input type="hidden" name="search_start" value="{page}"><input type="hidden" name="result_from" value="{(page - 1) * 12 + 1}"><input name="story" value="Наруто">')
+            body += '<div id="dle-content">' + ''.join(self.card(anime_id).replace('class="news"', 'class="short news"') for anime_id in range(10938 + (page - 1) * 12, 10938 + page * 12)) + '</div>'
+            if page == 1:
+                body += '<div class="pagenav"><a href="#" onclick="list_submit(2); return false;">2</a></div>'
+            self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
+            return
         valid = fields.get('login_name') == ['тест'] and fields.get('login_password') == ['пароль'] and fields.get('formtoken') == ['fixture']
         if valid:
             self.server.session_active = True
@@ -122,6 +132,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 body += ''
             body += '</div>'
+            self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
+        elif path == '/':
+            body = (MEMBER if self.authenticated() else GUEST) + SEARCH_FORM
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
         elif path in ('/anime/', '/anime/page/2/', '/anime/comedy/', '/anime/comedy/page/2/', '/new/', '/new/page/2/'):
             if self.server.catalog_error and self.authenticated():
