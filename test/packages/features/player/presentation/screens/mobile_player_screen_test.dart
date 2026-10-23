@@ -1,5 +1,4 @@
 // Lifecycle pumps and native callback observations must read current state.
-// ignore_for_file: prefer-moving-to-variable
 import 'dart:async';
 
 import 'package:anistar_tv/packages/features/player/player_providers.dart';
@@ -102,7 +101,6 @@ void main() {
       'DeviceOrientation.portraitUp',
     ]);
     // Returning to portrait must still reuse the original native source.
-    // ignore: avoid-duplicate-test-assertions
     expect(video.sources.length, 1);
     await tester.binding.handlePopRoute();
     await settle(tester);
@@ -150,7 +148,6 @@ void main() {
     view = tester.widget<PlayerView>(find.byType(PlayerView));
     expect(view.controller.value.position, const Duration(seconds: 30));
     // Switching quality must preserve the pause verified before selection.
-    // ignore: avoid-duplicate-test-assertions
     expect(view.controller.value.isPlaying, isFalse);
     expect(video.sources.length, 2);
     TestWidgetsFlutterBinding.instance.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -212,7 +209,6 @@ void main() {
     await mount(tester);
     expect(find.text('Видео не запустилось'), findsOneWidget);
     // Return must remain available after failure, as it was during loading.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byKey(const ValueKey('player-back')), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
@@ -244,7 +240,6 @@ void main() {
     await settle(tester);
     expect(video.seeks.last, Duration.zero);
     // Reverse seeks must be serialized independently of the forward sequence.
-    // ignore: avoid-duplicate-test-assertions
     expect(video.maxActiveSeeks, 1);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);

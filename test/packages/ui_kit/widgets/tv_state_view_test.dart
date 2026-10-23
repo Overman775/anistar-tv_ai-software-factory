@@ -1,5 +1,4 @@
 // Repeated checks observe geometry and focus after asynchronous layout.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:flutter/services.dart';
 

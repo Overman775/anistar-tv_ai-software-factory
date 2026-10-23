@@ -1,5 +1,4 @@
 // Each assertion observes a separate remote event or asynchronous response.
-// ignore_for_file: prefer-moving-to-variable, avoid-duplicate-test-assertions
 
 import 'dart:async';
 

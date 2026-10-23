@@ -1,5 +1,4 @@
 // Each finder observes successive startup/auth states.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 
@@ -91,9 +90,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     // Recheck both replacement widgets after the form cancellation transition.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(IntroScreen), findsOneWidget);
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(LoginScreen), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('intro_guest')));
@@ -164,7 +161,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(IntroScreen), findsOneWidget);
       // Recheck after completion and a second OK during the pending restore.
-      // ignore: avoid-duplicate-test-assertions
       expect(repository.restoreCalls, 2);
       expect(tester.takeException(), isNull);
     });

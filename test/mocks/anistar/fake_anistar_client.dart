@@ -17,6 +17,9 @@ final class FakeAnistarClient implements AnistarClient {
   Future<List<AnistarEpisodeDto>> Function(int)? loadEpisodes;
   AnistarCatalogSort? lastSort;
   String? lastPath;
+  String? lastSearchQuery;
+  int? lastSearchPage;
+  RequestCancellation? lastSearchCancellation;
 
   @override
   Stream<void> get expired => expiry;
@@ -52,7 +55,13 @@ final class FakeAnistarClient implements AnistarClient {
 
   @override
   Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation}) =>
-      _reply('search', () => pageResult ?? AnistarCatalogPageDto(items: [], page: page, hasNext: false));
+      _reply('search', () {
+        lastSearchQuery = query;
+        lastSearchPage = page;
+        lastSearchCancellation = cancellation;
+
+        return pageResult ?? AnistarCatalogPageDto(items: [], page: page, hasNext: false);
+      });
 
   @override
   Future<AnistarCatalogPageDto> favorites(int page) =>

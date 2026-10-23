@@ -19,8 +19,6 @@ class _LogViewerViewState extends State<LogViewerView> {
 
   Widget _buildBody(BuildContext context, LogViewerState state) => switch (state) {
     LogViewerInitialState() || LogViewerLoadingState() => const TvProgressView(label: 'Загружаем логи…'),
-    // Private composition helpers keep scroll ownership in this state object.
-    // ignore: avoid-returning-widgets
     LogViewerLoadedState() => _buildLoadedBody(context, state),
     LogViewerErrorState() => TvStateView(
       icon: Icons.folder_off_outlined,
@@ -95,7 +93,6 @@ class _LogViewerViewState extends State<LogViewerView> {
               ),
               child: Text(error, style: TextStyle(color: colorScheme.onErrorContainer)),
             ),
-          // ignore: avoid-returning-widgets
           Expanded(child: _buildLogContent(state)),
         ],
       ),

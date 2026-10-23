@@ -1,7 +1,3 @@
-// Factories and operations describe one sealed result; DCM's ordering rules
-// require conflicting positions for its redirecting factories and fields.
-// ignore_for_file: member-ordering
-
 import 'failure.dart';
 
 /// Repositories return a value or a domain failure, never a transport exception.

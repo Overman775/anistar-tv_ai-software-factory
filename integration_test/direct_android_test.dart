@@ -1,6 +1,5 @@
 // Native playback changes between awaits: pumps and fresh controller snapshots
 // must be repeated rather than cached across those transitions.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar/html.dart';
 import 'package:anistar_tv/app/app.dart';
@@ -188,7 +187,6 @@ Future<void> _verifyFavorites(WidgetTester tester, LiveHarness live, String slug
     await _selectTab(tester, 'Избранное');
     await _wait(tester, () => card.evaluate().isNotEmpty, 'authenticated favorites list');
     // Verify the badge on the distinct favorites route as well as the main route.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.descendant(of: card, matching: find.byIcon(Icons.star_rounded)), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await live.launch(tester);

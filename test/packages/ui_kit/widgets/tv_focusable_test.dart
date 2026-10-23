@@ -1,5 +1,4 @@
 // Separate key events and assertions verify each phase of the same hold.
-// ignore_for_file: prefer-moving-to-variable, avoid-duplicate-test-assertions
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

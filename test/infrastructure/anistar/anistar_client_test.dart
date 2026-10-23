@@ -57,13 +57,11 @@ void main() {
     );
     final repository = AnistarAuthRepository(client);
     // The same login must be retried after mirror availability changes.
-    // ignore: prefer-moving-to-variable
     final blocked = await repository.signIn('test', 'private-password');
     expect(blocked.failureOrNull, isA<RequestFailure>());
     expect(adapter.requests, isEmpty);
 
     available = true;
-    // ignore: prefer-moving-to-variable
     final recovered = await repository.signIn('test', 'private-password');
     expect(recovered.successOrNull, 'test');
     expect(adapter.requests.where((request) => request.method == 'POST'), hasLength(1));

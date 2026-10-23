@@ -7,3 +7,4 @@ export 'src/anistar_favorites_html.dart';
 export 'src/anistar_html_parser.dart';
 export 'src/anistar_profile_html.dart';
 export 'src/html_decoder.dart';
+export 'src/parsed_episode.dart' show ParsedEpisode;

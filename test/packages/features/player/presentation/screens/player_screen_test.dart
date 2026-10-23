@@ -21,7 +21,6 @@ import '../../../../../support/test_app.dart';
 
 // Each await advances the player lifecycle. Repeating pumps and reading mutable
 // fake state again is intentional; caching those results changes the test.
-// ignore_for_file: prefer-moving-to-variable
 
 void main() {
   late FakeVideoPlatform video;
@@ -763,7 +762,6 @@ void main() {
     await settle(tester);
     expect(video.playCalls, isEmpty, reason: 'Late initialization must not start playback in the background');
     // Background initialization must still leave the initial flag disabled.
-    // ignore: avoid-duplicate-test-assertions
     expect(awakeCalls, [false]);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
@@ -1240,7 +1238,6 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
     // Recheck after disposal, following the earlier runtime error.
-    // ignore: avoid-duplicate-test-assertions
     expect(awakeCalls.last, isFalse);
     expect(native.disposed, [1, 2, 3]);
   });

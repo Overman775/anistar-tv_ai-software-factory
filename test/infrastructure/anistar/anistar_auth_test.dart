@@ -1,5 +1,4 @@
 // Mutable session state is intentionally observed before and after each operation.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:convert';
 
@@ -107,7 +106,6 @@ void main() {
       ..formAction = null
       ..redirect = 'https://other.example/login';
     // Redirect and form action are separate rejection paths.
-    // ignore: avoid-duplicate-test-assertions
     await expectLater(service.signIn('test', 'secret'), throwsA(isA<AnistarClientException>()));
     expect(adapter.requests.every((request) => request.uri.origin == origin.origin), isTrue);
     expect(storage.values, isEmpty);
@@ -232,7 +230,6 @@ void main() {
     await restored.initialize();
     expect(restored.account, isNull);
     // Corrupt record cleanup is independent of expiry cleanup.
-    // ignore: avoid-duplicate-test-assertions
     expect(storage.values, isEmpty);
   });
 }

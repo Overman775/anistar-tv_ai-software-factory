@@ -1,5 +1,4 @@
 // Each request/assertion observes state after a distinct site mutation.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar/anistar.dart';
 import 'package:app_logging/app_logging.dart';
@@ -40,7 +39,6 @@ void main() {
     await expectLater(source.markWatched(animeId: 10938, episodeNumber: 42), throwsA(isA<AnistarClientException>()));
     adapter.missingMediaId = true;
     // A separate malformed media ID must also fail before mutation.
-    // ignore: avoid-duplicate-test-assertions
     await expectLater(source.markWatched(animeId: 10938, episodeNumber: 1), throwsA(isA<AnistarClientException>()));
     expect(adapter.requests.where((request) => request.uri.path == '/engine/ajax/ns.php'), isEmpty);
   });

@@ -1,5 +1,4 @@
 // Assertions observe identities and focus again after each section transition.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 
@@ -63,9 +62,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
       await tester.pumpAndSettle();
       // Root Back must restore the previously active menu target and expansion.
-      // ignore: avoid-duplicate-test-assertions
       expect(focusedControlLabel(tester), 'Избранное');
-      // ignore: avoid-duplicate-test-assertions
       expect(tester.widget<CatalogNavigationRail>(rail).expanded, isTrue);
       for (var step = 0; step < 2; step++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);

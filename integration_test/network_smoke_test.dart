@@ -22,7 +22,6 @@ void main() {
     bool catalogVisible() => find.byType(CatalogScreen).evaluate().isNotEmpty;
     await LiveHarness.wait(tester, catalogVisible, 'live login');
     // Read the active scope again after restarting the application below.
-    // ignore: prefer-moving-to-variable
     final container = ProviderScope.containerOf(tester.element(find.byType(App)));
     final page = await container.read(catalogRepositoryProvider).getPage(1);
     expect(page.isSuccess, isTrue, reason: page.failureOrNull?.message);
@@ -32,7 +31,6 @@ void main() {
     await live.launch(tester);
     await LiveHarness.wait(tester, catalogVisible, 'live session restore');
     expect(live.loginPosts, 1, reason: 'Restore must use encrypted cookies without another login POST');
-    // ignore: prefer-moving-to-variable
     final restoredContainer = ProviderScope.containerOf(tester.element(find.byType(App)));
     expect(restoredContainer.read(authAccessProvider).account == LiveHarness.username, isTrue);
     await restoredContainer.read(authControllerProvider.notifier).signOut();

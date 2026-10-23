@@ -30,10 +30,8 @@ void main() {
     final fileFailure = files.failureOrNull;
     final contentFailure = content.failureOrNull;
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     expect(fileFailure, isA<LogFailure>());
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     expect(contentFailure, isA<LogFailure>());
     expect(fileFailure?.message, 'Не удалось загрузить список журналов.');
     expect(contentFailure?.message, 'Не удалось прочитать файл журнала.');

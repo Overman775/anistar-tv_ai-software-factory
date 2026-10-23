@@ -84,7 +84,6 @@ void main() {
       ..requestSignIn();
     final operation = controller.signIn('viewer', 'fixture-password');
     // This snapshot precedes cancellation; the later snapshot must sample again.
-    // ignore: prefer-moving-to-variable
     final submitting = container.read(authControllerProvider).value;
     expect(submitting?.isSigningIn, isTrue);
     expect(container.read(authAccessProvider), isA<AnonymousAccess>());
@@ -96,7 +95,6 @@ void main() {
     await operation;
     await cancellationOperation;
     // Cancellation must re-read the provider after the pending operation completes.
-    // ignore: prefer-moving-to-variable
     final current = container.read(authControllerProvider).value ?? (throw TestFailure('Expected restored auth state'));
     expect(cancellation?.isCancelled, isTrue);
     expect(current.access, same(submitting?.access));
@@ -118,7 +116,6 @@ void main() {
     const password = 'fixture-password';
     await controller.signIn(username, password);
     // This snapshot precedes retry; the later snapshot must sample again.
-    // ignore: prefer-moving-to-variable
     final failed = container.read(authControllerProvider).value ?? (throw TestFailure('Expected restored auth state'));
     expect(failed.access, isA<AnonymousAccess>());
     expect(failed.loginRequested, isTrue);
@@ -131,7 +128,6 @@ void main() {
     expect(access.account, 'viewer');
     expect(access.canUseAccount, isTrue);
     // Successful retry must sample the state after the account transition.
-    // ignore: prefer-moving-to-variable
     expect(container.read(authControllerProvider).value?.loginRequested, isFalse);
   });
 

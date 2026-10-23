@@ -264,8 +264,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
 
     if (!AppLayoutScope.isTvOf(context)) {
-      // The platform branch shares this State's bloc and scroll controller.
-      // ignore: avoid-returning-widgets
       return _mobileGrid(state);
     }
 
@@ -344,7 +342,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   Future<void> _performMobileRefresh() async {
     final bloc = _bloc;
     // Revision must be sampled again after the asynchronous refresh.
-    // ignore: prefer-moving-to-variable
     final revision = ref.read(favoritesControllerProvider).revision;
     // Logout can dispose the catalog while the refresh request is pending.
     // Wait for the refresh's terminal state, never a preceding pagination result.
@@ -359,7 +356,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     final state = bloc.state;
     // The current revision protects writes confirmed while the request was pending.
-    // ignore: prefer-moving-to-variable
     if (state is CatalogReady && ref.read(favoritesControllerProvider).revision == revision) {
       final favorites = ref.read(favoritesControllerProvider.notifier)..invalidate();
       for (final anime in state.items) {
@@ -798,8 +794,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       });
 
     if (!AppLayoutScope.isTvOf(context)) {
-      // Both layouts retain the same catalog State, bloc and navigation handlers.
-      // ignore: avoid-returning-widgets
       return _mobileScreen(context);
     }
 

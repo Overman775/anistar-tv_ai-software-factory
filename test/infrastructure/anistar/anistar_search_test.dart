@@ -121,7 +121,6 @@ void main() {
     );
     dio.httpClientAdapter = adapter;
     // The second failure comes from malformed pagination rather than the earlier charset.
-    // ignore: avoid-duplicate-test-assertions
     await expectLater(client.search('Наруто'), clientError);
   });
 
@@ -150,7 +149,6 @@ void main() {
       await client.search('Наруто');
       await client.signOut();
       // Logout must invalidate a freshly loaded continuation as account login did above.
-      // ignore: avoid-duplicate-test-assertions
       await expectLater(client.search('Наруто', page: 2), clientError);
       expect(storage.values, isEmpty);
     },

@@ -1,5 +1,4 @@
 // Each pump commits a separate remote focus transition.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

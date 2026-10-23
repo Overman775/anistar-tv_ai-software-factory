@@ -74,27 +74,19 @@ void main() {
         longCatalogOverride,
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final scroll = catalogScroll;
-    // ignore: prefer-moving-to-variable
     final initialTop = tester.getTopLeft(scroll).dy;
-    // ignore: prefer-moving-to-variable
     final navigationTop = tester.getTopLeft(navigationBar).dy;
     await tester.drag(scroll, const Offset(0, -400));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
-    // ignore: prefer-moving-to-variable
     expect(tester.getTopLeft(scroll).dy, initialTop - kToolbarHeight);
     expect(visibleAccount, findsNothing);
     expect(find.bySemanticsLabel('Аккаунт'), findsNothing);
-    // ignore: prefer-moving-to-variable
     expect(tester.getTopLeft(navigationBar).dy, navigationTop);
     // Reversal reveals the header while keeping the user's catalog position.
     await tester.drag(scroll, const Offset(0, 80));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
-    // ignore: prefer-moving-to-variable
     expect(tester.getTopLeft(scroll).dy, initialTop);
     expect(visibleAccount, findsOneWidget);
     expect(mobileCatalogController(tester, scroll).offset, greaterThan(0));
@@ -123,10 +115,8 @@ void main() {
         ),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.drag(catalogScroll, const Offset(0, -200));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(visibleAccount, findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -143,15 +133,12 @@ void main() {
         longCatalogOverride,
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final scroll = catalogScroll;
     await tester.drag(scroll, const Offset(0, -400));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final controller = mobileCatalogController(tester, scroll);
     controller.jumpTo(controller.position.maxScrollExtent);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final navigationTop = tester.getTopLeft(navigationBar).dy;
     final lastCard = find.byKey(const ValueKey(50));
@@ -160,11 +147,9 @@ void main() {
     expect(visibleAccount, findsNothing);
     final lastOffset = controller.offset;
     await tester.drag(scroll, const Offset(0, -100));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(controller.offset, lastOffset);
     // Recheck after end overscroll to catch viewport/header oscillation.
-    // ignore: avoid-duplicate-test-assertions
     expect(visibleAccount, findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -185,10 +170,8 @@ void main() {
         longCatalogOverride,
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.drag(catalogScroll, const Offset(0, -400));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(visibleAccount, findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -210,11 +193,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     final scroll = catalogScroll;
-    // ignore: prefer-moving-to-variable
     final top = tester.getTopLeft(scroll).dy;
     await tester.drag(scroll, const Offset(0, -100));
     await tester.pump();
-    // ignore: prefer-moving-to-variable
     expect(tester.getTopLeft(scroll).dy, top);
     expect(visibleAccount, findsOneWidget);
     expect(navigationBar.hitTestable(), findsOneWidget);
@@ -245,7 +226,6 @@ void main() {
         ),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final refresh = tester.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh();
     await tester.pump();
@@ -256,7 +236,6 @@ void main() {
     await tester.pump();
     await refresh;
     pending.complete(Result.success(AnimePage(items: [], page: 1, hasNext: false)));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
@@ -283,19 +262,15 @@ void main() {
         ),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.tap(genresDestination);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.tap(find.text('Повседневность'));
     expect(selected, genre);
     await tester.tap(account);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(find.text('overman'), findsOneWidget);
     await tester.tap(find.text('Выйти из аккаунта'));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(signedOut, isTrue);
     expect(tester.takeException(), isNull);
@@ -332,27 +307,22 @@ void main() {
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.drag(catalogScroll, const Offset(0, -600));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     final controller = mobileCatalogController(tester, catalogScroll);
     final offset = controller.offset;
     expect(offset, greaterThan(0));
     expect(visibleAccount, findsNothing);
     await tester.tap(favoritesDestination);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(visibleAccount, findsOneWidget);
     expect(find.text('Аниме 101'), findsOneWidget);
     await tester.binding.handlePopRoute();
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(tester.widget<NavigationBar>(navigationBar).selectedIndex, 0);
     expect(controller.offset, offset);
     // System Back must also reveal the header on the restored destination.
-    // ignore: avoid-duplicate-test-assertions
     expect(visibleAccount, findsOneWidget);
     expect(requests, [1, 1]);
     expect(favorites.pages, [1]);
@@ -432,14 +402,11 @@ void main() {
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.tap(firstCardActions);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(bottomSheet, findsOneWidget);
     await tester.tap(find.text('Добавить в избранное'));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     expect(favorites.ids, contains(1));
     expect(favorites.writes, [true]);
@@ -484,29 +451,22 @@ void main() {
         catalogBrowseRepositoryProvider.overrideWithValue(FakeCatalogBrowseRepository()),
       ],
     );
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_home_390.png'));
     await tester.tap(firstCardActions);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_actions_390.png'));
     await tester.tap(find.byTooltip('Закрыть').last);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.tap(favoritesDestination);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_favorites_empty_390.png'));
     await tester.tap(genresDestination);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_genres_390.png'));
     await tester.tap(homeDestination);
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await tester.drag(catalogScroll, const Offset(0, -250));
-    // ignore: prefer-moving-to-variable
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_home_scrolled_390.png'));
   }, tags: ['golden']);

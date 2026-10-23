@@ -1,5 +1,4 @@
 // Pumps observe each routing and focus transition.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/app/app_router.dart';
 import 'package:anistar_tv/app/app_routes.dart';

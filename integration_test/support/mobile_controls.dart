@@ -1,5 +1,4 @@
 // Touches and frame pumps must run after each separate UI transition.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';

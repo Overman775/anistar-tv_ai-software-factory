@@ -61,7 +61,7 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
     final label = 'Серия ${episode.number}';
     final title = episode.title.trim();
     final caption = title.isEmpty || title == label ? null : title;
-    final copyWidth = math.max(1.0, width - AppSpacing.md * 2);
+    final copyWidth = math.max<double>(1, width - AppSpacing.md * 2);
     final titleHeight = _textHeight(
       context: context,
       text: label,

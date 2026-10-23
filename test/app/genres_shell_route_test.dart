@@ -231,7 +231,6 @@ void main() {
     await popRoute();
     await settle();
     // First root Back opens the menu while keeping the current section mounted.
-    // ignore: avoid-duplicate-test-assertions
     expect(genresScreen, findsOneWidget);
     await popRoute();
     await settle();

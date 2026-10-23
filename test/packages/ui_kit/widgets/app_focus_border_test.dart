@@ -42,12 +42,10 @@ void main() {
       }
       await settle();
       // The completed entry must repaint beyond its earlier midpoint sample.
-      // ignore: prefer-moving-to-variable
       final entered = painted().top;
       expect(entered.color, AppPalette.focusOutline);
       expect(entered.width, 2);
       // Entry and exit require distinct geometry samples after the animation.
-      // ignore: prefer-moving-to-variable
       expect(tester.getSize(bounds), size);
       active.value = false;
       await pump();
@@ -57,15 +55,12 @@ void main() {
       if (!reduced) {
         await pump(const Duration(milliseconds: 100));
         // Sample the independent exit midpoint after advancing its own clock.
-        // ignore: prefer-moving-to-variable
         expect(painted().top.color.a, closeTo(1 - Curves.easeInCubic.transform(0.5), 0.01));
       }
       await settle();
       // Sample completion after the exit clock has fully advanced.
-      // ignore: prefer-moving-to-variable
       expect(painted().top.color, Colors.transparent);
       // Exit must retain the same geometry already checked after entry.
-      // ignore: avoid-duplicate-test-assertions, prefer-moving-to-variable
       expect(tester.getSize(bounds), size);
     });
   }

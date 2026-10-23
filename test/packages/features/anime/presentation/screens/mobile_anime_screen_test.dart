@@ -20,7 +20,6 @@ import '../../../../../mocks/features/fake_watched_episodes_repository.dart';
 import '../../../../../support/test_app.dart';
 
 // Widget state and layout are sampled again after each gesture and network response.
-// ignore_for_file: prefer-moving-to-variable
 
 const _title = 'Пожалуйста, простите моих младших братьев / Please Forgive My Younger Brothers';
 final _data = AnimeScreenData(
@@ -121,7 +120,6 @@ void main() {
       expect(tester.widget<MobileAnimeContent>(content).episodes.first.number, 7);
       expect(tester.state(content), same(originalContent), reason: 'description and scroll state survive refresh');
       // Dismissal is checked independently after failure and success.
-      // ignore: avoid-duplicate-test-assertions
       expect(find.byType(RefreshProgressIndicator), findsNothing);
       expect(tester.takeException(), isNull);
     });

@@ -1,5 +1,4 @@
 // Each assertion observes focus or UI after a separate remote event.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/app/app_router.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
@@ -99,7 +98,6 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.pumpAndSettle();
         // Re-entering the section must restore its original public menu node.
-        // ignore: avoid-duplicate-test-assertions
         expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         await tester.pumpAndSettle();

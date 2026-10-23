@@ -1,5 +1,4 @@
 // Pumps and focus reads observe successive remote events.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';

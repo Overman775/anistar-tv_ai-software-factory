@@ -20,7 +20,6 @@ import '../../../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../../../support/test_app.dart';
 
 // Focus is mutable: each assertion reads the result of the preceding key event.
-// ignore_for_file: prefer-moving-to-variable
 
 void main() {
   testWidgets('a thousand catalog entries stay virtualized and the last row remains operable', (tester) async {
@@ -107,7 +106,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(card));
     // Check the final collapsed width after the return transition.
-    // ignore: avoid-duplicate-test-assertions
     expect(tester.getSize(rail).width, 88);
     expect(tester.takeException(), isNull);
   });
@@ -332,7 +330,6 @@ void main() {
     final grid = tester.widget<SliverGrid>(gridFinder);
     expect((grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount, 2);
     // Check the loaded screen separately from the skeleton above.
-    // ignore: avoid-duplicate-test-assertions
     expect(tester.takeException(), isNull);
   });
 
@@ -373,7 +370,6 @@ void main() {
     scroll.jumpTo(scroll.position.maxScrollExtent);
     await pumpAndSettle();
     // The second assertion verifies that scrolling did not retry the failed page.
-    // ignore: avoid-duplicate-test-assertions
     expect(requests, [1, 2]);
     await tester.tap(find.byType(CatalogTail));
     await pumpAndSettle();

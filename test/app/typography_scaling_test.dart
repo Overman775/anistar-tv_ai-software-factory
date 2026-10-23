@@ -1,5 +1,4 @@
 // Each scale verifies the same focus path and text containment.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_filter_row.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
