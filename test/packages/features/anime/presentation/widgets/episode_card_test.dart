@@ -28,7 +28,6 @@ void main() {
     );
     await pumpTvApp(tester, card(siteWatched: true));
     // Recheck the independently supplied HTML mark after replacing local status.
-    // ignore: avoid-duplicate-test-assertions
     expect(check, findsOneWidget);
   });
 }

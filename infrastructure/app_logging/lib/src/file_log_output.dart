@@ -62,7 +62,7 @@ final class FileLogOutput implements LogOutput {
     }
     final List<FileSystemEntity> files;
     try {
-      // ignore: avoid_slow_async_io, directory listing must not block the UI isolate.
+      // Directory listing must not block the UI isolate.
       files = await directory.list(followLinks: false).toList();
     } on FileSystemException catch (error) {
       if (error.osError?.errorCode == 2) {

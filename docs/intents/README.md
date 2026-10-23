@@ -24,5 +24,6 @@ Intent описывает причину и желаемый результат 
 - [Немного уменьшить шрифты на главной и странице сериала](readable-smaller-typography.md).
 - [Новые идентификаторы приложения и запуск на iOS](app-identifiers-and-ios-launch.md).
 - [Аватар профиля в левом меню с инициалами при отсутствии картинки](sidebar-profile-avatar-with-initials-fallback.md).
+- [Качество разработки с ИИ: линтеры, тесты и DCM Free](ai-development-quality.md).
 
 [Документация проекта](../README.md) · [Шаблон intent](../templates/intent.md)

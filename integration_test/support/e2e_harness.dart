@@ -273,12 +273,10 @@ final class E2eHarness {
 
   Dio _transport(Logger logger) {
     final context = io.SecurityContext()..setTrustedCertificatesBytes(utf8.encode(localhostCertificate));
-    final dio = DioClient.create(
+    return DioClient.create(
       config: NetworkConfig(baseUri: origin),
       logger: logger,
     )..httpClientAdapter = IOHttpClientAdapter(createHttpClient: () => io.HttpClient(context: context));
-
-    return dio;
   }
 }
 

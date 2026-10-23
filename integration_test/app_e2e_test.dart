@@ -1,5 +1,4 @@
 // Native controller state changes on the Android event loop between pumps.
-// ignore_for_file: prefer-moving-to-variable
 
 // Deterministic Android TV suite: remote focus, TV panels and native playback.
 // Phone touch journeys live separately in mobile_e2e_test.dart.
@@ -338,7 +337,6 @@ void main() {
       'rejected login',
     );
     // Verify the gate again after this separate session transition.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
     await E2eHarness.waitFor(
       tester,
@@ -401,7 +399,6 @@ void main() {
     await _selectRail(tester, 'catalog-genres');
     await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'expired session intro');
     // Verify the gate again after this separate session transition.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
     await E2eHarness.login(tester);
     await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'second login');
@@ -426,7 +423,6 @@ void main() {
       'logout survives restart',
     );
     // Verify the gate again after this separate session transition.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -746,9 +742,7 @@ void main() {
     );
     player = E2eHarness.requirePlayer(tester);
     // Recheck position and quality on the newly created previous-episode controller.
-    // ignore: avoid-duplicate-test-assertions
     expect(player.value.position.inSeconds, lessThan(5));
-    // ignore: avoid-duplicate-test-assertions
     expect(player.value.size.height, 360);
     expect(find.byKey(const ValueKey('player-previous-episode')), findsNothing);
     await RemoteControls.nextEpisode(tester);

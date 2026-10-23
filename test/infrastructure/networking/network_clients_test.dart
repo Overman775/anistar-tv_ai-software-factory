@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:app_logging/app_logging.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -87,4 +89,90 @@ void main() {
 
     expect(requests, 1);
   });
+
+  testWidgets('retries an idempotent request until a local adapter succeeds', (tester) async {
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+    );
+    final adapter = NetworkClientsTest((attempt) => attempt == 1 ? 503 : 200);
+    dio.httpClientAdapter = adapter;
+    addTearDown(() => dio.close(force: true));
+
+    final response = dio.get<String>('/retry');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+
+    expect(((await response).statusCode, adapter.attempts), (200, 2));
+  });
+
+  testWidgets('stops retrying after the documented attempt limit', (tester) async {
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+    );
+    final adapter = NetworkClientsTest((_) => 503);
+    dio.httpClientAdapter = adapter;
+    addTearDown(() => dio.close(force: true));
+
+    final response = dio.get<String>('/retry-limit');
+    final failure = expectLater(response, throwsA(isA<DioException>()));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    await failure;
+
+    expect(adapter.attempts, 3);
+  });
+
+  testWidgets('does not retry after cancellation during a retryable local response', (tester) async {
+    final dio = DioClient.create(
+      config: config,
+      logger: Logger(level: Level.off),
+    );
+    final adapter = NetworkClientsTest((_) => 503);
+    dio.httpClientAdapter = adapter;
+    final cancellation = CancelToken();
+    addTearDown(() => dio.close(force: true));
+    final response = dio.get<String>('/cancel-retry', cancelToken: cancellation);
+    final failure = expectLater(response, throwsA(isA<DioException>()));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(adapter.attempts, 1);
+    cancellation.cancel('user cancelled');
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await failure;
+
+    expect(adapter.attempts, 1);
+  });
+}
+
+final class NetworkClientsTest implements HttpClientAdapter {
+  NetworkClientsTest(this._statusAt);
+
+  final int Function(int attempt) _statusAt;
+  int attempts = 0;
+  var _closed = false;
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) {
+    if (_closed) {
+      return Future.error(StateError('The test adapter is closed.'));
+    }
+    attempts++;
+    final status = _statusAt(attempts);
+    return Future.value(ResponseBody.fromString(status == 200 ? 'ready' : 'unavailable', status));
+  }
+
+  @override
+  void close({bool force = false}) {
+    _closed = true;
+  }
 }

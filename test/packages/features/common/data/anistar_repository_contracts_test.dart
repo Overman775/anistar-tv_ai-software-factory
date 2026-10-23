@@ -52,25 +52,19 @@ void main() {
     final catalog = AnistarCatalogRepository(client);
     final favorites = AnistarFavoritesRepository(client, null, _account);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final emptyCatalog = await catalog.getPage(1);
     expect(emptyCatalog.successOrNull?.items, isEmpty);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final emptyFavorites = await favorites.getPage(1);
     expect(emptyFavorites.successOrNull?.items, isEmpty);
     client.pageResult = AnistarCatalogPageDto(items: [], page: 2, hasNext: false);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final wrongCatalog = await catalog.getPage(1);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     expect(wrongCatalog.failureOrNull, isA<RequestFailure>());
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final wrongFavorites = await favorites.getPage(1);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     expect(wrongFavorites.failureOrNull, isA<RequestFailure>());
   });
 
@@ -183,12 +177,10 @@ void main() {
     final repository = AnistarAnimeRepository(client, null, _canUseAccount);
     client.detailResult = AnistarAnimeDetailsDto(id: 2, slug: '2-anime', title: 'Anime');
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final wrongId = await repository.getAnime(id: 1, slug: '1-anime');
     expect(wrongId.isFailure, isTrue);
     client.detailResult = AnistarAnimeDetailsDto(id: 1, slug: '1-anime', title: '');
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final emptyTitle = await repository.getAnime(id: 1, slug: '1-anime');
     expect(emptyTitle.failureOrNull, isA<RequestFailure>());
     client.pageResult = AnistarCatalogPageDto(
@@ -271,14 +263,12 @@ void main() {
     final history = AnistarWatchedEpisodesRepository(client, null, _account);
     final watched = _success(await history.getWatched(1));
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final marked = _success(await history.markStarted(animeId: 1, episodeNumber: 3));
     client.watchedResult.clear();
     expect(watched, {1, 3});
     expect(marked, {1, 3});
     expect(() => watched.add(9), throwsUnsupportedError);
     // Re-read after changing the fake response; caching would hide the behavior under test.
-    // ignore: prefer-moving-to-variable
     final unconfirmed = await history.markStarted(animeId: 1, episodeNumber: 3);
     expect(unconfirmed.isFailure, isTrue);
   });

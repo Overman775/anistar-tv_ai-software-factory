@@ -1,5 +1,4 @@
 // Each snapshot captures a different screen and focus state.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';

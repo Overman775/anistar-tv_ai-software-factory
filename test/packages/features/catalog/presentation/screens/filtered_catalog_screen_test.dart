@@ -1,5 +1,4 @@
 // Each assertion observes focus or UI after a separate remote event.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 

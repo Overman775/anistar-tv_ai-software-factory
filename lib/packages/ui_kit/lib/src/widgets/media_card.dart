@@ -138,7 +138,7 @@ class MediaCard extends StatelessWidget {
   }
 
   double _episodeCopyHeight(BuildContext context, double width) {
-    final double copyWidth = math.max(1.0, width - AppSpacing.md * 2);
+    final double copyWidth = math.max<double>(1, width - AppSpacing.md * 2);
     final titleHeight = _textHeight(
       context: context,
       text: label,

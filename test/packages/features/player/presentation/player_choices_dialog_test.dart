@@ -1,5 +1,4 @@
 // Repeated pumps observe focus and route transitions.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 

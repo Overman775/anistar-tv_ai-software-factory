@@ -54,7 +54,7 @@ final class _RetryInterceptor extends RetryInterceptor {
 
   // The dependency's retry messages include the complete request path.
   // DioLoggingInterceptor already records each attempt without credentials.
-  _RetryInterceptor({required super.dio}) : super(retryDelays: _retryDelays, retryEvaluator: _shouldRetry);
+  _RetryInterceptor({required super.dio}) : super(retries: 2, retryDelays: _retryDelays, retryEvaluator: _shouldRetry);
 
   static bool _shouldRetry(DioException error, int attempt) {
     if (error.type == DioExceptionType.cancel || error.response?.statusCode == 401) {

@@ -24,7 +24,6 @@ import '../../../../../mocks/features/fake_watched_episodes_repository.dart';
 import '../../../../../support/test_app.dart';
 
 // Focus is mutable: each assertion reads the result of the preceding key event.
-// ignore_for_file: prefer-moving-to-variable
 
 void main() {
   testWidgets('empty episodes expose remote reload and can recover to playable data', (tester) async {
@@ -232,7 +231,6 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
         expect(opened, 1);
         // Navigation must not introduce a new layout exception.
-        // ignore: avoid-duplicate-test-assertions
         expect(tester.takeException(), isNull);
       });
     }
@@ -340,12 +338,10 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       // Recheck focus after each directional transition.
-      // ignore: avoid-duplicate-test-assertions
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'Смотреть первую серию');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
       // Recheck restored focus after leaving the metadata row.
-      // ignore: avoid-duplicate-test-assertions
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'Длинный жанр 8');
       expect(tester.takeException(), isNull);
     });

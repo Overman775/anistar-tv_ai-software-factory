@@ -13,7 +13,7 @@ import '../../support/test_app.dart';
 void main() {
   test('iOS icon catalog contains opaque launcher artwork at every declared size', () async {
     const directory = 'ios/Runner/Assets.xcassets/AppIcon.appiconset';
-    final catalog = jsonDecode(await File('$directory/Contents.json').readAsString());
+    final Object? catalog = jsonDecode(await File('$directory/Contents.json').readAsString());
     if (catalog case {'images': final List<Object?> entries}) {
       expect(entries, isNotEmpty);
       for (final entry in entries) {
@@ -64,7 +64,7 @@ void main() {
     final storyboard = await File('ios/Runner/Base.lproj/LaunchScreen.storyboard').readAsString();
     expect(storyboard, contains('contentMode="scaleAspectFit" image="LaunchImage"'));
     expect(storyboard, contains('image="LaunchBackground"'));
-    final catalog = jsonDecode(await File('$directory/LaunchImage.imageset/Contents.json').readAsString());
+    final Object? catalog = jsonDecode(await File('$directory/LaunchImage.imageset/Contents.json').readAsString());
     if (catalog case {'images': final List<Object?> entries}) {
       expect(entries, hasLength(3));
       for (final entry in entries) {

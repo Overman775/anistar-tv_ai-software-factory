@@ -1,5 +1,5 @@
 // Pumps observe successive native notifications; the private widget is a test fixture.
-// ignore_for_file: prefer-moving-to-variable, prefer-match-file-name
+// ignore_for_file: prefer-match-file-name
 
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';

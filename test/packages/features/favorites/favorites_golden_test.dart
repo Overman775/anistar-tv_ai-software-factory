@@ -1,5 +1,4 @@
 // Each pump and snapshot observes a distinct navigation state.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';

@@ -1,5 +1,4 @@
 // Successive pumps deliberately observe mutable native and repository state.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 import 'dart:ui' show SemanticsAction;
@@ -140,7 +139,6 @@ void main() {
         expect(find.byType(PlayerChoicesDialog<PlaybackQuality>), findsNothing);
         expect(video.disposed, isEmpty);
         // Choosing the current row has the same no-reload contract as cancel.
-        // ignore: avoid-duplicate-test-assertions
         expect(repository.calls, 1);
         await unmount(tester);
         semantics.dispose();

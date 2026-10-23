@@ -1,5 +1,4 @@
 // Golden matrix and callback observations intentionally reuse fixture state.
-// ignore_for_file: prefer-moving-to-variable
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';
 import 'package:anistar_tv/packages/features/player/presentation/widgets/mobile_player_controls.dart';

@@ -70,7 +70,6 @@ void main() {
       'dle_direction_cat=desc; Path=/',
     ], 0);
     // Read before and after the request to detect mutation.
-    // ignore: prefer-moving-to-variable
     final before = await session.cookieHeader(origin);
     const sort = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
     final dio = Dio(BaseOptions(baseUrl: origin.toString()));
@@ -89,7 +88,6 @@ void main() {
     expect(sent, contains('dle_user_id=42'));
     expect(sent, contains('dle_sort_cat=title'));
     expect(sent, isNot(contains('dle_sort_cat=rating')));
-    // ignore: prefer-moving-to-variable
     expect(await session.cookieHeader(origin), before);
     await client.catalog(1);
     expect(adapter.requests.last.headers['Cookie'], before);

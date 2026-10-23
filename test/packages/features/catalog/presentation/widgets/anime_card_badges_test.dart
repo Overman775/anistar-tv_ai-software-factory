@@ -1,5 +1,4 @@
 // Each finder observes a distinct pump or semantic assertion.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';

@@ -142,7 +142,6 @@ void main() {
     final page = await container.read(catalogRepositoryProvider).getPage(1);
     expect(page.successOrNull?.items.single.id, 10938);
     // Capture different requests before and after logout, never reuse a snapshot.
-    // ignore: prefer-moving-to-variable
     final authenticatedHeaders = adapter.requests.last.headers;
     expect(authenticatedHeaders['Cookie'], contains('dle_password=session-secret'));
     expect(container.read(anistarClientProvider), same(client));
@@ -151,7 +150,6 @@ void main() {
     expect((await auth.signOut()).isSuccess, isTrue);
     expect(await client.restore(), isNull);
     await expectLater(client.catalog(1), throwsA(isA<AnistarClientException>()));
-    // ignore: prefer-moving-to-variable
     final guestHeaders = adapter.requests.last.headers;
     expect(guestHeaders.containsKey('Cookie'), isFalse);
   });

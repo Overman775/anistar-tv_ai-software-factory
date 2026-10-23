@@ -1,5 +1,4 @@
 // Each assertion observes focus or UI after a separate remote event.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 
@@ -68,7 +67,6 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pumpAndSettle();
       // Boundary navigation must leave focus on the same tile.
-      // ignore: avoid-duplicate-test-assertions
       expect(FocusManager.instance.primaryFocus?.debugLabel, 'Жанр 0');
       for (var i = 0; i < 14; i++) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);

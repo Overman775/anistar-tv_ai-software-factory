@@ -1,5 +1,4 @@
 // Each repeated mark/read observes a new persistence or account transition.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 
@@ -101,7 +100,6 @@ void main() {
     container.invalidate(watchHistoryAccountProvider);
     expect(await container.read(provider.future), isEmpty);
     // Repeat after changing the scope to anonymous; this is a separate guard.
-    // ignore: avoid-duplicate-test-assertions
     expect(await container.read(provider.notifier).markStarted(1), isFalse);
     expect(repository.writes, writes);
   });

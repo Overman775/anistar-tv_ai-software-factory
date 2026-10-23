@@ -1,5 +1,4 @@
 // Each native observation and touch pump samples a new device state.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
@@ -136,7 +135,6 @@ void main() {
       'logout intro survives restart',
     );
     // A new restored client must remain outside the authenticated shell.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(MobileHomeShell), findsNothing);
   });
 

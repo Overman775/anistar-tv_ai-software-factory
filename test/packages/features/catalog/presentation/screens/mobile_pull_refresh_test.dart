@@ -17,7 +17,6 @@ import '../../../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../../../support/test_app.dart';
 
 // Each read samples widget state or geometry after a different gesture/response.
-// ignore_for_file: prefer-moving-to-variable
 
 Future<void> pull(WidgetTester tester, Finder scroll) async {
   await tester.drag(scroll, const Offset(0, 350));
@@ -99,7 +98,6 @@ void main() {
           expect(find.text('Аниме 2'), findsOneWidget);
           expect(find.descendant(of: tab, matching: find.text('Аниме 1')), findsNothing);
           // Check dismissal independently after failure and then after recovery.
-          // ignore: avoid-duplicate-test-assertions
           expect(find.byType(RefreshProgressIndicator), findsNothing);
           expect(find.text('Обновить контент'), findsNothing);
           expect(tester.takeException(), isNull);

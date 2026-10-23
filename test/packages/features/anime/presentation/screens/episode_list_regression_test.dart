@@ -19,7 +19,6 @@ import '../../../../../mocks/features/anime/fake_anime_screen_repository.dart';
 import '../../../../../support/test_app.dart';
 
 // Repeated reads observe layout and focus after different asynchronous transitions.
-// ignore_for_file: prefer-moving-to-variable
 
 const _longTitle = 'Очень длинное собственное название серии о путешествии друзей через незнакомые города';
 
@@ -225,6 +224,32 @@ void main() {
     await tester.pumpAndSettle();
     expect((_focusedNumber(), controller?.offset), (2, offset));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('episode focus only moves on KeyDown or KeyRepeat, never KeyUp', (tester) async {
+    await pumpTvApp(
+      tester,
+      const AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: 'Аниме', onEpisodeTap: _unexpected),
+      wrapInScaffold: false,
+      overrides: [
+        animeRepositoryProvider.overrideWithValue(
+          FakeAnimeScreenRepository(load: (_, _) async => Result.success(_data(8))),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(_focusedNumber(), isNull);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(_focusedNumber(), 8);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(_focusedNumber(), 5);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(_focusedNumber(), 5);
   });
 
   testWidgets('a removed focused episode leaves an available action and an empty list can reload', (tester) async {

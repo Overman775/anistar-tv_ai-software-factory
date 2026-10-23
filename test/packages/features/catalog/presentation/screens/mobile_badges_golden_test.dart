@@ -39,12 +39,10 @@ void main() {
         ],
       );
       // Each pump observes the preceding navigation state.
-      // ignore: prefer-moving-to-variable
       await tester.pumpAndSettle();
       if (favorites) {
         await tester.tap(find.byType(NavigationDestination).at(2));
         // Each pump observes the preceding navigation state.
-        // ignore: prefer-moving-to-variable
         await tester.pumpAndSettle();
       }
       expect(find.text('8,7'), findsNothing);

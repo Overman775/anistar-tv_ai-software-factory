@@ -1,5 +1,4 @@
 // Finder evaluation is repeated to observe widget replacement across auth transitions.
-// ignore_for_file: prefer-moving-to-variable
 
 import 'dart:async';
 
@@ -207,10 +206,8 @@ void main() {
     repository.expire();
     await settle();
     // Recheck the gate after an authenticated router existed.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(IntroScreen), findsOneWidget);
     // The catalog was present before expiry.
-    // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -277,7 +274,6 @@ void main() {
     expect(error.flagsCollection.isLiveRegion, isTrue);
     expect(error.label, contains(const AuthInvalidCredentialsFailure().message));
     // Focus is checked again after a separate, rejected network operation.
-    // ignore: avoid-duplicate-test-assertions
     expect(tester.widget<EditableText>(find.descendant(of: password, matching: field)).focusNode.hasFocus, isTrue);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -318,7 +314,6 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
     // Recheck the same target after the explicit reverse transition from submit.
-    // ignore: avoid-duplicate-test-assertions
     expect(FocusManager.instance.primaryFocus, same(passwordNode));
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowUp);

@@ -32,7 +32,6 @@ void main() {
     expect(await resolveProfile(), AppDeviceProfile.mobile);
     messenger.setMockMethodCallHandler(AppDeviceProfileResolver.channel, (_) async => throw MissingPluginException());
     // Missing-plugin fallback must be verified separately from the successful mobile response.
-    // ignore: avoid-duplicate-test-assertions
     expect(await resolveProfile(), AppDeviceProfile.mobile);
   });
 
