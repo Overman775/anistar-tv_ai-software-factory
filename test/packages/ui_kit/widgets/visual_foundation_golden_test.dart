@@ -49,6 +49,7 @@ void main() {
                       label: 'Избранное',
                       caption: 'Смотрю',
                       selected: true,
+                      showBookmark: true,
                       onPressed: () => fail('Unexpected activation'),
                     ),
                   ),

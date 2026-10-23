@@ -240,7 +240,7 @@ void main() {
     expect(_focusedNumber(), 8);
     await pumpTvApp(tester, screen('empty'), overrides: overrides, wrapInScaffold: false);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное сериала');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить серии');
     expect(find.byType(EpisodeCard), findsNothing);
     await _key(tester, LogicalKeyboardKey.arrowDown);
     expect(find.widgetWithText(AppButton, 'Обновить серии').hitTestable(), findsOneWidget);
@@ -276,7 +276,9 @@ void main() {
     final content = find.byType(MobileAnimeContent);
     final state = tester.state(content);
     final row = find.byKey(const ValueKey('mobile-episode-20'));
-    await tester.scrollUntilVisible(row, 200, scrollable: find.byType(Scrollable).first);
+    final list = find.descendant(of: content, matching: find.byType(Scrollable));
+    expect(list, findsOneWidget);
+    await tester.scrollUntilVisible(row, 200, scrollable: list);
     await tester.pumpAndSettle();
     final controller = tester.widget<MobileAnimeContent>(content).controller;
     final offset = controller.offset;
@@ -286,7 +288,7 @@ void main() {
     expect(controller.offset, offset);
     expect(loads, 1);
     expect(AppLayoutScope.isTvOf(tester.element(content)), isFalse);
-    await tester.scrollUntilVisible(row, -100, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(row, -100, scrollable: list);
     await tester.pumpAndSettle();
     final node = tester.semantics.simulatedAccessibilityTraversal().singleWhere((node) => node.label == 'Серия 20');
     node.owner?.performAction(node.id, SemanticsAction.tap);

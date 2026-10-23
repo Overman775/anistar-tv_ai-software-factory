@@ -3,10 +3,12 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_copy.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_rating.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../../../../../support/test_app.dart';
@@ -16,6 +18,25 @@ const _second = AnimeSummary(id: 2, slug: '2-second', title: 'Второй та�
 const _last = AnimeSummary(id: 3, slug: '3-last', title: 'Последний тайтл');
 
 void main() {
+  testWidgets('TV inspector presents a valid rating without an outlined metadata badge', (tester) async {
+    final semantics = tester.ensureSemantics();
+    const anime = AnimeSummary(id: 1, slug: '1-first', title: 'Первый тайтл', rating: 8.7);
+    await pumpTvApp(tester, const CatalogInspector(anime: anime));
+    final rating = find.byType(CatalogInspectorRating);
+    final ratingValue = find.text('8,7');
+    final ratingScale = find.text('/ 10');
+    final ratingSemantics = find.bySemanticsLabel('Рейтинг 8,7 из 10');
+    final atLeastOne = findsAtLeastNWidgets(1);
+
+    expect(rating, atLeastOne);
+    expect(find.descendant(of: rating, matching: ratingValue), atLeastOne);
+    expect(find.descendant(of: rating, matching: ratingScale), atLeastOne);
+    expect(find.descendant(of: rating, matching: find.byType(AppMetadataBadge)), findsNothing);
+    expect(ratingSemantics, atLeastOne);
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
   testWidgets('inspector dwell does not rebuild the grid or issue another catalog query', (tester) async {
     var requests = 0;
     await pumpTvApp(

@@ -20,6 +20,7 @@ class MobileHomeShell extends StatefulWidget {
     this.onGenreSelected,
     this.onOpenGenres,
     this.accountName,
+    this.accountImageUrl,
     this.onSignOut,
     this.onSignIn,
     this.root = false,
@@ -37,6 +38,7 @@ class MobileHomeShell extends StatefulWidget {
   final ValueChanged<CatalogFilter>? onGenreSelected;
   final VoidCallback? onOpenGenres;
   final String? accountName;
+  final String? accountImageUrl;
   final VoidCallback? onSignOut;
   final VoidCallback? onSignIn;
   final bool root;
@@ -154,10 +156,11 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
       builder: (sheetContext) => AppActionSheet(
         title: 'Аккаунт',
         mobileHeightFactor: 0.65,
+        expandChild: true,
         child: ListView(
           children: [
             if (widget.accountName case final name?) ...[
-              AccountIdentity(name: name),
+              AccountIdentity(name: name, imageUrl: widget.accountImageUrl),
               const SizedBox(height: AppSpacing.lg),
             ],
             if (widget.onSignOut != null)

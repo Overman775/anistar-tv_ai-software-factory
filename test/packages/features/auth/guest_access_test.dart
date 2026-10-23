@@ -44,6 +44,34 @@ void main() {
     expect((await restarted.read(authControllerProvider.future)).access, isA<UnauthenticatedAccess>());
   });
 
+  test('unauthenticated sign-in request opens the form and a safe cancellation restores intro access', () async {
+    final repository = FakeAuthRepository();
+    addTearDown(repository.close);
+    final container = ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repository)]);
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.future);
+    final controller = container.read(authControllerProvider.notifier);
+    AuthSessionState currentSession() => container.read(authControllerProvider).requireValue;
+
+    final initial = currentSession();
+    final originalAccess = initial.access;
+    final sameOriginalAccess = same(originalAccess);
+    expect(originalAccess, isA<UnauthenticatedAccess>());
+
+    controller.requestSignIn();
+    final requested = currentSession();
+    expect(requested.access, sameOriginalAccess);
+    expect(requested.loginRequested, isTrue);
+    expect(requested.profileContextGeneration, initial.profileContextGeneration);
+
+    await controller.cancelSignIn();
+    final restored = currentSession();
+    expect(restored.access, sameOriginalAccess);
+    expect(restored.loginRequested, isFalse);
+    expect(restored.requiresCancellation, isFalse);
+    expect(repository.cancellationCalls, 0);
+  });
+
   test('cancelled guest login preserves guest access and rejects late confirmation', () async {
     final pending = Completer<Result<String, Failure>>();
     final repository = FakeAuthRepository()..pendingLogin = pending;
@@ -122,6 +150,36 @@ void main() {
       container.dispose();
       await repository.close();
     }
+  });
+
+  test('profile state is cleared between authenticated contexts', () async {
+    final repository = FakeAuthRepository()..restoreResult = const Result.success('first-account');
+    addTearDown(repository.close);
+    final container = ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repository)]);
+    addTearDown(container.dispose);
+    await container.read(authControllerProvider.future);
+    await Future<void>.delayed(Duration.zero);
+
+    final first = container.read(authProfileStateProvider);
+    expect(first.account, 'first-account');
+    expect(first.loadState, AuthProfileLoadState.loaded);
+    expect(first.profile?.imageUri, isNull);
+    expect(first.failure, isNull);
+
+    await container.read(authControllerProvider.notifier).signOut();
+    final inactive = container.read(authProfileStateProvider);
+    expect(inactive.loadState, AuthProfileLoadState.inactive);
+    expect(inactive.account, isNull);
+
+    final controller = container.read(authControllerProvider.notifier)..requestSignIn();
+    repository.loginResult = const Result.success('second-account');
+    await controller.signIn('second-account', 'fixture-password');
+    await Future<void>.delayed(Duration.zero);
+    final second = container.read(authProfileStateProvider);
+    expect(second.account, 'second-account');
+    expect(second.loadState, AuthProfileLoadState.loaded);
+    expect(second.profile?.imageUri, isNull);
+    expect(second.contextGeneration, greaterThan(first.contextGeneration));
   });
 
   test('failed restoration never enables the explicit guest action', () async {

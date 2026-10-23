@@ -69,14 +69,19 @@ class IsolatedInfrastructureTest(unittest.TestCase):
         self.assertTrue(Path(os.environ['ANISTAR_FAKE_ADB_STATE']).is_file())
 ''')
         (self.project / 'tool/e2e/fixture_server.py').write_text('''
-import argparse, signal
+import argparse, json, signal
 from pathlib import Path
 parser=argparse.ArgumentParser()
 parser.add_argument('--ready-file')
 parser.add_argument('--event-log')
+parser.add_argument('--native-ime-adb')
+parser.add_argument('--native-ime-device')
+parser.add_argument('--native-ime-package')
 args=parser.parse_args()
 Path(args.ready_file).write_text('50234')
 Path(args.event_log).write_text('')
+with Path('fixture-server-args.jsonl').open('a') as stream:
+    stream.write(json.dumps(vars(args)) + '\\n')
 signal.pause()
 ''')
         sdk = Path(self.environment['ANISTAR_FLUTTER_SDK'])
@@ -180,6 +185,13 @@ elif 'test' in args:
         self.assertEqual([run['exit_code'] for run in summary['runs']], [4, 0])
         self.assertEqual([run['status'] for run in summary['runs']], ['failed', 'passed'])
         self.assertEqual([run['native_tests'] for run in summary['runs']], [1, 1])
+        starts = [json.loads(line) for line in (self.project / 'fixture-server-args.jsonl').read_text().splitlines()]
+        self.assertEqual(starts[0]['native_ime_adb'], str(self.sdk / 'platform-tools/adb'))
+        self.assertEqual(starts[0]['native_ime_device'], 'emulator-5556')
+        self.assertEqual(starts[0]['native_ime_package'], 'com.anistar.tv.dev')
+        self.assertIsNone(starts[1]['native_ime_adb'])
+        self.assertIsNone(starts[1]['native_ime_device'])
+        self.assertIsNone(starts[1]['native_ime_package'])
         self.assertFalse((self.project / 'build/e2e/.flutter.lock').exists())
 
     def test_successful_sdk_without_native_events_fails_closed(self):

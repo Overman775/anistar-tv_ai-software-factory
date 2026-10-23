@@ -17,6 +17,7 @@ class MobileEpisodeRow extends StatelessWidget {
     final caption = EpisodeCaption(number: episode.number, title: episode.title);
 
     return MediaCard(
+      episodeHeight: 92,
       variant: MediaCardVariant.episode,
       label: caption.numberLabel,
       caption: caption.descriptiveTitle,

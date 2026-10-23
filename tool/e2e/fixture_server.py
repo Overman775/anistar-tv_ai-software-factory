@@ -9,6 +9,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
+from native_ime import NativeImeSnapshot, read_native_ime
+
 ROOT = Path(__file__).resolve().parents[2]
 CERT = ROOT / 'android/app/src/debug/res/raw/e2e_localhost.pem'
 MEDIA = ROOT / 'tool/e2e/media'
@@ -21,7 +23,7 @@ MEMBER = '<a href="javascript:void(0)">Профиль</a><a href="/index.php?act
 class FixtureServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, port=0, event_log=None):
+    def __init__(self, port=0, event_log=None, native_ime_reader=None):
         super().__init__(('127.0.0.1', port), Handler)
         self.origin = f'https://localhost:{self.server_port}'
         self.lock = threading.Lock()
@@ -35,6 +37,7 @@ class FixtureServer(ThreadingHTTPServer):
         self.favorite_writes = 0
         self.favorite_error = False
         self.watched = set()
+        self.native_ime_reader = native_ime_reader
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(CERT, ROOT / 'tool/e2e/tls/localhost.key')
         self.socket = context.wrap_socket(self.socket, server_side=True)
@@ -105,6 +108,12 @@ class Handler(BaseHTTPRequestHandler):
             with self.server.lock:
                 state = {'events': list(self.server.events), 'player_pages': self.server.player_pages, 'favorites': sorted(self.server.favorites), 'favorite_writes': self.server.favorite_writes, 'watched': sorted(self.server.watched)}
             self.reply(200, json.dumps(state).encode(), 'application/json', record=False)
+        elif path == '/__test/native-ime':
+            try:
+                snapshot = self.server.native_ime_reader() if self.server.native_ime_reader else NativeImeSnapshot.unavailable()
+            except Exception:
+                snapshot = NativeImeSnapshot.error()
+            self.reply(200, json.dumps(snapshot.as_json()).encode(), 'application/json', record=False)
         elif path == '/engine/ajax/favorites.php':
             with self.server.lock:
                 self.server.favorite_writes += 1
@@ -249,8 +258,15 @@ def main():
     parser.add_argument('--port', type=int, default=0)
     parser.add_argument('--ready-file', type=Path, required=True)
     parser.add_argument('--event-log', type=Path)
+    parser.add_argument('--native-ime-adb')
+    parser.add_argument('--native-ime-device')
+    parser.add_argument('--native-ime-package')
     args = parser.parse_args()
-    with FixtureServer(args.port, args.event_log) as server:
+    configured = (args.native_ime_adb, args.native_ime_device, args.native_ime_package)
+    native_ime_reader = None
+    if all(configured):
+        native_ime_reader = lambda: read_native_ime(*configured)
+    with FixtureServer(args.port, args.event_log, native_ime_reader) as server:
         args.ready_file.write_text(str(server.server_port))
         server.serve_forever()
 

@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:core/data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auth_profile_controller.dart';
 import 'auth_repository_provider.dart';
 import 'auth_startup_stage.dart';
 import 'domain/auth_access.dart';
+import 'domain/auth_repository.dart';
 
 final class AuthController extends AsyncNotifier<AuthSessionState> {
   int _operation = 0;
@@ -19,14 +21,15 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
       if (state.value?.requiresCancellation == true) {
         return;
       }
-      _operation++;
+      final contextGeneration = ++_operation;
       _signInCancellation?.cancel();
       if (ref.read(authStartupStageProvider) != AuthStartupStage.complete) {
         ref.invalidateSelf();
 
         return;
       }
-      state = const AsyncData(AuthSessionState(UnauthenticatedAccess()));
+      ref.read(authProfileStateProvider.notifier).clear();
+      state = AsyncData(AuthSessionState(const UnauthenticatedAccess(), profileContextGeneration: contextGeneration));
     });
     ref.onDispose(() {
       _signInCancellation?.cancel();
@@ -37,6 +40,7 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     if (!ref.mounted || operation != _operation) {
       return const AuthSessionState(UnknownAccess());
     }
+    ref.read(authProfileStateProvider.notifier).clear();
     ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.site;
     final result = await repository.restore(
       onSessionCheck: () {
@@ -52,8 +56,14 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     return result.when(
       success: (account) {
         ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.complete;
+        if (account != null) {
+          _loadProfile(repository, account: account, contextGeneration: operation);
+        }
 
-        return AuthSessionState(account == null ? const UnauthenticatedAccess() : AuthenticatedAccess(account));
+        return AuthSessionState(
+          account == null ? const UnauthenticatedAccess() : AuthenticatedAccess(account),
+          profileContextGeneration: operation,
+        );
       },
       failure: (failure) => throw failure,
     );
@@ -65,31 +75,48 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
         ref.read(authStartupStageProvider) != AuthStartupStage.complete) {
       return;
     }
-    _operation++;
-    state = const AsyncData(AuthSessionState(AnonymousAccess()));
+    final operation = ++_operation;
+    state = AsyncData(AuthSessionState(const AnonymousAccess(), profileContextGeneration: operation));
   }
 
   void requestSignIn() {
-    final access = state.value?.access;
-    if (access is AnonymousAccess && !state.isLoading && state.value?.requiresCancellation != true) {
-      state = AsyncData(AuthSessionState(access, loginRequested: true));
+    final session = state.value;
+    if (session == null ||
+        (session.access is! AnonymousAccess && session.access is! UnauthenticatedAccess) ||
+        state.isLoading ||
+        session.requiresCancellation) {
+      return;
     }
+    state = AsyncData(
+      AuthSessionState(
+        session.access,
+        loginRequested: true,
+        profileContextGeneration: session.profileContextGeneration,
+      ),
+    );
   }
 
   Future<void> cancelSignIn() async {
     final previous = state.value;
-    if (previous?.access is! AnonymousAccess || previous?.isCancellingSignIn == true) {
+    if (previous == null ||
+        (previous.access is! AnonymousAccess && previous.access is! UnauthenticatedAccess) ||
+        previous.isCancellingSignIn) {
       return;
     }
     final operation = ++_operation;
     final cancellation = _signInCancellation;
     if (cancellation == null) {
-      state = const AsyncData(AuthSessionState(AnonymousAccess()));
+      state = AsyncData(AuthSessionState(previous.access, profileContextGeneration: previous.profileContextGeneration));
 
       return;
     }
-    state = const AsyncData(
-      AuthSessionState(AnonymousAccess(), loginRequested: true, operation: AuthOperation.cancellingSignIn),
+    state = AsyncData(
+      AuthSessionState(
+        previous.access,
+        loginRequested: true,
+        operation: AuthOperation.cancellingSignIn,
+        profileContextGeneration: previous.profileContextGeneration,
+      ),
     );
     cancellation.cancel();
     final result = await ref.read(authRepositoryProvider).cancelSignIn(cancellation);
@@ -99,15 +126,18 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     result.when(
       success: (_) {
         _signInCancellation = null;
-        state = const AsyncData(AuthSessionState(AnonymousAccess()));
+        state = AsyncData(
+          AuthSessionState(previous.access, profileContextGeneration: previous.profileContextGeneration),
+        );
       },
       failure: (failure) {
         state = AsyncData(
           AuthSessionState(
-            const AnonymousAccess(),
+            previous.access,
             loginRequested: true,
             operation: AuthOperation.cancellationFailed,
             cancellationFailure: failure,
+            profileContextGeneration: previous.profileContextGeneration,
           ),
         );
       },
@@ -122,7 +152,12 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     final operation = ++_operation;
     final cancellation = _signInCancellation = RequestCancellation();
     state = AsyncData(
-      AuthSessionState(previous.access, loginRequested: previous.loginRequested, operation: AuthOperation.signingIn),
+      AuthSessionState(
+        previous.access,
+        loginRequested: previous.loginRequested,
+        operation: AuthOperation.signingIn,
+        profileContextGeneration: previous.profileContextGeneration,
+      ),
     );
     final result = await ref.read(authRepositoryProvider).signIn(username, password, cancellation: cancellation);
     if (!ref.mounted || operation != _operation || cancellation.isCancelled) {
@@ -130,9 +165,19 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     }
     _signInCancellation = null;
     state = result.when(
-      success: (account) => AsyncData(AuthSessionState(AuthenticatedAccess(account))),
-      failure: (failure) =>
-          AsyncData(AuthSessionState(previous.access, loginRequested: previous.loginRequested, signInFailure: failure)),
+      success: (account) {
+        _loadProfile(ref.read(authRepositoryProvider), account: account, contextGeneration: operation);
+
+        return AsyncData(AuthSessionState(AuthenticatedAccess(account), profileContextGeneration: operation));
+      },
+      failure: (failure) => AsyncData(
+        AuthSessionState(
+          previous.access,
+          loginRequested: previous.loginRequested,
+          signInFailure: failure,
+          profileContextGeneration: previous.profileContextGeneration,
+        ),
+      ),
     );
   }
 
@@ -148,7 +193,8 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
 
     return result.when(
       success: (_) {
-        state = const AsyncData(AuthSessionState(UnauthenticatedAccess()));
+        ref.read(authProfileStateProvider.notifier).clear();
+        state = AsyncData(AuthSessionState(const UnauthenticatedAccess(), profileContextGeneration: operation));
 
         return null;
       },
@@ -162,5 +208,16 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     }
     ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.site;
     ref.invalidateSelf();
+  }
+
+  void _loadProfile(AuthRepository repository, {required String account, required int contextGeneration}) {
+    final controller = ref.read(authProfileStateProvider.notifier);
+    final origin = repository.profileOrigin;
+    if (origin == null) {
+      controller.unavailable(account: account, contextGeneration: contextGeneration);
+
+      return;
+    }
+    controller.load(account: account, origin: origin, contextGeneration: contextGeneration);
   }
 }

@@ -76,6 +76,7 @@ class _CatalogSortSheetState extends State<CatalogSortSheet> {
   Widget build(BuildContext context) => AppActionSheet(
     title: 'Сортировка',
     closeOnLeft: false,
+    expandChild: true,
     child: Focus(
       canRequestFocus: false,
       onKeyEvent: _handleKey,

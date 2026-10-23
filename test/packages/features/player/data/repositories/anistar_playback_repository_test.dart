@@ -48,4 +48,33 @@ void main() {
     final missing = await repository.createSession(animeId: 10938, episodeNumber: 9);
     expect(missing.when(failure: (failure) => failure, success: (_) => null), isA<PlaybackFailure>());
   });
+
+  test('session keeps episode title, nullable preview and account-confirmed watched state', () async {
+    final source = playerHtml
+        .replaceFirst("image:'/preview.jpg'", 'image:null')
+        .replaceFirst('extra:[[1,2]],files:[', 'extra:[[1,2]],viewing:true,files:[');
+    final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'))
+      ..httpClientAdapter = HtmlFixtureAdapter({'/test/player2/videoas_p2p_new.php': source});
+    addTearDown(() => dio.close(force: true));
+    final client = createTestAnistarClient(dio);
+
+    final accountSession = (await AnistarPlaybackRepository(client, null, () => true).createSession(
+      animeId: 10938,
+      episodeNumber: 1,
+    )).when(failure: (failure) => fail(failure.message), success: (value) => value);
+
+    expect(accountSession.episodes.map((episode) => episode.number), [1, 2]);
+    expect(accountSession.episodes[0].title, 'Серия 1');
+    expect(accountSession.episodes[0].previewUri, Uri.parse('https://v30.astar.bz/preview.jpg'));
+    expect(accountSession.episodes[0].isWatched, isTrue);
+    expect(accountSession.episodes[1].title, 'Серия 2');
+    expect(accountSession.episodes[1].previewUri, isNull);
+    expect(accountSession.episodes[1].isWatched, isFalse);
+
+    final guestSession = (await AnistarPlaybackRepository(client, null, () => false).createSession(
+      animeId: 10938,
+      episodeNumber: 1,
+    )).when(failure: (failure) => fail(failure.message), success: (value) => value);
+    expect(guestSession.episodes[0].isWatched, isFalse);
+  });
 }

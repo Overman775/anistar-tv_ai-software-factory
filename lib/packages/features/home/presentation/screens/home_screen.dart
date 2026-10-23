@@ -21,6 +21,7 @@ class HomeScreen extends ConsumerStatefulWidget {
     this.onSignOut,
     this.onSignIn,
     this.accountName,
+    this.accountImageUrl,
     this.onRootBack,
     this.destination = HomeDestination.home,
     this.onDestinationSelected,
@@ -29,6 +30,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
   final ValueChanged<CatalogFilter>? onGenreSelected;
   final String? accountName;
+  final String? accountImageUrl;
   final ValueChanged<AnimeSummary> onAnimeTap;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onOpenGenres;
@@ -187,6 +189,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) => !AppLayoutScope.isTvOf(context)
       ? MobileHomeShell(
           accountName: widget.accountName,
+          accountImageUrl: widget.accountImageUrl,
           destination: _destination,
           onDestinationSelected: _select,
           onAnimeTap: widget.onAnimeTap,
@@ -205,6 +208,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: TvRouteShell(
               destination: _destination,
               accountName: widget.accountName,
+              accountImageUrl: widget.accountImageUrl,
               onDestinationSelected: _select,
               onSignOut: widget.onSignOut,
               onSignIn: widget.onSignIn,

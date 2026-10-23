@@ -5,9 +5,13 @@ import 'auth_startup_stage.dart';
 import 'domain/auth_access.dart';
 
 export 'auth_controller.dart';
+export 'auth_profile_controller.dart';
 export 'auth_repository_provider.dart';
 export 'auth_startup_stage.dart';
 export 'domain/auth_access.dart';
+export 'domain/auth_profile.dart';
+export 'domain/auth_profile_load_state.dart';
+export 'domain/auth_profile_state.dart';
 
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthSessionState>(
   AuthController.new,

@@ -64,6 +64,33 @@ final class E2eHarness {
     await _control.get<void>('/__test/expire');
   }
 
+  Future<NativeImeSnapshot> nativeImeSnapshot() async {
+    final response = await _control.get<Object?>('/__test/native-ime');
+
+    return NativeImeSnapshot.fromJson(response.data);
+  }
+
+  Future<void> waitForNativeIme(WidgetTester tester, {required bool visible, required String step}) async {
+    debugPrint('E2E: $step');
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    NativeImeSnapshot? latest;
+    while (DateTime.now().isBefore(deadline)) {
+      expect(tester.binding.framesEnabled, isTrue, reason: '$step: lifecycle=${tester.binding.lifecycleState}');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull, reason: step);
+      latest = await nativeImeSnapshot();
+      if (!latest.available || !latest.querySucceeded || latest.status == 'error' || latest.status == 'unavailable') {
+        fail('$step: native IME snapshot unavailable (${latest.status})');
+      }
+      if (visible ? latest.isVisible : latest.isHidden) {
+        return;
+      }
+    }
+    fail(
+      'Timed out: $step; native IME status=${latest?.status}; focus: ${FocusManager.instance.primaryFocus?.debugLabel}',
+    );
+  }
+
   Future<void> launch(
     WidgetTester tester, {
     bool autoLogin = true,
@@ -111,11 +138,13 @@ final class E2eHarness {
   }
 
   static Future<void> login(WidgetTester tester, {String password = 'пароль'}) async {
+    final mobile = await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile;
+    await openSignIn(tester, mobile: mobile);
     final submit = find.byKey(const ValueKey('login_submit'));
     await waitFor(tester, () => submit.evaluate().isNotEmpty && !tester.widget<AppButton>(submit).busy, 'login ready');
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
     await tester.enterText(find.byKey(const ValueKey('login_password')), password);
-    if (await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile) {
+    if (mobile) {
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       await tester.tap(submit.hitTestable());
@@ -130,6 +159,27 @@ final class E2eHarness {
       const ValueKey('login_submit'),
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+  }
+
+  /// Opens Intro's explicit sign-in choice, or keeps an already-open form.
+  static Future<void> openSignIn(WidgetTester tester, {required bool mobile}) async {
+    final signIn = find.byKey(const ValueKey('intro_sign_in'));
+    final submit = find.byKey(const ValueKey('login_submit'));
+    await waitFor(
+      tester,
+      () => signIn.evaluate().isNotEmpty || submit.evaluate().isNotEmpty,
+      'authentication entry ready',
+    );
+    if (signIn.evaluate().isEmpty) {
+      return;
+    }
+    await waitFor(tester, () => signIn.hitTestable().evaluate().length == 1, 'intro sign-in ready');
+    if (mobile) {
+      await tester.tap(signIn.hitTestable());
+    } else {
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    }
     await tester.pump();
   }
 
@@ -229,5 +279,46 @@ final class E2eHarness {
     )..httpClientAdapter = IOHttpClientAdapter(createHttpClient: () => io.HttpClient(context: context));
 
     return dio;
+  }
+}
+
+final class NativeImeSnapshot {
+  final bool available;
+  final bool querySucceeded;
+  final String status;
+  final bool currentEditorMatches;
+
+  bool get isVisible => status == 'visible' && currentEditorMatches;
+  bool get isHidden => status == 'hidden';
+
+  const NativeImeSnapshot({
+    required this.available,
+    required this.querySucceeded,
+    required this.status,
+    required this.currentEditorMatches,
+  });
+
+  factory NativeImeSnapshot.fromJson(Object? data) {
+    if (data is! Map<String, Object?>) {
+      throw const FormatException('Invalid native IME snapshot');
+    }
+    final available = data['available'];
+    final querySucceeded = data['querySucceeded'];
+    final status = data['status'];
+    final currentEditorMatches = data['currentEditorMatches'];
+    if (available is! bool ||
+        querySucceeded is! bool ||
+        status is! String ||
+        currentEditorMatches is! bool ||
+        !{'visible', 'hidden', 'transition', 'error', 'unavailable'}.contains(status)) {
+      throw const FormatException('Invalid native IME snapshot');
+    }
+
+    return NativeImeSnapshot(
+      available: available,
+      querySucceeded: querySucceeded,
+      status: status,
+      currentEditorMatches: currentEditorMatches,
+    );
   }
 }

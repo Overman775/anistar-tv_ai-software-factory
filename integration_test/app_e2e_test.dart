@@ -7,13 +7,13 @@
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/startup_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
-import 'package:anistar_tv/packages/features/catalog/presentation/widgets/favorite_ribbon.dart';
 import 'package:anistar_tv/packages/features/player/presentation/screens/player_screen.dart';
 import 'package:anistar_tv/packages/features/player/presentation/widgets/player_view.dart';
 import 'package:flutter/services.dart';
@@ -47,7 +47,7 @@ void main() {
     await fixture.launch(tester, autoLogin: false);
     await RemoteControls.activate(
       tester,
-      find.byKey(const ValueKey('login_guest')),
+      find.byKey(const ValueKey('intro_guest')),
       step: 'enter guest',
       direction: LogicalKeyboardKey.arrowDown,
     );
@@ -99,6 +99,123 @@ void main() {
       }),
       isEmpty,
     );
+  });
+
+  _tvTest('Android TV search shows native IME only on entry and restores remote navigation after editing', (
+    tester,
+  ) async {
+    await fixture.configure();
+    await fixture.launch(tester, autoLogin: false);
+    await RemoteControls.activate(
+      tester,
+      find.byKey(const ValueKey('intro_guest')),
+      step: 'enter guest before search IME check',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'guest home');
+    await _selectRail(tester, 'catalog-genres');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.byType(GenresScreen).evaluate().isNotEmpty,
+      'other section before search',
+    );
+
+    final query = find.byKey(const ValueKey('search-query'));
+    final rail = find.byType(CatalogNavigationRail);
+    TextField queryField() => tester.widget<TextField>(query);
+
+    await _selectRail(tester, 'catalog-search', direction: LogicalKeyboardKey.arrowUp);
+    await E2eHarness.waitFor(tester, () => !queryField().readOnly, 'search field editing after route entry');
+    await fixture.waitForNativeIme(tester, visible: true, step: 'native Android IME after search entry');
+    // Keep the native IME visible long enough for the host ADB observer to
+    // capture its real window state and emulator frame during this fixture.
+    await tester.pump(const Duration(seconds: 2));
+
+    await tester.enterText(query, 'Наруто');
+    final queryController = queryField().controller;
+    if (queryController == null) {
+      fail('Search query must have a controller.');
+    }
+    final cursorAtEnd = queryController.selection.extentOffset;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(queryField().focusNode?.hasFocus, isTrue);
+    expect(queryController.selection.extentOffset, lessThan(cursorAtEnd));
+    expect(tester.widget<CatalogNavigationRail>(rail).expanded, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => queryField().readOnly, 'Back finishes search editing');
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after Back');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await E2eHarness.waitFor(
+      tester,
+      () => tester.widget<CatalogNavigationRail>(rail).expanded,
+      'Left opens menu after editing is finished',
+    );
+    await RemoteControls.activate(tester, find.byKey(const ValueKey('catalog-search')), step: 'return to search field');
+    await E2eHarness.waitFor(tester, () => queryField().readOnly, 'rail reselect does not reopen the IME');
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after rail reselect');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await E2eHarness.waitFor(tester, () => !queryField().readOnly, 'explicit Select starts editing again');
+    await fixture.waitForNativeIme(tester, visible: true, step: 'native Android IME after explicit editing');
+
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    final first = find.byKey(const ValueKey('search-card-10938'));
+    await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'search result after IME submit');
+    await E2eHarness.waitFor(tester, () => queryField().readOnly, 'editing finishes after submit');
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after submit');
+
+    await RemoteControls.activate(
+      tester,
+      first,
+      step: 'open search detail before no-reopen check',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isNotEmpty, 'search detail');
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeScreen).evaluate().isEmpty, 'return to search');
+
+    await _selectRail(tester, 'catalog-search');
+    await E2eHarness.waitFor(tester, () => queryField().readOnly, 'same search destination remains non-editing');
+    await fixture.waitForNativeIme(
+      tester,
+      visible: false,
+      step: 'native Android IME hidden after returning from details and reselecting Search',
+    );
+  });
+
+  _tvTest('D-pad Left moves between real catalog cards before opening the active rail', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester);
+    final rail = find.byType(CatalogNavigationRail);
+    int? focusedAnimeId() =>
+        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>()?.anime.id;
+    void expectRailCollapsed() => expect(tester.widget<CatalogNavigationRail>(rail).expanded, isFalse);
+
+    await E2eHarness.waitFor(tester, () => focusedAnimeId() != null, 'initial catalog card focus');
+    final firstId = focusedAnimeId();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await E2eHarness.waitFor(
+      tester,
+      () => focusedAnimeId() != null && focusedAnimeId() != firstId,
+      'right neighbor focus',
+    );
+    final rightId = focusedAnimeId();
+    expectRailCollapsed();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await E2eHarness.waitFor(tester, () => focusedAnimeId() == firstId, 'left neighbor focus');
+    expect(focusedAnimeId(), isNot(rightId));
+    expectRailCollapsed();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await E2eHarness.waitFor(
+      tester,
+      () => tester.widget<CatalogNavigationRail>(rail).expanded,
+      'first-column Left opens active rail',
+    );
+    final home = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-false')));
+    expect(FocusManager.instance.primaryFocus, same(home.focusNode));
   });
 
   _tvTest('genre sorting applies per request, paginates and restores focus after detail', (tester) async {
@@ -282,7 +399,7 @@ void main() {
     await fixture.expireSession();
     // A normal protected request must detect expiry without a refresh button.
     await _selectRail(tester, 'catalog-genres');
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'expired session gate');
+    await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'expired session intro');
     // Verify the gate again after this separate session transition.
     // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);
@@ -300,14 +417,12 @@ void main() {
       step: 'confirm account logout',
       direction: LogicalKeyboardKey.arrowDown,
     );
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'logout gate');
+    await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'logout intro');
     await tester.pumpWidget(const SizedBox.shrink());
     await fixture.launch(tester, autoLogin: false, resetSession: false);
     await E2eHarness.waitFor(
       tester,
-      () =>
-          find.byKey(const ValueKey('login_submit')).evaluate().isNotEmpty &&
-          !tester.widget<AppButton>(find.byKey(const ValueKey('login_submit'))).busy,
+      () => find.byKey(const ValueKey('intro_sign_in')).evaluate().isNotEmpty,
       'logout survives restart',
     );
     // Verify the gate again after this separate session transition.
@@ -331,7 +446,7 @@ void main() {
     await _selectSheetAction(tester, 'Добавить в избранное');
     final marker = find.descendant(
       of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
-      matching: find.byType(FavoriteRibbon),
+      matching: find.byType(MediaCardBookmark),
     );
     await E2eHarness.waitFor(tester, () => marker.evaluate().isNotEmpty, 'confirmed catalog star');
     final added = await fixture.state();
@@ -389,7 +504,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
-        matching: find.byType(FavoriteRibbon),
+        matching: find.byType(MediaCardBookmark),
       ),
       findsNothing,
     );
@@ -407,7 +522,7 @@ void main() {
       () => find
           .descendant(
             of: find.byWidgetPredicate((widget) => widget is AnimeCard && widget.anime.id == 10938),
-            matching: find.byType(FavoriteRibbon),
+            matching: find.byType(MediaCardBookmark),
           )
           .evaluate()
           .isNotEmpty,
@@ -715,17 +830,30 @@ void main() {
   });
 
   _tvTest('catalog refusal is visible and explicit retry recovers', (tester) async {
-    await fixture.configure(catalogError: true);
+    await fixture.configure();
     await fixture.launch(tester);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'healthy catalog');
+    await _selectRail(tester, 'catalog-genres');
+    await _enterGenres(tester);
+    await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Комедия', 'genre');
+    await fixture.configure(catalogError: true, reset: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.text('Каталог недоступен').evaluate().isNotEmpty, 'catalog error');
-    await fixture.configure(reset: false);
-    await RemoteControls.activate(tester, RemoteControls.action('Попробовать снова'), step: 'catalog retry');
-    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog retry');
-    final events = _events(await fixture.state());
-    final statuses = events
-        .where((event) => event['path'] == '/anime/' && event['method'] == 'GET' && event['authenticated'] == true)
+    Future<Iterable<Object?>> statuses() async => _events(await fixture.state())
+        .where(
+          (event) => event['path'] == '/anime/comedy/' && event['method'] == 'GET' && event['authenticated'] == true,
+        )
         .map((event) => event['status']);
-    expect(statuses, [403, 200]);
+    expect(await statuses(), [403], reason: 'catalog failure does not retry automatically');
+    await fixture.configure(reset: false);
+    await RemoteControls.activate(
+      tester,
+      RemoteControls.action('Попробовать снова'),
+      direction: LogicalKeyboardKey.arrowDown,
+      step: 'catalog retry',
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog retry');
+    expect(await statuses(), [403, 200]);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

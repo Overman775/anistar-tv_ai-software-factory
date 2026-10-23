@@ -51,6 +51,8 @@ Runner устанавливает публичный localhost fixture root cert
 
 Runner запускает локальный fixture server, настраивает `adb reverse` и временно меняет immersive confirmation на устройстве. Cleanup останавливает server, снимает созданный `adb reverse`, восстанавливает настройку и освобождает build lock. Каждый запуск получает собственный server и состояние fixtures.
 
+TV fixture runner передаёт fixture server host ADB, выбранный device и package через `--native-ime-adb`, `--native-ime-device` и `--native-ime-package`. Endpoint `GET /__test/native-ime` возвращает `available`, `querySucceeded`, `status` и `currentEditorMatches`; сырые ответы `dumpsys input_method` и полного `dumpsys window` не публикуются. Полный window dump нужен для global focus и InputMethod window. Отсутствующий, ошибочный или переходный снимок не засчитывается как видимое либо скрытое состояние. Эта проверка использует нативные окна ОС: нулевые Flutter insets не означают, что видимая IME отсутствует.
+
 ## Проверка Python-инструментов
 
 Fixture-команды выше запускают Android runner. Чтобы отдельно проверить Python-инструменты fixture server, выполните из корня проекта:

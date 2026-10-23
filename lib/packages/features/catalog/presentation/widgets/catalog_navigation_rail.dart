@@ -16,12 +16,19 @@ typedef CatalogNavigationItem = ({
 });
 
 class CatalogNavigationRail extends StatelessWidget {
-  const CatalogNavigationRail({required this.expanded, required this.items, this.accountName, super.key});
+  const CatalogNavigationRail({
+    required this.expanded,
+    required this.items,
+    this.accountName,
+    this.accountImageUrl,
+    super.key,
+  });
 
   static const collapsedWidth = 88.0;
   static const expandedWidth = 264.0;
 
   final String? accountName;
+  final String? accountImageUrl;
   final bool expanded;
   final List<CatalogNavigationItem> items;
 
@@ -121,7 +128,7 @@ class CatalogNavigationRail extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         minWidth: expandedWidth - AppSpacing.xl - AppSpacing.xs,
                         maxWidth: expandedWidth - AppSpacing.xl - AppSpacing.xs,
-                        child: AccountIdentity(name: name),
+                        child: AccountIdentity(name: name, imageUrl: accountImageUrl),
                       ),
                     ),
                   ),

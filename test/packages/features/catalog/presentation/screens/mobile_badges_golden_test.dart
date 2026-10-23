@@ -14,7 +14,7 @@ import '../../../../../support/test_app.dart';
 
 void main() {
   for (final favorites in [false, true]) {
-    testWidgets('mobile confirmed favorite and rating badges favorites=$favorites', (tester) async {
+    testWidgets('mobile confirmed favorite omits desktop rating metadata favorites=$favorites', (tester) async {
       final page = AnimePage(
         page: 1,
         hasNext: false,
@@ -47,7 +47,7 @@ void main() {
         // ignore: prefer-moving-to-variable
         await tester.pumpAndSettle();
       }
-      expect(find.text('8,7'), findsOneWidget);
+      expect(find.text('8,7'), findsNothing);
       expect(find.text('0,0'), findsNothing);
       expect(tester.takeException(), isNull);
       await expectLater(

@@ -91,6 +91,12 @@ void main() {
 
   double previewSeconds(WidgetTester tester) => tester.widget<Slider>(find.byType(Slider)).value / 1000;
 
+  void expectSingleNativeSource(int calls) {
+    expect(repository.calls, calls);
+    expect(video.sources, hasLength(1));
+    expect(video.disposed, isEmpty);
+  }
+
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
@@ -1030,7 +1036,7 @@ void main() {
     await settle(tester);
     expect(storage.writes, 1);
     await openMenu(tester, episodes: true);
-    expect(find.text('Серия 1 — просмотрена'), findsOneWidget);
+    expect(find.bySemanticsLabel('Серия 1, текущая, просмотрена'), findsOneWidget);
     await tester.tap(find.text('Серия 2'));
     await settle(tester);
     expect(storage.watched[10938], {1, 2});
@@ -1136,6 +1142,27 @@ void main() {
     expect(native.disposed, isEmpty);
     await tester.pumpWidget(const SizedBox());
     await settle(tester);
+  });
+
+  testWidgets('current episode choice and cancel return video focus without reopening the source', (tester) async {
+    await mount(tester);
+    final calls = repository.calls;
+    void expectVideoFocusWithSingleSource() {
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Видео');
+      expectSingleNativeSource(calls);
+    }
+
+    await openMenu(tester, episodes: true);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 1, текущая');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await settle(tester);
+    expectVideoFocusWithSingleSource();
+
+    await openMenu(tester, episodes: true);
+    await tester.binding.handlePopRoute();
+    await settle(tester);
+    expectVideoFocusWithSingleSource();
+    await unmount(tester);
   });
 
   testWidgets('OK retries a failed stream without searching for the retry button', (tester) async {

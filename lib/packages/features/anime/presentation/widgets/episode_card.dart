@@ -11,12 +11,14 @@ class EpisodeCard extends StatelessWidget {
     this.autofocus = false,
     this.focusNode,
     this.isWatched = false,
+    this.episodeHeight,
     this.onFocusChanged,
     super.key,
   });
 
   final AnimeEpisode episode;
   final bool isWatched;
+  final double? episodeHeight;
   final VoidCallback onTap;
   final bool autofocus;
   final FocusNode? focusNode;
@@ -33,6 +35,7 @@ class EpisodeCard extends StatelessWidget {
       caption: caption.descriptiveTitle,
       semanticLabel: caption.semanticLabel(isWatched: watched),
       imageUrl: episode.previewUri?.toString(),
+      episodeHeight: episodeHeight,
       onPressed: onTap,
       autofocus: autofocus,
       focusNode: focusNode,

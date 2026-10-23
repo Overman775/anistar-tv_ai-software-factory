@@ -2,8 +2,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
-import '../widgets/anime_rating_badge.dart';
-import '../widgets/favorite_ribbon.dart';
 
 /// The common poster surface with a discoverable touch action.
 class MobileAnimeCard extends StatelessWidget {
@@ -29,14 +27,12 @@ class MobileAnimeCard extends StatelessWidget {
       MediaCard(
         label: anime.title,
         caption: anime.year,
+        showCaption: false,
+        showBookmark: showFavorite && (isFavorite ?? anime.isFavorite) == true,
         imageUrl: anime.posterUri?.toString(),
         heroTag: 'anime-poster-${anime.id}',
         onPressed: onTap,
         onLongPressed: onActions,
-        badges: [
-          AnimeRatingBadge(rating: anime.rating),
-          if (showFavorite && (isFavorite ?? anime.isFavorite) == true) const FavoriteRibbon(),
-        ],
       ),
       Positioned(
         top: AppSpacing.sm,

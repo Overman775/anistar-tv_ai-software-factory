@@ -12,6 +12,7 @@ class AppActionSheet extends StatelessWidget {
     required this.child,
     this.mobileHeightFactor = 0.75,
     this.closeOnLeft = true,
+    this.expandChild = false,
     super.key,
   });
 
@@ -19,11 +20,12 @@ class AppActionSheet extends StatelessWidget {
   final Widget child;
   final double mobileHeightFactor;
   final bool closeOnLeft;
+  final bool expandChild;
 
   @override
   Widget build(BuildContext context) {
     if (AppLayoutScope.isTvOf(context)) {
-      return TvSideSheet(title: title, closeOnLeft: closeOnLeft, child: child);
+      return TvSideSheet(title: title, closeOnLeft: closeOnLeft, expandChild: expandChild, child: child);
     }
     final media = MediaQuery.of(context);
     final availableHeight = (media.size.height - media.padding.top - media.viewInsets.bottom).clamp(
@@ -74,7 +76,7 @@ class AppActionSheet extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Expanded(child: child),
+                if (expandChild) Expanded(child: child) else child,
               ],
             ),
           ),

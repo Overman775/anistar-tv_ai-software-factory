@@ -10,6 +10,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../watch_history/watched_episodes.dart';
+import '../../domain/models/playback_episode.dart';
 import '../../domain/models/playback_failure.dart';
 import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_refresh_budget.dart';
@@ -21,6 +22,7 @@ import '../player_route_observer.dart';
 import '../player_seek_hold.dart';
 import '../widgets/player_choices_dialog.dart';
 import '../widgets/player_control_button.dart';
+import '../widgets/player_episode_choices_dialog.dart';
 import '../widgets/player_retry_view.dart';
 import '../widgets/player_view.dart';
 
@@ -508,17 +510,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       return;
     }
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
-    final episodes = session.episodeNumbers.toList()..sort((a, b) => b.compareTo(a));
+    final episodes = session.episodes.isNotEmpty
+        ? session.episodes
+        : session.episodeNumbers.map((number) => PlaybackEpisode(number: number, title: '')).toList(growable: false);
     _seekHold.stop();
     final choice = await showAppActionSheet<int>(
       context: context,
-      builder: (context) => PlayerChoicesDialog<int>(
-        title: 'Выбор серии',
-        choices: episodes,
+      builder: (context) => PlayerEpisodeChoicesDialog(
+        episodes: episodes,
         selected: _episodeNumber,
-        label: (number) => watched.contains(number) || session.watchedEpisodes.contains(number)
-            ? 'Серия $number — просмотрена'
-            : 'Серия $number',
+        watchedEpisodeNumbers: {...watched, ...session.watchedEpisodes},
       ),
     );
     if (_isCurrent(initializationId)) {

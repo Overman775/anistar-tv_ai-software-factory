@@ -3,27 +3,34 @@ import 'package:dio/dio.dart';
 
 import 'anistar_auth_service.dart';
 import 'anistar_failure.dart';
+import 'anistar_profile_source.dart';
 import 'anistar_session.dart';
 import 'anistar_source.dart';
 import 'contract/anistar_anime_details_dto.dart';
 import 'contract/anistar_catalog_filter_dto.dart';
 import 'contract/anistar_catalog_page_dto.dart';
 import 'contract/anistar_catalog_sort.dart';
-import 'contract/anistar_client.dart';
 import 'contract/anistar_client_exception.dart';
 import 'contract/anistar_episode_dto.dart';
+import 'contract/anistar_profile_client.dart';
+import 'contract/anistar_profile_dto.dart';
 
 /// Coordinates parsed data and authentication using the same Dio and session.
 /// Dependencies are supplied by the composition root, never resolved here.
-final class HtmlAnistarClient implements AnistarClient {
+final class HtmlAnistarClient implements AnistarProfileClient {
   final AnistarSource _source;
+  final AnistarProfileSource _profile;
   final AnistarAuthService _auth;
 
   @override
   Stream<void> get expired => _auth.session.expired;
 
+  @override
+  Uri get origin => _auth.session.origin;
+
   HtmlAnistarClient(Dio dio, AnistarSession session, {Future<void> Function()? ensureMirror})
     : _source = AnistarSource(dio, accessGeneration: () => session.accessGeneration),
+      _profile = AnistarProfileSource(dio, session.origin),
       _auth = AnistarAuthService(dio, session, ensureMirror: ensureMirror);
 
   @override
@@ -39,6 +46,9 @@ final class HtmlAnistarClient implements AnistarClient {
 
   @override
   Future<void> signOut() => _safe(_auth.signOut);
+
+  @override
+  Future<AnistarProfileDto> profile(String account) => _safe(() => _profile.profile(account));
 
   @override
   Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort}) =>

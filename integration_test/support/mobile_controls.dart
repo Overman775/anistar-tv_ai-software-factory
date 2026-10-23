@@ -39,6 +39,7 @@ abstract final class MobileControls {
   );
 
   static Future<void> login(WidgetTester tester, {String password = 'пароль'}) async {
+    await E2eHarness.openSignIn(tester, mobile: true);
     final submit = find.byKey(const ValueKey('login_submit'));
     await E2eHarness.waitFor(
       tester,

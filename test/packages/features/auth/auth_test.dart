@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:anistar_tv/app/app.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/auth/domain/auth_invalid_credentials_failure.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
@@ -43,14 +44,15 @@ void main() {
     );
     final settle = tester.pumpAndSettle;
     await settle();
-    final container = ProviderScope.containerOf(tester.element(find.byType(LoginScreen)));
-    final guest = find.byKey(const ValueKey('login_guest'));
-    await tester.tap(guest);
+    final container = ProviderScope.containerOf(tester.element(find.byType(IntroScreen)));
+    final introGuest = find.byKey(const ValueKey('intro_guest'));
+    await tester.tap(introGuest);
     await settle();
     await tester.tap(find.byKey(const ValueKey('catalog-sign-in')));
     await settle();
     final username = find.byKey(const ValueKey('login_username'));
     final submit = find.byKey(const ValueKey('login_submit'));
+    final dismiss = find.byKey(const ValueKey('login_guest'));
     await tester.enterText(username, 'abandoned');
     await tester.enterText(find.byKey(const ValueKey('login_password')), 'fixture-password');
     await tester.tap(submit);
@@ -61,7 +63,7 @@ void main() {
     expect(pending?.isCancellingSignIn, isTrue);
     expect(pending?.loginRequested, isTrue);
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(tester.widget<AppButton>(guest).busy, isTrue);
+    expect(tester.widget<AppButton>(dismiss).busy, isTrue);
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(repository.cancellationCalls, 1);
@@ -76,7 +78,7 @@ void main() {
     expect(failed?.cancellationFailure, isA<ConnectionFailure>());
     expect(find.text('Повторить отмену'), findsOneWidget);
     expect(find.byKey(const ValueKey('login_error')), findsOneWidget);
-    expect(tester.widget<AppButton>(guest).focusNode?.hasFocus, isTrue);
+    expect(tester.widget<AppButton>(dismiss).focusNode?.hasFocus, isTrue);
     expect(tester.widget<AppButton>(submit).enabled, isFalse);
     expect(tester.widget<TextFormField>(username).enabled, isFalse);
     final token = repository.lastCancelledToken;
@@ -174,7 +176,7 @@ void main() {
     });
   }
 
-  testWidgets('anonymous launch is gated; login opens catalog; expiry destroys protected navigation', (tester) async {
+  testWidgets('intro is gated; login opens catalog; expiry destroys protected navigation', (tester) async {
     await pumpTvApp(
       tester,
       const App(),
@@ -186,8 +188,11 @@ void main() {
     );
     final settle = tester.pumpAndSettle;
     await settle();
-    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(IntroScreen), findsOneWidget);
     expect(find.byType(CatalogScreen), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('intro_sign_in')));
+    await settle();
+    expect(find.byType(LoginScreen), findsOneWidget);
     final username = find.byKey(const ValueKey('login_username'));
     final password = find.byKey(const ValueKey('login_password'));
     await tester.enterText(username, 'test');
@@ -203,7 +208,7 @@ void main() {
     await settle();
     // Recheck the gate after an authenticated router existed.
     // ignore: avoid-duplicate-test-assertions
-    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.byType(IntroScreen), findsOneWidget);
     // The catalog was present before expiry.
     // ignore: avoid-duplicate-test-assertions
     expect(find.byType(CatalogScreen), findsNothing);

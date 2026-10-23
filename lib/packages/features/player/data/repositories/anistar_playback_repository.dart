@@ -3,6 +3,7 @@ import 'package:core/data.dart';
 import 'package:networking/networking.dart';
 
 import '../../../common/data/anistar_errors.dart';
+import '../../domain/models/playback_episode.dart';
 import '../../domain/models/playback_failure.dart';
 import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_session.dart';
@@ -49,10 +50,18 @@ final class AnistarPlaybackRepository extends BaseRepository implements Playback
         requestedQuality: quality,
         selectedQuality: selected,
         availableQualities: available,
-        episodeNumbers: numbers.toList()..sort(),
-        watchedEpisodes: _canUseAccount()
-            ? episodes.where((episode) => episode.isWatched).map((episode) => episode.number).toSet()
-            : const {},
+        episodes:
+            (episodes
+                .map(
+                  (episode) => PlaybackEpisode(
+                    number: episode.number,
+                    title: episode.title,
+                    previewUri: episode.previewUri,
+                    isWatched: _canUseAccount() && episode.isWatched,
+                  ),
+                )
+                .toList()
+              ..sort((left, right) => left.number.compareTo(right.number))),
         httpHeaders: source.httpHeaders,
         expiresAt: source.expiresAt,
       );

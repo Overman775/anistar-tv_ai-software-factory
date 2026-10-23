@@ -92,4 +92,27 @@ void main() {
     expect(bottomSheet, findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  for (final expandChild in [false, true]) {
+    testWidgets('TV sheet expandChild=$expandChild preserves the declared child layout mode', (tester) async {
+      const choiceKey = ValueKey('sheet-choice');
+      await pumpTvApp(
+        tester,
+        TvSideSheet(
+          title: 'Действия',
+          expandChild: expandChild,
+          child: const SizedBox(key: choiceKey, height: AppSizes.tvControl, child: Text('Гостевой вход')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final choiceHeight = tester.getSize(find.byKey(choiceKey)).height;
+      if (expandChild) {
+        expect(choiceHeight, greaterThan(AppSizes.tvControl));
+      } else {
+        expect(choiceHeight, AppSizes.tvControl);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

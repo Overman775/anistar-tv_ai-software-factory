@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../catalog/presentation/widgets/anime_card.dart';
 import '../../../catalog/presentation/widgets/catalog_navigation_rail.dart';
 import '../home_destination.dart';
 
@@ -14,6 +15,7 @@ class TvRouteShell extends StatefulWidget {
     this.onSignOut,
     this.onSignIn,
     this.accountName,
+    this.accountImageUrl,
     this.onOpenLogs,
     this.onRootBack,
     this.consumeBack,
@@ -28,6 +30,7 @@ class TvRouteShell extends StatefulWidget {
   final VoidCallback? onSignOut;
   final VoidCallback? onSignIn;
   final String? accountName;
+  final String? accountImageUrl;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onRootBack;
   final bool Function()? consumeBack;
@@ -54,6 +57,10 @@ class _TvRouteShellState extends State<TvRouteShell> {
   }
 
   void _focusContent({bool first = false}) {
+    // A modal route owns focus until it pops; deferred shell callbacks must not reclaim it.
+    if (ModalRoute.of(context)?.isCurrent == false) {
+      return;
+    }
     if (first && widget.onActivateContent != null) {
       _contentFocus.requestFocus();
       widget.onActivateContent?.call();
@@ -189,7 +196,12 @@ class _TvRouteShellState extends State<TvRouteShell> {
     if (event.logicalKey != LogicalKeyboardKey.arrowLeft) {
       return KeyEventResult.ignored;
     }
-    final input = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>();
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    final fromAnimeCard = focusContext?.findAncestorWidgetOfExactType<AnimeCard>() != null;
+    if (fromAnimeCard) {
+      return KeyEventResult.ignored;
+    }
+    final input = focusContext?.findAncestorWidgetOfExactType<EditableText>();
     if (input != null && !input.readOnly) {
       return KeyEventResult.ignored;
     }
@@ -267,7 +279,12 @@ class _TvRouteShellState extends State<TvRouteShell> {
               child: Focus(
                 onFocusChange: _menuFocusChanged,
                 onKeyEvent: _handleMenuKey,
-                child: CatalogNavigationRail(expanded: _expanded, items: _items(), accountName: widget.accountName),
+                child: CatalogNavigationRail(
+                  expanded: _expanded,
+                  items: _items(),
+                  accountName: widget.accountName,
+                  accountImageUrl: widget.accountImageUrl,
+                ),
               ),
             ),
           ],

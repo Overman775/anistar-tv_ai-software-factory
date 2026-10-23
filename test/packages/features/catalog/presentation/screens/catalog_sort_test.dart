@@ -12,11 +12,14 @@ import 'package:anistar_tv/packages/features/catalog/presentation/bloc/catalog_e
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_sort_sheet.dart';
+import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
+import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_browse_repository.dart';
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
@@ -144,6 +147,59 @@ void main() {
       isTrue,
     );
     expect(bloc.state.items.every((item) => item.title.startsWith('Batch 3')), isTrue);
+  });
+
+  testWidgets('filtered route shell moves from Sort to retry with one Down', (tester) async {
+    var requests = 0;
+    final repository = FakeCatalogBrowseRepository(
+      load: (_, page) {
+        requests++;
+
+        return Future.value(
+          requests == 1
+              ? const Result.failure(UnknownFailure())
+              : Result.success(
+                  AnimePage(
+                    page: page,
+                    hasNext: false,
+                    items: [AnimeSummary(id: 1, slug: 'retry', title: 'Recovered catalog', posterUri: Uri())],
+                  ),
+                ),
+        );
+      },
+    );
+    await pumpTvApp(
+      tester,
+      TvRouteShell(
+        destination: HomeDestination.genres,
+        onDestinationSelected: (_) => fail('Unexpected destination selection'),
+        builder: (onOpenNavigation) => CatalogScreen(
+          embedded: true,
+          filter: comedyFilter,
+          onOpenNavigation: onOpenNavigation,
+          onAnimeTap: (_) => fail('Unexpected anime selection'),
+        ),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogBrowseRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Каталог недоступен'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
+
+    await _key(tester, LogicalKeyboardKey.arrowDown);
+
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TvStateView>(), isNotNull);
+    await _key(tester, LogicalKeyboardKey.arrowUp);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
+    await _key(tester, LogicalKeyboardKey.arrowDown);
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<TvStateView>(), isNotNull);
+    await _key(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+
+    expect(requests, 2);
+    expect(find.byType(AnimeCard), findsOneWidget);
   });
 
   testWidgets('delayed sorted results keep focus on the button until Down', (tester) async {

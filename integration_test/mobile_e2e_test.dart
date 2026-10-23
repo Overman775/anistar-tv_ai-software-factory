@@ -4,6 +4,7 @@
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
@@ -44,7 +45,7 @@ void main() {
   _mobileTest('guest search native playback and cancelled login preserve public context', (tester) async {
     await fixture.configure();
     await fixture.launch(tester, autoLogin: false);
-    await MobileControls.tap(tester, find.byKey(const ValueKey('login_guest')), 'enter guest');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('intro_guest')), 'enter guest');
     await E2eHarness.waitFor(tester, () => find.byType(NavigationBar).evaluate().isNotEmpty, 'guest home');
     expect(find.text('Избранное'), findsNothing);
     await MobileControls.tab(tester, 'Поиск');
@@ -70,7 +71,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'restore guest search');
     expect(tester.widget<TextField>(find.byKey(const ValueKey('search-query'))).controller?.text, 'Наруто');
-    await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-account')), 'guest sign in');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-account')).hitTestable(), 'guest sign in');
     await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'guest login overlay');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isEmpty, 'cancel guest login');
@@ -112,7 +113,7 @@ void main() {
     expect(_events(await fixture.state()).where((event) => event['method'] == 'POST'), hasLength(loginPosts));
     await fixture.expireSession();
     await MobileControls.tab(tester, 'Жанры');
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'mobile expiry gate');
+    await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'mobile expiry intro');
     await MobileControls.login(tester);
     await _waitHome(tester);
     await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-account')), 'account');
@@ -126,10 +127,14 @@ void main() {
       'logout confirmation',
     );
     await MobileControls.tap(tester, find.widgetWithText(AppButton, 'Выйти из аккаунта'), 'confirm touch logout');
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'mobile logout gate');
+    await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'mobile logout intro');
     await tester.pumpWidget(const SizedBox.shrink());
     await launch(tester, login: false, resetSession: false);
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'logout survives restart');
+    await E2eHarness.waitFor(
+      tester,
+      () => find.byType(IntroScreen).evaluate().isNotEmpty,
+      'logout intro survives restart',
+    );
     // A new restored client must remain outside the authenticated shell.
     // ignore: avoid-duplicate-test-assertions
     expect(find.byType(MobileHomeShell), findsNothing);
@@ -448,15 +453,24 @@ void main() {
   });
 
   _mobileTest('mobile catalog refusal has touch retry and recovers without refresh button', (tester) async {
-    await fixture.configure(catalogError: true);
-    await launch(tester, login: false);
-    await MobileControls.login(tester);
+    await fixture.configure();
+    await launch(tester);
+    await MobileControls.tab(tester, 'Жанры');
+    await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'mobile genres');
+    await fixture.configure(catalogError: true, reset: false);
+    await MobileControls.tap(tester, find.text('Комедия'), 'comedy genre');
     await E2eHarness.waitFor(tester, () => find.text('Каталог недоступен').evaluate().isNotEmpty, 'catalog failure');
     expect(find.byType(MobileAnimeCard), findsNothing);
+    Future<Iterable<Object?>> statuses() async => _events(await fixture.state())
+        .where(
+          (event) => event['path'] == '/anime/comedy/' && event['method'] == 'GET' && event['authenticated'] == true,
+        )
+        .map((event) => event['status']);
+    expect(await statuses(), [403], reason: 'catalog failure does not retry automatically');
     await fixture.configure(reset: false);
     await MobileControls.tap(tester, find.text('Попробовать снова'), 'touch catalog retry');
-    await _waitHome(tester);
-    expect(_authenticatedCatalogGets(await fixture.state()).map((event) => event['status']), [403, 200]);
+    await _waitFilter(tester);
+    expect(await statuses(), [403, 200]);
   });
 
   _mobileTest('mobile persistent video error stops automatic retries and touch retry recovers', (tester) async {

@@ -3,6 +3,7 @@ import 'package:anistar/providers.dart';
 import 'package:anistar_tv/app/app_container.dart';
 import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
+import 'package:anistar_tv/packages/features/auth/data/anistar_auth_repository.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/log_viewer/domain/repositories/log_repository.dart';
@@ -25,6 +26,50 @@ import '../mocks/networking/html_fixture_adapter.dart';
 import '../mocks/storage/memory_secure_storage.dart';
 
 void main() {
+  test('base-only client restore publishes access and initials fallback through the real auth composition', () async {
+    final client = FakeAnistarClient()..account = 'restored-viewer';
+    final container = _baseOnlyAuthContainer(client);
+    addTearDown(container.dispose);
+
+    expect(container.read(authRepositoryProvider), isA<AnistarAuthRepository>());
+    final restored = await container.read(authControllerProvider.future);
+    final access = container.read(authAccessProvider);
+    final profile = container.read(authProfileStateProvider);
+
+    expect(restored.access.account, 'restored-viewer');
+    expect(access, isA<AuthenticatedAccess>());
+    expect(access.account, 'restored-viewer');
+    expect(restored.isSigningIn, isFalse);
+    expect(profile.loadState, AuthProfileLoadState.unavailable);
+    expect(profile.account, 'restored-viewer');
+    expect(profile.profile, isNull);
+    expect(profile.origin, isNull);
+    expect(client.calls, ['restore']);
+  });
+
+  test('base-only client sign-in publishes access and initials fallback through the real auth composition', () async {
+    final client = FakeAnistarClient();
+    final container = _baseOnlyAuthContainer(client);
+    addTearDown(container.dispose);
+
+    await container.read(authControllerProvider.future);
+    final controller = container.read(authControllerProvider.notifier)..requestSignIn();
+    await controller.signIn('signed-in-viewer', 'fixture-password');
+    final session = container.read(authControllerProvider).requireValue;
+    final access = container.read(authAccessProvider);
+    final profile = container.read(authProfileStateProvider);
+
+    expect(session.access.account, 'signed-in-viewer');
+    expect(session.isSigningIn, isFalse);
+    expect(access, isA<AuthenticatedAccess>());
+    expect(access.account, 'signed-in-viewer');
+    expect(profile.loadState, AuthProfileLoadState.unavailable);
+    expect(profile.account, 'signed-in-viewer');
+    expect(profile.profile, isNull);
+    expect(profile.origin, isNull);
+    expect(client.calls, ['restore', 'signIn']);
+  });
+
   test('all network repository bindings receive a contract-only client override without HTML startup', () async {
     final client = FakeAnistarClient()..watchedResult = {1};
     final container = ProviderContainer(
@@ -147,3 +192,15 @@ void main() {
     expect(headers['Accept'], 'text/html');
   });
 }
+
+ProviderContainer _baseOnlyAuthContainer(FakeAnistarClient client) => ProviderContainer(
+  overrides: [
+    ...createAppOverrides(
+      logger: Logger(level: Level.off),
+      mirrorUri: Uri.parse('https://mirror.test/'),
+      preferences: SharedPreferencesStorage(),
+      secureStorage: MemorySecureStorage(),
+    ),
+    anistarClientProvider.overrideWithValue(client),
+  ],
+);
