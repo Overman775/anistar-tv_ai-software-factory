@@ -1,6 +1,6 @@
 name = "developer"
-model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
 description = "Implements bounded AniStar TV changes from a locked ticket, task, request, or approved plan. Production code only; tests belong to test-writer."
 developer_instructions = """
 You are the `developer` subagent.

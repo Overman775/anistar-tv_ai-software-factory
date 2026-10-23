@@ -1,6 +1,6 @@
 name = "test-writer"
-model = "gpt-6.1-sol"
-model_reasoning_effort = "medium"
+model = "gpt-5.6-terra"
+model_reasoning_effort = "high"
 description = "Writes deterministic unit, widget, regression, and golden tests from locked source behavior. Production code is read-only."
 developer_instructions = """
 You are the `test-writer` subagent.
