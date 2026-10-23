@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -28,8 +28,8 @@ void main() {
     addTearDown(fixture.close);
     await fixture.configure();
     await fixture.launch(tester, autoLogin: false, deviceProfile: AppDeviceProfile.tv);
-    await E2eHarness.waitFor(tester, () => find.byType(LoginScreen).evaluate().isNotEmpty, 'TV diagnostic login');
-    expect(AppLayoutScope.profileOf(tester.element(find.byType(LoginScreen))), AppDeviceProfile.tv);
+    await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'TV diagnostic intro');
+    expect(AppLayoutScope.profileOf(tester.element(find.byType(IntroScreen))), AppDeviceProfile.tv);
     expect(tester.takeException(), isNull, reason: 'TV diagnostic layout');
   }, profile: AppDeviceProfile.tv);
 }

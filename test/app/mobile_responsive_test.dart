@@ -107,6 +107,7 @@ void main() {
             context: context,
             builder: (_) => AppActionSheet(
               title: 'Очень длинное название выбранного сериала',
+              expandChild: true,
               child: ListView(
                 children: [
                   // This fixture only tests sheet geometry and dismissal, not retry behavior.

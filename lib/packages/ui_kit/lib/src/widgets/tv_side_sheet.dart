@@ -6,11 +6,18 @@ import '../theme/app_palette.dart';
 
 /// A TV action surface with a stable right edge and its own focus scope.
 class TvSideSheet extends StatelessWidget {
-  const TvSideSheet({required this.title, required this.child, this.closeOnLeft = true, super.key});
+  const TvSideSheet({
+    required this.title,
+    required this.child,
+    this.closeOnLeft = true,
+    this.expandChild = false,
+    super.key,
+  });
 
   final String title;
   final Widget child;
   final bool closeOnLeft;
+  final bool expandChild;
 
   ThemeData _theme(BuildContext context) {
     final style = AppFocusStyle.button();
@@ -67,7 +74,7 @@ class TvSideSheet extends StatelessWidget {
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  Expanded(child: child),
+                  if (expandChild) Expanded(child: child) else child,
                 ],
               ),
             ),

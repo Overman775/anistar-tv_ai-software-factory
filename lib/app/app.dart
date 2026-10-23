@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../packages/features/auth/auth_providers.dart';
+import '../packages/features/auth/presentation/intro_screen.dart';
 import '../packages/features/auth/presentation/login_screen.dart';
 import '../packages/features/auth/presentation/startup_screen.dart';
 import 'authenticated_app.dart';
@@ -21,15 +22,19 @@ class App extends ConsumerWidget {
       );
     }
 
+    final loginRequested = ref.watch(authControllerProvider).value?.loginRequested ?? false;
+    final home = switch (ref.watch(authStartupStageProvider)) {
+      AuthStartupStage.complete => loginRequested ? const LoginScreen(canCancel: true) : const IntroScreen(),
+      _ => const StartupScreen(),
+    };
+
     return MaterialApp(
       title: 'Anistar TV',
       debugShowCheckedModeBanner: false,
       theme: AppLayoutScope.isTvOf(context) ? AppTheme.lightTheme : AppTheme.mobileLightTheme,
       darkTheme: AppLayoutScope.isTvOf(context) ? AppTheme.darkTheme : AppTheme.mobileDarkTheme,
       themeMode: ThemeMode.dark,
-      home: ref.watch(authStartupStageProvider) == AuthStartupStage.complete
-          ? const LoginScreen()
-          : const StartupScreen(),
+      home: home,
     );
   }
 }

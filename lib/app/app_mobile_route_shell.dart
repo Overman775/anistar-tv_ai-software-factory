@@ -12,6 +12,7 @@ class _AppMobileRouteShell extends ConsumerWidget {
     destination: destination,
     onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
     accountName: ref.watch(authAccessProvider).account,
+    accountImageUrl: _accountImageUrl(ref),
     onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
     onSignIn: ref.watch(authAccessProvider).canUseAccount
         ? null

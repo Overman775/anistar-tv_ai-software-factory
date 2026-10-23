@@ -12,6 +12,7 @@ class AppNetworkImage extends StatelessWidget {
     super.key,
     this.borderRadius = BorderRadius.zero,
     this.errorWidget,
+    this.placeholder,
     this.fit = BoxFit.cover,
     this.height,
     this.semanticLabel,
@@ -28,6 +29,7 @@ class AppNetworkImage extends StatelessWidget {
   /// would replace an already decoded image with a loading placeholder.
   final bool resizeToLayout;
   final Widget? errorWidget;
+  final Widget? placeholder;
   final BoxFit fit;
   final double? height;
   final String? imageUrl;
@@ -100,7 +102,7 @@ class AppNetworkImage extends StatelessWidget {
             fadeOutDuration: animateLoading ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
             placeholder: (_, _) => previous != null
                 ? SizedBox(width: width, height: height)
-                : TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
+                : placeholder ?? TvSkeletonBox(width: width, height: height, borderRadius: borderRadius),
             errorWidget: (_, _, _) => previous != null ? SizedBox(width: width, height: height) : fallback,
           );
 

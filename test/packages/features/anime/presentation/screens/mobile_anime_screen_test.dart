@@ -252,21 +252,33 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
+    final content = find.byType(MobileAnimeContent);
+    expect(tester.widget<MobileAnimeContent>(content).filterActions, isNotNull);
+    final scrollable = find.descendant(of: content, matching: find.byType(Scrollable));
+    void expectContentScrollable() => expect(scrollable, findsOneWidget);
+
+    expectContentScrollable();
     final play = find.widgetWithText(AppButton, 'Смотреть серию 3');
     await tester.ensureVisible(play);
     await tester.tap(play);
     expect(opened, 3);
-    final chip = find.widgetWithText(ActionChip, 'Комедия');
-    await tester.scrollUntilVisible(chip, -150, scrollable: find.byType(Scrollable).first);
+    expectContentScrollable();
+    final chip = find.text('Комедия');
+    await tester.scrollUntilVisible(chip, -150, scrollable: scrollable);
+    await tester.ensureVisible(chip);
+    expect(chip.hitTestable(), findsOneWidget);
     await tester.tap(chip);
     expect(selected?.path, '/comedy/');
     final more = find.text('Подробнее');
-    await tester.scrollUntilVisible(more, 150, scrollable: find.byType(Scrollable).first);
+    await tester.drag(scrollable, const Offset(0, -250));
+    await tester.pumpAndSettle();
+    expect(more.hitTestable(), findsOneWidget);
     await tester.tap(more);
     await tester.pump();
     expect(find.text('Свернуть описание'), findsOneWidget);
     final episode = find.byKey(const ValueKey('mobile-episode-5'));
-    await tester.scrollUntilVisible(episode, 200, scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(episode, -200, scrollable: scrollable);
+    await tester.ensureVisible(episode);
     final node = tester.semantics.simulatedAccessibilityTraversal().singleWhere((node) => node.label == 'Серия 5');
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     node.owner?.performAction(node.id, SemanticsAction.tap);

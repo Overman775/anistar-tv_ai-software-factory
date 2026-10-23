@@ -11,9 +11,10 @@ import '../domain/auth_invalid_credentials_failure.dart';
 import 'login_brand.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
-  const LoginScreen({this.canCancel = false, super.key});
+  const LoginScreen({this.canCancel = false, this.showGuestAction = false, super.key});
 
   final bool canCancel;
+  final bool showGuestAction;
 
   @override
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
@@ -29,6 +30,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _visibilityFocus = FocusNode(debugLabel: 'Видимость пароля');
   final _guestFocus = FocusNode(debugLabel: 'Продолжить без входа');
   bool _obscurePassword = true;
+
+  bool get _showsDismissAction => widget.canCancel || widget.showGuestAction;
 
   @override
   void initState() {
@@ -121,7 +124,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await ref.read(authControllerProvider.notifier).signIn(_username.text, _password.text);
   }
 
-  void _continueAnonymous() {
+  void _dismissLogin() {
     final controller = ref.read(authControllerProvider.notifier);
     if (widget.canCancel) {
       unawaited(controller.cancelSignIn());
@@ -300,7 +303,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: AppSpacing.xl),
           Focus(
             canRequestFocus: false,
-            onKeyEvent: (_, event) => _moveFieldFocus(event, _guestFocus, _passwordFocus),
+            onKeyEvent: (_, event) =>
+                _moveFieldFocus(event, _showsDismissAction ? _guestFocus : _submitFocus, _passwordFocus),
             child: AppButton(
               key: const ValueKey('login_submit'),
               focusNode: _submitFocus,
@@ -310,24 +314,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onPressed: () => unawaited(_submit()),
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Focus(
-            canRequestFocus: false,
-            onKeyEvent: (_, event) => _moveFieldFocus(event, _guestFocus, _submitFocus),
-            child: AppButton(
-              key: const ValueKey('login_guest'),
-              focusNode: _guestFocus,
-              variant: AppButtonVariant.neutral,
-              enabled: widget.canCancel || !busy,
-              busy: snapshot?.isCancellingSignIn == true,
-              label: switch (snapshot?.operation) {
-                AuthOperation.cancellingSignIn => 'Отменяем вход…',
-                AuthOperation.cancellationFailed => 'Повторить отмену',
-                _ => 'Продолжить без входа',
-              },
-              onPressed: _continueAnonymous,
+          if (_showsDismissAction) ...[
+            const SizedBox(height: AppSpacing.md),
+            Focus(
+              canRequestFocus: false,
+              onKeyEvent: (_, event) => _moveFieldFocus(event, _guestFocus, _submitFocus),
+              child: AppButton(
+                key: const ValueKey('login_guest'),
+                focusNode: _guestFocus,
+                variant: AppButtonVariant.neutral,
+                enabled: widget.canCancel || !busy,
+                busy: snapshot?.isCancellingSignIn == true,
+                label: switch (snapshot?.operation) {
+                  AuthOperation.cancellingSignIn => 'Отменяем вход…',
+                  AuthOperation.cancellationFailed => 'Повторить отмену',
+                  _ when widget.canCancel => 'Отмена',
+                  _ => 'Продолжить без входа',
+                },
+                onPressed: _dismissLogin,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

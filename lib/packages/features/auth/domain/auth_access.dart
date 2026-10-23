@@ -40,6 +40,7 @@ final class AuthSessionState {
   final AuthOperation operation;
   final Failure? signInFailure;
   final Failure? cancellationFailure;
+  final int profileContextGeneration;
 
   bool get isSigningIn => operation == AuthOperation.signingIn;
   bool get isCancellingSignIn => operation == AuthOperation.cancellingSignIn;
@@ -51,5 +52,6 @@ final class AuthSessionState {
     this.operation = AuthOperation.idle,
     this.signInFailure,
     this.cancellationFailure,
+    this.profileContextGeneration = 0,
   });
 }

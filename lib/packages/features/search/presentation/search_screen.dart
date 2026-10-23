@@ -11,10 +11,11 @@ import '../../catalog/domain/models/anime_summary.dart';
 import '../../catalog/presentation/widgets/anime_rating_badge.dart';
 import '../../catalog/presentation/widgets/catalog_inspector.dart';
 import '../../catalog/presentation/widgets/catalog_layout.dart';
-import '../../catalog/presentation/widgets/catalog_skeleton.dart';
 import '../../favorites/presentation/favorite_actions_sheet.dart';
 import '../search_providers.dart';
 import 'search_bloc.dart';
+import 'search_feedback.dart';
+import 'search_loading.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({required this.onAnimeTap, this.onOpenNavigation, this.active = true, super.key});
@@ -43,18 +44,21 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   bool _editing = false;
   String _draft = '';
   bool _keyboardVisible = false;
+  int _imeRequest = 0;
   int? _selectedId;
   int _columns = 1;
+  SearchState _formState = const SearchState();
 
   @override
   void initState() {
     super.initState();
     _bloc = SearchBloc(ref.read(searchRepositoryProvider), ref.read(searchHistoryRepositoryProvider));
+    _formState = _bloc.state;
     _query.addListener(_inputChanged);
     _field.addListener(_fieldChanged);
     _scroll.addListener(_loadMore);
     if (widget.active) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _focusField());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _enterSearch());
     }
   }
 
@@ -64,6 +68,12 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void focusFirst() => _focusField();
+
+  void _enterSearch() {
+    if (mounted && widget.active && ModalRoute.of(context)?.isCurrent == true) {
+      _startEditing();
+    }
+  }
 
   void _focusField() {
     if (mounted && widget.active && AppLayoutScope.isTvOf(context) && ModalRoute.of(context)?.isCurrent == true) {
@@ -76,18 +86,22 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     if (!_editing) {
       return false;
     }
+    _imeRequest++;
     setState(() => _editing = false);
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
-    _field.requestFocus();
+    if (mounted && widget.active && ModalRoute.of(context)?.isCurrent == true) {
+      _field.requestFocus();
+    }
 
     return true;
   }
 
   void _startEditing() {
+    final request = ++_imeRequest;
     setState(() => _editing = true);
     _field.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _editing) {
+      if (mounted && request == _imeRequest && widget.active && _editing && ModalRoute.of(context)?.isCurrent == true) {
         unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
       }
     });
@@ -259,6 +273,9 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _searchStateChanged(BuildContext context, SearchState state) {
+    if (mounted) {
+      setState(() => _formState = state);
+    }
     if (_retry.hasFocus && state.status == SearchStatus.ready && !state.loadingMore && state.message == null) {
       _restoreRetryCard();
     }
@@ -310,7 +327,16 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     return KeyEventResult.ignored;
   }
 
-  Widget _feedback(SearchState state) => TvStateView(
+  String? _validationMessage(SearchState state) {
+    final length = state.query.length;
+    if (state.status == SearchStatus.error && length > 0 && (length < 4 || length > 120)) {
+      return state.message;
+    }
+
+    return null;
+  }
+
+  Widget _feedback(SearchState state) => SearchFeedback(
     icon: state.status == SearchStatus.error ? Icons.error_outline_rounded : Icons.search,
     title: switch (state.status) {
       SearchStatus.error => 'Поиск недоступен',
@@ -318,11 +344,10 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       _ => 'Ничего не найдено',
     },
     message: switch (state.status) {
-      SearchStatus.error => state.message,
+      SearchStatus.error => state.message ?? 'Не удалось загрузить результаты. Попробуйте ещё раз.',
       SearchStatus.idle => null,
       _ => 'Попробуйте другое название или проверьте написание.',
     },
-    autofocusAction: false,
   );
 
   Widget _results(SearchState state) => LayoutBuilder(
@@ -341,86 +366,107 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       final selected = state.items.where((item) => item.id == _selectedId).firstOrNull ?? state.items.first;
       final account = ref.watch(authAccessProvider).canUseAccount;
 
-      return SingleChildScrollView(
-        key: const PageStorageKey('search-results'),
-        controller: _scroll,
-        padding: EdgeInsets.fromLTRB(inset, AppSpacing.md, inset, tv ? 64 : MediaQuery.paddingOf(context).bottom + 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Semantics(
-              liveRegion: true,
-              child: Text(
-                'Результаты для «${state.query}» · ${state.items.length}',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-            if (tv) CatalogInspector(anime: selected),
-            const SizedBox(height: AppSpacing.md),
-            Wrap(
-              spacing: gap,
-              runSpacing: AppSpacing.lg,
-              children: [
-                for (var index = 0; index < state.items.length; index++)
-                  SizedBox(
-                    width: width,
-                    height: width / AppSizes.posterRatio,
-                    child: Focus(
-                      canRequestFocus: false,
-                      onKeyEvent: (_, event) => _cardKey(event, index),
-                      child: Builder(
-                        builder: (cardContext) {
-                          final anime = state.items[index];
-                          final node = _cards.putIfAbsent(
-                            anime.id,
-                            () => FocusNode(debugLabel: 'Поиск: ${anime.title}'),
-                          );
+      final count = Semantics(
+        liveRegion: true,
+        child: Text(
+          'Результаты для «${state.query}» · Найдено: ${state.items.length}',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textSecondary),
+        ),
+      );
 
-                          return MediaCard(
-                            key: ValueKey('search-card-${anime.id}'),
-                            focusNode: node,
-                            label: anime.title,
-                            caption: anime.year,
-                            imageUrl: anime.posterUri?.toString(),
-                            heroTag: 'anime-poster-${anime.id}',
-                            onPressed: () => _openAnime(anime),
-                            onLongPressed: () => unawaited(
-                              showFavoriteActions(cardContext, animeId: anime.id, slug: anime.slug, title: anime.title),
-                            ),
-                            onFocusChanged: (focused) => _cardFocused(focused, anime, node, index, state.items.length),
-                            badges: [
-                              AnimeRatingBadge(rating: anime.rating),
-                              if (account && anime.isFavorite == true) const AppIcon(AppIconType.heart),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                  ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(inset, AppSpacing.sm, inset, AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                count,
+                if (tv) ...[const SizedBox(height: AppSpacing.md), CatalogInspector(anime: selected)],
               ],
             ),
-            if (state.loadingMore)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              key: const PageStorageKey('search-results'),
+              controller: _scroll,
+              padding: EdgeInsets.fromLTRB(inset, 0, inset, tv ? 64 : MediaQuery.paddingOf(context).bottom + 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: gap,
+                    runSpacing: AppSpacing.lg,
+                    children: [
+                      for (var index = 0; index < state.items.length; index++)
+                        SizedBox(
+                          width: width,
+                          height: width / AppSizes.posterRatio,
+                          child: Focus(
+                            canRequestFocus: false,
+                            onKeyEvent: (_, event) => _cardKey(event, index),
+                            child: Builder(
+                              builder: (cardContext) {
+                                final anime = state.items[index];
+                                final node = _cards.putIfAbsent(
+                                  anime.id,
+                                  () => FocusNode(debugLabel: 'Поиск: ${anime.title}'),
+                                );
+
+                                return MediaCard(
+                                  key: ValueKey('search-card-${anime.id}'),
+                                  focusNode: node,
+                                  label: anime.title,
+                                  caption: tv ? anime.year : null,
+                                  showCaption: tv,
+                                  showBookmark: account && anime.isFavorite == true,
+                                  imageUrl: anime.posterUri?.toString(),
+                                  heroTag: 'anime-poster-${anime.id}',
+                                  onPressed: () => _openAnime(anime),
+                                  onLongPressed: () => unawaited(
+                                    showFavoriteActions(
+                                      cardContext,
+                                      animeId: anime.id,
+                                      slug: anime.slug,
+                                      title: anime.title,
+                                    ),
+                                  ),
+                                  onFocusChanged: (focused) =>
+                                      _cardFocused(focused, anime, node, index, state.items.length),
+                                  badges: [if (tv) AnimeRatingBadge(rating: anime.rating)],
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (state.loadingMore)
+                    const Padding(
+                      padding: EdgeInsets.all(AppSpacing.lg),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  if (state.message case final message?) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    Text(message, textAlign: TextAlign.center),
+                  ],
+                  if (state.message != null || state.loadingMore && _retry.hasFocus)
+                    Focus(
+                      canRequestFocus: false,
+                      onKeyEvent: _retryKey,
+                      child: TextButton(
+                        key: const ValueKey('search-pagination-retry'),
+                        focusNode: _retry,
+                        onPressed: () => _bloc.add(const SearchMoreRequested(retry: true)),
+                        child: Text(state.loadingMore ? 'Загружаем…' : 'Повторить загрузку'),
+                      ),
+                    ),
+                ],
               ),
-            if (state.message case final message?) ...[
-              const SizedBox(height: AppSpacing.md),
-              Text(message, textAlign: TextAlign.center),
-            ],
-            if (state.message != null || state.loadingMore && _retry.hasFocus)
-              Focus(
-                canRequestFocus: false,
-                onKeyEvent: _retryKey,
-                child: TextButton(
-                  key: const ValueKey('search-pagination-retry'),
-                  focusNode: _retry,
-                  onPressed: () => _bloc.add(const SearchMoreRequested(retry: true)),
-                  child: Text(state.loadingMore ? 'Загружаем…' : 'Повторить загрузку'),
-                ),
-              ),
-          ],
-        ),
+            ),
+          ),
+        ],
       );
     },
   );
@@ -483,12 +529,19 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   void didUpdateWidget(covariant SearchScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.active && !oldWidget.active) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _focusField());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _enterSearch());
+    } else if (!widget.active && oldWidget.active) {
+      _imeRequest++;
+      if (_editing) {
+        _editing = false;
+        unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
+      }
     }
   }
 
   @override
   void dispose() {
+    _imeRequest++;
     unawaited(_bloc.close());
     _query.removeListener(_inputChanged);
     _field.removeListener(_fieldChanged);
@@ -526,47 +579,60 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Semantics(
-                        label: 'Название аниме',
-                        child: AppFocusBorder(
-                          focusNode: _field,
-                          restingColor: AppPalette.outline,
-                          child: TextField(
-                            key: const ValueKey('search-query'),
-                            controller: _query,
-                            focusNode: _field,
-                            readOnly: tv && !_editing,
-                            textInputAction: TextInputAction.search,
-                            maxLength: 120,
-                            onTap: tv ? _startEditing : null,
-                            onSubmitted: (_) => _search(),
-                            decoration: InputDecoration(
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              counterText: '',
-                              hintText: _field.hasFocus ? null : 'Название аниме',
-                              suffixIcon: IconButton(
-                                key: const ValueKey('search-clear'),
-                                focusNode: _clear,
-                                tooltip: 'Очистить запрос',
-                                onPressed: _query.text.isEmpty
-                                    ? null
-                                    : () {
-                                        _query.clear();
-                                        _field.requestFocus();
-                                      },
-                                icon: const AppIcon(AppIconType.x),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Semantics(
+                            label: 'Название аниме',
+                            child: AppFocusBorder(
+                              focusNode: _field,
+                              restingColor: AppPalette.outline,
+                              child: TextField(
+                                key: const ValueKey('search-query'),
+                                controller: _query,
+                                focusNode: _field,
+                                readOnly: tv && !_editing,
+                                textInputAction: TextInputAction.search,
+                                maxLength: 120,
+                                onTap: tv ? _startEditing : null,
+                                onSubmitted: (_) => _search(),
+                                decoration: InputDecoration(
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
+                                  counterText: '',
+                                  hintText: _field.hasFocus ? null : 'Название аниме',
+                                  suffixIcon: IconButton(
+                                    key: const ValueKey('search-clear'),
+                                    focusNode: _clear,
+                                    tooltip: 'Очистить запрос',
+                                    onPressed: _query.text.isEmpty
+                                        ? null
+                                        : () {
+                                            _query.clear();
+                                            _field.requestFocus();
+                                          },
+                                    icon: const AppIcon(AppIconType.x),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                          if (_validationMessage(_formState) case final message?) ...[
+                            const SizedBox(height: AppSpacing.sm),
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(message, style: const TextStyle(color: AppPalette.danger)),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     AppButton(
                       key: const ValueKey('search-submit'),
                       focusNode: _submit,
+                      icon: const AppIcon(AppIconType.search),
                       label: 'Найти',
                       onPressed: _search,
                     ),
@@ -583,10 +649,13 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
             buildWhen: (previous, current) => previous != current,
             builder: (context, state) {
               if (state.status == SearchStatus.loading) {
-                return tv ? const CatalogSkeleton() : const Center(child: CircularProgressIndicator());
+                return const SearchLoading();
               }
               if (state.items.isNotEmpty) {
                 return _results(state);
+              }
+              if (_validationMessage(state) != null) {
+                return state.history.isNotEmpty ? _recent(state) : _feedback(const SearchState());
               }
               if (state.status == SearchStatus.idle && state.history.isNotEmpty) {
                 return _recent(state);

@@ -85,11 +85,7 @@ class AnimeSkeleton extends StatelessWidget {
                     crossAxisCount: columns,
                     mainAxisSpacing: AppSpacing.xl,
                     crossAxisSpacing: AppSpacing.lg,
-                    mainAxisExtent: AnimeLayout.episodeHeight(
-                      context,
-                      constraints.crossAxisExtent,
-                      viewportExtent: constraints.viewportMainAxisExtent,
-                    ),
+                    mainAxisExtent: AnimeLayout.episodeHeight(context, constraints.crossAxisExtent),
                   ),
                   itemCount: columns * 2,
                   itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),

@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
-import 'anime_rating_badge.dart';
+import 'catalog_inspector_rating.dart';
 import 'catalog_layout.dart';
 
 class CatalogInspectorCopy extends StatelessWidget {
@@ -46,7 +46,7 @@ class CatalogInspectorCopy extends StatelessWidget {
                   spacing: AppSpacing.md,
                   runSpacing: AppSpacing.xs,
                   children: [
-                    AnimeRatingBadge(rating: anime.rating),
+                    CatalogInspectorRating(rating: anime.rating),
                     if (facts.isNotEmpty)
                       Text(facts, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.bodyMedium),
                   ],

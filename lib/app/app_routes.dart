@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../packages/features/anime/domain/models/anime_episode.dart';
+import '../packages/features/anime/domain/models/anime_part.dart';
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/auth/auth_providers.dart';
 import '../packages/features/catalog/domain/models/anime_summary.dart';
@@ -72,6 +74,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
       destination: destination,
       onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
       accountName: ref.watch(authAccessProvider).account,
+      accountImageUrl: _accountImageUrl(ref),
       onOpenGenres: () => const GenresRoute().push<void>(context),
       onGenreSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
       onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
@@ -80,15 +83,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
           : ref.read(authControllerProvider.notifier).requestSignIn,
       onRootBack: supportsAppExit ? () => unawaited(confirmAppExit(context)) : null,
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
-      onAnimeTap: (anime) {
-        AnimeRoute(
-          animeId: anime.id,
-          slug: anime.slug,
-          title: anime.title,
-          destination: destination,
-          $extra: anime,
-        ).go(context);
-      },
+      onAnimeTap: (anime) => _openHomeAnime(context, anime, destination),
     ),
   );
 }
@@ -124,27 +119,8 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
       fallbackTitle: title,
       fallbackPosterUri: $extra?.id == animeId ? $extra?.posterUri : null,
       onFilterTap: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
-      onPartTap: (part) {
-        final id = part.id;
-        final partSlug = part.slug;
-        if (id != null && partSlug != null && id != animeId) {
-          unawaited(
-            AnimeRoute(animeId: id, slug: partSlug, title: part.label, destination: destination).push<void>(context),
-          );
-        }
-      },
-      onEpisodeTap: (episode) {
-        unawaited(
-          PlayerRoute(
-            animeId: animeId,
-            episodeNumber: episode.number,
-            destination: destination,
-            slug: slug,
-            title: title,
-            $extra: $extra,
-          ).push<void>(context),
-        );
-      },
+      onPartTap: (part) => _openAnimePart(context, part, animeId, destination),
+      onEpisodeTap: (episode) => _openEpisode(context, episode, animeId, destination, slug, title, $extra),
     ),
   );
 }
@@ -255,6 +231,45 @@ class FilterRoute extends GoRouteData with $FilterRoute {
 VoidCallback? _logsAction(BuildContext context) =>
     AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null;
 
+void _openHomeAnime(BuildContext context, AnimeSummary anime, HomeDestination destination) {
+  AnimeRoute(
+    animeId: anime.id,
+    slug: anime.slug,
+    title: anime.title,
+    destination: destination,
+    $extra: anime,
+  ).go(context);
+}
+
+void _openAnimePart(BuildContext context, AnimePart part, int animeId, HomeDestination destination) {
+  final id = part.id;
+  final partSlug = part.slug;
+  if (id != null && partSlug != null && id != animeId) {
+    unawaited(AnimeRoute(animeId: id, slug: partSlug, title: part.label, destination: destination).push<void>(context));
+  }
+}
+
+void _openEpisode(
+  BuildContext context,
+  AnimeEpisode episode,
+  int animeId,
+  HomeDestination destination,
+  String slug,
+  String title,
+  AnimeSummary? extra,
+) {
+  unawaited(
+    PlayerRoute(
+      animeId: animeId,
+      episodeNumber: episode.number,
+      destination: destination,
+      slug: slug,
+      title: title,
+      $extra: extra,
+    ).push<void>(context),
+  );
+}
+
 void _openAnime(BuildContext context, AnimeSummary anime, HomeDestination destination) {
   unawaited(
     AnimeRoute(
@@ -265,6 +280,19 @@ void _openAnime(BuildContext context, AnimeSummary anime, HomeDestination destin
       $extra: anime,
     ).push<void>(context),
   );
+}
+
+String? _accountImageUrl(WidgetRef ref) {
+  final access = ref.watch(authAccessProvider);
+  if (access is! AuthenticatedAccess) {
+    return null;
+  }
+  final profile = ref.watch(authProfileStateProvider);
+  if (profile.account != access.account) {
+    return null;
+  }
+
+  return profile.profile?.imageUri?.toString();
 }
 
 class _RouteShell extends ConsumerWidget {
@@ -279,6 +307,7 @@ class _RouteShell extends ConsumerWidget {
       ? TvRouteShell(
           destination: destination,
           accountName: ref.watch(authAccessProvider).account,
+          accountImageUrl: _accountImageUrl(ref),
           onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
           onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
           onSignIn: ref.watch(authAccessProvider).canUseAccount

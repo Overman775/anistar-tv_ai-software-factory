@@ -3,7 +3,6 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
 import 'anime_rating_badge.dart';
-import 'favorite_ribbon.dart';
 
 class AnimeCard extends StatelessWidget {
   const AnimeCard({
@@ -35,9 +34,7 @@ class AnimeCard extends StatelessWidget {
     onFocusChanged: onFocusChanged,
     onPressed: onTap,
     onLongPressed: onLongPressed,
-    badges: [
-      AnimeRatingBadge(rating: anime.rating),
-      if (showFavorite && (isFavorite ?? anime.isFavorite) == true) const FavoriteRibbon(),
-    ],
+    showBookmark: showFavorite && (isFavorite ?? anime.isFavorite) == true,
+    badges: [AnimeRatingBadge(rating: anime.rating)],
   );
 }

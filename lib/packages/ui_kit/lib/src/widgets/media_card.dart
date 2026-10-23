@@ -1,9 +1,13 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_content_typography.dart';
 import '../theme/app_palette.dart';
 import 'app_icon.dart';
 import 'app_network_image.dart';
+import 'media_card_bookmark.dart';
+import 'media_card_caption_underlay.dart';
 import 'tv_focus_tile.dart';
 import 'tv_poster_hero.dart';
 
@@ -15,6 +19,9 @@ class MediaCard extends StatelessWidget {
     this.imageUrl,
     this.caption,
     this.showCaption = true,
+    this.showBookmark = false,
+    this.showEpisodeTrailing = false,
+    this.episodeHeight,
     this.semanticLabel,
     this.variant = MediaCardVariant.poster,
     this.fit,
@@ -37,6 +44,9 @@ class MediaCard extends StatelessWidget {
   final String? imageUrl;
   final String? caption;
   final bool showCaption;
+  final bool showBookmark;
+  final bool showEpisodeTrailing;
+  final double? episodeHeight;
   final String? semanticLabel;
   final MediaCardVariant variant;
   final BoxFit? fit;
@@ -91,77 +101,108 @@ class MediaCard extends StatelessWidget {
                   ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
         ),
       ),
-      if (caption case final caption?) ...[
-        const SizedBox(height: AppSpacing.xs),
-        ExcludeSemantics(
-          child: Text(
-            caption,
-            maxLines: variant == MediaCardVariant.episode ? 2 : null,
-            overflow: variant == MediaCardVariant.episode ? TextOverflow.ellipsis : TextOverflow.clip,
-            style:
-                (variant == MediaCardVariant.episode
-                        ? AppContentTypography.episodeCaptionOf(context)
-                        : AppContentTypography.cardCaptionOf(context))
-                    ?.copyWith(color: AppPalette.textSecondary),
+      if (showCaption)
+        if (caption case final String caption) ...[
+          const SizedBox(height: AppSpacing.xs),
+          ExcludeSemantics(
+            child: Text(
+              caption,
+              maxLines: variant == MediaCardVariant.episode ? 2 : null,
+              overflow: variant == MediaCardVariant.episode ? TextOverflow.ellipsis : TextOverflow.clip,
+              style:
+                  (variant == MediaCardVariant.episode
+                          ? AppContentTypography.episodeCaptionOf(context)
+                          : AppContentTypography.cardCaptionOf(context))
+                      ?.copyWith(color: AppPalette.textSecondary),
+            ),
           ),
-        ),
-      ],
+        ],
     ],
   );
 
+  double _textHeight({
+    required BuildContext context,
+    required String text,
+    required TextStyle? style,
+    required double maxWidth,
+    required int maxLines,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: maxLines,
+    )..layout(maxWidth: maxWidth);
+
+    return painter.height;
+  }
+
+  double _episodeCopyHeight(BuildContext context, double width) {
+    final double copyWidth = math.max(1.0, width - AppSpacing.md * 2);
+    final titleHeight = _textHeight(
+      context: context,
+      text: label,
+      style: AppContentTypography.episodeTitleOf(context)
+          ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
+      maxWidth: copyWidth,
+      maxLines: 2,
+    );
+    final captionHeight = switch ((showCaption, caption)) {
+      (true, final String caption) =>
+        _textHeight(
+              context: context,
+              text: caption,
+              style: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
+              maxWidth: copyWidth,
+              maxLines: 2,
+            ) +
+            AppSpacing.xs,
+      _ => 0.0,
+    };
+
+    return AppSpacing.xxl + AppSpacing.md + titleHeight + captionHeight;
+  }
+
   Widget _episode() => LayoutBuilder(
     builder: (context, constraints) {
-      final copy = Row(
+      final width = constraints.hasBoundedWidth ? constraints.maxWidth : AppSizes.sideSheet;
+      final imageHeight = width / AppSizes.landscapeRatio;
+      final contentHeight = _episodeCopyHeight(context, width);
+      final baselineHeight = episodeHeight ?? imageHeight;
+      final double height = math.max(baselineHeight, contentHeight);
+      final surface = Stack(
+        fit: StackFit.expand,
         children: [
-          if (leading case final leading?) ...[leading, const SizedBox(width: AppSpacing.md)],
-          Expanded(child: _copy(context)),
-          const SizedBox(width: AppSpacing.sm),
-          if (busy) ...[
-            const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          if (badges.isNotEmpty) ...[...badges, const SizedBox(width: AppSpacing.sm)],
-          trailing ?? const AppIcon(AppIconType.play, size: 24),
+          ExcludeSemantics(child: _image()),
+          MediaCardCaptionUnderlay(child: _copy(context)),
+          if (leading case final leading?)
+            Positioned(
+              top: AppSpacing.sm,
+              left: AppSpacing.sm,
+              child: ExcludeSemantics(child: leading),
+            ),
+          if (busy)
+            const Positioned(
+              top: AppSpacing.sm,
+              left: AppSpacing.sm,
+              child: SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          if (badges.isNotEmpty)
+            Positioned(
+              top: AppSpacing.sm,
+              right: AppSpacing.sm,
+              child: Row(mainAxisSize: MainAxisSize.min, spacing: AppSpacing.xs, children: badges),
+            ),
+          if (showEpisodeTrailing)
+            Positioned(
+              right: AppSpacing.sm,
+              bottom: AppSpacing.sm,
+              child: ExcludeSemantics(child: trailing ?? const AppIcon(AppIconType.play, size: 24)),
+            ),
         ],
       );
 
-      if (constraints.maxWidth < 320) {
-        final preview = AspectRatio(
-          aspectRatio: AppSizes.episodeRatio,
-          child: ExcludeSemantics(child: _image()),
-        );
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (constraints.hasBoundedHeight)
-              Flexible(
-                child: Align(alignment: Alignment.topCenter, heightFactor: 1, child: preview),
-              )
-            else
-              preview,
-            Padding(padding: const EdgeInsets.all(AppSpacing.md), child: copy),
-          ],
-        );
-      }
-
-      return Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 96,
-              child: AspectRatio(
-                aspectRatio: AppSizes.episodeRatio,
-                child: ExcludeSemantics(child: _image()),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(child: copy),
-          ],
-        ),
-      );
+      return SizedBox(height: height, child: surface);
     },
   );
 
@@ -175,7 +216,7 @@ class MediaCard extends StatelessWidget {
     onPressed: onPressed,
     onLongPressed: onLongPressed,
     onFocusChanged: onFocusChanged,
-    semanticLabel: semanticLabel ?? [label, if (caption != null) caption].join(', '),
+    semanticLabel: semanticLabel ?? [label, if (showCaption && caption != null) caption].join(', '),
     builder: (context, focused) {
       if (variant == MediaCardVariant.episode) {
         return _episode();
@@ -187,26 +228,7 @@ class MediaCard extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             ExcludeSemantics(child: _image()),
-            if (showCaption)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.transparent, AppPalette.mediaCaptionShade, AppPalette.media],
-                      stops: [0, 0.48, 1],
-                    ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xxl, AppSpacing.md, AppSpacing.md),
-                    child: _copy(context),
-                  ),
-                ),
-              ),
+            MediaCardCaptionUnderlay(child: _copy(context)),
             if (busy)
               const Positioned(
                 top: AppSpacing.sm,
@@ -216,9 +238,10 @@ class MediaCard extends StatelessWidget {
             if (badges.isNotEmpty)
               Positioned(
                 top: AppSpacing.sm,
-                right: AppSpacing.sm,
+                left: AppSpacing.sm,
                 child: Row(mainAxisSize: MainAxisSize.min, spacing: AppSpacing.xs, children: badges),
               ),
+            if (showBookmark) const Positioned(top: 0, right: AppSpacing.md, child: MediaCardBookmark()),
           ],
         ),
       );

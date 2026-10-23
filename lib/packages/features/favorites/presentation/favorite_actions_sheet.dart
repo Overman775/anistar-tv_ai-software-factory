@@ -118,6 +118,7 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
     return AppActionSheet(
       title: widget.title,
       mobileHeightFactor: MediaQuery.sizeOf(context).height < 500 ? 0.8 : 0.4,
+      expandChild: true,
       child: ListView(
         children: [
           FutureBuilder<Result<bool, Failure>>(future: _future, builder: _content),

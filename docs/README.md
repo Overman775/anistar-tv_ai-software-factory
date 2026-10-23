@@ -32,16 +32,12 @@
 
 ## Намерения изменений
 
-- [Удобная перемотка и явный выбор качества в плеере](intents/player-seek-and-quality.md).
-- [Общий компонент выделения карточек и серий в UI Kit](intents/shared-card-focus-in-ui-kit.md).
-- [Единый стиль отметок и понятные подписи на карточках](intents/card-badges-and-captions.md).
-- [Три колонки серий на TV и одна серия в ряд на телефоне](intents/episode-grid-tv-and-mobile.md).
-- [Немного уменьшить шрифты на главной и странице сериала](intents/readable-smaller-typography.md).
-- [Новые идентификаторы приложения и запуск на iOS](intents/app-identifiers-and-ios-launch.md).
+[Полный список intent](intents/README.md) — пожелания по интерфейсу, поведению и исправлению багов.
 
 ## Согласованные планы
 
 - [Полный редизайн приложения по прототипу — revision 3](plans/prototype-app-redesign-2026-10-22.md).
+- [Карточки, поиск, вход и управление TV/mobile по 15 intent — revision 2](plans/ui-intents-polish-2026-10-23.md).
 - [Карточки, серии и управление плеером — revision 1](plans/ui-player-intents-2026-10-19.md).
 - [Идентификаторы приложения и запуск iOS — revision 6](plans/app-identifiers-and-ios-launch.md).
 

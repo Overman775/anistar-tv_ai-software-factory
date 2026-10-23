@@ -45,6 +45,7 @@ class _PlayerChoicesDialogState<T> extends State<PlayerChoicesDialog<T>> {
   @override
   Widget build(BuildContext context) => AppActionSheet(
     title: widget.title,
+    expandChild: true,
     child: ListView(
       controller: _scrollController,
       itemExtent: _rowHeight,

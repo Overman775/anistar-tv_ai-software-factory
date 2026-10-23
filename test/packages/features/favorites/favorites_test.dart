@@ -11,11 +11,25 @@ import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../support/test_app.dart';
 
 void main() {
+  testWidgets('guest favorite panel keeps its sign-in action at intrinsic TV control height', (tester) async {
+    await pumpTvApp(
+      tester,
+      const FavoriteActionsSheet(animeId: 1, slug: '1-test', title: 'Аниме 1'),
+      overrides: [authAccessProvider.overrideWithValue(const AnonymousAccess())],
+    );
+    final signIn = find.widgetWithText(AppButton, 'Войти, чтобы добавить в избранное');
+
+    expect(find.byType(TvSideSheet), findsOneWidget);
+    expect(tester.getSize(signIn).height, AppSizes.tvControl);
+    expect(tester.takeException(), isNull);
+  });
+
   test('serializes writes and keeps the last confirmed value on failure', () async {
     final pending = Completer<Result<bool, Failure>>();
     final repository = FakeFavoritesRepository()..change = (_) => pending.future;

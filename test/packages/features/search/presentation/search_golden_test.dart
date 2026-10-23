@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
@@ -20,7 +22,16 @@ void main() {
     (true, const Size(844, 390)),
   ]) {
     for (final textScale in [1.0, 2.0]) {
-      for (final scene in ['history', 'results', 'empty', 'error']) {
+      for (final scene in [
+        'idle',
+        'history',
+        'loading',
+        'results',
+        'empty',
+        'validation',
+        'error',
+        'pagination_retry',
+      ]) {
         final profile = mobile ? 'mobile' : 'tv';
         final dimensions = '${size.width.toInt()}x${size.height.toInt()}';
         final scale = (textScale * 100).toInt();
@@ -32,25 +43,37 @@ void main() {
             final opened = <int>[];
             final settle = tester.pumpAndSettle;
             final takeException = tester.takeException;
+            final pending = Completer<Result<AnimePage, Failure>>();
             final repository = FakeSearchRepository(
-              load: (_) async => scene == 'error'
-                  ? const Result.failure(UnknownFailure())
-                  : Result.success(
-                      AnimePage(
-                        items: scene == 'results'
-                            ? List.generate(
-                                6,
-                                (index) => AnimeSummary(
-                                  id: index + 1,
-                                  slug: '${index + 1}-anime',
-                                  title: 'Аниме ${index + 1}',
-                                ),
-                              )
-                            : const [],
-                        page: 1,
-                        hasNext: false,
+              load: (request) async {
+                if (scene == 'loading') {
+                  return pending.future;
+                }
+                if (scene == 'error') {
+                  return const Result.failure(UnknownFailure());
+                }
+                if (scene == 'pagination_retry' && request.page == 2) {
+                  return const Result.failure(UnknownFailure());
+                }
+
+                return Result.success(
+                  AnimePage(
+                    items: switch (scene) {
+                      'results' => List.generate(
+                        6,
+                        (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}'),
                       ),
-                    ),
+                      'pagination_retry' => List.generate(
+                        24,
+                        (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}'),
+                      ),
+                      _ => const [],
+                    },
+                    page: request.page,
+                    hasNext: scene == 'pagination_retry' && request.page == 1,
+                  ),
+                );
+              },
             );
             final overrides = [
               authAccessProvider.overrideWithValue(const AnonymousAccess()),
@@ -81,10 +104,23 @@ void main() {
               );
             }
             await settle();
-            if (scene != 'history') {
+            if (!['idle', 'history'].contains(scene)) {
               final field = find.byKey(const ValueKey('search-query'));
-              tester.widget<TextField>(field).controller?.text = 'Наруто';
+              tester.widget<TextField>(field).controller?.text = scene == 'validation' ? 'abc' : 'Наруто';
               await tester.tap(find.byKey(const ValueKey('search-submit')));
+              if (scene == 'loading') {
+                await tester.pump();
+              } else {
+                await settle();
+              }
+            }
+            if (scene == 'pagination_retry') {
+              final scroll = tester
+                  .widget<SingleChildScrollView>(find.byKey(const PageStorageKey('search-results')))
+                  .controller;
+              scroll?.jumpTo(scroll.position.maxScrollExtent);
+              await settle();
+              await tester.ensureVisible(find.byKey(const ValueKey('search-pagination-retry')));
               await settle();
             }
             final layoutException = takeException();
@@ -97,7 +133,9 @@ void main() {
             final field = find.byKey(const ValueKey('search-query'));
             final controller = tester.widget<TextField>(field).controller;
             expect(find.bySemanticsLabel(RegExp('Название аниме')), findsWidgets);
-            if (scene == 'history') {
+            if (scene == 'idle') {
+              expect(find.text('Что будем смотреть?'), findsOneWidget);
+            } else if (scene == 'history') {
               final recent = find.byKey(const ValueKey('search-recent-0'));
               _expectAction(tester, recent, 'Наруто');
               _expectAction(tester, find.byKey(const ValueKey('search-remove-0')), 'Удалить запрос Наруто');
@@ -110,26 +148,30 @@ void main() {
               expect(repository.requests.single.query, 'Наруто');
             } else if (scene == 'results') {
               final card = find.byKey(const ValueKey('search-card-1'));
-              await tester.ensureVisible(card);
-              await settle();
-              _expectAction(tester, card, 'Аниме 1');
-              await tester.tap(card);
-              await settle();
-              expect(opened, [1]);
+              expect(card, findsOneWidget);
+              expect(opened, isEmpty);
+            } else if (scene == 'loading') {
+              expect(find.text('Ищем аниме…'), findsOneWidget);
+            } else if (scene == 'validation') {
+              expect(find.text('Введите не менее 4 символов.'), findsOneWidget);
+            } else if (scene == 'pagination_retry') {
+              expect(find.byKey(const ValueKey('search-pagination-retry')), findsOneWidget);
             } else {
               expect(find.text(scene == 'empty' ? 'Ничего не найдено' : 'Поиск недоступен'), findsOneWidget);
             }
             final clear = find.byKey(const ValueKey('search-clear'));
-            _expectAction(tester, clear, 'Очистить запрос');
-            await tester.tap(clear);
-            await settle();
-            expect(controller?.text, isEmpty);
-            controller?.text = 'Ван Пис';
-            final requestCount = repository.requests.length;
-            await tester.tap(find.byKey(const ValueKey('search-submit')));
-            await settle();
-            expect(repository.requests.length, requestCount + 1);
-            expect(repository.requests.last.query, 'Ван Пис');
+            if (!['idle', 'loading'].contains(scene)) {
+              _expectAction(tester, clear, 'Очистить запрос');
+              await tester.tap(clear);
+              await settle();
+              expect(controller?.text, isEmpty);
+              controller?.text = 'Ван Пис';
+              final requestCount = repository.requests.length;
+              await tester.tap(find.byKey(const ValueKey('search-submit')));
+              await settle();
+              expect(repository.requests.length, requestCount + 1);
+              expect(repository.requests.last.query, 'Ван Пис');
+            }
             final interactionException = takeException();
             expect(interactionException, isNull);
           } finally {

@@ -15,7 +15,6 @@ class MobileAnimeContent extends StatefulWidget {
     required this.data,
     required this.episodes,
     required this.watched,
-    required this.favoriteAction,
     required this.onEpisodeTap,
     required this.onRetry,
     required this.onRefresh,
@@ -24,6 +23,9 @@ class MobileAnimeContent extends StatefulWidget {
     this.fallbackPosterUri,
     this.onFilterTap,
     this.onPartTap,
+    this.favoriteAction,
+    this.filterActions,
+    this.yearAction,
     this.rewatch = false,
     super.key,
   });
@@ -33,7 +35,9 @@ class MobileAnimeContent extends StatefulWidget {
   final Set<int> watched;
   final AnimeEpisode? playEpisode;
   final Uri? fallbackPosterUri;
-  final Widget favoriteAction;
+  final Widget? favoriteAction;
+  final Widget? filterActions;
+  final Widget? yearAction;
   final ValueChanged<AnimeEpisode> onEpisodeTap;
   final ValueChanged<CatalogFilter>? onFilterTap;
   final ValueChanged<AnimePart>? onPartTap;
@@ -65,7 +69,6 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
     final sectionStyle = AppContentTypography.sectionTitleOf(context);
     final mutedStyle = theme.bodyMedium?.copyWith(color: AppPalette.textSecondary);
     final wide = MediaQuery.sizeOf(context).width >= 600;
-    final metadata = [details.year, ...details.genres].whereType<String>().join(' · ');
     final description = details.description?.trim();
     final hasDescription = description != null && description.isNotEmpty;
     final pinWatch = wide && MediaQuery.sizeOf(context).height < 500 && MediaQuery.textScalerOf(context).scale(14) > 21;
@@ -105,28 +108,20 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
                 AppMetadataBadge(icon: Icons.grade_rounded, label: rating, semanticLabel: 'Рейтинг $rating из 10'),
                 const SizedBox(height: AppSpacing.sm),
               ],
-              if (metadata.isNotEmpty) Text(metadata, style: theme.bodyMedium),
-              if (details.director case final director?) Text(director, style: theme.bodyMedium),
+              if (widget.yearAction case final action?)
+                action
+              else if (details.year case final year?)
+                Text(year, style: theme.bodyMedium),
             ],
           ),
         ),
         const SizedBox(height: 16),
-        if (!pinWatch && watchAction != null) ...[watchAction, const SizedBox(height: 8)],
-        widget.favoriteAction,
-        if (details.filters.isNotEmpty && widget.onFilterTap != null) ...[
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final filter in details.filters)
-                ActionChip(label: Text(filter.label), onPressed: () => widget.onFilterTap?.call(filter)),
-            ],
-          ),
-        ] else if (details.genres.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(details.genres.join(' • '), style: mutedStyle),
+        if (!pinWatch && watchAction != null) ...[
+          watchAction,
+          if (widget.favoriteAction != null) const SizedBox(height: 8),
         ],
+        ?widget.favoriteAction,
+        if (widget.filterActions case final actions?) ...[const SizedBox(height: 20), actions],
         if (hasDescription) ...[
           const SizedBox(height: 24),
           Semantics(header: true, child: Text('Сюжет', style: sectionStyle)),
@@ -166,7 +161,16 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
           AnimeWatchOrder(parts: details.parts, currentId: details.id, onSelected: widget.onPartTap),
         ],
         const SizedBox(height: 24),
-        Semantics(header: true, child: Text('Серии · ${widget.episodes.length}', style: sectionStyle)),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Expanded(
+              child: Semantics(header: true, child: Text('Серии', style: sectionStyle)),
+            ),
+            Text('В списке: ${widget.episodes.length}', style: mutedStyle),
+          ],
+        ),
         const SizedBox(height: 12),
         if (widget.episodes.isEmpty) ...[
           const Text('Серии не найдены. Для этого аниме пока нет доступных выпусков.'),

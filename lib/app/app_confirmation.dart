@@ -35,6 +35,7 @@ Future<bool> showAppConfirmation(
       builder: (sheetContext) => AppActionSheet(
         title: title,
         mobileHeightFactor: 0.65,
+        expandChild: true,
         child: _AppConfirmation(message: message, confirmLabel: confirmLabel, cancelLabel: cancelLabel),
       ),
     ) ??

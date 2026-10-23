@@ -15,12 +15,14 @@ class AnimeHero extends StatelessWidget {
     this.fallbackPosterUri,
     this.playFocusNode,
     this.filterActions,
+    this.yearAction,
     this.rewatch = false,
   });
 
   final AnimeScreenData data;
   final AnimeEpisode? playEpisode;
   final Widget? filterActions;
+  final Widget? yearAction;
   final FocusNode? playFocusNode;
   final Widget? favoriteAction;
   final Uri? fallbackPosterUri;
@@ -34,7 +36,6 @@ class AnimeHero extends StatelessWidget {
     final posterUri = details.posterUri ?? fallbackPosterUri;
     final episode = playEpisode;
     final watchLabel = episode == null ? 'Нет доступных серий' : 'Смотреть серию ${episode.number}';
-    final metadata = [details.year, ...details.genres].whereType<String>().join(' · ');
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
@@ -63,19 +64,29 @@ class AnimeHero extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (details.rating case final rating?) ...[
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
+                    if (details.rating != null || details.year != null) ...[
+                      Wrap(
+                        spacing: AppSpacing.md,
+                        runSpacing: AppSpacing.sm,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          const AppIcon(AppIconType.star, size: 20),
-                          const SizedBox(width: 8),
-                          Text(rating.toStringAsFixed(1).replaceAll('.', ','), style: theme.titleMedium),
+                          if (details.rating case final rating?)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const AppIcon(AppIconType.star, size: 20),
+                                const SizedBox(width: 8),
+                                Text(rating.toStringAsFixed(1).replaceAll('.', ','), style: theme.titleMedium),
+                              ],
+                            ),
+                          if (yearAction case final action?)
+                            action
+                          else if (details.year case final year?)
+                            Text(year, style: theme.bodyLarge),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
                     ],
-                    if (metadata.isNotEmpty) Text(metadata, style: theme.bodyLarge),
-                    if (details.director case final director?) Text(director, style: theme.bodyMedium),
                     if (details.isOngoing) Text('Онгоинг', style: theme.labelLarge),
                     if (filterActions case final filters?) ...[const SizedBox(height: AppSpacing.lg), filters],
                     const SizedBox(height: AppSpacing.lg),

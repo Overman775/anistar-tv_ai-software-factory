@@ -1,7 +1,6 @@
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
-import 'package:anistar_tv/packages/features/catalog/presentation/widgets/favorite_ribbon.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -95,7 +94,7 @@ void main() {
     await tester.longPress(poster);
     expect(opens, 1);
     expect(actions, 1);
-    expect(find.byType(FavoriteRibbon), findsOneWidget);
+    expect(find.byType(MediaCardBookmark), findsOneWidget);
     expect(find.byType(TvFocusTile), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

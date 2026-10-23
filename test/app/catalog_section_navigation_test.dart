@@ -10,7 +10,6 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
-import 'package:anistar_tv/packages/features/catalog/presentation/widgets/favorite_ribbon.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
@@ -176,7 +175,7 @@ void main() {
     await settle();
     final catalog = find.byType(CatalogScreen);
     final initialState = tester.state(catalog);
-    final marker = find.byType(FavoriteRibbon);
+    final marker = find.byType(MediaCardBookmark);
     expect(marker, findsNothing);
     expect(requests, [1]);
     favoriteOnSite = true;
@@ -211,6 +210,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<AnimeCard>(find.byType(AnimeCard)).anime.id, 20);
     expect(focusedControlLabel(tester), 'Аниме 20');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Left stays in a card row until its first column, then opens the active menu', (tester) async {
+    await pumpTvApp(
+      tester,
+      HomeScreen(onAnimeTap: (_) => fail('Unexpected details')),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    int? focusedAnimeId() =>
+        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>()?.anime.id;
+    final rail = find.byType(CatalogNavigationRail);
+
+    expect(focusedAnimeId(), 1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(focusedAnimeId(), 3);
+    expect(tester.widget<CatalogNavigationRail>(rail).expanded, isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(focusedAnimeId(), 2);
+    expect(tester.widget<CatalogNavigationRail>(rail).expanded, isFalse);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    expect(focusedAnimeId(), 1);
+    expect(tester.widget<CatalogNavigationRail>(rail).expanded, isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(focusedControlLabel(tester), 'Главная');
+    expect(tester.widget<CatalogNavigationRail>(rail).expanded, isTrue);
     expect(tester.takeException(), isNull);
   });
 }

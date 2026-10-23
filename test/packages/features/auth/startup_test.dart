@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:anistar_tv/app/app.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
+import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/startup_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
@@ -48,16 +49,84 @@ void main() {
       session.complete(Result.success(account));
       await tester.pumpAndSettle();
       expect(find.byType(StartupScreen), findsNothing);
-      expect(find.byType(account == null ? LoginScreen : CatalogScreen), findsOneWidget);
+      expect(find.byType(account == null ? IntroScreen : CatalogScreen), findsOneWidget);
       if (account == null) {
-        final field = tester.widget<EditableText>(find.byType(EditableText).first);
-        expect(field.focusNode.hasFocus, isTrue);
+        expect(find.byType(TextFormField), findsNothing);
+        expect(
+          FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppButton>()?.key,
+          const ValueKey('intro_sign_in'),
+        );
       }
       expect(repository.loginCalls, 0);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('intro separates guest choice from the form and form cancellation returns to intro', (tester) async {
+    final repository = FakeAuthRepository();
+    addTearDown(repository.close);
+    await pumpTvApp(
+      tester,
+      const App(),
+      wrapInScaffold: false,
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repository),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(IntroScreen), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(find.text('Продолжить без входа'), findsOneWidget);
+    expect(find.byType(TextFormField), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('intro_sign_in')));
+    await tester.pumpAndSettle();
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(find.text('Продолжить без входа'), findsNothing);
+    expect(find.text('Отмена'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    // Recheck both replacement widgets after the form cancellation transition.
+    // ignore: avoid-duplicate-test-assertions
+    expect(find.byType(IntroScreen), findsOneWidget);
+    // ignore: avoid-duplicate-test-assertions
+    expect(find.byType(LoginScreen), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('intro_guest')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CatalogScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('intro sign-in success opens the home shell without replaying a protected action', (tester) async {
+    final repository = FakeAuthRepository()..loginResult = const Result.success('viewer');
+    addTearDown(repository.close);
+    await pumpTvApp(
+      tester,
+      const App(),
+      wrapInScaffold: false,
+      overrides: [
+        authRepositoryProvider.overrideWithValue(repository),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('intro_sign_in')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('login_username')), 'viewer');
+    await tester.enterText(find.byKey(const ValueKey('login_password')), 'fixture-password');
+    await tester.tap(find.byKey(const ValueKey('login_submit')));
+    await tester.pumpAndSettle();
+
+    expect(repository.loginCalls, 1);
+    expect(find.byType(CatalogScreen), findsOneWidget);
+    expect(find.byType(LoginScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final siteFailed in [true, false]) {
     testWidgets('startup error keeps credentials hidden and retries by remote; site=$siteFailed', (tester) async {
@@ -93,7 +162,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
       nextSite.complete();
       await tester.pumpAndSettle();
-      expect(find.byType(LoginScreen), findsOneWidget);
+      expect(find.byType(IntroScreen), findsOneWidget);
       // Recheck after completion and a second OK during the pending restore.
       // ignore: avoid-duplicate-test-assertions
       expect(repository.restoreCalls, 2);
@@ -112,6 +181,8 @@ void main() {
       wrapInScaffold: false,
       overrides: [authRepositoryProvider.overrideWithValue(repository)],
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('intro_sign_in')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'test');
     await tester.enterText(find.byKey(const ValueKey('login_password')), 'wrong');

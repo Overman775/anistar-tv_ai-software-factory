@@ -111,11 +111,13 @@ final class E2eHarness {
   }
 
   static Future<void> login(WidgetTester tester, {String password = 'пароль'}) async {
+    final mobile = await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile;
+    await openSignIn(tester, mobile: mobile);
     final submit = find.byKey(const ValueKey('login_submit'));
     await waitFor(tester, () => submit.evaluate().isNotEmpty && !tester.widget<AppButton>(submit).busy, 'login ready');
     await tester.enterText(find.byKey(const ValueKey('login_username')), 'тест');
     await tester.enterText(find.byKey(const ValueKey('login_password')), password);
-    if (await AppDeviceProfileResolver.resolve() == AppDeviceProfile.mobile) {
+    if (mobile) {
       FocusManager.instance.primaryFocus?.unfocus();
       await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
       await tester.tap(submit.hitTestable());
@@ -130,6 +132,27 @@ final class E2eHarness {
       const ValueKey('login_submit'),
     );
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pump();
+  }
+
+  /// Opens Intro's explicit sign-in choice, or keeps an already-open form.
+  static Future<void> openSignIn(WidgetTester tester, {required bool mobile}) async {
+    final signIn = find.byKey(const ValueKey('intro_sign_in'));
+    final submit = find.byKey(const ValueKey('login_submit'));
+    await waitFor(
+      tester,
+      () => signIn.evaluate().isNotEmpty || submit.evaluate().isNotEmpty,
+      'authentication entry ready',
+    );
+    if (signIn.evaluate().isEmpty) {
+      return;
+    }
+    await waitFor(tester, () => signIn.hitTestable().evaluate().length == 1, 'intro sign-in ready');
+    if (mobile) {
+      await tester.tap(signIn.hitTestable());
+    } else {
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    }
     await tester.pump();
   }
 

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -17,7 +19,7 @@ abstract final class AnimeLayout {
   static int episodeColumns(double _) => 3;
 
   /// Reserve the same scaled caption and two title lines in loading and ready.
-  static double episodeHeight(BuildContext context, double gridWidth, {double? viewportExtent}) {
+  static double episodeHeight(BuildContext context, double gridWidth) {
     final width = (gridWidth - AppSpacing.lg * 2) / episodeColumns(gridWidth);
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
@@ -36,16 +38,11 @@ abstract final class AnimeLayout {
       return height;
     }
 
-    final captionHeight = twoLineHeight(AppContentTypography.episodeCaptionOf(context)) + AppSpacing.xs * 2;
+    final captionHeight = twoLineHeight(AppContentTypography.episodeCaptionOf(context)) + AppSpacing.xs;
     final titleHeight = twoLineHeight(AppContentTypography.episodeTitleOf(context));
+    final copyHeight = AppSpacing.xxl + AppSpacing.md + captionHeight + titleHeight;
+    final imageHeight = width / AppSizes.landscapeRatio;
 
-    final naturalHeight = (width < 320 ? width * 9 / 16 : 0) + captionHeight + titleHeight + AppSpacing.lg * 2;
-    if (viewportExtent == null || !viewportExtent.isFinite || viewportExtent <= 0) {
-      return naturalHeight;
-    }
-    final focusScale = AppMotion.reducedOf(context) ? 1.0 : AppSizes.cardFocusScale;
-    final maximumHeight = viewportExtent / focusScale;
-
-    return naturalHeight > maximumHeight ? maximumHeight : naturalHeight;
+    return math.max(imageHeight, copyHeight);
   }
 }

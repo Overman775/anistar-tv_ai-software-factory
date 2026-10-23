@@ -5,7 +5,6 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_rating_badge.dart';
-import 'package:anistar_tv/packages/features/catalog/presentation/widgets/favorite_ribbon.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -53,18 +52,20 @@ void main() {
       testWidgets('favorite source=$source override=$override mobile=$mobile', (tester) async {
         final semantics = tester.ensureSemantics();
         final anime = AnimeSummary(id: 1, slug: 'anime', title: 'Anime', isFavorite: source, rating: 8.7);
-        await pumpTvApp(tester, _AnimeCardBadgesTest(mobile: mobile, anime: anime, favorite: override));
+        if (mobile) {
+          await pumpMobileApp(tester, _AnimeCardBadgesTest(mobile: true, anime: anime, favorite: override));
+        } else {
+          await pumpTvApp(tester, _AnimeCardBadgesTest(mobile: false, anime: anime, favorite: override));
+        }
         await tester.pumpAndSettle();
-        expect(find.byType(FavoriteRibbon), visible ? findsOneWidget : findsNothing);
-        expect(find.text('8,7'), findsOneWidget);
+        expect(find.byType(MediaCardBookmark), visible ? findsOneWidget : findsNothing);
+        expect(find.text('8,7'), mobile ? findsNothing : findsOneWidget);
         expect(find.byType(TvFocusTile), findsOneWidget);
         final badges = tester.widgetList<AppMetadataBadge>(find.byType(AppMetadataBadge));
-        expect(badges.map((badge) => badge.semanticLabel), contains('Рейтинг 8,7 из 10'));
-        if (visible) {
-          expect(
-            tester.semantics.simulatedAccessibilityTraversal().any((node) => node.label.contains('В избранном')),
-            isTrue,
-          );
+        if (mobile) {
+          expect(badges.map((badge) => badge.semanticLabel), isNot(contains('Рейтинг 8,7 из 10')));
+        } else {
+          expect(badges.map((badge) => badge.semanticLabel), contains('Рейтинг 8,7 из 10'));
         }
         for (final element in find.byType(AppMetadataBadge).evaluate()) {
           final badge = find.byElementPredicate((candidate) => identical(candidate, element));
@@ -104,14 +105,16 @@ void main() {
         expect(find.text(anime.title), findsOneWidget);
         final title = tester.widget<Text>(find.text(anime.title));
         expect(title.style?.fontSize, 15);
-        expect(tester.widget<Text>(find.text('2026')).style?.fontSize, mobile ? 14 : 15);
+        expect(find.text('2026'), mobile ? findsNothing : findsOneWidget);
         expect(MediaQuery.textScalerOf(tester.element(find.text(anime.title))).scale(15), closeTo(scale * 15, 0.001));
         expect(find.bySemanticsLabel(RegExp(anime.title)), findsWidgets);
-        expect(find.text('10,0'), findsOneWidget);
-        final favoriteRect = tester.getRect(find.byType(FavoriteRibbon));
-        final ratingRect = tester.getRect(find.byType(AnimeRatingBadge));
-        expect(favoriteRect.overlaps(ratingRect), isFalse);
-        expect(tester.getRect(find.byKey(const ValueKey('card-bounds'))).contains(ratingRect.center), isTrue);
+        expect(find.text('10,0'), mobile ? findsNothing : findsOneWidget);
+        if (!mobile) {
+          final favoriteRect = tester.getRect(find.byType(MediaCardBookmark));
+          final ratingRect = tester.getRect(find.byType(AnimeRatingBadge));
+          expect(favoriteRect.overlaps(ratingRect), isFalse);
+          expect(tester.getRect(find.byKey(const ValueKey('card-bounds'))).contains(ratingRect.center), isTrue);
+        }
         semantics.dispose();
       });
     }
