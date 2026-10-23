@@ -66,68 +66,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('new TV search entry requests IME while editing keeps arrows out of navigation', (tester) async {
-    final settle = tester.pumpAndSettle;
-    final pump = tester.pump;
-    final key = tester.sendKeyEvent;
-    TextField readField() => tester.widget<TextField>(query);
-    final repository = FakeSearchRepository();
-    var menuOpened = 0;
-    final textInputCalls = <MethodCall>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.textInput,
-      (call) async {
-        textInputCalls.add(call);
-
-        return null;
-      },
-    );
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+  testWidgets(
+    'new TV search entry attaches its input client before requesting IME and keeps arrows out of navigation',
+    (tester) async {
+      final settle = tester.pumpAndSettle;
+      final pump = tester.pump;
+      final key = tester.sendKeyEvent;
+      TextField readField() => tester.widget<TextField>(query);
+      final repository = FakeSearchRepository();
+      var menuOpened = 0;
+      final textInputCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.textInput,
-        null,
-      ),
-    );
-    await pumpTvApp(
-      tester,
-      SearchScreen(onAnimeTap: (_) => fail('Unexpected detail'), onOpenNavigation: () => menuOpened++),
-      overrides: [
-        authAccessProvider.overrideWithValue(const AnonymousAccess()),
-        searchRepositoryProvider.overrideWithValue(repository),
-        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
-      ],
-    );
-    await settle();
-    final field = readField();
-    expect(field.readOnly, isFalse);
-    expect(field.decoration?.hintText, isNull);
-    final fieldNode = field.focusNode;
-    expect(textInputCalls.where((call) => call.method == 'TextInput.show'), isNotEmpty);
-    await tester.enterText(query, 'Наруто');
-    expect(repository.requests, isEmpty);
-    await key(LogicalKeyboardKey.arrowLeft);
-    await key(LogicalKeyboardKey.arrowRight);
-    await pump();
-    expect(menuOpened, isZero);
-    expect(readField().focusNode?.hasFocus, isTrue);
-    await key(LogicalKeyboardKey.escape);
-    await pump();
-    final afterBack = readField();
-    expect(afterBack.controller?.text, 'Наруто');
-    expect(afterBack.readOnly, isTrue);
-    await key(LogicalKeyboardKey.arrowLeft);
-    expect(menuOpened, 1);
-    await key(LogicalKeyboardKey.arrowRight);
-    await pump();
-    expect(tester.widget<IconButton>(clear).focusNode?.hasFocus, isTrue);
-    await key(LogicalKeyboardKey.arrowRight);
-    await key(LogicalKeyboardKey.select);
-    await settle();
-    expect(repository.requests.single.query, 'Наруто');
-    expect(find.text('Ничего не найдено'), findsOneWidget);
-    expect(FocusManager.instance.primaryFocus, same(fieldNode));
-    expect(find.text('Повторить загрузку'), findsNothing);
-  });
+        (call) async {
+          textInputCalls.add(call);
+
+          return null;
+        },
+      );
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.textInput,
+          null,
+        ),
+      );
+      await pumpTvApp(
+        tester,
+        SearchScreen(onAnimeTap: (_) => fail('Unexpected detail'), onOpenNavigation: () => menuOpened++),
+        overrides: [
+          authAccessProvider.overrideWithValue(const AnonymousAccess()),
+          searchRepositoryProvider.overrideWithValue(repository),
+          searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+        ],
+      );
+      await settle();
+      final field = readField();
+      expect(field.readOnly, isFalse);
+      expect(field.decoration?.hintText, isNull);
+      final fieldNode = field.focusNode;
+      final clientAttach = textInputCalls.indexWhere((call) => call.method == 'TextInput.setClient');
+      final firstShow = textInputCalls.indexWhere((call) => call.method == 'TextInput.show');
+      expect(clientAttach, greaterThanOrEqualTo(0));
+      expect(firstShow, greaterThan(clientAttach));
+      await tester.enterText(query, 'Наруто');
+      expect(repository.requests, isEmpty);
+      await key(LogicalKeyboardKey.arrowLeft);
+      await key(LogicalKeyboardKey.arrowRight);
+      await pump();
+      expect(menuOpened, isZero);
+      expect(readField().focusNode?.hasFocus, isTrue);
+      await key(LogicalKeyboardKey.escape);
+      await pump();
+      final afterBack = readField();
+      expect(afterBack.controller?.text, 'Наруто');
+      expect(afterBack.readOnly, isTrue);
+      await key(LogicalKeyboardKey.arrowLeft);
+      expect(menuOpened, 1);
+      await key(LogicalKeyboardKey.arrowRight);
+      await pump();
+      expect(tester.widget<IconButton>(clear).focusNode?.hasFocus, isTrue);
+      await key(LogicalKeyboardKey.arrowRight);
+      await key(LogicalKeyboardKey.select);
+      await settle();
+      expect(repository.requests.single.query, 'Наруто');
+      expect(find.text('Ничего не найдено'), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus, same(fieldNode));
+      expect(find.text('Повторить загрузку'), findsNothing);
+    },
+  );
 
   for (final size in [const Size(320, 640), const Size(390, 844), const Size(844, 390)]) {
     testWidgets('touch search keeps a single-row form at doubled text $size', (tester) async {
@@ -197,7 +203,7 @@ void main() {
     expect(repository.requests, isEmpty);
   });
 
-  testWidgets('deactivated search invalidates its IME request and hides the active input', (tester) async {
+  testWidgets('deactivated search does not request another IME show and hides the active input', (tester) async {
     var active = true;
     late void Function(void Function()) update;
     final textInputCalls = <MethodCall>[];

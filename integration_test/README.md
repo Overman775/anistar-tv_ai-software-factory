@@ -59,7 +59,11 @@ Android TV/mobile входят в обязательный `test:e2e`. iOS fixtu
 
 Lifecycle в сценарии подаётся через Flutter binding. Player и Android screen flag при этом настоящие.
 
-Этот набор не подтверждает нажатие системного Home, process death, системную клавиатуру или permission dialogs. `integration_test` ограничен при взаимодействии с native UI. Если появится такое требование, нужен отдельный native driver/набор. Flutter finder не подтверждает такое покрытие. [Ограничения Flutter](https://docs.flutter.dev/testing/overview).
+Видимость системной клавиатуры Search проверяет host-side ADB oracle, подключённый только к TV fixture runner. Fixture server публикует его очищенный снимок через `GET /__test/native-ime`: `available`, `querySucceeded`, `status` (`visible`, `hidden`, `transition`, `error` или `unavailable`) и `currentEditorMatches`. Host читает `dumpsys input_method` и полный `dumpsys window`, который содержит global focus и InputMethod window; снимок не содержит сырой вывод. Ожидание завершается ошибкой при недоступном или ошибочном снимке. Состояние `visible` принимается для текущего редактора AniStar, а `hidden` проверяет скрытое состояние.
+
+Flutter `viewInsets` и `MediaQuery.viewInsets` не являются oracle для TV IME: оба могут оставаться нулевыми при видимой нативной клавиатуре. Вызов или mock `TextInput.show` также не доказывает видимость. Проверка опирается на состояние нативных окон ОС.
+
+Этот набор не подтверждает нажатие системного Home, process death или permission dialogs. `integration_test` ограничен при взаимодействии с native UI. Если появится такое требование, нужен отдельный native driver/набор. Flutter finder не подтверждает такое покрытие. [Ограничения Flutter](https://docs.flutter.dev/testing/overview).
 
 ## Навигация
 

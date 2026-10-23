@@ -123,7 +123,15 @@ else
   phase=fixture-tool-tests
   python3 -m unittest discover -s tool/e2e -p '*_test.py'
   phase=fixture-startup
-  python3 tool/e2e/fixture_server.py --ready-file "$run_dir/port" --event-log "$run_dir/requests.jsonl" > "$run_dir/server.log" 2>&1 &
+  fixture_args=(--ready-file "$run_dir/port" --event-log "$run_dir/requests.jsonl")
+  if [[ $expected_profile == tv ]]; then
+    fixture_args+=(
+      --native-ime-adb "${adb_cmd[0]}"
+      --native-ime-device "$device"
+      --native-ime-package com.anistar.tv.dev
+    )
+  fi
+  python3 tool/e2e/fixture_server.py "${fixture_args[@]}" > "$run_dir/server.log" 2>&1 &
   fixture_pid=$!
   for attempt in {1..100}; do
     [[ -s $run_dir/port ]] && break

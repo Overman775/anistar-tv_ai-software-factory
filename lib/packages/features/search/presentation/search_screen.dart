@@ -44,7 +44,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   bool _editing = false;
   String _draft = '';
   bool _keyboardVisible = false;
-  int _imeRequest = 0;
   int? _selectedId;
   int _columns = 1;
   SearchState _formState = const SearchState();
@@ -86,7 +85,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     if (!_editing) {
       return false;
     }
-    _imeRequest++;
     setState(() => _editing = false);
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
     if (mounted && widget.active && ModalRoute.of(context)?.isCurrent == true) {
@@ -97,14 +95,8 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _startEditing() {
-    final request = ++_imeRequest;
     setState(() => _editing = true);
     _field.requestFocus();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && request == _imeRequest && widget.active && _editing && ModalRoute.of(context)?.isCurrent == true) {
-        unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
-      }
-    });
   }
 
   void _search([String? query]) {
@@ -531,7 +523,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     if (widget.active && !oldWidget.active) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _enterSearch());
     } else if (!widget.active && oldWidget.active) {
-      _imeRequest++;
       if (_editing) {
         _editing = false;
         unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
@@ -541,7 +532,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   void dispose() {
-    _imeRequest++;
     unawaited(_bloc.close());
     _query.removeListener(_inputChanged);
     _field.removeListener(_fieldChanged);

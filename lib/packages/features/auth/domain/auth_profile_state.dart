@@ -12,6 +12,7 @@ import 'auth_profile_load_state.dart';
 @immutable
 final class AuthProfileState {
   final String? account;
+  final Uri? origin;
   final int contextGeneration;
   final AuthProfileLoadState loadState;
   final AuthProfile? profile;
@@ -19,6 +20,7 @@ final class AuthProfileState {
 
   const AuthProfileState._({
     required this.account,
+    required this.origin,
     required this.contextGeneration,
     required this.loadState,
     this.profile,
@@ -26,27 +28,47 @@ final class AuthProfileState {
   });
 
   const AuthProfileState.inactive()
-    : this._(account: null, contextGeneration: 0, loadState: AuthProfileLoadState.inactive);
+    : this._(account: null, origin: null, contextGeneration: 0, loadState: AuthProfileLoadState.inactive);
 
-  const AuthProfileState.unavailable({required String account, required int contextGeneration})
-    : this._(account: account, contextGeneration: contextGeneration, loadState: AuthProfileLoadState.unavailable);
-
-  const AuthProfileState.loading({required String account, required int contextGeneration})
-    : this._(account: account, contextGeneration: contextGeneration, loadState: AuthProfileLoadState.loading);
-
-  const AuthProfileState.loaded({required String account, required int contextGeneration, required AuthProfile profile})
+  const AuthProfileState.unavailable({required String account, required int contextGeneration, Uri? origin})
     : this._(
         account: account,
+        origin: origin,
         contextGeneration: contextGeneration,
-        loadState: AuthProfileLoadState.loaded,
-        profile: profile,
+        loadState: AuthProfileLoadState.unavailable,
       );
 
-  const AuthProfileState.failed({required String account, required int contextGeneration, required Failure failure})
+  const AuthProfileState.loading({required String account, required int contextGeneration, Uri? origin})
     : this._(
         account: account,
+        origin: origin,
         contextGeneration: contextGeneration,
-        loadState: AuthProfileLoadState.failed,
-        failure: failure,
+        loadState: AuthProfileLoadState.loading,
       );
+
+  const AuthProfileState.loaded({
+    required String account,
+    required int contextGeneration,
+    required AuthProfile profile,
+    Uri? origin,
+  }) : this._(
+         account: account,
+         origin: origin,
+         contextGeneration: contextGeneration,
+         loadState: AuthProfileLoadState.loaded,
+         profile: profile,
+       );
+
+  const AuthProfileState.failed({
+    required String account,
+    required int contextGeneration,
+    required Failure failure,
+    Uri? origin,
+  }) : this._(
+         account: account,
+         origin: origin,
+         contextGeneration: contextGeneration,
+         loadState: AuthProfileLoadState.failed,
+         failure: failure,
+       );
 }

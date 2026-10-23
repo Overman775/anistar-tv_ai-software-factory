@@ -10,4 +10,6 @@ export 'src/contract/anistar_catalog_sort.dart';
 export 'src/contract/anistar_client.dart';
 export 'src/contract/anistar_client_exception.dart';
 export 'src/contract/anistar_episode_dto.dart';
+export 'src/contract/anistar_profile_client.dart';
+export 'src/contract/anistar_profile_dto.dart';
 export 'src/contract/anistar_video_source_dto.dart';

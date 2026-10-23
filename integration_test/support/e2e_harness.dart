@@ -64,6 +64,33 @@ final class E2eHarness {
     await _control.get<void>('/__test/expire');
   }
 
+  Future<NativeImeSnapshot> nativeImeSnapshot() async {
+    final response = await _control.get<Object?>('/__test/native-ime');
+
+    return NativeImeSnapshot.fromJson(response.data);
+  }
+
+  Future<void> waitForNativeIme(WidgetTester tester, {required bool visible, required String step}) async {
+    debugPrint('E2E: $step');
+    final deadline = DateTime.now().add(const Duration(seconds: 45));
+    NativeImeSnapshot? latest;
+    while (DateTime.now().isBefore(deadline)) {
+      expect(tester.binding.framesEnabled, isTrue, reason: '$step: lifecycle=${tester.binding.lifecycleState}');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.takeException(), isNull, reason: step);
+      latest = await nativeImeSnapshot();
+      if (!latest.available || !latest.querySucceeded || latest.status == 'error' || latest.status == 'unavailable') {
+        fail('$step: native IME snapshot unavailable (${latest.status})');
+      }
+      if (visible ? latest.isVisible : latest.isHidden) {
+        return;
+      }
+    }
+    fail(
+      'Timed out: $step; native IME status=${latest?.status}; focus: ${FocusManager.instance.primaryFocus?.debugLabel}',
+    );
+  }
+
   Future<void> launch(
     WidgetTester tester, {
     bool autoLogin = true,
@@ -252,5 +279,46 @@ final class E2eHarness {
     )..httpClientAdapter = IOHttpClientAdapter(createHttpClient: () => io.HttpClient(context: context));
 
     return dio;
+  }
+}
+
+final class NativeImeSnapshot {
+  final bool available;
+  final bool querySucceeded;
+  final String status;
+  final bool currentEditorMatches;
+
+  bool get isVisible => status == 'visible' && currentEditorMatches;
+  bool get isHidden => status == 'hidden';
+
+  const NativeImeSnapshot({
+    required this.available,
+    required this.querySucceeded,
+    required this.status,
+    required this.currentEditorMatches,
+  });
+
+  factory NativeImeSnapshot.fromJson(Object? data) {
+    if (data is! Map<String, Object?>) {
+      throw const FormatException('Invalid native IME snapshot');
+    }
+    final available = data['available'];
+    final querySucceeded = data['querySucceeded'];
+    final status = data['status'];
+    final currentEditorMatches = data['currentEditorMatches'];
+    if (available is! bool ||
+        querySucceeded is! bool ||
+        status is! String ||
+        currentEditorMatches is! bool ||
+        !{'visible', 'hidden', 'transition', 'error', 'unavailable'}.contains(status)) {
+      throw const FormatException('Invalid native IME snapshot');
+    }
+
+    return NativeImeSnapshot(
+      available: available,
+      querySucceeded: querySucceeded,
+      status: status,
+      currentEditorMatches: currentEditorMatches,
+    );
   }
 }

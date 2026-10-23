@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
@@ -287,8 +288,11 @@ String? _accountImageUrl(WidgetRef ref) {
   if (access is! AuthenticatedAccess) {
     return null;
   }
+  final session = ref.watch(authControllerProvider).value;
   final profile = ref.watch(authProfileStateProvider);
-  if (profile.account != access.account) {
+  if (profile.account != access.account ||
+      profile.origin != ref.watch(anistarActiveMirrorProvider) ||
+      profile.contextGeneration != session?.profileContextGeneration) {
     return null;
   }
 

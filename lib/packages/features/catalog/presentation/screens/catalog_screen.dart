@@ -154,7 +154,9 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
                     (node) =>
                         node.canRequestFocus &&
                         node.context != null &&
-                        (!hasItems || node.context?.findAncestorWidgetOfExactType<AnimeCard>() != null),
+                        (hasItems
+                            ? node.context?.findAncestorWidgetOfExactType<AnimeCard>() != null
+                            : node.context?.findAncestorWidgetOfExactType<TvStateView>() != null),
                   )
                   .firstOrNull ??
               (widget.filter != null ? _sortFocus : _contentFocus))

@@ -152,17 +152,18 @@ void main() {
     }
   });
 
-  test('profile seam is unavailable only for the current authenticated context', () async {
+  test('profile state is cleared between authenticated contexts', () async {
     final repository = FakeAuthRepository()..restoreResult = const Result.success('first-account');
     addTearDown(repository.close);
     final container = ProviderContainer(overrides: [authRepositoryProvider.overrideWithValue(repository)]);
     addTearDown(container.dispose);
     await container.read(authControllerProvider.future);
+    await Future<void>.delayed(Duration.zero);
 
     final first = container.read(authProfileStateProvider);
     expect(first.account, 'first-account');
-    expect(first.loadState, AuthProfileLoadState.unavailable);
-    expect(first.profile, isNull);
+    expect(first.loadState, AuthProfileLoadState.loaded);
+    expect(first.profile?.imageUri, isNull);
     expect(first.failure, isNull);
 
     await container.read(authControllerProvider.notifier).signOut();
@@ -173,9 +174,11 @@ void main() {
     final controller = container.read(authControllerProvider.notifier)..requestSignIn();
     repository.loginResult = const Result.success('second-account');
     await controller.signIn('second-account', 'fixture-password');
+    await Future<void>.delayed(Duration.zero);
     final second = container.read(authProfileStateProvider);
     expect(second.account, 'second-account');
-    expect(second.loadState, AuthProfileLoadState.unavailable);
+    expect(second.loadState, AuthProfileLoadState.loaded);
+    expect(second.profile?.imageUri, isNull);
     expect(second.contextGeneration, greaterThan(first.contextGeneration));
   });
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/auth/domain/auth_profile.dart';
 import 'package:anistar_tv/packages/features/auth/domain/auth_repository.dart';
 import 'package:core/data.dart';
 
@@ -11,6 +12,10 @@ final class FakeAuthRepository implements AuthRepository {
   int cancellationCalls = 0;
   RequestCancellation? lastCancelledToken;
   Result<void, Failure> logoutResult = const Result.success(null);
+  @override
+  Uri profileOrigin = Uri.parse('https://auth.test/');
+  Result<AuthProfile, Failure> profileResult = const Result.success(AuthProfile());
+  Completer<Result<AuthProfile, Failure>>? pendingProfile;
   Completer<Result<String, Failure>>? pendingLogin;
   Completer<void>? pendingSiteCheck;
   Completer<Result<String?, Failure>>? pendingRestore;
@@ -22,6 +27,10 @@ final class FakeAuthRepository implements AuthRepository {
 
   @override
   Stream<void> get expired => _expired.stream;
+
+  @override
+  Future<Result<AuthProfile, Failure>> loadProfile(String account) =>
+      pendingProfile?.future ?? Future.value(profileResult);
 
   @override
   Future<Result<String?, Failure>> restore({void Function()? onSessionCheck}) async {

@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from fixture_server import CERT, FixtureServer
+from native_ime import NativeImeSnapshot
 
 
 class FixtureServerTest(unittest.TestCase):
@@ -147,6 +148,46 @@ class FixtureServerTest(unittest.TestCase):
             self.get('/hls/fresh/1/360.mp4/segment-99.ts', self.headers())
         self.assertEqual(error.exception.code, 404)
         error.exception.close()
+
+    def test_native_ime_endpoint_is_unavailable_without_runner_configuration(self):
+        with self.get('/__test/native-ime') as response:
+            snapshot = json.load(response)
+
+        self.assertEqual(
+            snapshot,
+            {
+                'available': False,
+                'querySucceeded': False,
+                'status': 'unavailable',
+                'currentEditorMatches': False,
+            },
+        )
+
+    def test_native_ime_endpoint_returns_only_sanitized_snapshot_fields(self):
+        self.server.native_ime_reader = lambda: NativeImeSnapshot(True, True, 'visible', True)
+
+        with self.get('/__test/native-ime') as response:
+            snapshot = json.load(response)
+
+        self.assertEqual(
+            snapshot,
+            {
+                'available': True,
+                'querySucceeded': True,
+                'status': 'visible',
+                'currentEditorMatches': True,
+            },
+        )
+
+    def test_native_ime_endpoint_sanitizes_reader_failure(self):
+        def fail():
+            raise RuntimeError('raw dumpsys must not escape')
+
+        self.server.native_ime_reader = fail
+        with self.get('/__test/native-ime') as response:
+            snapshot = json.load(response)
+
+        self.assertEqual(snapshot, NativeImeSnapshot.error().as_json())
 
 
 if __name__ == '__main__':

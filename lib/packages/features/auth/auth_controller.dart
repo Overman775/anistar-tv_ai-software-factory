@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:core/data.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auth_profile_controller.dart';
 import 'auth_repository_provider.dart';
 import 'auth_startup_stage.dart';
 import 'domain/auth_access.dart';
+import 'domain/auth_repository.dart';
 
 final class AuthController extends AsyncNotifier<AuthSessionState> {
   int _operation = 0;
@@ -26,6 +28,7 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
 
         return;
       }
+      ref.read(authProfileStateProvider.notifier).clear();
       state = AsyncData(AuthSessionState(const UnauthenticatedAccess(), profileContextGeneration: contextGeneration));
     });
     ref.onDispose(() {
@@ -37,6 +40,7 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     if (!ref.mounted || operation != _operation) {
       return const AuthSessionState(UnknownAccess());
     }
+    ref.read(authProfileStateProvider.notifier).clear();
     ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.site;
     final result = await repository.restore(
       onSessionCheck: () {
@@ -52,6 +56,9 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     return result.when(
       success: (account) {
         ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.complete;
+        if (account != null) {
+          _loadProfile(repository, account: account, contextGeneration: operation);
+        }
 
         return AuthSessionState(
           account == null ? const UnauthenticatedAccess() : AuthenticatedAccess(account),
@@ -158,8 +165,11 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     }
     _signInCancellation = null;
     state = result.when(
-      success: (account) =>
-          AsyncData(AuthSessionState(AuthenticatedAccess(account), profileContextGeneration: operation)),
+      success: (account) {
+        _loadProfile(ref.read(authRepositoryProvider), account: account, contextGeneration: operation);
+
+        return AsyncData(AuthSessionState(AuthenticatedAccess(account), profileContextGeneration: operation));
+      },
       failure: (failure) => AsyncData(
         AuthSessionState(
           previous.access,
@@ -183,6 +193,7 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
 
     return result.when(
       success: (_) {
+        ref.read(authProfileStateProvider.notifier).clear();
         state = AsyncData(AuthSessionState(const UnauthenticatedAccess(), profileContextGeneration: operation));
 
         return null;
@@ -197,5 +208,16 @@ final class AuthController extends AsyncNotifier<AuthSessionState> {
     }
     ref.read(authStartupStageProvider.notifier).stage = AuthStartupStage.site;
     ref.invalidateSelf();
+  }
+
+  void _loadProfile(AuthRepository repository, {required String account, required int contextGeneration}) {
+    final controller = ref.read(authProfileStateProvider.notifier);
+    final origin = repository.profileOrigin;
+    if (origin == null) {
+      controller.unavailable(account: account, contextGeneration: contextGeneration);
+
+      return;
+    }
+    controller.load(account: account, origin: origin, contextGeneration: contextGeneration);
   }
 }

@@ -123,14 +123,10 @@ void main() {
     final query = find.byKey(const ValueKey('search-query'));
     final rail = find.byType(CatalogNavigationRail);
     TextField queryField() => tester.widget<TextField>(query);
-    double keyboardInset() => MediaQuery.viewInsetsOf(tester.element(query)).bottom;
 
     await _selectRail(tester, 'catalog-search', direction: LogicalKeyboardKey.arrowUp);
     await E2eHarness.waitFor(tester, () => !queryField().readOnly, 'search field editing after route entry');
-    // On the configured Android TV AVD this comes from the OS IME window, not
-    // from a TextInput.show method-call observation. The host runner records
-    // dumpsys input_method (or an emulator screenshot) for this same step.
-    await E2eHarness.waitFor(tester, () => keyboardInset() > 0, 'native Android IME inset after search entry');
+    await fixture.waitForNativeIme(tester, visible: true, step: 'native Android IME after search entry');
     // Keep the native IME visible long enough for the host ADB observer to
     // capture its real window state and emulator frame during this fixture.
     await tester.pump(const Duration(seconds: 2));
@@ -149,7 +145,7 @@ void main() {
 
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => queryField().readOnly, 'Back finishes search editing');
-    await E2eHarness.waitFor(tester, () => keyboardInset() == 0, 'native Android IME hidden after Back');
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after Back');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await E2eHarness.waitFor(
       tester,
@@ -158,16 +154,16 @@ void main() {
     );
     await RemoteControls.activate(tester, find.byKey(const ValueKey('catalog-search')), step: 'return to search field');
     await E2eHarness.waitFor(tester, () => queryField().readOnly, 'rail reselect does not reopen the IME');
-    expect(keyboardInset(), 0);
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after rail reselect');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => !queryField().readOnly, 'explicit Select starts editing again');
-    await E2eHarness.waitFor(tester, () => keyboardInset() > 0, 'native Android IME after explicit editing');
+    await fixture.waitForNativeIme(tester, visible: true, step: 'native Android IME after explicit editing');
 
     await tester.testTextInput.receiveAction(TextInputAction.search);
     final first = find.byKey(const ValueKey('search-card-10938'));
     await E2eHarness.waitFor(tester, () => first.evaluate().isNotEmpty, 'search result after IME submit');
     await E2eHarness.waitFor(tester, () => queryField().readOnly, 'editing finishes after submit');
-    await E2eHarness.waitFor(tester, () => keyboardInset() == 0, 'native Android IME hidden after submit');
+    await fixture.waitForNativeIme(tester, visible: false, step: 'native Android IME hidden after submit');
 
     await RemoteControls.activate(
       tester,
@@ -181,7 +177,11 @@ void main() {
 
     await _selectRail(tester, 'catalog-search');
     await E2eHarness.waitFor(tester, () => queryField().readOnly, 'same search destination remains non-editing');
-    expect(keyboardInset(), 0, reason: 'Returning from details and reselecting Search must not reopen the IME.');
+    await fixture.waitForNativeIme(
+      tester,
+      visible: false,
+      step: 'native Android IME hidden after returning from details and reselecting Search',
+    );
   });
 
   _tvTest('D-pad Left moves between real catalog cards before opening the active rail', (tester) async {
@@ -830,17 +830,30 @@ void main() {
   });
 
   _tvTest('catalog refusal is visible and explicit retry recovers', (tester) async {
-    await fixture.configure(catalogError: true);
+    await fixture.configure();
     await fixture.launch(tester);
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'healthy catalog');
+    await _selectRail(tester, 'catalog-genres');
+    await _enterGenres(tester);
+    await E2eHarness.waitFor(tester, () => FocusManager.instance.primaryFocus?.debugLabel == 'Комедия', 'genre');
+    await fixture.configure(catalogError: true, reset: false);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.text('Каталог недоступен').evaluate().isNotEmpty, 'catalog error');
-    await fixture.configure(reset: false);
-    await RemoteControls.activate(tester, RemoteControls.action('Попробовать снова'), step: 'catalog retry');
-    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog retry');
-    final events = _events(await fixture.state());
-    final statuses = events
-        .where((event) => event['path'] == '/anime/' && event['method'] == 'GET' && event['authenticated'] == true)
+    Future<Iterable<Object?>> statuses() async => _events(await fixture.state())
+        .where(
+          (event) => event['path'] == '/anime/comedy/' && event['method'] == 'GET' && event['authenticated'] == true,
+        )
         .map((event) => event['status']);
-    expect(statuses, [403, 200]);
+    expect(await statuses(), [403], reason: 'catalog failure does not retry automatically');
+    await fixture.configure(reset: false);
+    await RemoteControls.activate(
+      tester,
+      RemoteControls.action('Попробовать снова'),
+      direction: LogicalKeyboardKey.arrowDown,
+      step: 'catalog retry',
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'catalog retry');
+    expect(await statuses(), [403, 200]);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
