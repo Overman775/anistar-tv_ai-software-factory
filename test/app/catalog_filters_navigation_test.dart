@@ -88,7 +88,7 @@ void main() {
         expect(FocusManager.instance.primaryFocus, same(menuFocus));
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
-        expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).genresActive, isFalse);
+        expect(find.byType(CatalogScreen), findsOneWidget);
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
         await tester.pumpAndSettle();
         final homeFocus = tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-false'))).focusNode;

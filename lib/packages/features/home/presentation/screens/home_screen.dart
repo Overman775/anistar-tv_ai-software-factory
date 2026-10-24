@@ -83,7 +83,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   : switch (destination) {
                       HomeDestination.home || HomeDestination.favorites => CatalogScreen(
                         key: destination == HomeDestination.home ? _home : _favorites,
-                        embedded: true,
                         favoritesOnly: destination == HomeDestination.favorites,
                         onTabSelected: (favorite) =>
                             _select(favorite ? HomeDestination.favorites : HomeDestination.home),
@@ -92,7 +91,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       HomeDestination.genres => GenresScreen(
                         key: _genres,
-                        embedded: true,
                         autofocus: destination == _destination,
                         onOpenNavigation: onNavigation,
                         onSelected: widget.onGenreSelected ?? (_) => widget.onOpenGenres?.call(),
@@ -192,10 +190,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           accountImageUrl: widget.accountImageUrl,
           destination: _destination,
           onDestinationSelected: _select,
-          onAnimeTap: widget.onAnimeTap,
           onOpenLogs: widget.onOpenLogs,
-          onOpenGenres: widget.onOpenGenres,
-          onGenreSelected: widget.onGenreSelected,
           onSignOut: widget.onSignOut,
           onSignIn: widget.onSignIn,
           onRootBack: widget.onRootBack,

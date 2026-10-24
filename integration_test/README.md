@@ -36,6 +36,17 @@ Entry points fixture-наборов запускаются через скрип
 
 Android TV/mobile входят в обязательный `test:e2e`. iOS fixture E2E запускается отдельно командой `fvm dart run melos run test:e2e:ios -- <simulator-UDID> <dev|prod> [mobile|tv]`; flavor обязателен, профиль по умолчанию — `mobile`. В профиле `mobile` runner вызывает общие touch-сценарии с native storage/player, без Flutter fakes. Успешная сборка не подтверждает их выполнение: пока E2E не запускался, результаты для iOS runtime, Keychain и HLS не заявляются.
 
+Для локальной диагностики задайте отдельному runner-у `--plain-name` или
+`--name`. Прямой Bash вызов сохраняет исходные аргументы. Через Melos задайте
+`ANISTAR_TEST_SELECTORS_JSON` как непустой JSON-массив селектора и его значения,
+например `["--plain-name","search submits"]`. Melos 7.8.1 не сохраняет границы
+аргументов с пробелами при передаче через shell. Фильтр помечает отчёт как
+`scope=filtered`; успешный результат — `PARTIAL PASS`. Он не заменяет полный
+`fvm dart run melos run test:e2e`, который последовательно запускает оба набора
+без фильтра. Параметры runners и структуру отчётов см. в
+[E2E tooling](../tool/e2e/README.md#запуск-runners) и
+[руководстве по разработке и тестированию](../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона).
+
 Опциональный `tv` запускает только компоновочную диагностику на выбранном iPad Simulator. Runner задаёт TV profile через test-only define; производственное приложение не выбирает TV по ширине. Эта проверка не подтверждает поддержку iPad, tvOS или Apple TV remote.
 
 Четыре ранее известные TV golden-регрессии находятся в отдельном наборе. Во время E2E-аудита не исправляйте их обновлением эталонов.

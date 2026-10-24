@@ -11,7 +11,6 @@ class FavoriteButton extends ConsumerStatefulWidget {
   const FavoriteButton({
     required this.animeId,
     required this.slug,
-    required this.title,
     this.initialFavorite,
     this.focusNode,
     this.autofocus = false,
@@ -23,7 +22,6 @@ class FavoriteButton extends ConsumerStatefulWidget {
   final bool autofocus;
   final bool? initialFavorite;
   final String slug;
-  final String title;
 
   @override
   ConsumerState<FavoriteButton> createState() => _FavoriteButtonState();

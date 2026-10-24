@@ -199,9 +199,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Focus(
               canRequestFocus: false,
               onKeyEvent: (_, event) => _moveFieldFocus(event, _passwordFocus, _usernameFocus),
-              child: AppFocusBorder(
+              child: AppInputFrame(
                 focusNode: _usernameFocus,
-                restingColor: AppPalette.outline,
                 child: TextFormField(
                   key: const ValueKey('login_username'),
                   controller: _username,
@@ -241,9 +240,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Expanded(
                     child: Semantics(
                       label: 'Пароль',
-                      child: AppFocusBorder(
+                      child: AppInputFrame(
                         focusNode: _passwordFocus,
-                        restingColor: AppPalette.outline,
                         child: TextFormField(
                           key: const ValueKey('login_password'),
                           controller: _password,

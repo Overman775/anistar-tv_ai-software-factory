@@ -5,20 +5,14 @@ import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-import '../../../catalog/domain/models/anime_summary.dart';
-import '../../../catalog/domain/models/catalog_filter.dart';
-import '../../../catalog/presentation/screens/catalog_screen.dart';
-import '../../../catalog/presentation/screens/genres_screen.dart';
 import '../../../common/presentation/widgets/account_identity.dart';
-import '../../../search/presentation/search_screen.dart';
 import '../home_destination.dart';
 
 /// Root destinations keep their controllers and scroll positions across switches.
 class MobileHomeShell extends StatefulWidget {
   const MobileHomeShell({
-    required this.onAnimeTap,
-    this.onGenreSelected,
-    this.onOpenGenres,
+    required this.content,
+    required this.onDestinationSelected,
     this.accountName,
     this.accountImageUrl,
     this.onSignOut,
@@ -27,16 +21,11 @@ class MobileHomeShell extends StatefulWidget {
     this.onOpenLogs,
     this.onRootBack,
     this.destination = HomeDestination.home,
-    this.onDestinationSelected,
-    this.content,
     this.contextTitle,
     this.onBack,
     super.key,
   });
 
-  final ValueChanged<AnimeSummary> onAnimeTap;
-  final ValueChanged<CatalogFilter>? onGenreSelected;
-  final VoidCallback? onOpenGenres;
   final String? accountName;
   final String? accountImageUrl;
   final VoidCallback? onSignOut;
@@ -45,8 +34,8 @@ class MobileHomeShell extends StatefulWidget {
   final VoidCallback? onOpenLogs;
   final VoidCallback? onRootBack;
   final HomeDestination destination;
-  final ValueChanged<HomeDestination>? onDestinationSelected;
-  final Widget? content;
+  final ValueChanged<HomeDestination> onDestinationSelected;
+  final Widget content;
   final String? contextTitle;
   final VoidCallback? onBack;
 
@@ -55,36 +44,19 @@ class MobileHomeShell extends StatefulWidget {
 }
 
 class _MobileHomeShellState extends State<MobileHomeShell> {
-  late int _selected;
-  final _visited = <int>{};
   bool _headerVisible = true;
   bool _accountOpen = false;
 
   @override
   void initState() {
     super.initState();
-    _selected = widget.destination.index;
-    _visited.add(_selected);
   }
 
   List<HomeDestination> get _destinations => homeDestinations(account: widget.onSignIn == null);
 
   void _select(int index) => _selectDestination(_destinations[index]);
 
-  void _selectDestination(HomeDestination destination) {
-    final index = destination.index;
-    final onSelected = widget.onDestinationSelected;
-    if (onSelected != null) {
-      onSelected(destination);
-
-      return;
-    }
-    setState(() {
-      _selected = index;
-      _visited.add(index);
-      _headerVisible = true;
-    });
-  }
+  void _selectDestination(HomeDestination destination) => widget.onDestinationSelected(destination);
 
   bool _onScroll(ScrollNotification notification) {
     // Only the active destination's primary vertical list owns this chrome.
@@ -190,7 +162,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   }
 
   void _handleBack(bool didPop, Object? _) {
-    if (!didPop && _selected != 0) {
+    if (!didPop && widget.destination != HomeDestination.home) {
       _selectDestination(HomeDestination.home);
     } else if (!didPop) {
       widget.onRootBack?.call();
@@ -201,15 +173,13 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   void didUpdateWidget(covariant MobileHomeShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.destination != widget.destination) {
-      _selected = widget.destination.index;
-      _visited.add(_selected);
       _headerVisible = true;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final label = homeDestinationLabel(HomeDestination.values[_selected]);
+    final label = homeDestinationLabel(widget.destination);
     final headerVisible =
         _headerVisible ||
         AppMotion.reducedOf(context) ||
@@ -217,10 +187,8 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
         _accountOpen ||
         ModalRoute.of(context)?.isCurrent != true;
     final headerHeight = _headerHeight(context);
-    final content = widget.content;
-
     return PopScope(
-      canPop: !widget.root && widget.content != null || _selected == 0 && widget.onRootBack == null,
+      canPop: !widget.root || widget.destination == HomeDestination.home && widget.onRootBack == null,
       onPopInvokedWithResult: _handleBack,
       child: Scaffold(
         extendBody: true,
@@ -275,41 +243,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                 ),
               ),
               Expanded(
-                child: content != null
-                    ? NotificationListener<ScrollNotification>(onNotification: _onScroll, child: content)
-                    : IndexedStack(
-                        index: _selected,
-                        children: List.generate(
-                          HomeDestination.values.length,
-                          (index) => NotificationListener<ScrollNotification>(
-                            onNotification: (notification) => index == _selected && _onScroll(notification),
-                            child: HeroMode(
-                              enabled: index == _selected,
-                              child: TickerMode(
-                                enabled: index == _selected,
-                                child: !_visited.contains(index)
-                                    ? const SizedBox.shrink()
-                                    : switch (index) {
-                                        3 => SearchScreen(onAnimeTap: widget.onAnimeTap, active: _selected == 3),
-                                        2 => GenresScreen(
-                                          embedded: true,
-                                          onSelected: widget.onGenreSelected ?? (_) => widget.onOpenGenres?.call(),
-                                        ),
-                                        _ => CatalogScreen(
-                                          key: ValueKey('mobile-tab-$index'),
-                                          embedded: true,
-                                          favoritesOnly: index == 1,
-                                          onAnimeTap: widget.onAnimeTap,
-                                          onTabSelected: (favorite) => _selectDestination(
-                                            favorite ? HomeDestination.favorites : HomeDestination.home,
-                                          ),
-                                        ),
-                                      },
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                child: NotificationListener<ScrollNotification>(onNotification: _onScroll, child: widget.content),
               ),
             ],
           ),
@@ -328,9 +262,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
                 height: MediaQuery.textScalerOf(context).scale(12) * 2 + 56,
-                selectedIndex: _destinations
-                    .indexOf(HomeDestination.values[_selected])
-                    .clamp(0, _destinations.length - 1),
+                selectedIndex: _destinations.indexOf(widget.destination).clamp(0, _destinations.length - 1),
                 onDestinationSelected: _select,
                 destinations: [
                   for (final destination in _destinations)

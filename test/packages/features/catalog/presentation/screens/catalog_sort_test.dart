@@ -173,7 +173,6 @@ void main() {
         destination: HomeDestination.genres,
         onDestinationSelected: (_) => fail('Unexpected destination selection'),
         builder: (onOpenNavigation) => CatalogScreen(
-          embedded: true,
           filter: comedyFilter,
           onOpenNavigation: onOpenNavigation,
           onAnimeTap: (_) => fail('Unexpected anime selection'),

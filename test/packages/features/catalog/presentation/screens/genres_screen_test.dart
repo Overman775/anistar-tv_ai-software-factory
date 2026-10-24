@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
+import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
+import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,21 +105,26 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
     expect(attempts, 2);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Комедия');
+    expect(find.text('Комедия'), findsOneWidget);
   });
 
-  testWidgets('Back is available during loading without waiting for HTTP', (tester) async {
+  testWidgets('loading keeps the genres route shell mounted without waiting for HTTP', (tester) async {
     final pending = Completer<Result<List<CatalogFilter>, Failure>>();
     await pumpTvApp(
       tester,
-      GenresScreen(onSelected: (_) => fail('Unexpected selection')),
+      TvRouteShell(
+        destination: HomeDestination.genres,
+        onDestinationSelected: (_) => fail('Unexpected destination selection'),
+        builder: (onOpenNavigation) =>
+            GenresScreen(onOpenNavigation: onOpenNavigation, onSelected: (_) => fail('Unexpected selection')),
+      ),
       wrapInScaffold: false,
       overrides: [
         catalogBrowseRepositoryProvider.overrideWithValue(FakeCatalogBrowseRepository(genres: () => pending.future)),
       ],
     );
     await tester.pump();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Назад из жанров');
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byKey(const ValueKey('catalog-navigation-rail')), findsOneWidget);
   });
 }

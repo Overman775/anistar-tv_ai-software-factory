@@ -11,8 +11,6 @@ import '../../../support/test_app.dart';
 void main() {
   for (final size in [const Size(640, 360), const Size(390, 844)]) {
     testWidgets('long mixed-script state at 200% keeps remote recovery visible at $size', (tester) async {
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
       final semantics = tester.ensureSemantics();
       var calls = 0;
       final message = List.filled(3, 'Проверьте сеть и повторите попытку. 日本語 العربية 🎬').join(' ');
@@ -26,6 +24,7 @@ void main() {
           onAction: () => calls++,
         ),
         size: size,
+        textScale: 2,
       );
       await tester.pumpAndSettle();
       final button = find.widgetWithText(AppButton, 'Повторить');
@@ -90,8 +89,6 @@ void main() {
   });
 
   testWidgets('scaled compact recovery can reveal its header with Up and return to retry', (tester) async {
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final settle = tester.pumpAndSettle;
     final key = tester.sendKeyEvent;
     var calls = 0;
@@ -106,6 +103,7 @@ void main() {
           onAction: () => calls++,
         ),
       ),
+      textScale: 2,
     );
     await settle();
     final scroll = tester.state<ScrollableState>(find.byType(Scrollable)).position;

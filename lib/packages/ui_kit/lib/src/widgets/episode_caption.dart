@@ -1,5 +1,7 @@
-/// Presentation-only caption; source titles and episode data remain unchanged.
+/// Neutral episode caption for visual surfaces and their accessibility labels.
 class EpisodeCaption {
+  const EpisodeCaption({required this.number, required this.title});
+
   final int number;
   final String title;
 
@@ -10,8 +12,6 @@ class EpisodeCaption {
 
     return normalized == numberLabel.toLowerCase() ? null : title;
   }
-
-  const EpisodeCaption({required this.number, required this.title});
 
   String semanticLabel({required bool isWatched}) {
     final description = descriptiveTitle;

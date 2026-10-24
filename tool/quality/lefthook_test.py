@@ -33,7 +33,17 @@ class LefthookTest(unittest.TestCase):
         self.run_command("git", "config", "user.name", "Hook Fixture")
         self.run_command("git", "config", "user.email", "fixture@example.invalid")
         self.run_command("git", "config", "commit.gpgsign", "false")
-        for relative in ("lefthook.yml", "scripts/lefthook.sh", "scripts/with_python.sh", "tool/quality/verify_sdk.dart", ".fvmrc", ".gitleaks.toml", "scripts/security_gitleaks.sh"):
+        for relative in (
+            "lefthook.yml",
+            "scripts/lefthook.sh",
+            "scripts/quality_runner.sh",
+            "scripts/with_python.sh",
+            "tool/e2e/e2e_report.py",
+            "tool/quality/verify_sdk.dart",
+            ".fvmrc",
+            ".gitleaks.toml",
+            "scripts/security_gitleaks.sh",
+        ):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(PROJECT / relative, target)
@@ -71,12 +81,13 @@ class LefthookTest(unittest.TestCase):
     def snapshot(self):
         files = {}
         for path in self.root.rglob("*"):
-            if ".git" in path.relative_to(self.root).parts:
+            relative = path.relative_to(self.root)
+            if ".git" in relative.parts or relative.parts[:2] == ("build", "quality"):
                 continue
             if path.is_symlink():
-                files[str(path.relative_to(self.root))] = ("symlink", os.readlink(path))
+                files[str(relative)] = ("symlink", os.readlink(path))
             elif path.is_file():
-                files[str(path.relative_to(self.root))] = (path.stat().st_mode, hashlib.sha256(path.read_bytes()).hexdigest())
+                files[str(relative)] = (path.stat().st_mode, hashlib.sha256(path.read_bytes()).hexdigest())
         return (self.run_command("git", "ls-files", "--stage", "-z").stdout, files, self.run_command("git", "for-each-ref", "--format=%(objectname)", "refs/stash").stdout)
 
     def assert_hook(self, passes):
@@ -249,7 +260,7 @@ class LefthookTest(unittest.TestCase):
         commands = {
             self.bin / "fvm": '#!/bin/sh\n[ "$1" = dart ] || exit 98\nshift\nexec ' + shlex.quote(str(dart)) + ' "$@"\n',
             sdk / "bin/dart": '#!/bin/sh\nif [ "$1" = format ]; then echo format >> "$ANISTAR_GATE_TRACE"; exit "${ANISTAR_GATE_FORMAT_EXIT:-0}"; fi\nexec ' + shlex.quote(str(dart)) + ' "$@"\n',
-            sdk / "bin/flutter": '#!/bin/sh\n[ "$1" = --no-version-check ] && shift\ncase "$1" in\n--version) echo \'{"frameworkVersion":"' + version + '"}\';;\npub) echo pub >> "$ANISTAR_GATE_TRACE";;\nanalyze) echo analyze >> "$ANISTAR_GATE_TRACE";;\ntest) case " $* " in *" --tags=golden "*) echo golden >> "$ANISTAR_GATE_TRACE";; *) echo unit >> "$ANISTAR_GATE_TRACE";; esac;;\n*) exit 90;;\nesac\n',
+            sdk / "bin/flutter": '#!/bin/sh\n[ "$1" = --no-version-check ] && shift\ncase "$1" in\n--version) echo \'{"frameworkVersion":"' + version + '"}\';;\npub) echo pub >> "$ANISTAR_GATE_TRACE";;\nanalyze) echo analyze >> "$ANISTAR_GATE_TRACE";;\ntest) case " $* " in *" --tags=golden "*) echo golden >> "$ANISTAR_GATE_TRACE";; *) echo unit >> "$ANISTAR_GATE_TRACE";; esac\nreport=\nfor argument in "$@"; do case "$argument" in --file-reporter=json:*) report=${argument#--file-reporter=json:};; esac; done\nif [ -n "$report" ]; then mkdir -p "$(dirname "$report")"; printf \'%s\\n\' \'{"type":"testStart","test":{"id":1,"name":"fixture test","hidden":false},"time":0}\' \'{"type":"testDone","testID":1,"result":"success","hidden":false,"time":1}\' \'{"type":"done","success":true}\' > "$report"; fi;;\n*) exit 90;;\nesac\n',
             self.bin / "dcm": '#!/bin/sh\necho dcm >> "$ANISTAR_GATE_TRACE"\n',
             self.bin / "gitleaks": '#!/bin/sh\ncase " $* " in *" --log-opts="*) echo secrets >> "$ANISTAR_GATE_TRACE";; esac\nexec ' + shlex.quote(shutil.which("gitleaks")) + ' "$@"\n',
         }
@@ -279,7 +290,7 @@ class LefthookTest(unittest.TestCase):
         before = self.snapshot()
         result = self.run_command("git", "push", "fixture", "HEAD:refs/heads/main", expected=None)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("quality:format-check", result.stdout + result.stderr)
+        self.assertIn("FAIL suite=format-check", result.stdout + result.stderr)
         self.assertEqual(trace.read_text().splitlines(), ["secrets", "pub", "format"])
         self.assertEqual(self.snapshot(), before)
         actual = self.run_command("git", "--git-dir", str(remote), "rev-parse", "refs/heads/main").stdout.strip()

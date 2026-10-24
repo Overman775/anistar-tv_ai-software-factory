@@ -1,6 +1,5 @@
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
-import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_episode_row.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
@@ -17,42 +16,39 @@ void main() {
   for (final mobile in [false, true]) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('long catalog favorite and episode typography mobile=$mobile scale=$scale', (tester) async {
-        final child = MediaQuery(
-          data: MediaQueryData(disableAnimations: true, textScaler: TextScaler.linear(scale)),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: ListView(
-              children: [
-                Align(
+        final child = Padding(
+          padding: const EdgeInsets.all(24),
+          child: ListView(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: mobile ? 150 : 220,
+                  height: mobile ? 340 : 330,
+                  child: mobile
+                      ? const MobileAnimeCard(anime: _anime, onTap: _unexpected, onActions: _unexpected)
+                      : const AnimeCard(anime: _anime, onTap: _unexpected),
+                ),
+              ),
+              const SizedBox(height: 24),
+              if (mobile)
+                const EpisodeCard(episode: _episode, isWatched: true, episodeHeight: 92, onTap: _unexpected)
+              else
+                const Align(
                   alignment: Alignment.topLeft,
                   child: SizedBox(
-                    width: mobile ? 150 : 220,
-                    height: mobile ? 340 : 330,
-                    child: mobile
-                        ? const MobileAnimeCard(anime: _anime, onTap: _unexpected, onActions: _unexpected)
-                        : const AnimeCard(anime: _anime, onTap: _unexpected),
+                    width: 360,
+                    height: 220,
+                    child: EpisodeCard(episode: _episode, onTap: _unexpected),
                   ),
                 ),
-                const SizedBox(height: 24),
-                if (mobile)
-                  const MobileEpisodeRow(episode: _episode, isWatched: true, onTap: _unexpected)
-                else
-                  const Align(
-                    alignment: Alignment.topLeft,
-                    child: SizedBox(
-                      width: 360,
-                      height: 220,
-                      child: EpisodeCard(episode: _episode, onTap: _unexpected),
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         );
         if (mobile) {
-          await pumpMobileApp(tester, child, textScale: scale);
+          await pumpMobileApp(tester, child, textScale: scale, disableAnimations: true);
         } else {
-          await pumpTvApp(tester, child, size: wideTvSize);
+          await pumpTvApp(tester, child, size: wideTvSize, textScale: scale, disableAnimations: true);
         }
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);

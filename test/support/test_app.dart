@@ -7,6 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'test_app_viewport.dart';
+
+export 'test_app_viewport.dart';
+
 const compactTvSize = Size(960, 540);
 const wideTvSize = Size(1280, 720);
 
@@ -15,10 +19,19 @@ Future<void> pumpTvApp(
   WidgetTester tester,
   Widget child, {
   Size size = compactTvSize,
+  double devicePixelRatio = 1,
+  double? textScale,
+  bool? disableAnimations,
   List<Override> overrides = const [],
   bool wrapInScaffold = true,
 }) async {
-  setTvView(tester, size: size);
+  final viewport = TestAppViewport.tv(
+    logicalSize: size,
+    devicePixelRatio: devicePixelRatio,
+    textScale: textScale ?? 1,
+    disableAnimations: disableAnimations ?? false,
+  );
+  setTestViewport(tester, viewport);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [loggerProvider.overrideWithValue(AppLogger.logger), ...overrides],
@@ -26,6 +39,20 @@ Future<void> pumpTvApp(
         debugShowCheckedModeBanner: false,
         navigatorObservers: [PlayerRouteObserver()],
         theme: AppTheme.darkTheme,
+        builder: (context, content) {
+          final inherited = MediaQuery.of(context);
+          final media = textScale == null && disableAnimations == null
+              ? inherited
+              : inherited.copyWith(
+                  textScaler: textScale == null ? null : TextScaler.linear(viewport.textScale),
+                  disableAnimations: disableAnimations,
+                );
+
+          return MediaQuery(
+            data: media,
+            child: content ?? (throw StateError('MaterialApp did not provide a navigator')),
+          );
+        },
         home: wrapInScaffold ? Scaffold(body: child) : child,
       ),
     ),
@@ -37,10 +64,7 @@ Future<void> pumpTvApp(
 }
 
 void setTvView(WidgetTester tester, {Size size = compactTvSize}) {
-  final view = tester.view
-    ..physicalSize = size
-    ..devicePixelRatio = 1;
-  addTearDown(view.reset);
+  setTestViewport(tester, TestAppViewport.tv(logicalSize: size));
 }
 
 /// Uses the production responsive root and touch theme with logical dimensions.
@@ -54,10 +78,13 @@ Future<void> pumpMobileApp(
   List<Override> overrides = const [],
   bool wrapInScaffold = true,
 }) async {
-  tester.view
-    ..physicalSize = size * devicePixelRatio
-    ..devicePixelRatio = devicePixelRatio;
-  addTearDown(tester.view.reset);
+  final viewport = TestAppViewport.mobile(
+    logicalSize: size,
+    devicePixelRatio: devicePixelRatio,
+    textScale: textScale,
+    disableAnimations: disableAnimations,
+  );
+  setTestViewport(tester, viewport);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [loggerProvider.overrideWithValue(AppLogger.logger), ...overrides],
@@ -68,8 +95,10 @@ Future<void> pumpMobileApp(
           navigatorObservers: [PlayerRouteObserver()],
           theme: AppTheme.mobileDarkTheme,
           builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: TextScaler.linear(textScale), disableAnimations: disableAnimations),
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(viewport.textScale),
+              disableAnimations: viewport.disableAnimations,
+            ),
             child: child ?? (throw StateError('MaterialApp did not provide a navigator')),
           ),
           home: wrapInScaffold ? Scaffold(body: child) : child,
@@ -91,6 +120,7 @@ String? focusedControlLabel(WidgetTester tester) {
     'catalog-tab-true': 'Избранное',
     'catalog-genres': 'Жанры',
     'catalog-account': 'Выйти из аккаунта',
+    'catalog-logs': 'Открыть логи',
     'catalog-sign-in': 'Войти',
   };
   for (final entry in labels.entries) {

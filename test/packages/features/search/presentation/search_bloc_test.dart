@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
+import 'package:anistar_tv/packages/features/search/domain/search_rules.dart';
 import 'package:anistar_tv/packages/features/search/presentation/search_bloc.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,9 +19,29 @@ void main() {
     expect(bloc.state.items, isEmpty);
     await _submit(bloc, 'abc', SearchStatus.error);
     expect(bloc.state.message, 'Введите не менее 4 символов.');
+    expect(bloc.state.error, SearchError.validation);
     await _submit(bloc, List.filled(121, 'a').join(), SearchStatus.error);
     expect(repository.requests, isEmpty);
     expect(history.writes, isEmpty);
+  });
+
+  test('query validation counts Unicode runes and exposes validation separately from request errors', () async {
+    final failureRepository = FakeSearchRepository(load: (_) async => const Result.failure(UnknownFailure()));
+    final bloc = SearchBloc(failureRepository, FakeSearchHistoryRepository());
+    addTearDown(bloc.close);
+    final fourEmoji = List.filled(SearchRules.minimumQueryLength, '😀').join();
+    final maximumEmoji = List.filled(SearchRules.maximumQueryLength, '😀').join();
+    final overMaximumEmoji = List.filled(SearchRules.maximumQueryLength + 1, '😀').join();
+
+    expect((fourEmoji.length, SearchRules.queryLength(fourEmoji)), (8, 4));
+    expect(SearchRules.hasValidQueryLength(maximumEmoji), isTrue);
+    expect(SearchRules.hasValidQueryLength(overMaximumEmoji), isFalse);
+
+    await _submit(bloc, fourEmoji, SearchStatus.error);
+    expect(bloc.state.error, SearchError.request);
+    await _submit(bloc, overMaximumEmoji, SearchStatus.error);
+    expect(bloc.state.error, SearchError.validation);
+    expect(failureRepository.requests, hasLength(1));
   });
 
   test('a new explicit submit cancels the previous request and ignores its late result', () async {

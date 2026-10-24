@@ -31,7 +31,7 @@ class AnimeWatchOrder extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Semantics(header: true, child: Text('Порядок просмотра', style: AppContentTypography.sectionTitleOf(context))),
+      AppSectionHeader(title: 'Порядок просмотра', titleStyle: AppContentTypography.sectionTitleOf(context)),
       const SizedBox(height: AppSpacing.md),
       for (final (index, part) in parts.indexed)
         Padding(

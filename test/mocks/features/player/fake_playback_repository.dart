@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:anistar_tv/packages/features/player/domain/models/playback_episode.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';
 import 'package:anistar_tv/packages/features/player/domain/repositories/playback_repository.dart';
@@ -20,7 +21,9 @@ final class FakePlaybackRepository implements PlaybackRepository {
     requestedQuality: quality,
     selectedQuality: selectedQuality ?? quality,
     availableQualities: availableQualities,
-    episodeNumbers: episodeNumbers,
+    episodes: episodeNumbers
+        .map((number) => PlaybackEpisode(number: number, title: 'Episode $number'))
+        .toList(growable: false),
     httpHeaders: const {'Referer': 'https://v30.astar.bz/player?id=10938'},
   );
 

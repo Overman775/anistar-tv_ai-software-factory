@@ -6,12 +6,18 @@ import 'html_form_encoder.dart';
 
 /// DLE's login form and positive authentication marker, without executing scripts.
 abstract final class AnistarAuthHtml {
-  static bool isAuthenticated(String source, Uri baseUri) => logoutUri(source, baseUri) != null;
+  static bool isAuthenticated(String source, Uri baseUri) => isAuthenticatedDocument(html.parse(source), baseUri);
 
-  static bool isGuest(String source) => html.parse(source).querySelector('input[name="login_password"]') != null;
+  static bool isAuthenticatedDocument(Document document, Uri baseUri) => logoutUriDocument(document, baseUri) != null;
 
-  static Uri? logoutUri(String source, Uri baseUri) {
-    for (final link in html.parse(source).querySelectorAll('a[href]')) {
+  static bool isGuest(String source) => isGuestDocument(html.parse(source));
+
+  static bool isGuestDocument(Document document) => document.querySelector('input[name="login_password"]') != null;
+
+  static Uri? logoutUri(String source, Uri baseUri) => logoutUriDocument(html.parse(source), baseUri);
+
+  static Uri? logoutUriDocument(Document document, Uri baseUri) {
+    for (final link in document.querySelectorAll('a[href]')) {
       final reference = Uri.tryParse(link.attributes['href'] ?? '');
       if (reference == null) {
         continue;

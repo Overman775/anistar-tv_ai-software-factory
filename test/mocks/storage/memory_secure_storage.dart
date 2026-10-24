@@ -7,12 +7,12 @@ final class MemorySecureStorage extends SecureStorage {
   bool failDelete = false;
 
   @override
-  Future<String?> get(String key, {String? defaultValue}) async {
+  Future<String?> get(String key) async {
     if (failRead) {
       throw StateError('Injected secure read failure');
     }
 
-    return values[key] ?? defaultValue;
+    return values[key];
   }
 
   @override

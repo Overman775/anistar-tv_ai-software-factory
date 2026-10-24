@@ -5,6 +5,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_da
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
+import 'package:anistar_tv/packages/features/player/domain/models/playback_episode.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_quality.dart';
 import 'package:anistar_tv/packages/features/player/domain/models/playback_session.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,16 +57,17 @@ void main() {
     final episodes = [const AnimeEpisode(number: 1, title: 'One')];
     final screen = AnimeScreenData(details: details, episodes: episodes);
     final qualities = [PlaybackQuality.low, PlaybackQuality.high];
-    final numbers = [1, 3];
-    final watched = {1};
+    final playbackEpisodes = [
+      const PlaybackEpisode(number: 1, title: 'One', isWatched: true),
+      const PlaybackEpisode(number: 3, title: 'Three'),
+    ];
     final headers = {'Token': 'first'};
     final session = PlaybackSession(
       manifestUri: Uri.parse('https://cdn.test/video'),
       requestedQuality: PlaybackQuality.high,
       selectedQuality: PlaybackQuality.high,
       availableQualities: qualities,
-      episodeNumbers: numbers,
-      watchedEpisodes: watched,
+      episodes: playbackEpisodes,
       httpHeaders: headers,
     );
     summaries.clear();
@@ -73,8 +75,7 @@ void main() {
     filters.clear();
     episodes.clear();
     qualities.clear();
-    numbers.clear();
-    watched.clear();
+    playbackEpisodes.clear();
     headers.clear();
     expect(page.items.single.posterUri, isNull);
     expect(screen.details.genres, ['Comedy']);

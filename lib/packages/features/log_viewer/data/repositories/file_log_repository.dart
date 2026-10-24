@@ -2,11 +2,12 @@ import 'dart:io';
 
 import 'package:app_logging/app_logging.dart';
 import 'package:core/data.dart';
+import 'package:networking/networking.dart';
 
 import '../../domain/log_failure.dart';
 import '../../domain/repositories/log_repository.dart';
 
-final class FileLogRepository implements LogRepository {
+final class FileLogRepository extends BaseRepository implements LogRepository {
   final Future<List<String>> Function() _readFiles;
   final Future<String> Function(String) _readContent;
 
@@ -15,27 +16,28 @@ final class FileLogRepository implements LogRepository {
       _readContent = readContent ?? FileLogOutput.getLogContent;
 
   @override
-  Future<Result<String, Failure>> getLogContent(String fileName) => _read(() async {
+  Future<Result<String, Failure>> getLogContent(String fileName) => makeApiCall(() async {
     if (!RegExp(r'^[^/\\]+\.txt$').hasMatch(fileName)) {
-      throw const FormatException('Invalid log file name');
+      throw const LogFailure(message: 'Не удалось прочитать файл журнала.');
     }
 
-    return _readContent(fileName);
-  }, 'Не удалось прочитать файл журнала.');
+    try {
+      return await _readContent(fileName);
+    } on FileSystemException catch (_, stackTrace) {
+      Error.throwWithStackTrace(const LogFailure(message: 'Не удалось прочитать файл журнала.'), stackTrace);
+    } on FormatException catch (_, stackTrace) {
+      Error.throwWithStackTrace(const LogFailure(message: 'Не удалось прочитать файл журнала.'), stackTrace);
+    }
+  });
 
   @override
-  Future<Result<List<String>, Failure>> getLogFiles() =>
-      _read(() async => List.unmodifiable(await _readFiles()), 'Не удалось загрузить список журналов.');
-
-  Future<Result<T, Failure>> _read<T>(Future<T> Function() read, String message) async {
+  Future<Result<List<String>, Failure>> getLogFiles() => makeApiCall(() async {
     try {
-      return Result.success(await read());
-    } on FileSystemException {
-      return Result.failure(LogFailure(message: message));
-    } on FormatException {
-      return Result.failure(LogFailure(message: message));
-    } on Object {
-      return const Result.failure(UnknownFailure());
+      return List.unmodifiable(await _readFiles());
+    } on FileSystemException catch (_, stackTrace) {
+      Error.throwWithStackTrace(const LogFailure(message: 'Не удалось загрузить список журналов.'), stackTrace);
+    } on FormatException catch (_, stackTrace) {
+      Error.throwWithStackTrace(const LogFailure(message: 'Не удалось загрузить список журналов.'), stackTrace);
     }
-  }
+  });
 }

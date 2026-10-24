@@ -3,6 +3,7 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import 'player_control_button.dart';
+import 'player_progress.dart';
 
 class MobilePlayerFooter extends StatelessWidget {
   const MobilePlayerFooter({
@@ -15,13 +16,6 @@ class MobilePlayerFooter extends StatelessWidget {
     super.key,
   });
 
-  static String _format(Duration value) {
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-
-    return value.inHours > 0 ? '${value.inHours}:$minutes:$seconds' : '$minutes:$seconds';
-  }
-
   final VideoPlayerValue value;
   final ValueChanged<Duration> onSeek;
   final VoidCallback? onPreviousEpisode;
@@ -31,13 +25,9 @@ class MobilePlayerFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final durationMs = value.duration.inMilliseconds;
-    final position = value.position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
-    final buffered = value.buffered.fold<int>(0, (previous, range) {
-      final end = range.end.inMilliseconds;
-
-      return end > previous ? end : previous;
-    });
+    final durationMs = playerSliderMaximum(value.duration);
+    final position = playerSliderPosition(value.position, value.duration);
+    final buffered = playerBufferedPosition(value.buffered, value.duration);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -54,12 +44,14 @@ class MobilePlayerFooter extends StatelessWidget {
           child: Slider(
             key: const ValueKey('player-timeline'),
             value: position.toDouble(),
-            max: durationMs <= 0 ? 1 : durationMs.toDouble(),
-            secondaryTrackValue: buffered.clamp(0, durationMs <= 0 ? 1 : durationMs).toDouble(),
+            max: durationMs.toDouble(),
+            secondaryTrackValue: buffered.toDouble(),
             onChangeStart: (_) => onInteractionStart?.call(),
             onChangeEnd: (_) => onInteractionEnd?.call(),
-            onChanged: durationMs > 0 ? (milliseconds) => onSeek(Duration(milliseconds: milliseconds.round())) : null,
-            semanticFormatterCallback: (milliseconds) => _format(Duration(milliseconds: milliseconds.round())),
+            onChanged: value.duration.inMilliseconds > 0
+                ? (milliseconds) => onSeek(Duration(milliseconds: milliseconds.round()))
+                : null,
+            semanticFormatterCallback: (milliseconds) => formatPlayerTime(Duration(milliseconds: milliseconds.round())),
           ),
         ),
         Row(
@@ -84,7 +76,7 @@ class MobilePlayerFooter extends StatelessWidget {
             ],
             Expanded(
               child: Text(
-                '${_format(Duration(milliseconds: position))} / ${_format(value.duration)}',
+                '${formatPlayerTime(Duration(milliseconds: position))} / ${formatPlayerTime(value.duration)}',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.end,

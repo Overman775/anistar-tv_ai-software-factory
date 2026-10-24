@@ -1,4 +1,3 @@
-import 'package:core/data.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,44 +25,28 @@ final class LogViewerBloc extends Bloc<LogViewerEvent, LogViewerState> {
 
     final generation = ++_requestGeneration;
     emit(currentState.selecting(event.fileName));
-    try {
-      final result = await _repository.getLogContent(event.fileName);
-      if (isClosed || emit.isDone || generation != _requestGeneration) {
-        return;
-      }
-
-      result.when(
-        failure: (failure) => emit(currentState.withError(fileName: event.fileName, message: failure.message)),
-        success: (content) => emit(currentState.withContent(fileName: event.fileName, content: content)),
-      );
-    } on Object {
-      if (isClosed || emit.isDone || generation != _requestGeneration) {
-        return;
-      }
-
-      emit(currentState.withError(fileName: event.fileName, message: const UnknownFailure().message));
+    final result = await _repository.getLogContent(event.fileName);
+    if (isClosed || emit.isDone || generation != _requestGeneration) {
+      return;
     }
+
+    result.when(
+      failure: (failure) => emit(currentState.withError(fileName: event.fileName, message: failure.message)),
+      success: (content) => emit(currentState.withContent(fileName: event.fileName, content: content)),
+    );
   }
 
   Future<void> _onStarted(LogViewerStartedEvent event, Emitter<LogViewerState> emit) async {
     final generation = ++_requestGeneration;
     emit(const LogViewerLoadingState());
-    try {
-      final result = await _repository.getLogFiles();
-      if (isClosed || emit.isDone || generation != _requestGeneration) {
-        return;
-      }
-
-      result.when(
-        failure: (failure) => emit(LogViewerErrorState(failure.message)),
-        success: (files) => emit(LogViewerLoadedState(logFiles: List.unmodifiable(files))),
-      );
-    } on Object {
-      if (isClosed || emit.isDone || generation != _requestGeneration) {
-        return;
-      }
-
-      emit(LogViewerErrorState(const UnknownFailure().message));
+    final result = await _repository.getLogFiles();
+    if (isClosed || emit.isDone || generation != _requestGeneration) {
+      return;
     }
+
+    result.when(
+      failure: (failure) => emit(LogViewerErrorState(failure.message)),
+      success: (files) => emit(LogViewerLoadedState(logFiles: List.unmodifiable(files))),
+    );
   }
 }

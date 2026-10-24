@@ -2,12 +2,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../catalog/domain/models/catalog_filter.dart';
+import '../../../common/presentation/rating_presentation.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_part.dart';
 import '../../domain/models/anime_screen_data.dart';
 import 'anime_watch_order.dart';
+import 'episode_card.dart';
 import 'mobile_anime_poster_header.dart';
-import 'mobile_episode_row.dart';
 
 /// Touch composition shares data and actions with the TV route, but no TV focus graph.
 class MobileAnimeContent extends StatefulWidget {
@@ -65,7 +66,7 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
   Widget build(BuildContext context) {
     final details = widget.data.details;
     final theme = Theme.of(context).textTheme;
-    final ratingLabel = details.rating?.toStringAsFixed(1).replaceAll('.', ',');
+    final rating = RatingPresentation.from(details.rating);
     final sectionStyle = AppContentTypography.sectionTitleOf(context);
     final mutedStyle = theme.bodyMedium?.copyWith(color: AppPalette.textSecondary);
     final wide = MediaQuery.sizeOf(context).width >= 600;
@@ -104,8 +105,8 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
                 Text('Онгоинг', style: theme.labelLarge?.copyWith(color: AppPalette.secondary)),
                 const SizedBox(height: 8),
               ],
-              if (ratingLabel case final rating?) ...[
-                AppMetadataBadge(icon: Icons.grade_rounded, label: rating, semanticLabel: 'Рейтинг $rating из 10'),
+              if (rating case final value?) ...[
+                AppMetadataBadge(icon: Icons.grade_rounded, label: value.label, semanticLabel: value.semanticLabel),
                 const SizedBox(height: AppSpacing.sm),
               ],
               if (widget.yearAction case final action?)
@@ -124,7 +125,7 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
         if (widget.filterActions case final actions?) ...[const SizedBox(height: 20), actions],
         if (hasDescription) ...[
           const SizedBox(height: 24),
-          Semantics(header: true, child: Text('Сюжет', style: sectionStyle)),
+          AppSectionHeader(title: 'Сюжет', titleStyle: sectionStyle),
           const SizedBox(height: 8),
           Text(
             description,
@@ -161,15 +162,10 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
           AnimeWatchOrder(parts: details.parts, currentId: details.id, onSelected: widget.onPartTap),
         ],
         const SizedBox(height: 24),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Expanded(
-              child: Semantics(header: true, child: Text('Серии', style: sectionStyle)),
-            ),
-            Text('В списке: ${widget.episodes.length}', style: mutedStyle),
-          ],
+        AppSectionHeader(
+          title: 'Серии',
+          titleStyle: sectionStyle,
+          trailing: Text('В списке: ${widget.episodes.length}', style: mutedStyle),
         ),
         const SizedBox(height: 12),
         if (widget.episodes.isEmpty) ...[
@@ -178,9 +174,10 @@ class _MobileAnimeContentState extends State<MobileAnimeContent> {
           OutlinedButton(onPressed: widget.onRetry, child: const Text('Обновить серии')),
         ] else
           for (final episode in widget.episodes) ...[
-            MobileEpisodeRow(
+            EpisodeCard(
               key: ValueKey('mobile-episode-${episode.number}'),
               episode: episode,
+              episodeHeight: 92,
               isWatched: episode.isWatched || widget.watched.contains(episode.number),
               onTap: () => widget.onEpisodeTap(episode),
             ),

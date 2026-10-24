@@ -103,13 +103,13 @@ TV-профиль должен полностью управляться пул�
 4. viewport TV **960×540** и **1280×720** logical pixels, а для mobile используйте compact и wide портретные размеры из существующих тестов;
 5. системное уменьшение анимаций и асинхронную загрузку содержимого.
 
-Цвета берите из `Theme.of(context).colorScheme` и общих значений `AppPalette`. Typography берите из `Theme.of(context).textTheme` и `TvTypography`. Spacing, radii и motion берите из `AppSpacing`, `AppRadii` и `AppMotion` в [UI Kit](../lib/packages/ui_kit/README.md). Экранный компонент и раскладка сетки принадлежат feature, пока у них нет повторного общего контракта.
+Цвета берите из `Theme.of(context).colorScheme` и общих значений `AppPalette`. Базовые роли TV/mobile берите из `Theme.of(context).textTheme` и `AppTypography`; контентные роли карточек и полной карточки — из `AppContentTypography`. `TvTypography` остаётся совместимым API и делегирует типографику `AppTypography`. Отступы, радиусы, размеры и движение берите из отдельных токенов `AppSpacing`, `AppRadii`, `AppSizes` и `AppMotion` в [UI Kit](../lib/packages/ui_kit/README.md). Экранный компонент и раскладка сетки принадлежат feature, пока у них нет повторного общего контракта.
 
 ---
 
 ## 7. UI Kit и ресурсы
 
-Корневые темы предоставляет `AppTheme`. `AppPalette`, `AppSpacing`, `AppRadii`, `AppMotion`, `TvTypography` и `AppFocusStyle` владеют общими токенами. `AppNetworkImage` загружает изображения. `TvSkeleton` предоставляет состояние ожидания. Feature не добавляет в UI Kit правила AniStar или запросы.
+Корневые темы предоставляет `AppTheme`. Общие цвета, типографику и геометрию предоставляют `AppPalette`, `AppTypography`, `AppContentTypography`, `AppSpacing`, `AppRadii` и `AppSizes`. Движение и focus style принадлежат `AppMotion` и `AppFocusStyle`. `TvTypography` сохраняется как совместимый типографический API. `AppNetworkImage` загружает изображения. `TvSkeleton` предоставляет состояние ожидания. Feature не добавляет в UI Kit правила AniStar или запросы.
 
 Assets берите через сгенерированные FlutterGen exports из `ui_kit`. Не редактируйте generated-файлы вручную. После изменения исходных ресурсов запустите согласованную команду генерации из [Melos tooling](melos_tooling.md) и проверьте diff.
 

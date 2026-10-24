@@ -14,6 +14,8 @@ import '../../../../mocks/features/search/fake_search_repository.dart';
 import '../../../../support/test_app.dart';
 
 void main() {
+  // This matrix owns visual states across profile, viewport and text scale.
+  // Query rules and retry semantics stay covered by SearchBloc/SearchScreen tests.
   for (final (mobile, size) in [
     (false, compactTvSize),
     (false, wideTvSize),
@@ -95,11 +97,10 @@ void main() {
             } else {
               await pumpTvApp(
                 tester,
-                MediaQuery(
-                  data: MediaQueryData(disableAnimations: true, textScaler: TextScaler.linear(textScale)),
-                  child: screen,
-                ),
+                screen,
                 size: size,
+                textScale: textScale,
+                disableAnimations: true,
                 overrides: overrides,
               );
             }

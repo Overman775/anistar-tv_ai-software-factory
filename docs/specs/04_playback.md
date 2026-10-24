@@ -8,7 +8,7 @@
 
 Перед открытием источника repository получает свежий player HTML. Выбранная серия определяется номером, качество — files её объекта. Поддерживаемые значения качества — `360` и `720`; доступный поток любого из них открывается native player как HLS независимо от суффикса URL. Если запрошенного качества нет, выбирается наибольшее доступное для этой серии; `requestedQuality` и `selectedQuality` хранятся раздельно. Отсутствующие серия или поток дают Failure.
 
-Session содержит `manifestUri`, заголовки, доступные серии/качества и необязательный `expiresAt`. Signed URL сохраняется полностью, включая `+`, запятые, path и query. Клиент не генерирует Key. `end` разбирается как Unix seconds, если значение поддерживается DateTime. Неверный или слишком большой timestamp не мешает открыть целый URI.
+`PlaybackSession` содержит `manifestUri`, заголовки, доступные качества и один неизменяемый список `PlaybackEpisode`, включая название, превью и подтверждённое состояние просмотра. Номера и набор отмеченных серий вычисляются из этого списка. Список не копируется в отдельные параллельные коллекции session. Необязательный `expiresAt` остаётся metadata. Signed URL сохраняется полностью, включая `+`, запятые, path и query. Клиент не генерирует Key. `end` разбирается как Unix seconds, если значение поддерживается DateTime. Неверный или слишком большой timestamp не мешает открыть целый URI.
 
 Поле `expiresAt` — только metadata. Оно не гарантирует срок действия ссылки и не запускает отдельный таймер refresh.
 
@@ -88,7 +88,7 @@ HTML и native `errorDescription` с signed URL не попадают в UI ил
 
 ## Источники и границы подтверждения
 
-- [Playback repository](../../lib/packages/features/player/data/repositories/anistar_playback_repository.dart), [player screen](../../lib/packages/features/player/presentation/screens/player_screen.dart), [budget](../../lib/packages/features/player/domain/models/playback_refresh_budget.dart).
+- [Playback repository](../../lib/packages/features/player/data/repositories/anistar_playback_repository.dart), [PlaybackSession](../../lib/packages/features/player/domain/models/playback_session.dart), [PlaybackEpisode](../../lib/packages/features/player/domain/models/playback_episode.dart), [player screen](../../lib/packages/features/player/presentation/screens/player_screen.dart), [budget](../../lib/packages/features/player/domain/models/playback_refresh_budget.dart).
 - [Session tests](../../test/packages/features/player/data/repositories/anistar_playback_repository_test.dart), [lifecycle tests](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart), [iOS fixture E2E](../../integration_test/ios_e2e_test.dart), [live smoke](../../integration_test/direct_android_test.dart).
 
 Проверка native HLS на эмуляторе не подтверждает аппаратный декодер физического TV. Fixture отказ и refresh не подтверждают естественное суточное expiry; эти уровни проверяются и отражаются в отчёте отдельно. Границы описаны в [разработке и тестировании](../05_development_and_testing.md#10-результаты-и-границы-проверки).

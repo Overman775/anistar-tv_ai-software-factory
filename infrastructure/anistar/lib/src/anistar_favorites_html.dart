@@ -37,7 +37,7 @@ abstract final class AnistarFavoritesHtml {
         canonical?.scheme == origin.scheme &&
         canonical?.origin == origin.origin &&
         canonical?.queryParameters['do'] == 'favorites' &&
-        AnistarAuthHtml.isAuthenticated(document.outerHtml, origin)) {
+        AnistarAuthHtml.isAuthenticatedDocument(document, origin)) {
       return true;
     }
 

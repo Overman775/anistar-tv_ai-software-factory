@@ -20,6 +20,38 @@ Melos выбирает доступный совместимый Python interpre
 
 Скрипты выбирают AVD по имени, а не первый emulator в adb. Имена можно переопределить через `ANISTAR_TV_AVD` и `ANISTAR_MOBILE_AVD`. Чтобы указать запущенный экземпляр явно, передайте `emulator-<port>` первым аргументом платформенного скрипта. Например: `bash scripts/e2e-mobile.sh emulator-5554`. Старый CLI остаётся совместимым: `bash scripts/e2e.sh <tv-emulator> fixtures` и `bash scripts/e2e.sh <phone-emulator> fixtures-mobile`.
 
+Одиночный TV/mobile runner принимает фильтр после необязательных аргументов
+устройства и режима. `--plain-name <substring>` ищет подстроку.
+`--name <regexp>` сопоставляет полное имя теста регулярным выражением. Допустима также
+форма `--plain-name=<substring>` или `--name=<regexp>`:
+
+```bash
+bash scripts/e2e-tv.sh --plain-name 'search submits'
+bash scripts/e2e-mobile.sh emulator-5554 fixtures-mobile --name '^MobileSearch submits query$'
+```
+
+Прямой вызов Bash runner передаёт исходные argv от shell, поэтому обычные
+кавычки сохраняют значения в примерах выше.
+
+Melos 7.8.1 передаёт аргументы через shell и не сохраняет границы значений с
+пробелами. Для выборочного E2E через Melos задайте непустой JSON-массив
+`ANISTAR_TEST_SELECTORS_JSON`; он может содержать только `--plain-name` или
+`--name` с их значениями:
+
+```bash
+ANISTAR_TEST_SELECTORS_JSON='["--plain-name","search submits"]' fvm dart run melos run test:e2e:tv --include-private
+```
+
+Не сочетайте JSON-переменную с selector arguments. Публичный `test:e2e`
+отклоняет её и всегда выполняет полный gate. Подробности host selectors и
+ограничений полного gate находятся в [Melos tooling](../../docs/melos_tooling.md#2-проверки).
+
+Фильтр разрешён только для отдельного platform runner. `scripts/e2e-all.sh` и
+публичный `test:e2e` принимают только два необязательных device arguments и
+отклоняют дополнительные selectors. Общий запуск всегда запускает полные TV
+и mobile suites последовательно на разных устройствах; mobile запускается
+даже после ошибки TV.
+
 Общий runner выполняет TV и mobile последовательно, сохраняет результат каждого и после ошибки TV запускает mobile. Flutter/Gradle и APK output общие, поэтому одновременные E2E runners блокируются build lock.
 
 <a id="ios-fixture-e2e"></a>
@@ -67,6 +99,13 @@ python3 -m unittest discover -s tool/e2e -p '*_test.py'
 ## Отчёты
 
 Каждая платформа сохраняет отчёт в отдельном каталоге вида `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`. Каталог содержит `runner.log`, `flutter.log`, `flutter-events.jsonl`, `logcat.log`, fixture `requests.jsonl`, `selection.json`, `summary.json` и `junit.xml`. При отказе preflight отчёт указывает этап и причину, не представляя native tests как успешно завершённые.
+
+Отчёт содержит `scope=full` без selectors и `scope=filtered` при запуске с
+фильтром, а также selector, seed, длительность, exit code, статус, этап,
+счётчики, завершённые тесты и пути артефактов. Успешный filtered run выводит
+`PARTIAL PASS`; он предназначен для диагностики и не удовлетворяет полному
+E2E gate. Полный успешный platform run выводит `OK`. При ошибке runner выводит
+`FAIL`, фазу и путь к отчёту и `flutter.log`.
 
 Общий запуск создаёт отдельные `tv/` и `mobile/` каталоги и объединяет summary/JUnit в корне своего каталога. Отсутствующие или оборванные native events не дают успешный отчёт.
 

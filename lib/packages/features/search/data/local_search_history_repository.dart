@@ -3,6 +3,7 @@ import 'package:networking/networking.dart';
 import 'package:storage/storage.dart';
 
 import '../domain/search_repository.dart';
+import '../domain/search_rules.dart';
 
 final class LocalSearchHistoryRepository extends BaseRepository implements SearchHistoryRepository {
   final SharedPreferencesStorage _storage;
@@ -18,8 +19,8 @@ final class LocalSearchHistoryRepository extends BaseRepository implements Searc
     return List.unmodifiable(
       values
           .map((value) => value.trim())
-          .where((value) => value.isNotEmpty && value.length <= 120 && seen.add(normalizeSearchQuery(value)))
-          .take(8),
+          .where((value) => SearchRules.hasValidHistoryLength(value) && seen.add(normalizeSearchQuery(value)))
+          .take(SearchRules.historyLimit),
     );
   });
 

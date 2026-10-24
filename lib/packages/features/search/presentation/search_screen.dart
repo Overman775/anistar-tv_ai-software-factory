@@ -12,6 +12,7 @@ import '../../catalog/presentation/widgets/anime_rating_badge.dart';
 import '../../catalog/presentation/widgets/catalog_inspector.dart';
 import '../../catalog/presentation/widgets/catalog_layout.dart';
 import '../../favorites/presentation/favorite_actions_sheet.dart';
+import '../domain/search_rules.dart';
 import '../search_providers.dart';
 import 'search_bloc.dart';
 import 'search_feedback.dart';
@@ -42,17 +43,15 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   final Map<int, FocusNode> _cards = {};
   final Map<String, FocusNode> _history = {};
   bool _editing = false;
-  String _draft = '';
+  bool _restoringEditableFocus = false;
   bool _keyboardVisible = false;
   int? _selectedId;
   int _columns = 1;
-  SearchState _formState = const SearchState();
 
   @override
   void initState() {
     super.initState();
     _bloc = SearchBloc(ref.read(searchRepositoryProvider), ref.read(searchHistoryRepositoryProvider));
-    _formState = _bloc.state;
     _query.addListener(_inputChanged);
     _field.addListener(_fieldChanged);
     _scroll.addListener(_loadMore);
@@ -61,8 +60,11 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     }
   }
 
-  void _inputChanged() => setState(() => _draft = _query.text);
+  void _inputChanged() => setState(() => _retryCardId = null);
   void _fieldChanged() {
+    if (_restoringEditableFocus && !_field.hasFocus) {
+      return;
+    }
     setState(() => _editing = _field.hasFocus && _editing);
   }
 
@@ -88,15 +90,50 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     setState(() => _editing = false);
     unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.hide'));
     if (mounted && widget.active && ModalRoute.of(context)?.isCurrent == true) {
-      _field.requestFocus();
+      if (_field.hasFocus) {
+        _field.requestFocus();
+      } else {
+        final focusScope = FocusScope.of(context);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted &&
+              !_editing &&
+              widget.active &&
+              ModalRoute.of(context)?.isCurrent == true &&
+              identical(FocusManager.instance.primaryFocus, focusScope) &&
+              !_field.hasFocus) {
+            _field.requestFocus();
+          }
+        });
+      }
     }
 
     return true;
   }
 
   void _startEditing() {
+    final alreadyFocused = _field.hasFocus;
     setState(() => _editing = true);
-    _field.requestFocus();
+    if (!alreadyFocused) {
+      _field.requestFocus();
+
+      return;
+    }
+
+    _restoringEditableFocus = true;
+    final focusScope = FocusScope.of(context);
+    _field.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoringEditableFocus = false;
+      if (mounted &&
+          _editing &&
+          widget.active &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          identical(FocusManager.instance.primaryFocus, focusScope)) {
+        _field.requestFocus();
+      } else if (mounted && _editing && !_field.hasFocus) {
+        setState(() => _editing = false);
+      }
+    });
   }
 
   void _search([String? query]) {
@@ -162,7 +199,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      final nodes = [_field, if (_draft.isNotEmpty) _clear, _submit];
+      final nodes = [_field, if (_query.text.isNotEmpty) _clear, _submit];
       final index = nodes.indexWhere((focus) => focus.hasFocus);
       if (key == LogicalKeyboardKey.arrowDown) {
         _focusBody();
@@ -265,9 +302,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _searchStateChanged(BuildContext context, SearchState state) {
-    if (mounted) {
-      setState(() => _formState = state);
-    }
     if (_retry.hasFocus && state.status == SearchStatus.ready && !state.loadingMore && state.message == null) {
       _restoreRetryCard();
     }
@@ -319,14 +353,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     return KeyEventResult.ignored;
   }
 
-  String? _validationMessage(SearchState state) {
-    final length = state.query.length;
-    if (state.status == SearchStatus.error && length > 0 && (length < 4 || length > 120)) {
-      return state.message;
-    }
-
-    return null;
-  }
+  String? _validationMessage(SearchState state) => state.error == SearchError.validation ? state.message : null;
 
   Widget _feedback(SearchState state) => SearchFeedback(
     icon: state.status == SearchStatus.error ? Icons.error_outline_rounded : Icons.search,
@@ -574,16 +601,15 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
                         children: [
                           Semantics(
                             label: 'Название аниме',
-                            child: AppFocusBorder(
+                            child: AppInputFrame(
                               focusNode: _field,
-                              restingColor: AppPalette.outline,
                               child: TextField(
                                 key: const ValueKey('search-query'),
                                 controller: _query,
                                 focusNode: _field,
                                 readOnly: tv && !_editing,
                                 textInputAction: TextInputAction.search,
-                                maxLength: 120,
+                                maxLength: SearchRules.maximumQueryLength,
                                 onTap: tv ? _startEditing : null,
                                 onSubmitted: (_) => _search(),
                                 decoration: InputDecoration(
@@ -608,13 +634,24 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
                               ),
                             ),
                           ),
-                          if (_validationMessage(_formState) case final message?) ...[
-                            const SizedBox(height: AppSpacing.sm),
-                            Semantics(
-                              liveRegion: true,
-                              child: Text(message, style: const TextStyle(color: AppPalette.danger)),
-                            ),
-                          ],
+                          BlocBuilder<SearchBloc, SearchState>(
+                            bloc: _bloc,
+                            buildWhen: (previous, current) =>
+                                _validationMessage(previous) != _validationMessage(current),
+                            builder: (context, state) {
+                              final message = _validationMessage(state);
+
+                              return message == null
+                                  ? const SizedBox.shrink()
+                                  : Padding(
+                                      padding: const EdgeInsets.only(top: AppSpacing.sm),
+                                      child: Semantics(
+                                        liveRegion: true,
+                                        child: Text(message, style: const TextStyle(color: AppPalette.danger)),
+                                      ),
+                                    );
+                            },
+                          ),
                         ],
                       ),
                     ),

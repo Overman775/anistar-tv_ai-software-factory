@@ -181,7 +181,6 @@ class GenresRoute extends GoRouteData with $GenresRoute {
     destination: HomeDestination.genres,
     title: 'Жанры',
     builder: (onOpenNavigation) => GenresScreen(
-      embedded: true,
       onOpenNavigation: onOpenNavigation,
       onSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
     ),
@@ -202,13 +201,9 @@ class FilterRoute extends GoRouteData with $FilterRoute {
       final mobile = !AppLayoutScope.isTvOf(context);
       final catalog = CatalogScreen(
         key: ValueKey(path),
-        embedded: true,
-        accountName: ref.watch(authAccessProvider).account,
         filter: CatalogFilter(label: title, path: path),
         onTabSelected: (favorite) =>
             HomeRoute(destination: favorite ? HomeDestination.favorites : HomeDestination.home).go(context),
-        onOpenGenres: () => const HomeRoute(destination: HomeDestination.genres).go(context),
-        onOpenLogs: _logsAction(context),
         onAnimeTap: (anime) => _openAnime(context, anime, destination),
       );
 
@@ -219,7 +214,6 @@ class FilterRoute extends GoRouteData with $FilterRoute {
               title: title,
               builder: (onNavigation) => CatalogScreen(
                 key: ValueKey(path),
-                embedded: true,
                 filter: CatalogFilter(label: title, path: path),
                 onOpenNavigation: onNavigation,
                 onAnimeTap: (anime) => _openAnime(context, anime, destination),

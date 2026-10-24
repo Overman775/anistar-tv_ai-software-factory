@@ -4,16 +4,13 @@ import 'package:anistar_tv/packages/features/player/domain/models/playback_sessi
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  PlaybackSession session({List<PlaybackEpisode> episodes = const [], List<int> episodeNumbers = const []}) =>
-      PlaybackSession(
-        manifestUri: Uri.parse('https://cdn.test/master.m3u8'),
-        requestedQuality: PlaybackQuality.high,
-        selectedQuality: PlaybackQuality.high,
-        availableQualities: const [PlaybackQuality.low, PlaybackQuality.high],
-        episodes: episodes,
-        episodeNumbers: episodeNumbers,
-        watchedEpisodes: const {2},
-      );
+  PlaybackSession session({List<PlaybackEpisode> episodes = const []}) => PlaybackSession(
+    manifestUri: Uri.parse('https://cdn.test/master.m3u8'),
+    requestedQuality: PlaybackQuality.high,
+    selectedQuality: PlaybackQuality.high,
+    availableQualities: const [PlaybackQuality.low, PlaybackQuality.high],
+    episodes: episodes,
+  );
 
   test('episode metadata and watched numbers are immutable snapshots', () {
     final input = [
@@ -33,15 +30,17 @@ void main() {
     expect(() => value.episodes.add(const PlaybackEpisode(number: 3, title: 'Следующая')), throwsUnsupportedError);
   });
 
-  test('legacy episode numbers remain available as metadata-free immutable episodes', () {
-    final numbers = [1, 3];
-    final value = session(episodeNumbers: numbers);
-    numbers.clear();
+  test('episode numbers and watched state are derived from immutable metadata', () {
+    final episodes = [
+      const PlaybackEpisode(number: 1, title: 'Первая'),
+      const PlaybackEpisode(number: 3, title: 'Третья', isWatched: true),
+    ];
+    final value = session(episodes: episodes);
+    episodes.clear();
 
     expect(value.episodeNumbers, [1, 3]);
-    expect(value.episodes.map((episode) => episode.number), [1, 3]);
-    expect(value.episodes.map((episode) => episode.title), ['', '']);
-    expect(value.episodes.every((episode) => episode.previewUri == null && !episode.isWatched), isTrue);
-    expect(value.watchedEpisodes, {2});
+    expect(value.watchedEpisodes, {3});
+    expect(value.previousEpisode(3), 1);
+    expect(value.nextEpisode(1), 3);
   });
 }

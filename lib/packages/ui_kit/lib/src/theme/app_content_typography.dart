@@ -1,49 +1,21 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../widgets/app_layout_scope.dart';
+import 'app_typography.dart';
 
 /// Local text roles for catalog cards and anime details, without changing controls.
 abstract final class AppContentTypography {
-  static TextStyle? cardTitleOf(BuildContext context) => Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 15);
+  static TextStyle? cardTitleOf(BuildContext context) => AppTypography.cardTitleOf(context);
 
-  static TextStyle? cardCaptionOf(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+  static TextStyle? cardCaptionOf(BuildContext context) => AppTypography.cardCaptionOf(context);
 
-    return AppLayoutScope.isTvOf(context) ? text.labelLarge?.copyWith(fontSize: 15) : text.labelMedium;
-  }
+  static TextStyle? detailTitleOf(BuildContext context, {bool wide = false}) =>
+      AppTypography.detailTitleOf(context, wide: wide);
 
-  static TextStyle? detailTitleOf(BuildContext context, {bool wide = false}) {
-    final text = Theme.of(context).textTheme;
-    if (!AppLayoutScope.isTvOf(context)) {
-      return text.headlineSmall?.copyWith(fontSize: 20);
-    }
+  static TextStyle? descriptionOf(BuildContext context) => AppTypography.descriptionOf(context);
 
-    return wide ? text.headlineLarge?.copyWith(fontSize: 30) : text.headlineMedium?.copyWith(fontSize: 26);
-  }
+  static TextStyle? sectionTitleOf(BuildContext context) => AppTypography.sectionTitleOf(context);
 
-  static TextStyle? descriptionOf(BuildContext context) {
-    final text = Theme.of(context).textTheme;
+  static TextStyle? episodeTitleOf(BuildContext context) => AppTypography.episodeTitleOf(context);
 
-    return AppLayoutScope.isTvOf(context) ? text.bodyLarge?.copyWith(fontSize: 17) : text.bodyMedium;
-  }
-
-  static TextStyle? sectionTitleOf(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    return AppLayoutScope.isTvOf(context) ? text.headlineSmall : text.titleLarge?.copyWith(fontSize: 19);
-  }
-
-  static TextStyle? episodeTitleOf(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    return AppLayoutScope.isTvOf(context)
-        ? text.titleMedium?.copyWith(fontSize: 18)
-        : text.bodyLarge?.copyWith(fontSize: 15);
-  }
-
-  static TextStyle? episodeCaptionOf(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-
-    return AppLayoutScope.isTvOf(context) ? text.labelMedium : text.bodyMedium;
-  }
+  static TextStyle? episodeCaptionOf(BuildContext context) => AppTypography.episodeCaptionOf(context);
 }

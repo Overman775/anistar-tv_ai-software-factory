@@ -11,16 +11,9 @@ import '../../catalog_providers.dart';
 import '../../domain/models/catalog_filter.dart';
 
 class GenresScreen extends ConsumerStatefulWidget {
-  const GenresScreen({
-    required this.onSelected,
-    this.embedded = false,
-    this.autofocus = true,
-    this.onOpenNavigation,
-    super.key,
-  });
+  const GenresScreen({required this.onSelected, this.autofocus = true, this.onOpenNavigation, super.key});
 
   final ValueChanged<CatalogFilter> onSelected;
-  final bool embedded;
   final bool autofocus;
   final VoidCallback? onOpenNavigation;
 
@@ -31,7 +24,6 @@ class GenresScreen extends ConsumerStatefulWidget {
 class GenresScreenState extends ConsumerState<GenresScreen> {
   final _retry = FocusNode(debugLabel: 'Повторить загрузку жанров');
   bool _stateActionFocused = false;
-  final _back = FocusNode(debugLabel: 'Назад из жанров');
   final Map<String, FocusNode> _nodes = {};
   int _columns = 1;
   List<CatalogFilter> _items = [];
@@ -51,7 +43,7 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
     }
   }
 
-  bool get _shouldFocusContent => widget.embedded ? FocusScope.of(context).hasFocus : widget.autofocus;
+  bool get _shouldFocusContent => widget.autofocus && FocusScope.of(context).hasFocus;
 
   void _focusReadyTarget(FocusNode? target) {
     if (mounted &&
@@ -68,13 +60,11 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
     final index = _items.indexWhere((item) => _nodes[item.path] == current);
     final key = event.logicalKey;
     FocusNode? target;
-    if (current == _back && key == LogicalKeyboardKey.arrowDown && _items.isNotEmpty) {
-      target = _nodes[_items.first.path];
-    } else if (index >= 0) {
+    if (index >= 0) {
       var next = index;
       if (key == LogicalKeyboardKey.arrowUp) {
         if (index < _columns) {
-          target = widget.embedded ? current : _back;
+          target = current;
         } else {
           next -= _columns;
         }
@@ -115,9 +105,7 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
     }
 
     return Padding(
-      padding: EdgeInsets.only(
-        bottom: widget.embedded && !AppLayoutScope.isTvOf(context) ? MediaQuery.paddingOf(context).bottom : 0,
-      ),
+      padding: EdgeInsets.only(bottom: !AppLayoutScope.isTvOf(context) ? MediaQuery.paddingOf(context).bottom : 0),
       child: TvStateView(
         icon: Icons.category_outlined,
         title: title,
@@ -154,7 +142,6 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
 
   @override
   void dispose() {
-    _back.dispose();
     _retry.dispose();
     for (final node in _nodes.values) {
       node.dispose();
@@ -169,21 +156,8 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
     child: TvBackdrop(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: widget.embedded
-            ? null
-            : AppBar(
-                title: const Text('Аниме по жанрам'),
-                leading: IconButton(
-                  focusNode: _back,
-                  autofocus: AppLayoutScope.isTvOf(context),
-                  tooltip: 'Назад',
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const AppIcon.fromMaterial(Icons.arrow_back),
-                ),
-              ),
         body: SafeArea(
-          top: !widget.embedded,
-          bottom: !widget.embedded,
+          bottom: false,
           child: ref
               .watch(genresProvider)
               .when(

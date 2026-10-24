@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_content_typography.dart';
@@ -8,6 +6,7 @@ import 'app_icon.dart';
 import 'app_network_image.dart';
 import 'media_card_bookmark.dart';
 import 'media_card_caption_underlay.dart';
+import 'media_card_metrics.dart';
 import 'tv_focus_tile.dart';
 import 'tv_poster_hero.dart';
 
@@ -120,56 +119,21 @@ class MediaCard extends StatelessWidget {
     ],
   );
 
-  double _textHeight({
-    required BuildContext context,
-    required String text,
-    required TextStyle? style,
-    required double maxWidth,
-    required int maxLines,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: maxLines,
-    )..layout(maxWidth: maxWidth);
-
-    return painter.height;
-  }
-
-  double _episodeCopyHeight(BuildContext context, double width) {
-    final double copyWidth = math.max<double>(1, width - AppSpacing.md * 2);
-    final titleHeight = _textHeight(
-      context: context,
-      text: label,
-      style: AppContentTypography.episodeTitleOf(context)
-          ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
-      maxWidth: copyWidth,
-      maxLines: 2,
-    );
-    final captionHeight = switch ((showCaption, caption)) {
-      (true, final String caption) =>
-        _textHeight(
-              context: context,
-              text: caption,
-              style: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
-              maxWidth: copyWidth,
-              maxLines: 2,
-            ) +
-            AppSpacing.xs,
-      _ => 0.0,
-    };
-
-    return AppSpacing.xxl + AppSpacing.md + titleHeight + captionHeight;
-  }
-
   Widget _episode() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.hasBoundedWidth ? constraints.maxWidth : AppSizes.sideSheet;
-      final imageHeight = width / AppSizes.landscapeRatio;
-      final contentHeight = _episodeCopyHeight(context, width);
-      final baselineHeight = episodeHeight ?? imageHeight;
-      final double height = math.max(baselineHeight, contentHeight);
+      final metrics = MediaCardMetrics(
+        width: width,
+        label: label,
+        caption: caption,
+        showCaption: showCaption,
+        minimumHeight: episodeHeight,
+        titleStyle: AppContentTypography.episodeTitleOf(context)
+            ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
+        captionStyle: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
+        textScaler: MediaQuery.textScalerOf(context),
+        direction: Directionality.of(context),
+      );
       final surface = Stack(
         fit: StackFit.expand,
         children: [
@@ -202,7 +166,7 @@ class MediaCard extends StatelessWidget {
         ],
       );
 
-      return SizedBox(height: height, child: surface);
+      return SizedBox(height: metrics.episodeHeight, child: surface);
     },
   );
 

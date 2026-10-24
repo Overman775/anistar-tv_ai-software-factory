@@ -14,18 +14,6 @@ import 'package:flutter/widgets.dart';
 class $AssetsFontsGen {
   const $AssetsFontsGen();
 
-  /// File path: assets/fonts/Inter-Bold.otf
-  String get interBold => 'packages/ui_kit/assets/fonts/Inter-Bold.otf';
-
-  /// File path: assets/fonts/Inter-Medium.otf
-  String get interMedium => 'packages/ui_kit/assets/fonts/Inter-Medium.otf';
-
-  /// File path: assets/fonts/Inter-Regular.otf
-  String get interRegular => 'packages/ui_kit/assets/fonts/Inter-Regular.otf';
-
-  /// File path: assets/fonts/LICENSE.txt
-  String get license => 'packages/ui_kit/assets/fonts/LICENSE.txt';
-
   /// File path: assets/fonts/Manrope-400.ttf
   String get manrope400 => 'packages/ui_kit/assets/fonts/Manrope-400.ttf';
 
@@ -45,18 +33,7 @@ class $AssetsFontsGen {
   String get manropeOFL => 'packages/ui_kit/assets/fonts/Manrope-OFL.txt';
 
   /// List of all assets
-  List<String> get values => [
-    interBold,
-    interMedium,
-    interRegular,
-    license,
-    manrope400,
-    manrope500,
-    manrope600,
-    manrope700,
-    manrope800,
-    manropeOFL,
-  ];
+  List<String> get values => [manrope400, manrope500, manrope600, manrope700, manrope800, manropeOFL];
 }
 
 class $AssetsIconsGen {
