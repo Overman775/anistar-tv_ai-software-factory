@@ -1,6 +1,7 @@
 // Each assertion observes a separate remote event or asynchronous response.
 
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
@@ -43,6 +44,61 @@ Future<void> _applyTitle(WidgetTester tester) async {
   await _key(tester, LogicalKeyboardKey.select);
 }
 
+Finder _sortChoice(String label) => find.byWidgetPredicate((widget) => widget is TvChoiceTile && widget.label == label);
+
+Future<void> _openSortWithPopularityDraft(WidgetTester tester) async {
+  if (FocusManager.instance.primaryFocus?.debugLabel != 'Сортировка') {
+    await _key(tester, LogicalKeyboardKey.arrowUp);
+  }
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
+  await _key(tester, LogicalKeyboardKey.select);
+  expect(find.byType(CatalogSortSheet), findsOneWidget);
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'sort-option-0');
+  expect(tester.widget<TvChoiceTile>(_sortChoice('По дате')).selected, isTrue);
+  expect(tester.getSemantics(_sortChoice('По дате')).getSemanticsData().flagsCollection.isSelected, Tristate.isTrue);
+  expect(tester.widget<TvChoiceTile>(_sortChoice('По популярности')).selected, isFalse);
+  await _key(tester, LogicalKeyboardKey.arrowDown);
+  await _key(tester, LogicalKeyboardKey.select);
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'sort-option-1');
+}
+
+void _expectUnsavedPopularityDraft(WidgetTester tester, FakeCatalogBrowseRepository repository, {required int option}) {
+  expect(find.byType(CatalogSortSheet), findsOneWidget);
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'sort-option-$option');
+  expect(tester.widget<TvChoiceTile>(_sortChoice('По популярности')).selected, isTrue);
+  expect(
+    tester.getSemantics(_sortChoice('По популярности')).getSemanticsData().flagsCollection.isSelected,
+    Tristate.isTrue,
+  );
+  expect(tester.widget<TvChoiceTile>(_sortChoice('По убыванию')).selected, isTrue);
+  expect(repository.requests, hasLength(1));
+  expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 88);
+}
+
+Future<void> _sendIgnoredHorizontalInput(
+  WidgetTester tester,
+  LogicalKeyboardKey key,
+  VoidCallback expectUnchanged,
+) async {
+  await tester.sendKeyDownEvent(key);
+  await tester.pump();
+  expectUnchanged();
+  await tester.sendKeyRepeatEvent(key);
+  await tester.pump();
+  expectUnchanged();
+  await tester.sendKeyUpEvent(key);
+  await tester.pump();
+  expectUnchanged();
+}
+
+void _expectDefaultSortRestored(FakeCatalogBrowseRepository repository) {
+  expect(find.byType(CatalogSortSheet), findsNothing);
+  expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
+  expect(find.text('По дате · Сначала новые'), findsOneWidget);
+  expect(repository.sorts, [defaultCatalogSort]);
+  expect(repository.requests, hasLength(1));
+}
+
 void main() {
   for (final size in [compactTvSize, wideTvSize, const Size(390, 844)]) {
     testWidgets('sort draft, cancel, apply, same selection and focus at $size', (tester) async {
@@ -83,6 +139,91 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('sort keeps an unsaved draft through horizontal key lifecycles and preserves cancel and apply', (
+    tester,
+  ) async {
+    final repository = FakeCatalogBrowseRepository(
+      load: (_, page) => const FakeCatalogScreenRepository().getPage(page),
+    );
+    var destinationSelections = 0;
+    await pumpTvApp(
+      tester,
+      TvRouteShell(
+        destination: HomeDestination.genres,
+        onDestinationSelected: (_) => destinationSelections++,
+        builder: (onOpenNavigation) => CatalogScreen(
+          filter: comedyFilter,
+          onOpenNavigation: onOpenNavigation,
+          onAnimeTap: (_) => fail('Unexpected anime selection'),
+        ),
+      ),
+      wrapInScaffold: false,
+      overrides: [catalogBrowseRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+
+    await _openSortWithPopularityDraft(tester);
+    var focusedRow = 1;
+    for (final row in [1, 5, 7, 8]) {
+      if (row != focusedRow) {
+        await _key(tester, LogicalKeyboardKey.arrowDown, row - focusedRow);
+        focusedRow = row;
+      }
+      for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight]) {
+        await _sendIgnoredHorizontalInput(
+          tester,
+          key,
+          () => _expectUnsavedPopularityDraft(tester, repository, option: row),
+        );
+      }
+    }
+    expect(destinationSelections, 0);
+
+    await _key(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    _expectDefaultSortRestored(repository);
+
+    await _openSortWithPopularityDraft(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    _expectDefaultSortRestored(repository);
+
+    await _openSortWithPopularityDraft(tester);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    _expectDefaultSortRestored(repository);
+
+    await _openSortWithPopularityDraft(tester);
+    await tester.tapAt(const Offset(100, 270));
+    await tester.pumpAndSettle();
+    _expectDefaultSortRestored(repository);
+
+    await _openSortWithPopularityDraft(tester);
+    for (final key in [LogicalKeyboardKey.arrowLeft, LogicalKeyboardKey.arrowRight]) {
+      await _sendIgnoredHorizontalInput(
+        tester,
+        key,
+        () => _expectUnsavedPopularityDraft(tester, repository, option: 1),
+      );
+    }
+    await _key(tester, LogicalKeyboardKey.arrowDown, 6);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'sort-option-7');
+    await _key(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(repository.sorts, [defaultCatalogSort, (criterion: CatalogSortCriterion.popularity, ascending: false)]);
+    expect(repository.requests, hasLength(2));
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Сортировка');
+    expect(find.text('По популярности · По убыванию'), findsOneWidget);
+
+    await _key(tester, LogicalKeyboardKey.select);
+    await _key(tester, LogicalKeyboardKey.arrowDown, 6);
+    await _key(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(repository.requests, hasLength(2));
+    expect(destinationSelections, 0);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('sort discards pending old pagination, retries new order and resets the page', (tester) async {
     final oldMore = Completer<Result<AnimePage, Failure>>();

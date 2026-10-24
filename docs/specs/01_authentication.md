@@ -36,6 +36,12 @@ AuthController / AuthRepository принадлежат feature Auth. AnistarClie
 
 Пароль не сохраняется. Сохранённая сессия проверяется без повторного POST.
 
+## Термины и ответственность
+
+- **Термины:** [доступ, аккаунт и зеркало](../01_01_domain_glossary.md#1-доступ-аккаунт-и-зеркало).
+- **Владелец:** [auth](../01_02_feature_responsibilities.md#1-владельцы-поведения) — состояние доступа и переходы.
+- **Участники:** AniStar — протокол и сессия сайта; storage — хранение; app — композиция и маршруты. См. [инфраструктуру и композицию](../01_02_feature_responsibilities.md#2-композиция-и-инфраструктура).
+
 ## Сессия и изоляция origin
 
 Ключ записи: `anistar.session.v1.<Uri.encodeComponent(origin.origin)>`. JSON record содержит `version=1`, origin, account и host/domain cookies. Зеркала и порты изолированы. Android dev/prod используют разные application IDs. На iOS bundle ID задаёт отдельные preferences и default Keychain group; `SecureStorage` дополнительно задаёт `accountName` `com.anistar.tv.dev` для dev и `com.anistar.tv` для prod. Сессии flavors не пересекаются. Android backup выключен, чтобы запись cookies не восстанавливалась отдельно от ключа шифрования.

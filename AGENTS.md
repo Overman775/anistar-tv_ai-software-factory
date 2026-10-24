@@ -26,6 +26,7 @@ factory-meta-retro → session retrospective and factory improvements
 - Clarify missing behavior/scope; resolve routine choices from project patterns.
 - Minimal changes; preserve user work; no adjacent refactors.
 - Read actual applicable docs; pass their concrete paths to delegated roles; verify before claiming success.
+- For feature behavior, domain terms, ownership or cross-feature changes, read `docs/01_01_domain_glossary.md` and `docs/01_02_feature_responsibilities.md`, then the affected specifications. Pass these concrete paths to delegated roles working on that scope. Keep the existing feature-based CleanArch.
 - TV layout/focus/controls/motion → ADR-0008 and linked specs; update regression tests together.
 - Commits, push, releases and publication require an explicit request.
 
@@ -43,6 +44,8 @@ factory-meta-retro → session retrospective and factory improvements
 - **UI prototype (visual reference):** `prototype/index.html`, `prototype/app.js`, `prototype/app.css`, `prototype/responsive.css`; handoff: `prototype/DESIGN-HANDOFF.md`. Flutter production code belongs in `lib/`.
 - **Product:** `PRODUCT.md`
 - **Arch/DI:** `docs/01_architecture_principles.md`
+- **Domain terms:** `docs/01_01_domain_glossary.md`
+- **Feature ownership/interactions:** `docs/01_02_feature_responsibilities.md`
 - **Decisions:** `docs/adr/README.md`
 - **Specifications:** `docs/specs/README.md`
 - **Doc templates:** `docs/templates/README.md` — guides, ADR, specifications, intent, README; read the matching template before creating a document.

@@ -8,6 +8,8 @@
 | :--- | :--- |
 | Как проверить, установить или обновить окружение проекта с выбором компонентов | [Factory Install](../.agents/skills/factory-install/SKILL.md) |
 | Как разделены слои, зависимости и DI | [Архитектурные принципы](01_architecture_principles.md) |
+| Что означают предметные термины и состояния | [Доменный глоссарий](01_01_domain_glossary.md) |
+| Какая фича владеет правилом и как взаимодействуют фичи | [Ответственность фич](01_02_feature_responsibilities.md) |
 | Где разместить код и как связаны пакеты | [Структура проекта](02_project_structure.md) |
 | Какие правила соблюдать в Dart, асинхронном коде и TV UI | [Code Style](03_codestyle_and_rules.md) |
 | Как взаимодействуют transport, сайт, сессия и native playback | [Сеть и HLS](04_network_and_playback.md) |
@@ -36,6 +38,7 @@
 
 ## Согласованные планы
 
+- [Согласованность доменных контрактов — revision 1](plans/domain-contract-consistency-2026-10-24.md).
 - [Полный редизайн приложения по прототипу — revision 3](plans/prototype-app-redesign-2026-10-22.md).
 - [Карточки, поиск, вход и управление TV/mobile по 15 intent — revision 2](plans/ui-intents-polish-2026-10-23.md).
 - [Карточки, серии и управление плеером — revision 1](plans/ui-player-intents-2026-10-19.md).
