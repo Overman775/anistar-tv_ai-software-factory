@@ -1,5 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 
+export 'app_motion.dart';
+export 'app_spacing.dart';
+
 /// Semantic colours shared by TV and touch surfaces.
 abstract final class AppPalette {
   static const background = Color(0xFF101214);
@@ -39,55 +42,4 @@ abstract final class AppPalette {
   static const playerOnLight = Color(0xFF121517);
   static const playerShadeTop = Color(0xC2000000);
   static const playerShadeBottom = Color(0xE0000000);
-}
-
-abstract final class AppSpacing {
-  static const double xs = 4;
-  static const double sm = 8;
-  static const double md = 16;
-  static const double lg = 24;
-  static const double xl = 32;
-  static const double xxl = 48;
-  static const double xxxl = 64;
-}
-
-abstract final class AppRadii {
-  static const small = BorderRadius.all(Radius.circular(4));
-  static const medium = BorderRadius.all(Radius.circular(10));
-  static const large = BorderRadius.all(Radius.circular(12));
-  static const edge = BorderRadius.zero;
-  static const pill = BorderRadius.all(Radius.circular(999));
-}
-
-abstract final class AppSizes {
-  static const double cardFocusScale = 1.025;
-  static const double tvControl = 56;
-  static const double touchControl = 48;
-  static const double sideSheet = 440;
-  static const double bottomSheetMaxWidth = 640;
-  static const double posterRatio = 2 / 3;
-  static const double landscapeRatio = 219 / 92;
-  static const double episodeRatio = 16 / 9;
-}
-
-abstract final class AppMotion {
-  static const fast = Duration(milliseconds: 160);
-  static const standard = Duration(milliseconds: 240);
-  static const page = Duration(milliseconds: 280);
-  static const pageReverse = Duration(milliseconds: 200);
-  static const panelEnter = standard;
-  static const panelExit = Duration(milliseconds: 156);
-  static const focusExit = Duration(milliseconds: 104);
-  static const focusBorderEnter = Duration(milliseconds: 280);
-  static const focusBorderExit = Duration(milliseconds: 200);
-  static const inspectorDwell = Duration(milliseconds: 150);
-  static const inspectorContent = page;
-  static const shimmer = Duration(milliseconds: 1100);
-  static const enterCurve = Curves.easeOutCubic;
-  static const exitCurve = Curves.easeInCubic;
-
-  static bool reducedOf(BuildContext context) =>
-      MediaQuery.disableAnimationsOf(context) || MediaQuery.accessibleNavigationOf(context);
-
-  static Duration durationOf(BuildContext context, Duration duration) => reducedOf(context) ? Duration.zero : duration;
 }

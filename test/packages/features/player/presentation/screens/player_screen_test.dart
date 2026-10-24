@@ -1034,7 +1034,7 @@ void main() {
     await settle(tester);
     expect(storage.writes, 1);
     await openMenu(tester, episodes: true);
-    expect(find.bySemanticsLabel('Серия 1, текущая, просмотрена'), findsOneWidget);
+    expect(find.bySemanticsLabel('Серия 1, Episode 1, текущая, просмотрена'), findsOneWidget);
     await tester.tap(find.text('Серия 2'));
     await settle(tester);
     expect(storage.watched[10938], {1, 2});
@@ -1151,7 +1151,7 @@ void main() {
     }
 
     await openMenu(tester, episodes: true);
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 1, текущая');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 1, Episode 1, текущая');
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await settle(tester);
     expectVideoFocusWithSingleSource();

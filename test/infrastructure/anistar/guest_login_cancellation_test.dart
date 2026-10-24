@@ -170,7 +170,7 @@ final class _GatedSecureStorage extends SecureStorage {
   bool _gateFirstWrite = true;
 
   @override
-  Future<String?> get(String key, {String? defaultValue}) async => values[key] ?? defaultValue;
+  Future<String?> get(String key) async => values[key];
 
   @override
   Future<void> set(String key, String value) async {

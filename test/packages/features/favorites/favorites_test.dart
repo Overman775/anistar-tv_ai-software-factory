@@ -91,7 +91,7 @@ void main() {
     final repository = FakeFavoritesRepository()..change = (_) => pending.future;
     await pumpTvApp(
       tester,
-      const FavoriteButton(animeId: 1, slug: '1-test', title: 'Аниме 1'),
+      const FavoriteButton(animeId: 1, slug: '1-test'),
       overrides: [
         authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
         favoritesAccountProvider.overrideWithValue('test'),
@@ -149,7 +149,7 @@ void main() {
     final repository = FakeFavoritesRepository()..statusFailure = const UnknownFailure();
     await pumpTvApp(
       tester,
-      const FavoriteButton(animeId: 1, slug: '1-test', title: 'Аниме 1'),
+      const FavoriteButton(animeId: 1, slug: '1-test'),
       overrides: [
         authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
         favoritesAccountProvider.overrideWithValue('test'),

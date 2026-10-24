@@ -122,6 +122,19 @@ void main() {
       expect(afterBack.readOnly, isTrue);
       await key(LogicalKeyboardKey.arrowLeft);
       expect(menuOpened, 1);
+      final passiveInputClients = textInputCalls.where((call) => call.method == 'TextInput.setClient').length;
+      await key(LogicalKeyboardKey.select);
+      await pump();
+      await pump();
+      expect(readField().readOnly, isFalse);
+      expect(readField().focusNode?.hasFocus, isTrue);
+      expect(
+        textInputCalls.where((call) => call.method == 'TextInput.setClient').length,
+        greaterThan(passiveInputClients),
+      );
+      await key(LogicalKeyboardKey.escape);
+      await pump();
+      expect(readField().readOnly, isTrue);
       await key(LogicalKeyboardKey.arrowRight);
       await pump();
       expect(tester.widget<IconButton>(clear).focusNode?.hasFocus, isTrue);
@@ -134,6 +147,60 @@ void main() {
       expect(find.text('Повторить загрузку'), findsNothing);
     },
   );
+
+  testWidgets('TV rail focus cancels a pending editable search reset', (tester) async {
+    final repository = FakeSearchRepository();
+    await pumpTvApp(
+      tester,
+      HomeScreen(destination: HomeDestination.search, onAnimeTap: (_) => fail('Unexpected detail')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(query).readOnly, isFalse);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    expect(tester.widget<TextField>(query).readOnly, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump();
+
+    expect(focusedControlLabel(tester), 'Поиск');
+    expect(tester.widget<TextField>(query).readOnly, isTrue);
+  });
+
+  testWidgets('TV rail focus cancels passive search focus restoration after Back', (tester) async {
+    final repository = FakeSearchRepository();
+    await pumpTvApp(
+      tester,
+      HomeScreen(destination: HomeDestination.search, onAnimeTap: (_) => fail('Unexpected detail')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+
+    await tester.binding.handlePopRoute();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump();
+
+    expect(focusedControlLabel(tester), 'Поиск');
+    expect(tester.widget<TextField>(query).readOnly, isTrue);
+  });
 
   for (final size in [const Size(320, 640), const Size(390, 844), const Size(844, 390)]) {
     testWidgets('touch search keeps a single-row form at doubled text $size', (tester) async {

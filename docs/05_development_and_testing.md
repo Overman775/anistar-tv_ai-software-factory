@@ -55,7 +55,40 @@ fvm dart run melos run check
 | Обновить golden baseline | `fvm dart run melos run test:goldens:update` |
 | Быстрые Flutter-проверки без DCM | `fvm dart run melos run check:flutter` |
 
+Публичные команды `test:unit`, `test:coverage`, `test:goldens` и
+`test:goldens:update` принимают пути `.dart`, `--plain-name` и `--name`.
+Melos 7.8.1 передаёт аргументы через shell и не сохраняет границы значений с
+пробелами. Для имён и регулярных выражений используйте JSON-массив
+`ANISTAR_TEST_SELECTORS_JSON`:
+
+```bash
+fvm dart run melos run test:unit -- test/packages/features/search/search_bloc_test.dart
+ANISTAR_TEST_SELECTORS_JSON='["--plain-name","empty query"]' fvm dart run melos run test:unit
+ANISTAR_TEST_SELECTORS_JSON='["--name","^SearchPage shows results$"]' fvm dart run melos run test:goldens
+```
+
+JSON-массив содержит непустые строки, сохраняет аргументы точно и не сочетается
+с selector arguments команды. Остальные аргументы Flutter test не поддерживаются.
+Прямой Bash runner принимает исходные shell argv. Точная форма передачи и
+ограничения полного gate описаны в [Melos tooling](melos_tooling.md#2-проверки).
+
+Публичный профиль подготавливает SDK и lockfile один раз перед тестами. Каждый
+запуск создаёт уникальный каталог в `build/quality/`. Хост-тесты сохраняют
+`flutter-events.jsonl`, `summary.json`, `junit.xml` и полный `flutter.log`;
+unit coverage также записывается в `coverage/lcov.info`. Консоль показывает
+краткий `OK` или `FAIL`, `scope=full|filtered`, число завершённых тестов,
+счётчики и путь отчёта. При ошибке выводятся последние строки полного лога.
+Пустой или незавершённый запуск завершается ошибкой. Выборочный запуск полезен
+для диагностики, но не заменяет полный gate. `test:coverage` является alias
+`test:unit` и принимает те же selectors. Обновлять baselines можно отдельной
+командой `test:goldens:update`; `--update-goldens` нельзя передать в обычную
+команду сравнения.
+
 DCM нужен для полной локальной проверки. Допустимая версия указана в `dcm_global.yaml`. Analyzer считает infos ошибкой. Все workspace-пакеты наследуют корневой `analysis_options.yaml`.
+
+Выборочные test selectors меняют только тестовый набор. Они не меняют strict
+уровни analyzer и DCM в `check`: analyzer сохраняет `--fatal-infos`, а DCM —
+`--fatal-style` и `--fatal-warnings`.
 
 Проверки выполняются локально. CI/CD не настроен. `check:flutter` — короткий профиль без DCM. Он запускает format, analyzer, unit coverage и goldens. Для полного прогона используйте `check`.
 
@@ -159,7 +192,7 @@ fvm dart run melos run generate
 
 FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`. Он создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт: `package:ui_kit/assets.dart`. Этот файл также экспортируется через `ui_kit.dart`.
 
-Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.manrope`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. `FontFamily.manrope` уже содержит пакетный префикс. `TvTypography` использует его напрямую. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
+Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.manrope`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. `FontFamily.manrope` уже содержит пакетный префикс. `AppTypography` использует его как основное семейство; `TvTypography` сохраняется совместимым API. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
 
 ---
 
@@ -175,9 +208,25 @@ FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`. Он созд
 
 Fixtures и fakes находятся в `test/mocks/`. HTTP заменяется adapter, репозитории fake-реализациями, native player fake platform. Unit/widget-тесты не обращаются к сайту.
 
-`test/flutter_test_config.dart` вызывает общий bootstrap из `test/support/`: тестовый logger, локальные Manrope/Lucide и запрет создания настоящего HttpClient. Проверки HTTP используют fixture adapter. Проверки логирования передают capturing logger явно.
+`test/flutter_test_config.dart` вызывает `runTestSuite` из `test/support/test_bootstrap.dart` для каждого test isolate. Bootstrap настраивает тестовый logger, загружает Manrope 400–800, MaterialIcons и все SVG `AppIconType`, затем запрещает внешний HTTP через `OfflineHttpOverrides`. Это сохраняет реальные локальные ресурсы для обычных `pumpWidget` и детерминированного первого кадра. `pumpTvApp` и `pumpMobileApp` отдельно precache-ят локальный логотип вне fake clock. Проверки HTTP используют fixture adapter. Проверки логирования передают capturing logger явно.
 
-`pumpTvApp` задаёт production theme, ProviderScope и TV viewport. Свойства view сбрасываются после теста. Fake video platform восстанавливает прежний platform instance. Тесты также покрывают bootstrap, разбор Dart directives и остановку quality gate.
+`TestAppViewport` объявлен в `test/support/test_app_viewport.dart` и
+реэкспортирован через `test/support/test_app.dart`. Он описывает независимые
+параметры профиля и logical viewport: `profile`, `logicalSize`, `devicePixelRatio`,
+`textScale` и `disableAnimations`. `TestAppViewport.tv()` по умолчанию задаёт
+960×540, а `TestAppViewport.mobile()` — 390×844. `setTestViewport` выставляет
+physical size как произведение logical size и DPR и регистрирует сброс свойств
+view через `addTearDown`.
+
+`pumpTvApp` использует TV-профиль, production theme и `ProviderScope`.
+`pumpMobileApp` сохраняет `AppResponsiveRoot` с mobile-профилем, touch theme и
+`ProviderScope`. У `pumpTvApp` неназначенные `textScale` и `disableAnimations`
+наследуются из `MediaQuery`; явные аргументы задают их значения. У
+`pumpMobileApp` сохраняются явные defaults `textScale: 1` и
+`disableAnimations: false`. Оба helper передают размер и DPR через
+`TestAppViewport`. `setTvView` остаётся совместимым wrapper-ом для TV viewport.
+Fake video platform восстанавливает прежний platform instance.
+Тесты также покрывают bootstrap, разбор Dart directives и остановку quality gate.
 
 Регрессионные тесты проверяют поздние ответы и refresh логов, смену параметров
 маршрута, выход во время native initialization, ошибки команд плеера, ручной
@@ -290,7 +339,27 @@ Native Android доверяет этому certificate через debug resource
 
 Общий запуск выполняет наборы последовательно. Это исключает конфликты Flutter/Gradle и общего APK output. Сбой TV не скрывает результат mobile.
 
-Логи и отчёты сохраняются в `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`. Общий запуск сохраняет их в `all-seed-…/tv/` и `mobile/`. `summary.json` содержит устройство, AVD, seed, этап и exit code. `junit.xml` содержит отдельные native cases. Отказ preflight тоже даёт ошибку в отчёте.
+Обязательная команда `fvm dart run melos run test:e2e` не принимает фильтры и
+отклоняет `ANISTAR_TEST_SELECTORS_JSON`:
+она всегда запускает полные TV и mobile suites последовательно на разных AVD.
+Она продолжает запуск mobile после сбоя TV. Для диагностики отдельный
+`test:e2e:tv` или `test:e2e:mobile` принимает `--plain-name <substring>` либо
+`--name <regexp>`. Через Melos передавайте их JSON-массивом:
+
+```bash
+ANISTAR_TEST_SELECTORS_JSON='["--plain-name","search submits"]' fvm dart run melos run test:e2e:tv --include-private
+```
+
+Первый selector ищет подстроку, второй задаёт регулярное выражение полного
+имени. Прямой вызов `bash scripts/e2e-tv.sh` сохраняет shell argv и принимает
+эти же параметры. `check` и `check:flutter` также отклоняют JSON-переменную,
+чтобы не сокращать полный gate.
+
+Успешный отфильтрованный runner выводит `PARTIAL PASS` и сохраняет
+`scope=filtered`. Такой результат не проходит полный E2E gate. Полный runner
+выводит `OK`; при ошибке выводит `FAIL` и путь к отчёту и логу.
+
+Логи и отчёты сохраняются в уникальных каталогах `build/e2e/<platform>-<mode>-seed-<seed>-<avd>.<suffix>/`. Общий запуск сохраняет их в `all-seed-…/tv/` и `mobile/`. `summary.json` содержит suite, scope, selectors, seed, длительность, exit code, статус, этап, счётчики, завершённые тесты и пути артефактов. `junit.xml` содержит отдельные native cases. Отказ preflight тоже даёт ошибку в отчёте.
 
 Flutter JSON events сохраняются рядом для диагностики. Общий запуск объединяет summary и JUnit обеих платформ.
 

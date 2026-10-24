@@ -18,7 +18,6 @@ class _AppMobileRouteShell extends ConsumerWidget {
         ? null
         : ref.read(authControllerProvider.notifier).requestSignIn,
     onOpenLogs: _logsAction(context),
-    onAnimeTap: (anime) => _openAnime(context, anime, destination),
     contextTitle: title,
     onBack: () => context.pop(),
     content: content,

@@ -27,6 +27,7 @@ void main() {
             requestedQuality: PlaybackQuality.high,
             selectedQuality: PlaybackQuality.high,
             availableQualities: const [PlaybackQuality.high],
+            episodes: const [],
           ),
           value: const VideoPlayerValue(
             duration: Duration(minutes: 24),
@@ -171,4 +172,5 @@ final _session = PlaybackSession(
   requestedQuality: PlaybackQuality.high,
   selectedQuality: PlaybackQuality.high,
   availableQualities: const [PlaybackQuality.low, PlaybackQuality.high],
+  episodes: const [],
 );

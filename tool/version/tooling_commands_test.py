@@ -135,7 +135,7 @@ class ToolingCommandsTest(unittest.TestCase):
         result = subprocess.run(["bash", str(ROOT / "scripts/e2e_live.sh"), "invalid-device"],
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 64)
-        self.assertIn("Usage:", result.stderr)
+        self.assertIn("E2E selectors must use --plain-name or --name", result.stderr)
 
     def test_version_cli_preview_prints_plan_and_preserves_checkout(self):
         files = (ROOT / "pubspec.yaml", ROOT / "README.md")

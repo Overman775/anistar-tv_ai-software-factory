@@ -22,7 +22,6 @@ import '../mobile/mobile_anime_card.dart';
 import '../widgets/anime_card.dart';
 import '../widgets/catalog_inspector.dart';
 import '../widgets/catalog_layout.dart';
-import '../widgets/catalog_navigation_rail.dart';
 import '../widgets/catalog_skeleton.dart';
 import '../widgets/catalog_sort_sheet.dart';
 import '../widgets/catalog_tail.dart';
@@ -30,37 +29,17 @@ import '../widgets/catalog_tail.dart';
 class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({
     required this.onAnimeTap,
-    this.onOpenLogs,
-    this.onOpenGenres,
     this.onOpenNavigation,
     this.filter,
-    this.onBack,
-    this.onRootBack,
-    this.onSignOut,
-    this.accountName,
     this.onTabSelected,
     this.favoritesOnly = false,
-    this.autofocusTab = false,
-    this.embedded = false,
-    this.genresActive = false,
-    this.sectionBuilder,
     super.key,
   });
 
-  final String? accountName;
-  final VoidCallback? onOpenGenres;
   final VoidCallback? onOpenNavigation;
-  final VoidCallback? onBack;
-  final VoidCallback? onRootBack;
   final CatalogFilter? filter;
   final bool favoritesOnly;
-  final bool autofocusTab;
-  final bool embedded;
-  final bool genresActive;
-  final Widget Function(VoidCallback onOpenNavigation)? sectionBuilder;
   final ValueChanged<AnimeSummary> onAnimeTap;
-  final VoidCallback? onOpenLogs;
-  final VoidCallback? onSignOut;
   final ValueChanged<bool>? onTabSelected;
 
   @override
@@ -75,14 +54,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   final _sortFocus = FocusNode(debugLabel: 'Сортировка');
   CatalogSort get _sort => _filteredRepository?.sort ?? defaultCatalogSort;
   final ScrollController _scrollController = ScrollController();
-  final _homeTabFocus = FocusNode(debugLabel: 'Главная');
-  final _genresFocus = FocusNode(debugLabel: 'Жанры');
-  final _backFocus = FocusNode(debugLabel: 'Назад');
-  final _favoritesTabFocus = FocusNode(debugLabel: 'Избранное');
-  final _signOutFocus = FocusNode(debugLabel: 'Выйти из аккаунта');
-  final _logsFocus = FocusNode(debugLabel: 'Открыть логи');
   final _contentFocus = FocusScopeNode(debugLabel: 'Каталог');
-  bool _railExpanded = false;
   bool _pendingFirst = false;
   bool _initialFilteredLoad = true;
   bool _sortInteracted = false;
@@ -112,12 +84,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     )..add(const CatalogStarted());
   }
 
-  void _onRailFocusChanged(bool focused) {
-    if (_railExpanded != focused) {
-      setState(() => _railExpanded = focused);
-    }
-  }
-
   void focusFirst() {
     _selectedIndex = 0;
     _lastCardFocus = null;
@@ -145,7 +111,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   void _focusContent() {
     final previous = _lastCardFocus;
-    if (!widget.genresActive && previous?.context != null && previous?.canRequestFocus == true) {
+    if (previous?.context != null && previous?.canRequestFocus == true) {
       previous?.requestFocus();
     } else {
       final hasItems = _bloc.state.items.isNotEmpty;
@@ -165,75 +131,12 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _focusRail() {
-    if (widget.embedded && widget.onOpenNavigation != null) {
-      widget.onOpenNavigation?.call();
+    if (widget.onOpenNavigation case final onOpenNavigation?) {
+      onOpenNavigation();
 
       return;
     }
-    _keepSortFocus = false;
-    if (widget.genresActive || widget.filter != null && widget.onOpenGenres != null) {
-      _genresFocus.requestFocus();
-    } else if (widget.onTabSelected == null) {
-      if (widget.onBack != null) {
-        _backFocus.requestFocus();
-      } else if (widget.onOpenGenres != null) {
-        _genresFocus.requestFocus();
-      } else if (widget.onSignOut != null) {
-        _signOutFocus.requestFocus();
-      } else if (widget.onOpenLogs != null) {
-        _logsFocus.requestFocus();
-      } else {
-        _focusContent();
-      }
-    } else {
-      (widget.favoritesOnly ? _favoritesTabFocus : _homeTabFocus).requestFocus();
-    }
-  }
-
-  void _onPopInvoked(bool didPop, Object? result) {
-    if (didPop) {
-      return;
-    }
-    if (_railExpanded) {
-      _focusContent();
-    } else if (widget.onBack == null && widget.favoritesOnly && widget.onTabSelected != null) {
-      widget.onTabSelected?.call(false);
-    } else if (widget.onBack == null) {
-      widget.onRootBack?.call();
-    }
-  }
-
-  KeyEventResult _handleHeaderKey(FocusNode node, KeyEvent event) {
-    final nodes = [
-      if (widget.onTabSelected != null) ...[_homeTabFocus, _favoritesTabFocus],
-      if (widget.onBack != null) _backFocus,
-      if (widget.onOpenGenres != null) _genresFocus,
-      if (widget.onSignOut != null) _signOutFocus,
-      if (widget.onOpenLogs != null) _logsFocus,
-    ];
-    final index = nodes.indexOf(FocusManager.instance.primaryFocus ?? node);
-    if (index < 0) {
-      return KeyEventResult.ignored;
-    }
-    final key = event.logicalKey;
-    FocusNode? target;
-    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.arrowDown) {
-      final next = index + (key == LogicalKeyboardKey.arrowDown ? 1 : -1);
-      target = nodes[next.clamp(0, nodes.length - 1)];
-    } else if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.escape) {
-      if (event is KeyDownEvent || event is KeyRepeatEvent) {
-        _focusContent();
-      }
-
-      return KeyEventResult.handled;
-    } else if (key != LogicalKeyboardKey.arrowLeft) {
-      return KeyEventResult.ignored;
-    }
-    if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      target?.requestFocus();
-    }
-
-    return KeyEventResult.handled;
+    _focusContent();
   }
 
   Widget _buildState(BuildContext context, CatalogState state) {
@@ -318,8 +221,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
                             isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
                             showFavorite: !widget.favoritesOnly && ref.watch(authAccessProvider).canUseAccount,
                             onLongPressed: () => unawaited(_favoriteActions(anime)),
-                            autofocus:
-                                !widget.autofocusTab && !_railExpanded && !_keepSortFocus && index == _selectedIndex,
+                            autofocus: !_keepSortFocus && index == _selectedIndex,
                             onFocusChanged: (focused) =>
                                 _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
                             onTap: () => _selectAndOpen(anime, index),
@@ -407,7 +309,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
             SliverToBoxAdapter(
               child: CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore),
             ),
-          if (widget.embedded) SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)),
+          SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)),
         ],
       );
     },
@@ -417,21 +319,8 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     value: _bloc,
     child: Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: widget.embedded
-          ? null
-          : AppBar(
-              title: Text(widget.filter?.label ?? (widget.favoritesOnly ? 'Избранное' : 'Главная')),
-              leading: widget.onBack == null
-                  ? null
-                  : IconButton(
-                      tooltip: 'Назад',
-                      onPressed: widget.onBack,
-                      icon: const AppIcon.fromMaterial(Icons.arrow_back),
-                    ),
-            ),
       body: SafeArea(
-        top: !widget.embedded,
-        bottom: !widget.embedded,
+        bottom: false,
         child: Column(
           children: [
             if (widget.filter != null)
@@ -464,11 +353,12 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
                       builder: (context, constraints) => SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         child: Padding(
-                          padding: EdgeInsets.only(bottom: widget.embedded ? MediaQuery.paddingOf(context).bottom : 0),
+                          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
                           child: SizedBox(
-                            height:
-                                (constraints.maxHeight - (widget.embedded ? MediaQuery.paddingOf(context).bottom : 0))
-                                    .clamp(0.0, double.infinity),
+                            height: (constraints.maxHeight - MediaQuery.paddingOf(context).bottom).clamp(
+                              0.0,
+                              double.infinity,
+                            ),
                             child: _buildState(context, state),
                           ),
                         ),
@@ -551,7 +441,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         });
       }
     }
-    if (!AppLayoutScope.isTvOf(context) || widget.genresActive) {
+    if (!AppLayoutScope.isTvOf(context)) {
       return;
     }
     if (_keepSortFocus && state is CatalogReady && state.items.isNotEmpty) {
@@ -580,7 +470,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         state.items.isEmpty &&
         !pendingActivation &&
         !emptyActionFocused &&
-        (!widget.embedded || _contentFocus.hasFocus) &&
+        _contentFocus.hasFocus &&
         ModalRoute.of(context)?.isCurrent == true) {
       _focusRail();
     }
@@ -589,10 +479,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   int _columnCount(double width) => CatalogLayout.columnCount(width);
 
   void _loadMoreNearEnd() {
-    if (!widget.genresActive &&
-        _scrollController.hasClients &&
-        _scrollController.position.extentAfter < 500 &&
-        _canPreload) {
+    if (_scrollController.hasClients && _scrollController.position.extentAfter < 500 && _canPreload) {
       _bloc.add(const CatalogMoreRequested());
     }
   }
@@ -755,9 +642,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         _scrollController.jumpTo(0);
       }
       _startCatalog();
-      if (widget.autofocusTab) {
-        _focusRail();
-      }
     }
   }
 
@@ -767,12 +651,6 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     _inspected.dispose();
     _sortFocus.dispose();
     _contentFocus.dispose();
-    _homeTabFocus.dispose();
-    _genresFocus.dispose();
-    _backFocus.dispose();
-    _favoritesTabFocus.dispose();
-    _signOutFocus.dispose();
-    _logsFocus.dispose();
     _scrollController
       ..removeListener(_loadMoreNearEnd)
       ..dispose();
@@ -797,238 +675,50 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       return _mobileScreen(context);
     }
 
-    if (widget.embedded) {
-      return BlocProvider.value(
-        value: _bloc,
-        child: FocusScope(
-          node: _contentFocus,
-          onKeyEvent: _handleContentKey,
-          child: Column(
-            children: [
-              if (widget.filter case final filter?)
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final title = Text(
-                        filter.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      );
-                      final sort = Builder(builder: (_) => _sortButton());
-
-                      return constraints.maxWidth < 600
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [title, const SizedBox(height: 8), sort],
-                            )
-                          : Row(
-                              children: [
-                                Expanded(child: title),
-                                const SizedBox(width: 16),
-                                Flexible(child: sort),
-                              ],
-                            );
-                    },
-                  ),
-                ),
-              Expanded(
-                child: BlocConsumer<CatalogBloc, CatalogState>(
-                  bloc: _bloc,
-                  listener: _onCatalogStateChanged,
-                  buildWhen: (previous, current) => previous != current,
-                  builder: _buildState,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final items = <CatalogNavigationItem>[
-      if (widget.onTabSelected != null) ...[
-        (
-          key: const ValueKey('catalog-tab-false'),
-          icon: Icons.home_outlined,
-          label: 'Главная',
-          focusNode: _homeTabFocus,
-          onPressed: () => widget.onTabSelected?.call(false),
-          selected: widget.filter == null && !widget.genresActive && !widget.favoritesOnly,
-          autofocus: widget.autofocusTab && !widget.genresActive && !widget.favoritesOnly,
-        ),
-        (
-          key: const ValueKey('catalog-tab-true'),
-          icon: Icons.favorite_border_rounded,
-          label: 'Избранное',
-          focusNode: _favoritesTabFocus,
-          onPressed: () => widget.onTabSelected?.call(true),
-          selected: widget.filter == null && !widget.genresActive && widget.favoritesOnly,
-          autofocus: widget.autofocusTab && !widget.genresActive && widget.favoritesOnly,
-        ),
-      ],
-      if (widget.onBack case final onBack?)
-        (
-          key: const ValueKey('catalog-back'),
-          icon: Icons.arrow_back,
-          label: 'Назад',
-          focusNode: _backFocus,
-          onPressed: onBack,
-          selected: false,
-          autofocus: false,
-        ),
-      if (widget.onOpenGenres case final onOpenGenres?)
-        (
-          key: const ValueKey('catalog-genres'),
-          icon: Icons.category_outlined,
-          label: 'Жанры',
-          focusNode: _genresFocus,
-          onPressed: onOpenGenres,
-          selected: widget.genresActive || widget.filter != null,
-          autofocus: false,
-        ),
-      if (widget.onSignOut case final onSignOut?)
-        (
-          key: const ValueKey('catalog-account'),
-          icon: Icons.account_circle_outlined,
-          label: 'Выйти из аккаунта',
-          focusNode: _signOutFocus,
-          onPressed: onSignOut,
-          selected: false,
-          autofocus: false,
-        ),
-      if (widget.onOpenLogs case final onOpenLogs?)
-        (
-          key: const ValueKey('catalog-logs'),
-          icon: Icons.article_outlined,
-          label: 'Открыть логи',
-          focusNode: _logsFocus,
-          onPressed: onOpenLogs,
-          selected: false,
-          autofocus: false,
-        ),
-    ];
-
     return BlocProvider.value(
       value: _bloc,
-      child: PopScope(
-        canPop:
-            !_railExpanded &&
-            !(widget.onBack == null &&
-                (widget.onRootBack != null || widget.favoritesOnly && widget.onTabSelected != null)),
-        onPopInvokedWithResult: _onPopInvoked,
-        child: TvBackdrop(
-          child: Scaffold(
-            backgroundColor: Colors.transparent,
-            body: SafeArea(
-              child: Stack(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(left: CatalogNavigationRail.collapsedWidth),
-                    child: Column(
-                      children: [
-                        if (widget.filter case final filter?)
-                          Padding(
-                            padding: const EdgeInsets.all(AppSpacing.lg),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final title = Text(
-                                  filter.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.headlineSmall,
-                                );
+      child: FocusScope(
+        node: _contentFocus,
+        onKeyEvent: _handleContentKey,
+        child: Column(
+          children: [
+            if (widget.filter case final filter?)
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final title = Text(
+                      filter.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineSmall,
+                    );
+                    final sort = Builder(builder: (_) => _sortButton());
 
-                                return constraints.maxWidth < 600
-                                    ? Column(
-                                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                                        children: [title, const SizedBox(height: 8), _sortButton()],
-                                      )
-                                    : Row(
-                                        children: [
-                                          Expanded(child: title),
-                                          const SizedBox(width: 16),
-                                          Flexible(child: _sortButton()),
-                                        ],
-                                      );
-                              },
-                            ),
-                          ),
-                        Expanded(
-                          child: FocusScope(
-                            node: _contentFocus,
-                            onKeyEvent: _handleContentKey,
-                            child: TweenAnimationBuilder<double>(
-                              key: ValueKey((widget.favoritesOnly, widget.filter?.path)),
-                              tween: Tween(begin: 0, end: 1),
-                              duration: AppMotion.durationOf(context, AppMotion.fast),
-                              curve: AppMotion.enterCurve,
-                              builder: (context, value, child) => Opacity(opacity: value, child: child),
-                              child: IndexedStack(
-                                index: widget.genresActive ? 1 : 0,
-                                children: [
-                                  HeroMode(
-                                    enabled: !widget.genresActive,
-                                    child: TickerMode(
-                                      enabled: !widget.genresActive,
-                                      child: ExcludeFocus(
-                                        excluding: widget.genresActive,
-                                        child: BlocConsumer<CatalogBloc, CatalogState>(
-                                          bloc: _bloc,
-                                          listener: _onCatalogStateChanged,
-                                          buildWhen: (previous, current) => previous != current,
-                                          builder: _buildState,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                  ExcludeFocus(
-                                    excluding: !widget.genresActive,
-                                    child: TickerMode(
-                                      enabled: widget.genresActive,
-                                      child: widget.sectionBuilder?.call(_focusRail) ?? const SizedBox.shrink(),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Positioned.fill(
-                    left: CatalogNavigationRail.collapsedWidth,
-                    child: IgnorePointer(
-                      ignoring: !_railExpanded,
-                      child: AnimatedOpacity(
-                        opacity: _railExpanded ? 1 : 0,
-                        duration: AppMotion.durationOf(context, AppMotion.standard),
-                        child: GestureDetector(
-                          onTap: _focusContent,
-                          child: const ColoredBox(color: Color(0x66000000)),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    right: null,
-                    child: Focus(
-                      canRequestFocus: false,
-                      onFocusChange: _onRailFocusChanged,
-                      onKeyEvent: _handleHeaderKey,
-                      child: CatalogNavigationRail(
-                        expanded: _railExpanded,
-                        items: items,
-                        accountName: widget.accountName,
-                      ),
-                    ),
-                  ),
-                ],
+                    return constraints.maxWidth < 600
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [title, const SizedBox(height: 8), sort],
+                          )
+                        : Row(
+                            children: [
+                              Expanded(child: title),
+                              const SizedBox(width: 16),
+                              Flexible(child: sort),
+                            ],
+                          );
+                  },
+                ),
+              ),
+            Expanded(
+              child: BlocConsumer<CatalogBloc, CatalogState>(
+                bloc: _bloc,
+                listener: _onCatalogStateChanged,
+                buildWhen: (previous, current) => previous != current,
+                builder: _buildState,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );

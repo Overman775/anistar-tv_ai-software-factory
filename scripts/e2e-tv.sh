@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-device=''
-mode=fixtures
-if [[ $# -gt 0 ]]; then
-  if [[ $1 == fixtures || $1 == live ]]; then
-    mode=$1
-    shift
-  else
-    device=$1
-    shift
-    if [[ $# -gt 0 ]]; then mode=$1; shift; fi
-  fi
+cd "$project_root"
+forward=()
+forward_count=0
+for argument in "$@"; do
+  [[ -n $argument ]] || continue
+  [[ $argument != fixtures-mobile ]] || { echo 'TV runner does not accept fixtures-mobile mode.' >&2; exit 64; }
+  forward+=("$argument")
+  forward_count=$((forward_count + 1))
+done
+# Bash 3.2 treats an empty array expansion as an unset variable under `set -u`.
+# Keep the no-argument full-suite invocation truly argument-free.
+if [[ $forward_count == 0 ]]; then
+  exec bash "$project_root/scripts/e2e.sh"
 fi
-[[ $# == 0 && ( $mode == fixtures || $mode == live ) ]] || { echo 'Usage: bash scripts/e2e-tv.sh [emulator-<port>] [fixtures|live]' >&2; exit 64; }
-exec bash "$project_root/scripts/e2e.sh" "$device" "$mode"
+exec bash "$project_root/scripts/e2e.sh" "${forward[@]}"

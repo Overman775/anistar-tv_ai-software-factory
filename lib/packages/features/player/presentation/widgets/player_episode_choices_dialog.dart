@@ -33,11 +33,11 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
   Widget _episodeCard(BuildContext context, PlaybackEpisode episode) {
     final isCurrent = episode.number == widget.selected;
     final isWatched = episode.isWatched || widget.watchedEpisodeNumbers.contains(episode.number);
-    final title = episode.title.trim();
-    final label = 'Серия ${episode.number}';
+    final caption = EpisodeCaption(number: episode.number, title: episode.title);
+    final description = caption.descriptiveTitle;
     final semanticLabel = [
-      label,
-      if (title.isNotEmpty && title != label) title,
+      caption.numberLabel,
+      ?description,
       if (isCurrent) 'текущая',
       if (isWatched) 'просмотрена',
     ].join(', ');
@@ -45,8 +45,8 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
     return MediaCard(
       key: isCurrent ? _selectedEpisodeKey : ValueKey('player-episode-${episode.number}'),
       variant: MediaCardVariant.episode,
-      label: label,
-      caption: title.isEmpty || title == label ? null : title,
+      label: caption.numberLabel,
+      caption: description,
       semanticLabel: semanticLabel,
       imageUrl: episode.previewUri?.toString(),
       episodeHeight: _minimumEpisodeHeight,
@@ -58,28 +58,20 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
   }
 
   double _episodeHeight(BuildContext context, PlaybackEpisode episode, double width) {
-    final label = 'Серия ${episode.number}';
-    final title = episode.title.trim();
-    final caption = title.isEmpty || title == label ? null : title;
-    final copyWidth = math.max<double>(1, width - AppSpacing.md * 2);
-    final titleHeight = _textHeight(
-      context: context,
-      text: label,
-      style: AppContentTypography.episodeTitleOf(context)
-          ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
-      maxWidth: copyWidth,
-    );
-    final captionHeight = caption == null
-        ? 0.0
-        : _textHeight(
-                context: context,
-                text: caption,
-                style: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
-                maxWidth: copyWidth,
-              ) +
-              AppSpacing.xs;
+    final caption = EpisodeCaption(number: episode.number, title: episode.title);
 
-    return math.max(_minimumEpisodeHeight, AppSpacing.xxl + AppSpacing.md + titleHeight + captionHeight);
+    return MediaCardMetrics(
+      width: width,
+      label: caption.numberLabel,
+      caption: caption.descriptiveTitle,
+      showCaption: true,
+      minimumHeight: _minimumEpisodeHeight,
+      titleStyle: AppContentTypography.episodeTitleOf(context)
+          ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
+      captionStyle: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
+      textScaler: MediaQuery.textScalerOf(context),
+      direction: Directionality.of(context),
+    ).episodeHeight;
   }
 
   double _initialScrollOffset(BuildContext context, BoxConstraints constraints) {
@@ -97,24 +89,6 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
     final maxScrollExtent = math.max(0, contentHeight - constraints.maxHeight);
 
     return (selectedOffset - (constraints.maxHeight - selectedHeight) / 2).clamp(0, maxScrollExtent).toDouble();
-  }
-
-  double _textHeight({
-    required BuildContext context,
-    required String text,
-    required TextStyle? style,
-    required double maxWidth,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 2,
-    )..layout(maxWidth: maxWidth);
-    final height = painter.height;
-    painter.dispose();
-
-    return height;
   }
 
   @override

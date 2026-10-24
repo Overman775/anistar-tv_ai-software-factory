@@ -2,12 +2,21 @@ import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
 
-/// Consistent TV-scale section heading with an optional counter or action.
-class TvSectionHeader extends StatelessWidget {
-  const TvSectionHeader({required this.title, super.key, this.subtitle, this.trailing});
+/// Accessible section heading shared by TV and touch compositions.
+class AppSectionHeader extends StatelessWidget {
+  const AppSectionHeader({
+    required this.title,
+    super.key,
+    this.subtitle,
+    this.titleStyle,
+    this.subtitleStyle,
+    this.trailing,
+  });
 
   final String title;
   final String? subtitle;
+  final TextStyle? titleStyle;
+  final TextStyle? subtitleStyle;
   final Widget? trailing;
 
   @override
@@ -18,10 +27,13 @@ class TvSectionHeader extends StatelessWidget {
     final heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: textTheme.headlineSmall?.copyWith(color: AppPalette.textPrimary)),
+        Semantics(
+          header: true,
+          child: Text(title, style: titleStyle ?? textTheme.headlineSmall?.copyWith(color: AppPalette.textPrimary)),
+        ),
         if (subtitleText != null) ...[
           const SizedBox(height: AppSpacing.xs),
-          Text(subtitleText, style: textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary)),
+          Text(subtitleText, style: subtitleStyle ?? textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary)),
         ],
       ],
     );
@@ -44,4 +56,16 @@ class TvSectionHeader extends StatelessWidget {
             ),
     );
   }
+}
+
+/// Consistent TV-scale section heading with an optional counter or action.
+class TvSectionHeader extends StatelessWidget {
+  const TvSectionHeader({required this.title, super.key, this.subtitle, this.trailing});
+
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => AppSectionHeader(title: title, subtitle: subtitle, trailing: trailing);
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:html/parser.dart' as html;
 
 import 'anistar_auth_html.dart';
 import 'anistar_failure.dart';
@@ -70,7 +71,9 @@ final class AnistarSessionInterceptor extends Interceptor {
         final data = response.data;
         if (_session.account != null && options.extra['anistarAuth'] != true && data is List<int>) {
           final source = HtmlDecoder.decode(data, response.headers.value('content-type'));
-          if (AnistarAuthHtml.isGuest(source) && !AnistarAuthHtml.isAuthenticated(source, _session.origin)) {
+          final document = html.parse(source);
+          if (AnistarAuthHtml.isGuestDocument(document) &&
+              !AnistarAuthHtml.isAuthenticatedDocument(document, _session.origin)) {
             await _session.clear(expired: true, expectedGeneration: generation);
             throw const AnistarFailure(message: 'Сессия AniStar истекла. Войдите снова.');
           }

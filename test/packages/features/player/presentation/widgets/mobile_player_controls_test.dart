@@ -13,6 +13,7 @@ final _session = PlaybackSession(
   requestedQuality: PlaybackQuality.high,
   selectedQuality: PlaybackQuality.high,
   availableQualities: PlaybackQuality.values,
+  episodes: const [],
 );
 
 void main() {

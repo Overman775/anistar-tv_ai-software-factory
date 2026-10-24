@@ -7,7 +7,6 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_da
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
-import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_episode_row.dart';
 import 'package:core/data.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -61,7 +60,7 @@ void main() {
         var actions = 0;
         final episode = AnimeEpisode(number: 7, title: title, isWatched: true);
         final child = mobile
-            ? MobileEpisodeRow(episode: episode, isWatched: false, onTap: () => actions++)
+            ? EpisodeCard(episode: episode, episodeHeight: 92, onTap: () => actions++)
             : SizedBox(
                 width: 360,
                 height: 220,
@@ -74,7 +73,7 @@ void main() {
         }
         await tester.pumpAndSettle();
         final template = title == 'Серия 7' || title == '  сЕрИя\t 7 \n';
-        final tile = find.byType(mobile ? MobileEpisodeRow : EpisodeCard);
+        final tile = find.byType(EpisodeCard);
         final texts = tester.widgetList<Text>(find.descendant(of: tile, matching: find.byType(Text)));
         var visibleTitle = 'Серия 7';
         if (mobile) {
@@ -360,7 +359,7 @@ void main() {
         }
         expect(lefts.toSet(), hasLength(1));
         expect(heights.first, greaterThan(heights.last), reason: 'descriptive titles use additional row height');
-        expect(find.byType(EpisodeCard), findsNothing);
+        expect(find.byType(EpisodeCard), findsWidgets);
         expect(tester.takeException(), isNull);
       });
     }

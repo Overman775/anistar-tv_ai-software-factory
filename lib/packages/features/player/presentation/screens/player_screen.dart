@@ -10,7 +10,6 @@ import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../../watch_history/watched_episodes.dart';
-import '../../domain/models/playback_episode.dart';
 import '../../domain/models/playback_failure.dart';
 import '../../domain/models/playback_quality.dart';
 import '../../domain/models/playback_refresh_budget.dart';
@@ -510,14 +509,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       return;
     }
     final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
-    final episodes = session.episodes.isNotEmpty
-        ? session.episodes
-        : session.episodeNumbers.map((number) => PlaybackEpisode(number: number, title: '')).toList(growable: false);
     _seekHold.stop();
     final choice = await showAppActionSheet<int>(
       context: context,
       builder: (context) => PlayerEpisodeChoicesDialog(
-        episodes: episodes,
+        episodes: session.episodes,
         selected: _episodeNumber,
         watchedEpisodeNumbers: {...watched, ...session.watchedEpisodes},
       ),

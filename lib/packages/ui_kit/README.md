@@ -14,9 +14,9 @@ import 'package:ui_kit/ui_kit.dart';
 
 | API | Назначение |
 | --- | --- |
-| `AppTheme`, `TvTypography` | Темы и типографическая шкала TV/mobile на Manrope |
-| `AppPalette`, `AppSpacing`, `AppRadii`, `AppSizes` | Семантические цвета, отступы, радиусы и общая геометрия |
-| `AppMotion` | Длительности, кривые и учёт системного уменьшения движения |
+| `AppTheme`, `AppTypography`, `AppContentTypography` | Темы Manrope и общие/контентные типографические роли TV/mobile |
+| `AppPalette`, `AppSpacing`, `AppRadii`, `AppSizes` | Семантические цвета, отступы, радиусы и общие размеры |
+| `AppMotion` | Отдельные длительности, кривые и учёт системного уменьшения движения |
 | `AppIcon`, `AppIconType` | Типизированные Lucide-иконки из локальных SVG |
 | `AppButton`, `MediaCard`, `MediaCardBookmark` | Общие действия, карточки постера/широкого изображения/серии и метка подтверждённого избранного |
 | `AppAvatar` | Изображение аккаунта с инициалами при отсутствии URI, загрузке или ошибке |
@@ -49,6 +49,8 @@ AppButton(
 | Компонент | Контракт |
 | --- | --- |
 | `MediaCard` | Нейтральная карточка `poster`, `landscape` или `episode`; caller передаёт подпись, изображение, метки и callback |
+| `EpisodeCaption`, `MediaCardMetrics` | Нейтральная модель подписи серии и общий расчёт геометрии её карточки |
+| `AppInputFrame`, `AppSectionHeader` | Общая рамка поля ввода и доступный адаптивный заголовок секции; `TvSectionHeader` сохраняется как совместимая обёртка |
 | `AppNetworkImage` | Загружает и кеширует переданный URI, ограничивает decode текущей геометрией/DPR и сохраняет fallback |
 | `TvFocusable` | Обрабатывает OK, KeyRepeat для долгого действия, busy/enabled и изменение состояния focus |
 | `TvFocusTile` | Общая рамка и геометрия для карточки или строки выбора; принимает состояния selected, enabled и busy |
@@ -83,7 +85,13 @@ MediaCard(
 
 `MediaCard.showCaption` по умолчанию показывает подпись; при `false` скрывается только её текстовая плашка поверх изображения. Изображение, метки и семантическое имя карточки сохраняются.
 
-`AppContentTypography` задаёт локальные роли каталога, карточки сериала и серий. Роли сохраняют системный `textScaler`; общая тема и остальные экраны не масштабируются.
+`AppTypography` задаёт типографику Manrope и общие роли TV/mobile. `AppContentTypography` предоставляет роли текста каталога и полной карточки: `cardTitleOf`, `cardCaptionOf`, `detailTitleOf`, `descriptionOf`, `sectionTitleOf`, `episodeTitleOf` и `episodeCaptionOf`. Контентные роли сохраняют системный `TextScaler`; они не меняют типографику кнопок и остальных контролов. `TvTypography` остаётся публичным compatibility export.
+
+`AppSpacing` и `AppRadii` содержат отступы и радиусы. `AppSizes` содержит размеры контролов и пропорции карточек. Длительности и кривые находятся отдельно в `AppMotion`; `durationOf` возвращает нулевую длительность при выключенных системных анимациях или включённой accessible navigation.
+
+`AppInputFrame` оформляет переданное поле ввода общей рамкой фокуса. Он принимает необязательный `focusNode` и `hasError`; controller, validation и клавиатурное поведение остаются у caller. `AppSectionHeader` объявляет заголовок через Semantics и располагает необязательный trailing content рядом с заголовком на широкой области или ниже него на узкой. `TvSectionHeader` делегирует этому компоненту.
+
+`EpisodeCaption` формирует метку `Серия N`, скрывает повторяющее её описание для визуального текста и включает отметку просмотра в полную Semantics label. `MediaCardMetrics` рассчитывает высоту превью и области текста с теми же шириной, стилями, направлением и системным масштабом, которые используются при отображении карточки.
 
 ---
 

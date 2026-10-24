@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../common/presentation/rating_presentation.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
 import 'anime_description.dart';
@@ -70,14 +71,19 @@ class AnimeHero extends StatelessWidget {
                         runSpacing: AppSpacing.sm,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          if (details.rating case final rating?)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const AppIcon(AppIconType.star, size: 20),
-                                const SizedBox(width: 8),
-                                Text(rating.toStringAsFixed(1).replaceAll('.', ','), style: theme.titleMedium),
-                              ],
+                          if (RatingPresentation.from(details.rating) case final rating?)
+                            Semantics(
+                              label: rating.semanticLabel,
+                              child: ExcludeSemantics(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const AppIcon(AppIconType.star, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(rating.label, style: theme.titleMedium),
+                                  ],
+                                ),
+                              ),
                             ),
                           if (yearAction case final action?)
                             action
@@ -112,7 +118,7 @@ class AnimeHero extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xl),
           if (details.description case final description?) ...[
-            Text('Сюжет', style: AppContentTypography.sectionTitleOf(context)),
+            AppSectionHeader(title: 'Сюжет', titleStyle: AppContentTypography.sectionTitleOf(context)),
             const SizedBox(height: AppSpacing.md),
             AnimeDescription(description: description),
           ],

@@ -2,7 +2,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_episode.dart';
-import 'episode_caption.dart';
 
 class EpisodeCard extends StatelessWidget {
   const EpisodeCard({

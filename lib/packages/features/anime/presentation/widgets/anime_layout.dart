@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -21,28 +19,18 @@ abstract final class AnimeLayout {
   /// Reserve the same scaled caption and two title lines in loading and ready.
   static double episodeHeight(BuildContext context, double gridWidth) {
     final width = (gridWidth - AppSpacing.lg * 2) / episodeColumns(gridWidth);
-    final scaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    double twoLineHeight(TextStyle? style) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: 'Серия\nНазвание',
-          style: style?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        textScaler: scaler,
-        textDirection: direction,
-      )..layout();
-      final height = painter.height;
-      painter.dispose();
+    const sample = 'Серия\nНазвание';
 
-      return height;
-    }
-
-    final captionHeight = twoLineHeight(AppContentTypography.episodeCaptionOf(context)) + AppSpacing.xs;
-    final titleHeight = twoLineHeight(AppContentTypography.episodeTitleOf(context));
-    final copyHeight = AppSpacing.xxl + AppSpacing.md + captionHeight + titleHeight;
-    final imageHeight = width / AppSizes.landscapeRatio;
-
-    return math.max(imageHeight, copyHeight);
+    return MediaCardMetrics(
+      width: width,
+      label: sample,
+      caption: sample,
+      showCaption: true,
+      titleStyle: AppContentTypography.episodeTitleOf(context)
+          ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
+      captionStyle: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
+      textScaler: MediaQuery.textScalerOf(context),
+      direction: Directionality.of(context),
+    ).episodeHeight;
   }
 }

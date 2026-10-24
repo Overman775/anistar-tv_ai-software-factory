@@ -19,11 +19,13 @@ class E2eScriptsTest(unittest.TestCase):
         self.project = Path(self.temp.name) / 'project'
         (self.project / 'scripts').mkdir(parents=True)
         (self.project / 'tool/e2e').mkdir(parents=True)
+        (self.project / 'tool/quality').mkdir(parents=True)
         source = Path(__file__).resolve().parents[2]
         for name in ('e2e.sh', 'e2e-tv.sh', 'e2e-mobile.sh', 'e2e-all.sh'):
             shutil.copyfile(source / 'scripts' / name, self.project / 'scripts' / name)
         for name in ('emulator_selection.py', 'emulator_profile.py', 'e2e_report.py'):
             shutil.copyfile(source / 'tool/e2e' / name, self.project / 'tool/e2e' / name)
+        shutil.copyfile(source / 'tool/quality/selector_args.py', self.project / 'tool/quality/selector_args.py')
         self.state_file = Path(self.temp.name) / 'state.json'
         self.sdk = Path(self.temp.name) / 'android'
         (self.sdk / 'platform-tools').mkdir(parents=True)
@@ -41,6 +43,7 @@ class E2eScriptsTest(unittest.TestCase):
             'ANISTAR_TEST_SEED': '42',
         }
         self.environment.pop('ANISTAR_E2E_RUN_DIR', None)
+        self.environment.pop('ANISTAR_TEST_SELECTORS_JSON', None)
 
     def cli(self, script, items, *args):
         self.state_file.write_text(json.dumps(items))
@@ -99,10 +102,23 @@ if '--version' in args:
 elif 'test' in args:
     tv=any(arg.endswith('/app_e2e_test.dart') for arg in args)
     status=int(os.environ.get('ANISTAR_FAKE_TV_EXIT', '0')) if tv else 0
+    recorded=os.environ.get('ANISTAR_FAKE_FLUTTER_ARGS')
+    if recorded:
+        Path(recorded).write_text(json.dumps(args))
     if not os.environ.get('ANISTAR_FAKE_NO_EVENTS'):
         report=next(arg.split('json:',1)[1] for arg in args if arg.startswith('--file-reporter=json:'))
-        events=[{'type':'testStart','test':{'id':1,'name':'native fixture case'}},
-                {'type':'testDone','testID':1,'result':'failure' if status else 'success','hidden':False}]
+        names=(['native  fixture "case" | $'] if os.environ.get('ANISTAR_FAKE_COMPLEX_NAME')
+               else ['native fixture case'])
+        if '--plain-name' in args:
+            names.append('native fixture case extended')
+        if '--name' in args:
+            import re
+            names=[name for name in names if re.search(args[args.index('--name') + 1], name)]
+        events=[]
+        for index, name in enumerate(names, 1):
+            events.extend([{'type':'testStart','test':{'id':index,'name':name}},
+                           {'type':'testDone','testID':index,'result':'failure' if status else 'success','hidden':False}])
+        events.append({'type':'done','success':not status})
         Path(report).write_text('\\n'.join(json.dumps(event) for event in events))
     print('FAKE SDK test invocation')
     raise SystemExit(status)
@@ -161,6 +177,64 @@ elif 'test' in args:
                 self.assertEqual(result.returncode, 64)
                 self.assertFalse((self.project / 'build/e2e').exists())
 
+    def test_filtered_mobile_run_forwards_selectors_and_reports_actual_completed_names(self):
+        self.fake_successful_build_tools()
+        arguments = Path(self.temp.name) / 'flutter-arguments.json'
+        self.environment['ANISTAR_FAKE_FLUTTER_ARGS'] = str(arguments)
+        result = self.cli('e2e-mobile.sh', self.ready_devices(), '--plain-name', 'native fixture case')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('PARTIAL PASS suite=e2e:mobile scope=filtered', result.stdout)
+        summary_file = next((self.project / 'build/e2e').glob('*/summary.json'))
+        summary = json.loads(summary_file.read_text())
+        self.assertEqual(summary['scope'], 'filtered')
+        self.assertEqual(summary['selector'], ['--plain-name', 'native fixture case'])
+        self.assertEqual(summary['completed_tests'], ['native fixture case', 'native fixture case extended'])
+        self.assertEqual(summary['completed_test_count'], 2)
+        self.assertEqual(json.loads(arguments.read_text())[-2:], ['--plain-name', 'native fixture case'])
+
+    def test_anchored_name_selects_one_mobile_fixture_case(self):
+        self.fake_successful_build_tools()
+        result = self.cli('e2e-mobile.sh', self.ready_devices(), '--name', '^native fixture case$')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary_file = next((self.project / 'build/e2e').glob('*/summary.json'))
+        summary = json.loads(summary_file.read_text())
+        self.assertEqual(summary['completed_tests'], ['native fixture case'])
+        self.assertEqual(summary['completed_test_count'], 1)
+
+    def test_structured_selector_environment_preserves_special_name_pattern(self):
+        self.fake_successful_build_tools()
+        arguments = Path(self.temp.name) / 'flutter-arguments.json'
+        selectors = ['--name', r'^native  fixture "case" \| \$$']
+        self.environment.update({
+            'ANISTAR_FAKE_FLUTTER_ARGS': str(arguments),
+            'ANISTAR_FAKE_COMPLEX_NAME': '1',
+            'ANISTAR_TEST_SELECTORS_JSON': json.dumps(selectors),
+        })
+
+        result = self.cli('e2e-mobile.sh', self.ready_devices())
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary_file = next((self.project / 'build/e2e').glob('*/summary.json'))
+        summary = json.loads(summary_file.read_text())
+        self.assertEqual(summary['selector'], selectors)
+        self.assertEqual(summary['completed_tests'], ['native  fixture "case" | $'])
+        self.assertEqual(json.loads(arguments.read_text())[-len(selectors):], selectors)
+
+    def test_full_e2e_runner_rejects_filtered_children_before_device_or_build_work(self):
+        result = self.cli('e2e-all.sh', [], '--name', '^native fixture case$')
+        self.assertEqual(result.returncode, 64)
+        self.assertIn('selectors are diagnostic-only', result.stderr)
+        self.assertFalse((self.project / 'build/e2e').exists())
+
+    def test_full_e2e_runner_rejects_structured_selectors_before_device_or_build_work(self):
+        self.environment['ANISTAR_TEST_SELECTORS_JSON'] = json.dumps(['--name', '^native fixture case$'])
+
+        result = self.cli('e2e-all.sh', [])
+
+        self.assertEqual(result.returncode, 64)
+        self.assertIn('ANISTAR_TEST_SELECTORS_JSON', result.stderr)
+        self.assertFalse((self.project / 'build/e2e').exists())
+
     def test_nonempty_explicit_run_directory_is_preserved_and_rejected(self):
         directory = self.project / 'existing-run'
         directory.mkdir()
@@ -179,12 +253,16 @@ elif 'test' in args:
         self.environment['ANISTAR_FAKE_TV_EXIT'] = '4'
         result = self.cli('e2e-all.sh', self.ready_devices())
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertEqual(result.stdout.count('FAKE SDK test invocation'), 2)
+        # Only the failed child is tailed to the concise aggregate console;
+        # every child keeps its SDK output in its own artifact.
+        self.assertEqual(result.stdout.count('FAKE SDK test invocation'), 1)
         summary_file = next((self.project / 'build/e2e').glob('all-*/summary.json'))
         summary = json.loads(summary_file.read_text())
         self.assertEqual([run['exit_code'] for run in summary['runs']], [4, 0])
         self.assertEqual([run['status'] for run in summary['runs']], ['failed', 'passed'])
         self.assertEqual([run['native_tests'] for run in summary['runs']], [1, 1])
+        for platform in ('tv', 'mobile'):
+            self.assertIn('FAKE SDK test invocation', (summary_file.parent / platform / 'flutter.log').read_text())
         starts = [json.loads(line) for line in (self.project / 'fixture-server-args.jsonl').read_text().splitlines()]
         self.assertEqual(starts[0]['native_ime_adb'], str(self.sdk / 'platform-tools/adb'))
         self.assertEqual(starts[0]['native_ime_device'], 'emulator-5556')

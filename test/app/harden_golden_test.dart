@@ -3,6 +3,8 @@ import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
+import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
+import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -62,7 +64,12 @@ void main() {
     );
     await pumpTvApp(
       tester,
-      GenresScreen(onSelected: (_) => fail('Unexpected selection')),
+      TvRouteShell(
+        destination: HomeDestination.genres,
+        onDestinationSelected: (_) => fail('Unexpected destination selection'),
+        builder: (onOpenNavigation) =>
+            GenresScreen(onOpenNavigation: onOpenNavigation, onSelected: (_) => fail('Unexpected selection')),
+      ),
       size: const Size(390, 844),
       wrapInScaffold: false,
       overrides: [

@@ -6,6 +6,7 @@ import 'package:video_player/video_player.dart';
 import '../../domain/models/playback_session.dart';
 import '../playback_quality_label.dart';
 import 'player_control_button.dart';
+import 'player_progress.dart';
 
 class PlayerOverlay extends StatefulWidget {
   const PlayerOverlay({
@@ -28,14 +29,6 @@ class PlayerOverlay extends StatefulWidget {
     this.playFocusNode,
     super.key,
   });
-
-  static String _format(Duration value) {
-    final hours = value.inHours;
-    final minutes = value.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
-
-    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
-  }
 
   final bool Function(KeyEvent)? onSeekKeyEvent;
   final ValueChanged<Duration>? onSeekRelative;
@@ -73,20 +66,9 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
 
   bool _timelineFocused = false;
 
-  int get _bufferedPosition {
-    final duration = widget.value.duration.inMilliseconds;
-    var buffered = 0;
-    for (final range in widget.value.buffered) {
-      final end = range.end.inMilliseconds;
-      if (end > buffered) {
-        buffered = end;
-      }
-    }
+  int get _bufferedPosition => playerBufferedPosition(widget.value.buffered, widget.value.duration);
 
-    return buffered.clamp(0, duration <= 0 ? 1 : duration);
-  }
-
-  String _formatSliderPosition(double value) => PlayerOverlay._format(Duration(milliseconds: value.round()));
+  String _formatSliderPosition(double value) => formatPlayerTime(Duration(milliseconds: value.round()));
 
   void _onTimelineFocusChanged(bool focused) => setState(() => _timelineFocused = focused);
 
@@ -163,8 +145,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
       return;
     }
     final target = widget.value.position + offset;
-    final durationMs = widget.value.duration.inMilliseconds;
-    widget.onSeek(Duration(milliseconds: target.inMilliseconds.clamp(0, durationMs)));
+    widget.onSeek(Duration(milliseconds: playerSeekPosition(target, widget.value.duration)));
   }
 
   @override
@@ -190,10 +171,10 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
     final textTheme = Theme.of(context).textTheme;
     final selectedQuality = widget.session.selectedQuality;
     final value = widget.value;
-    final durationMs = value.duration.inMilliseconds;
+    final durationMs = playerSliderMaximum(value.duration);
     final position = widget.previewPosition ?? value.position;
-    final positionMs = position.inMilliseconds.clamp(0, durationMs <= 0 ? 1 : durationMs);
-    final time = '${PlayerOverlay._format(position)} / ${PlayerOverlay._format(value.duration)}';
+    final positionMs = playerSliderPosition(position, value.duration);
+    final time = '${formatPlayerTime(position)} / ${formatPlayerTime(value.duration)}';
 
     return Focus(
       canRequestFocus: false,
@@ -269,9 +250,9 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                       child: Slider(
                         key: const ValueKey('player-timeline'),
                         value: positionMs.toDouble(),
-                        max: durationMs <= 0 ? 1 : durationMs.toDouble(),
+                        max: durationMs.toDouble(),
                         secondaryTrackValue: _bufferedPosition.toDouble(),
-                        onChanged: durationMs > 0 ? _onSliderChanged : null,
+                        onChanged: value.duration.inMilliseconds > 0 ? _onSliderChanged : null,
                         semanticFormatterCallback: _formatSliderPosition,
                       ),
                     ),

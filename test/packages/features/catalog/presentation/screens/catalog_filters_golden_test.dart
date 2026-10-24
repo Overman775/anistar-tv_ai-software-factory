@@ -11,6 +11,8 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filte
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres_screen.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
+import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
+import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,7 +62,12 @@ void main() {
       final overrides = [catalogBrowseRepositoryProvider.overrideWithValue(repository)];
       await pumpTvApp(
         tester,
-        GenresScreen(onSelected: (_) => fail('Unexpected selection')),
+        TvRouteShell(
+          destination: HomeDestination.genres,
+          onDestinationSelected: (_) => fail('Unexpected destination selection'),
+          builder: (onOpenNavigation) =>
+              GenresScreen(onOpenNavigation: onOpenNavigation, onSelected: (_) => fail('Unexpected selection')),
+        ),
         size: size,
         wrapInScaffold: false,
         overrides: overrides,
@@ -70,11 +77,14 @@ void main() {
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/genres_$name.png'));
       await pumpTvApp(
         tester,
-        CatalogScreen(
-          filter: comedyFilter,
-          onAnimeTap: (_) => fail('Unexpected selection'),
-          onBack: () => fail('Unexpected Back'),
-          onOpenGenres: () => fail('Unexpected genres'),
+        TvRouteShell(
+          destination: HomeDestination.genres,
+          onDestinationSelected: (_) => fail('Unexpected destination selection'),
+          builder: (onOpenNavigation) => CatalogScreen(
+            filter: comedyFilter,
+            onOpenNavigation: onOpenNavigation,
+            onAnimeTap: (_) => fail('Unexpected selection'),
+          ),
         ),
         size: size,
         wrapInScaffold: false,

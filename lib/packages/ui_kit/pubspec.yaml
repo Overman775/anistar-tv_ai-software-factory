@@ -31,7 +31,6 @@ flutter:
     - assets/icons/
     - assets/fonts/
   licenses:
-    - assets/fonts/LICENSE.txt
     - assets/fonts/Manrope-OFL.txt
     - assets/icons/LICENSE
   fonts:
@@ -47,14 +46,6 @@ flutter:
           weight: 700
         - asset: assets/fonts/Manrope-800.ttf
           weight: 800
-    - family: Inter
-      fonts:
-        - asset: assets/fonts/Inter-Regular.otf
-          weight: 400
-        - asset: assets/fonts/Inter-Medium.otf
-          weight: 500
-        - asset: assets/fonts/Inter-Bold.otf
-          weight: 700
 
 flutter_gen:
   output: lib/src/generate/

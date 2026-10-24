@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
-  static const flavor = String.fromEnvironment('FLAVOR', defaultValue: 'prod');
   static const networkLoggablePaths = {
     '/anime/',
     '/index.php',

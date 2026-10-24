@@ -182,7 +182,8 @@ void main() {
       expect(find.text('В избранное'), findsNothing);
       final retry = find.text('Обновить серии');
       if (mobile) {
-        await tester.scrollUntilVisible(retry, 160, scrollable: find.byType(Scrollable).first);
+        await tester.ensureVisible(retry);
+        await tester.pumpAndSettle();
         expect(retry.hitTestable(), findsOneWidget);
       } else {
         expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить серии');

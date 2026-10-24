@@ -4,9 +4,9 @@ import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
-import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/favorites/presentation/favorite_actions_sheet.dart';
+import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
 import 'package:flutter/services.dart';
@@ -92,11 +92,7 @@ void main() {
       final repository = FakeFavoritesRepository()..ids.add(1);
       await pumpTvApp(
         tester,
-        CatalogScreen(
-          favoritesOnly: true,
-          onAnimeTap: (_) => fail('Unexpected navigation'),
-          onTabSelected: (_) => fail('Unexpected tab change'),
-        ),
+        HomeScreen(destination: HomeDestination.favorites, onAnimeTap: (_) => fail('Unexpected navigation')),
         size: size,
         wrapInScaffold: false,
         overrides: [

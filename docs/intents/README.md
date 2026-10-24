@@ -25,5 +25,6 @@ Intent описывает причину и желаемый результат 
 - [Новые идентификаторы приложения и запуск на iOS](app-identifiers-and-ios-launch.md).
 - [Аватар профиля в левом меню с инициалами при отсутствии картинки](sidebar-profile-avatar-with-initials-fallback.md).
 - [Качество разработки с ИИ: линтеры, тесты и DCM Free](ai-development-quality.md).
+- [Рефакторинг приложения, UI Kit и тестового tooling](refactoring-ui-kit-and-test-tooling.md) — полный аудит, удаление Inter, общие UI-компоненты, выборочные тесты и краткие отчёты для ИИ.
 
 [Документация проекта](../README.md) · [Шаблон intent](../templates/intent.md)

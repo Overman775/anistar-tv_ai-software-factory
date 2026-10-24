@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../widgets/app_focus_border.dart';
 import 'app_focus_style.dart';
 import 'app_palette.dart';
-import 'tv_typography.dart';
+import 'app_typography.dart';
 
 abstract final class AppTheme {
   static final ThemeData lightTheme = _createTheme(Brightness.light);
@@ -12,16 +12,7 @@ abstract final class AppTheme {
   static final ThemeData mobileLightTheme = _mobileTheme(lightTheme);
 
   static ThemeData _mobileTheme(ThemeData base) {
-    final text = base.textTheme.copyWith(
-      headlineLarge: base.textTheme.headlineLarge?.copyWith(fontSize: 28, height: 1.2),
-      headlineMedium: base.textTheme.headlineMedium?.copyWith(fontSize: 24, height: 1.25),
-      headlineSmall: base.textTheme.headlineSmall?.copyWith(fontSize: 22, height: 1.25),
-      titleLarge: base.textTheme.titleLarge?.copyWith(fontSize: 20, height: 1.3),
-      titleMedium: base.textTheme.titleMedium?.copyWith(fontSize: 16, height: 1.35),
-      bodyLarge: base.textTheme.bodyLarge?.copyWith(fontSize: 16),
-      bodyMedium: base.textTheme.bodyMedium?.copyWith(fontSize: 14),
-      labelLarge: base.textTheme.labelLarge?.copyWith(fontSize: 14),
-    );
+    final text = AppTypography.mobile(base.textTheme);
 
     return base.copyWith(
       textTheme: text,
@@ -105,7 +96,7 @@ abstract final class AppTheme {
 
       return focused ? primaryColor.withValues(alpha: 0.3) : primaryHoverColor;
     });
-    final textTheme = TvTypography.apply(baseTextTheme)
+    final textTheme = AppTypography.tv(baseTextTheme)
         .apply(bodyColor: baseScheme.onSurface, displayColor: baseScheme.onSurface);
 
     return ThemeData(

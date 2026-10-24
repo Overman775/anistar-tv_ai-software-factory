@@ -17,6 +17,7 @@ import '../../anime_providers.dart';
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_part.dart';
 import '../../domain/models/anime_screen_data.dart';
+import '../../domain/models/anime_watch_action.dart';
 import '../widgets/anime_detail_filter_actions.dart';
 import '../widgets/anime_detail_filter_groups.dart';
 import '../widgets/anime_filter_row.dart';
@@ -193,11 +194,9 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
     _hasFavoriteAction = hasFavoriteAction;
     final watched = ref.watch(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
     final ascending = data.episodes.toList()..sort((a, b) => a.number.compareTo(b.number));
-    final confirmed = {...watched, ...ascending.where((episode) => episode.isWatched).map((episode) => episode.number)};
-    final maxWatched = confirmed.isEmpty ? null : confirmed.reduce((left, right) => left > right ? left : right);
-    final nextEpisode = ascending.where((episode) => maxWatched == null || episode.number > maxWatched).firstOrNull;
-    final rewatch = ascending.isNotEmpty && nextEpisode == null;
-    final playEpisode = nextEpisode ?? ascending.firstOrNull;
+    final watchAction = selectAnimeWatchAction(ascending, watched);
+    final playEpisode = watchAction.episode;
+    final rewatch = watchAction.rewatch;
     _parts = data.details.parts;
     final episodes = ascending.reversed.toList();
     if (lostFavoriteAction && _favoriteFocus.hasFocus) {
@@ -238,12 +237,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         yearAction: yearAction,
         filterActions: filterActions,
         favoriteAction: hasFavoriteAction
-            ? FavoriteButton(
-                animeId: animeId,
-                slug: data.details.slug,
-                title: data.details.title,
-                initialFavorite: data.details.isFavorite,
-              )
+            ? FavoriteButton(animeId: animeId, slug: data.details.slug, initialFavorite: data.details.isFavorite)
             : null,
       );
     }
@@ -264,7 +258,6 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
                     autofocus: episodes.isEmpty,
                     animeId: animeId,
                     slug: data.details.slug,
-                    title: data.details.title,
                     initialFavorite: data.details.isFavorite,
                   )
                 : null,
@@ -288,7 +281,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> {
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.sm),
           sliver: SliverToBoxAdapter(
-            child: TvSectionHeader(
+            child: AppSectionHeader(
               title: 'Серии',
               trailing: Text(
                 'В списке: ${episodes.length}',

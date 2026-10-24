@@ -221,7 +221,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls, 2);
     final reload = find.text('Обновить серии');
-    await tester.scrollUntilVisible(reload, 200, scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(reload);
+    await tester.pumpAndSettle();
     expect(reload.hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

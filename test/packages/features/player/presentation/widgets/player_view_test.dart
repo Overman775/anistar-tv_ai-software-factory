@@ -126,6 +126,7 @@ class _TestPlayerView extends StatelessWidget {
       requestedQuality: PlaybackQuality.high,
       selectedQuality: PlaybackQuality.high,
       availableQualities: const [PlaybackQuality.high],
+      episodes: const [],
     ),
     onPlayPause: () => fail('Unexpected play command'),
     onSelectQuality: () => fail('Unexpected quality command'),

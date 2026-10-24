@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../catalog/domain/models/anime_summary.dart';
 import '../domain/search_repository.dart';
+import '../domain/search_rules.dart';
 
 final class SearchBloc extends Bloc<SearchEvent, SearchState> {
   final SearchRepository _repository;
@@ -42,7 +43,7 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     }
   }
 
-  SearchState _copy({List<String>? history, bool? loadingMore, String? message}) => SearchState(
+  SearchState _copy({List<String>? history, bool? loadingMore, String? message, SearchError? error}) => SearchState(
     query: state.query,
     status: state.status,
     items: state.items,
@@ -51,6 +52,7 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     hasMore: state.hasMore,
     loadingMore: loadingMore ?? state.loadingMore,
     message: message,
+    error: error ?? state.error,
   );
 
   Future<void> _submit(SearchSubmitted event, Emitter<SearchState> emit) async {
@@ -58,17 +60,18 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     final generation = ++_generation;
     _cancellation?.cancel();
     final cancellation = _cancellation = RequestCancellation();
-    if (query.isEmpty || query.length < 4 || query.length > 120) {
+    if (query.isEmpty || !SearchRules.hasValidQueryLength(query)) {
       emit(
         SearchState(
           query: query,
           status: query.isEmpty ? SearchStatus.ready : SearchStatus.error,
           history: state.history,
-          message: switch (query.length) {
+          message: switch (SearchRules.queryLength(query)) {
             0 => null,
-            < 4 => 'Введите не менее 4 символов.',
+            < SearchRules.minimumQueryLength => 'Введите не менее 4 символов.',
             _ => 'Введите не более 120 символов.',
           },
+          error: query.isEmpty ? null : SearchError.validation,
         ),
       );
 
@@ -77,7 +80,7 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     final history = [
       query,
       ...state.history.where((value) => normalizeSearchQuery(value) != normalizeSearchQuery(query)),
-    ].take(8).toList(growable: false);
+    ].take(SearchRules.historyLimit).toList(growable: false);
     _historyChanged = true;
     emit(SearchState(query: query, status: SearchStatus.loading, history: List.unmodifiable(history)));
     _saveHistory(history);
@@ -96,8 +99,15 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
           hasMore: page.hasNext,
         ),
       ),
-      failure: (failure) =>
-          emit(SearchState(query: query, status: SearchStatus.error, history: state.history, message: failure.message)),
+      failure: (failure) => emit(
+        SearchState(
+          query: query,
+          status: SearchStatus.error,
+          history: state.history,
+          message: failure.message,
+          error: SearchError.request,
+        ),
+      ),
     );
   }
 
@@ -183,6 +193,8 @@ final class _HistoryLoaded extends SearchEvent {
 
 enum SearchStatus { idle, loading, ready, error }
 
+enum SearchError { validation, request }
+
 @immutable
 final class SearchState {
   final String query;
@@ -193,6 +205,7 @@ final class SearchState {
   final bool hasMore;
   final bool loadingMore;
   final String? message;
+  final SearchError? error;
 
   const SearchState({
     this.query = '',
@@ -203,5 +216,6 @@ final class SearchState {
     this.hasMore = false,
     this.loadingMore = false,
     this.message,
+    this.error,
   });
 }

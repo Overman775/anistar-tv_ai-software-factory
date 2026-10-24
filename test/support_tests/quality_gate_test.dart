@@ -20,6 +20,7 @@ void main() {
     addTearDown(() => fixture.deleteSync(recursive: true));
     for (final path in [
       'scripts',
+      'tool/e2e',
       'tool/quality',
       'lib',
       'infrastructure',
@@ -42,6 +43,9 @@ void main() {
     Directory('${fixture.path}/.dart_tool').createSync();
     File('.dart_tool/package_config.json').copySync('${fixture.path}/.dart_tool/package_config.json');
     File('scripts/with_python.sh').copySync('${fixture.path}/scripts/with_python.sh');
+    File('scripts/quality_runner.sh').copySync('${fixture.path}/scripts/quality_runner.sh');
+    File('tool/e2e/e2e_report.py').copySync('${fixture.path}/tool/e2e/e2e_report.py');
+    File('tool/quality/selector_args.py').copySync('${fixture.path}/tool/quality/selector_args.py');
     for (final scanner in ['gitleaks', 'osv', 'semgrep']) {
       File('${fixture.path}/scripts/security_$scanner.sh').writeAsStringSync(
         'echo $scanner >> "\$ANISTAR_GATE_TRACE"\nexit "\${ANISTAR_SECURITY_${scanner.toUpperCase()}_EXIT:-0}"\n',
@@ -90,21 +94,20 @@ void main() {
   test('format failure stops before analyzer and reports its failing stage', () async {
     final result = await run('check', environment: {'ANISTAR_GATE_FORMAT_EXIT': '17'});
     expect(result.exitCode, isNot(0), reason: result.stderr.toString());
-    expect('${result.stdout}${result.stderr}', contains('quality:format-check'));
     expect(trace.readAsLinesSync(), ['pub', 'format']);
+    expect(_summary(fixture, 'format-check')['exit_code'], isNot(0));
   });
 
   test('analyzer failure stops before DCM and tests and reports its failing stage', () async {
     final result = await run('check', environment: {'ANISTAR_GATE_ANALYZE_EXIT': '23'});
     expect(result.exitCode, isNot(0), reason: result.stderr.toString());
-    expect('${result.stdout}${result.stderr}', contains('analyze'));
     expect(trace.readAsLinesSync(), ['pub', 'format', 'analyze']);
+    expect(_summary(fixture, 'analyze')['exit_code'], isNot(0));
   });
 
   test('wrong SDK stops before dependency resolution', () async {
     final result = await run('check:flutter', environment: {'ANISTAR_GATE_VERSION': '0.0.0'});
     expect(result.exitCode, isNot(0));
-    expect('${result.stdout}${result.stderr}', contains('Flutter SDK mismatch'));
     expect(trace.existsSync(), isFalse);
   });
 
@@ -118,8 +121,8 @@ void main() {
   test('native DCM failure prevents unit, golden, tooling and version checks', () async {
     final result = await run('check', environment: {'ANISTAR_GATE_DCM_EXIT': '29'});
     expect(result.exitCode, isNot(0));
-    expect('${result.stdout}${result.stderr}', contains('dcm'));
     expect(trace.readAsLinesSync(), ['pub', 'format', 'analyze', 'dcm']);
+    expect(_summary(fixture, 'dcm')['exit_code'], isNot(0));
   });
 
   test('lockfile failure prevents every quality stage', () async {
@@ -165,6 +168,53 @@ void main() {
       expect(result.exitCode, 0, reason: '${profile.key}: ${result.stdout}${result.stderr}');
       expect(trace.readAsLinesSync(), ['pub', profile.value]);
     }
+  });
+
+  test('public JSON selectors preserve exact values and retain fixed suite flags', () async {
+    final arguments = File('${fixture.path}/flutter-arguments');
+    final selectors = ['test/with  spaces.dart', '--name', r'^one  test "quoted" \| \$$'];
+    final result = await run(
+      'test:unit',
+      environment: {'ANISTAR_GATE_ARGUMENTS': arguments.path, 'ANISTAR_TEST_SELECTORS_JSON': jsonEncode(selectors)},
+    );
+
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
+    final invocation = (jsonDecode(arguments.readAsStringSync()) as List<Object?>).cast<String>();
+    expect(invocation, contains('--exclude-tags=golden'));
+    expect(invocation, contains('--coverage'));
+    expect(invocation, contains('--concurrency=4'));
+    expect(invocation.sublist(invocation.length - selectors.length), selectors);
+    final summary = _summary(fixture, 'unit');
+    expect(summary['scope'], 'filtered');
+    expect(summary['selector'], selectors);
+    expect(summary['completed_test_count'], 1);
+    expect(summary['completed_tests'], ['unit selected test']);
+  });
+
+  test('ambiguous ordinary selector fragments fail instead of being reconstructed', () async {
+    final result = await run('test:unit', arguments: ['--', 'test/with', 'spaces.dart']);
+
+    expect(result.exitCode, isNot(0));
+    expect('${result.stdout}${result.stderr}', contains('ANISTAR_TEST_SELECTORS_JSON'));
+    expect(trace.existsSync(), isFalse);
+  });
+
+  test('ordinary golden comparison rejects an update selector before Flutter test runs', () async {
+    final result = await run('test:goldens', arguments: ['--', '--update-goldens']);
+
+    expect(result.exitCode, isNot(0));
+    expect('${result.stdout}${result.stderr}', contains('test:goldens:update'));
+    expect(trace.existsSync(), isFalse);
+  });
+
+  test('host runner fails closed when Flutter completes without visible JSONL tests', () async {
+    final result = await run('test:unit', environment: {'ANISTAR_GATE_EVENT_MODE': 'none'});
+
+    expect(result.exitCode, isNot(0));
+    final summary = _summary(fixture, 'unit');
+    expect(summary['phase'], 'report-validation');
+    expect(summary['completed_test_count'], 0);
+    expect(summary['errors'], 1);
   });
 
   test('Flutter-only profile runs format, analysis, unit coverage and golden comparison in order', () async {
@@ -283,6 +333,17 @@ void main() {
   });
 }
 
+Map<String, Object?> _summary(Directory fixture, String suite) {
+  final reports = Directory('${fixture.path}/build/quality')
+      .listSync()
+      .whereType<Directory>()
+      .where((directory) => directory.path.split(Platform.pathSeparator).last.startsWith('$suite-'))
+      .toList();
+  expect(reports, hasLength(1));
+
+  return jsonDecode(File('${reports.single.path}/summary.json').readAsStringSync()) as Map<String, Object?>;
+}
+
 const _flutterStub = r'''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -297,6 +358,28 @@ case "$1" in
     case " $* " in
       *" --tags=golden "*) [[ " $* " == *" --concurrency=1 "* && " $* " != *" --update-goldens "* ]] || exit 95; stage=golden ;;
       *) [[ " $* " == *" --coverage "* && " $* " == *" --concurrency=4 "* && " $* " == *" --exclude-tags=golden "* ]] || exit 96; stage=unit ;;
+    esac
+    report=''
+    for argument in "$@"; do
+      case "$argument" in --file-reporter=json:*) report="${argument#--file-reporter=json:}" ;; esac
+    done
+    [[ -n $report ]] || exit 99
+    if [[ -n ${ANISTAR_GATE_ARGUMENTS:-} ]]; then
+      python3 -c 'import json, os, sys; open(os.environ["ANISTAR_GATE_ARGUMENTS"], "w").write(json.dumps(sys.argv[1:]))' "$@"
+    fi
+    case ${ANISTAR_GATE_EVENT_MODE:-normal} in
+      none) ;;
+      corrupt) printf 'not json\n' > "$report" ;;
+      late-error)
+        printf '%s\n' '{"type":"testStart","test":{"id":1,"name":"late error"}}' \
+          '{"type":"testDone","testID":1,"result":"success"}' \
+          '{"type":"error","testID":1,"error":"late failure","stackTrace":"fixture.dart:1"}' > "$report"
+        ;;
+      *)
+        printf '%s\n' "{\"type\":\"testStart\",\"test\":{\"id\":1,\"name\":\"$stage selected test\"}}" \
+          '{"type":"testDone","testID":1,"result":"success"}' \
+          '{"type":"done","success":true}' > "$report"
+        ;;
     esac
     echo "$stage" >> "$ANISTAR_GATE_TRACE"
     if [[ ${ANISTAR_GATE_TEST_FAILURE:-} == "$stage" ]]; then exit 32; fi ;;

@@ -2,10 +2,49 @@
 set -euo pipefail
 project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_root"
-device=${1:-}
-mode=${2:-fixtures}
-[[ $# -le 2 && ( -z $device || $device =~ ^emulator-[0-9]+$ ) ]] || { echo 'Usage: bash scripts/e2e.sh [emulator-<port>] [fixtures|fixtures-mobile|live]' >&2; exit 64; }
+device=''
+mode=fixtures
+selectors=()
+selector_count=0
+structured_selectors=${ANISTAR_TEST_SELECTORS_JSON:-}
+if [[ ${1:-} =~ ^emulator-[0-9]+$ ]]; then
+  device=$1
+  shift
+fi
+if [[ ${1:-} == fixtures || ${1:-} == fixtures-mobile || ${1:-} == live ]]; then
+  mode=$1
+  shift
+fi
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --plain-name|--name)
+      [[ $# -ge 2 && -n ${2:-} ]] || { echo "Missing value for $1." >&2; exit 64; }
+      selectors+=("$1" "$2")
+      selector_count=$((selector_count + 2))
+      shift 2
+      ;;
+    --plain-name=*|--name=*)
+      [[ ${1#*=} ]] || { echo "Missing value for ${1%%=*}." >&2; exit 64; }
+      selectors+=("$1")
+      selector_count=$((selector_count + 1))
+      shift
+      ;;
+    *)
+      echo 'E2E selectors must use --plain-name or --name. Use ANISTAR_TEST_SELECTORS_JSON for values containing spaces or shell metacharacters.' >&2
+      exit 64
+      ;;
+  esac
+done
 [[ $mode == fixtures || $mode == fixtures-mobile || $mode == live ]] || { echo 'Unknown E2E mode.' >&2; exit 64; }
+if [[ -n $structured_selectors && $selector_count != 0 ]]; then
+  echo 'Use either normal selector arguments or ANISTAR_TEST_SELECTORS_JSON, not both.' >&2
+  exit 64
+fi
+if [[ -n $structured_selectors ]]; then
+  python3 tool/quality/selector_args.py --profile e2e validate || exit $?
+fi
+scope=full
+[[ $selector_count == 0 && -z $structured_selectors ]] || scope=filtered
 seed=${ANISTAR_TEST_SEED:-20261010}
 [[ $seed =~ ^[0-9]+$ ]] || { echo 'ANISTAR_TEST_SEED must be a non-negative integer.' >&2; exit 64; }
 sdk_dir=${ANISTAR_FLUTTER_SDK:-$project_root/.fvm/flutter_sdk}
@@ -32,7 +71,8 @@ if [[ -n ${ANISTAR_E2E_RUN_DIR:-} ]]; then
 else
   run_dir=$(mktemp -d "$prefix.XXXXXX")
 fi
-exec > >(tee "$run_dir/runner.log") 2>&1
+exec 3>&1 4>&2
+exec > "$run_dir/runner.log" 2>&1
 started_at=$(python3 -c 'import datetime; print(datetime.datetime.now(datetime.timezone.utc).isoformat())')
 avd=''
 phase=preflight
@@ -60,12 +100,25 @@ cleanup() {
   if [[ -n $fixture_pid ]]; then kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; fi
   if [[ $lock_owned == 1 ]]; then rm -f "$lock_dir/owner"; rmdir "$lock_dir" 2>/dev/null || true; fi
   local report_status=0
-  python3 tool/e2e/e2e_report.py run --directory "$run_dir" --platform "$expected_profile" \
+  report_args=(python3 tool/e2e/e2e_report.py run --directory "$run_dir" --platform "$expected_profile" \
     --mode "$mode" --seed "$seed" --device "$device" --avd "$avd" --exit-code "$status" \
-    --requested-avd "$requested_avd" --phase "$phase" --started-at "$started_at" || report_status=$?
+    --requested-avd "$requested_avd" --scope "$scope" --phase "$phase" --started-at "$started_at")
+  if [[ -n $structured_selectors ]]; then
+    report_args+=("--selectors-json" "$structured_selectors")
+  elif [[ $selector_count != 0 ]]; then
+    for selector in "${selectors[@]}"; do report_args+=("--selector=$selector"); done
+  fi
+  "${report_args[@]}" || report_status=$?
   if [[ $status == 0 && $report_status != 0 ]]; then status=$report_status; fi
-  echo "E2E [$expected_profile/$mode] AVD=${avd:-unknown} requestedAVD=$requested_avd device=${device:-unselected} seed=$seed exit=$status"
-  echo "Reports and logs: $run_dir"
+  if [[ $status == 0 && $scope == filtered ]]; then
+    echo "PARTIAL PASS suite=e2e:$expected_profile scope=filtered report=$run_dir (does not satisfy the full E2E gate)" >&3
+  elif [[ $status == 0 ]]; then
+    echo "OK suite=e2e:$expected_profile scope=full report=$run_dir" >&3
+  else
+    echo "FAIL suite=e2e:$expected_profile phase=$phase report=$run_dir log=$run_dir/flutter.log" >&3
+    [[ ! -f $run_dir/runner.log ]] || tail -n 80 "$run_dir/runner.log" >&3
+    [[ ! -f $run_dir/flutter.log ]] || tail -n 80 "$run_dir/flutter.log" >&3
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -84,8 +137,6 @@ if [[ -z ${ANISTAR_E2E_RUN_DIR:-} && $avd != "$safe_label" ]]; then
   mv "$run_dir" "$actual_dir"
   run_dir=$actual_dir
 fi
-echo "E2E [$expected_profile/$mode] AVD=$avd device=$device seed=$seed"
-echo "Reports and logs: $run_dir"
 if [[ $expected_profile == tv ]]; then
   python3 tool/e2e/emulator_input.py --adb "${adb_cmd[0]}" --device "$device"
 fi
@@ -115,10 +166,16 @@ except (OSError, ValueError, AssertionError, AttributeError):
     raise SystemExit('Missing/invalid local live credentials. See docs/05_development_and_testing.md section 9.')
 PYCONFIG
   phase=flutter-tests
-  "${flutter_cmd[@]}" test integration_test/direct_android_test.dart -d "$device" --flavor dev \
+  flutter_test_args=(test integration_test/direct_android_test.dart -d "$device" --flavor dev \
     --dart-define-from-file="$credentials_file" \
-    --timeout=10m --reporter=expanded --file-reporter="json:$run_dir/flutter-events.jsonl" \
-    --test-randomize-ordering-seed="$seed" 2>&1 | tee "$run_dir/flutter.log"
+    --timeout=10m --reporter=failures-only --file-reporter="json:$run_dir/flutter-events.jsonl" \
+    --test-randomize-ordering-seed="$seed")
+  if [[ $selector_count != 0 ]]; then flutter_test_args+=("${selectors[@]}"); fi
+  if [[ -n $structured_selectors ]]; then
+    python3 tool/quality/selector_args.py --profile e2e exec -- "${flutter_cmd[@]}" "${flutter_test_args[@]}" > "$run_dir/flutter.log" 2>&1
+  else
+    "${flutter_cmd[@]}" "${flutter_test_args[@]}" > "$run_dir/flutter.log" 2>&1
+  fi
 else
   phase=fixture-tool-tests
   python3 -m unittest discover -s tool/e2e -p '*_test.py'
@@ -146,9 +203,15 @@ else
     test_file=integration_test/mobile_e2e_test.dart
   fi
   phase=flutter-tests
-  "${flutter_cmd[@]}" test "$test_file" -d "$device" --flavor dev \
+  flutter_test_args=(test "$test_file" -d "$device" --flavor dev \
     --dart-define="ANISTAR_MIRROR_URL=https://localhost:$fixture_port" \
-    --timeout=10m --reporter=expanded --file-reporter="json:$run_dir/flutter-events.jsonl" \
-    --test-randomize-ordering-seed="$seed" 2>&1 | tee "$run_dir/flutter.log"
+    --timeout=10m --reporter=failures-only --file-reporter="json:$run_dir/flutter-events.jsonl" \
+    --test-randomize-ordering-seed="$seed")
+  if [[ $selector_count != 0 ]]; then flutter_test_args+=("${selectors[@]}"); fi
+  if [[ -n $structured_selectors ]]; then
+    python3 tool/quality/selector_args.py --profile e2e exec -- "${flutter_cmd[@]}" "${flutter_test_args[@]}" > "$run_dir/flutter.log" 2>&1
+  else
+    "${flutter_cmd[@]}" "${flutter_test_args[@]}" > "$run_dir/flutter.log" 2>&1
+  fi
 fi
 phase=complete

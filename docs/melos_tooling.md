@@ -139,14 +139,79 @@ DCM, Python-инструменты и проверку версии. Отдел�
 | Запустить Python tooling | `fvm dart run melos run test:tooling` |
 | Проверить только Flutter-инструментами | `fvm dart run melos run check:flutter` |
 
+Melos 7.8.1 передаёт script arguments через shell и не сохраняет исходные
+границы цитируемых аргументов. Простые пути `.dart` и односоставные значения
+`--plain-name` или `--name` можно передавать как обычные аргументы. Для
+селектора с пробелами или shell-символами используйте
+`ANISTAR_TEST_SELECTORS_JSON`: это JSON-массив
+непустых строк, который сохраняет каждый аргумент без изменений. Хост-профили
+принимают пути тестовых файлов, `--plain-name` с подстрокой и `--name` с
+регулярным выражением полного имени. Другие аргументы Flutter test запрещены.
+
+```bash
+fvm dart run melos run test:unit -- test/packages/features/search/search_bloc_test.dart
+ANISTAR_TEST_SELECTORS_JSON='["--plain-name","empty query"]' fvm dart run melos run test:unit
+ANISTAR_TEST_SELECTORS_JSON='["--name","^search \"one\" \\| test$"]' fvm dart run melos run test:goldens
+ANISTAR_TEST_SELECTORS_JSON='["test/path with spaces.dart"]' fvm dart run melos run test:unit
+```
+
+JSON-массив нельзя сочетать с selector arguments команды. Для полного запуска
+не задавайте эту переменную; пустой JSON-массив не поддерживается. Команды `check` и
+`check:flutter` отклоняют эту переменную, чтобы сохранить полный gate.
+Для E2E JSON-массив может содержать только `--plain-name` или `--name` и их
+значения. Публичный `test:e2e` также отклоняет переменную. Выборочный E2E
+доступен только отдельным TV/mobile runner.
+
+При прямом запуске Bash runner получает исходные argv от shell, поэтому
+обычные кавычки shell сохраняют значение:
+
+```bash
+bash scripts/quality_runner.sh test unit --prepare --plain-name 'empty query'
+```
+
+Каждый публичный запуск сначала один раз проверяет SDK и lockfile. Затем он
+создаёт уникальный каталог `build/quality/` для логов и отчётов. Хост-тесты
+сохраняют `flutter-events.jsonl`, `summary.json` и `junit.xml`; coverage для
+unit-набора остаётся в `coverage/lcov.info`. В консоль выводится краткий
+`OK` или `FAIL` с областью `full`/`filtered`, числом завершённых тестов,
+счётчиками и путём к отчёту. При ошибке показываются последние строки лога.
+Полный вывод находится в каталоге отчёта. Пустой или незавершённый запуск не
+считается успешным.
+
+Наличие selector помечает отчёт как `filtered`. Успешный выборочный запуск
+полезен для диагностики, но не заменяет полный gate. `test:coverage` —
+совместимый alias `test:unit` и принимает те же selectors. Обновлять baselines
+можно отдельной командой `test:goldens:update`; `--update-goldens` нельзя
+передать в обычную команду сравнения.
+
 `test:e2e` последовательно запускает TV- и mobile-наборы fixture-тестов на
-отдельных эмуляторах. Для отдельного fixture-набора используйте `test:e2e:tv`
+разных эмуляторах. Полная команда не принимает фильтры и запускает mobile даже
+после ошибки TV, чтобы сохранить оба результата. Для отдельного fixture-набора
+используйте `test:e2e:tv`
 или `test:e2e:mobile` с `--include-private`. Приватная `test:e2e:live` запускает
 сценарий с тестовым аккаунтом и меняет удалённую историю просмотренных серий.
 Приватная `test:network:live` выполняет live-диагностику сети и входа без изменения
 избранного и истории. Не запускайте live-команды без отдельного явного запроса.
 Условия запуска и побочные эффекты
 описаны в [руководстве по разработке и тестированию](05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+
+Одиночный TV/mobile runner принимает `--plain-name <substring>` для поиска
+подстроки или `--name <regexp>` для полного совпадения имени. В Melos
+передавайте selector через JSON-переменную, чтобы сохранить пробелы:
+
+```bash
+ANISTAR_TEST_SELECTORS_JSON='["--plain-name","search submits"]' fvm dart run melos run test:e2e:tv --include-private
+```
+
+Прямой вызов сохраняет исходные аргументы shell и поддерживает те же значения:
+
+```bash
+bash scripts/e2e-tv.sh --plain-name 'search submits'
+```
+
+Такой запуск отмечается `scope=filtered` и выводит `PARTIAL PASS` при успехе.
+Он не удовлетворяет полному Android E2E gate. Команда `test:e2e` отклоняет
+селекторы, чтобы нельзя было незаметно сократить обязательный набор.
 
 `test:e2e:ios` — отдельный опциональный native fixture-runner. Он не входит в
 `check` или Android `test:e2e`. Передайте booted Simulator UDID и flavor:

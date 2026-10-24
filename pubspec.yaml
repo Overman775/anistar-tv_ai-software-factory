@@ -84,9 +84,7 @@ melos:
         post: "python3 tool/graphify/prepare.py --optional"
   scripts:
     analyze:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:analyze --include-private
+      run: "bash scripts/quality_runner.sh gate analyze"
       description: "Strict analyzer for app and all workspace packages"
 
     clean:
@@ -98,15 +96,11 @@ melos:
       description: "Clean app and code generator caches"
 
     format:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:format --include-private
+      run: "bash scripts/quality_runner.sh gate format"
       description: "Format maintained Dart sources"
 
     format:check:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:format-check --include-private
+      run: "bash scripts/quality_runner.sh gate format-check"
       description: "Check format without editing files"
 
     fix:
@@ -118,9 +112,7 @@ melos:
       description: "Preview Dart fixes"
 
     dcm:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:dcm --include-private
+      run: "bash scripts/quality_runner.sh gate dcm"
       description: "Strict DCM analysis including tests"
 
     dcm:fix:
@@ -132,24 +124,11 @@ melos:
       description: "Apply Dart and DCM fixes sequentially"
 
     check:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:format-check --include-private
-        - dart run melos run quality:analyze --include-private
-        - dart run melos run quality:dcm --include-private
-        - dart run melos run quality:unit --include-private
-        - dart run melos run quality:goldens --include-private
-        - dart run melos run test:tooling --include-private
-        - dart run melos run version:check --include-private
+      run: "bash scripts/quality_runner.sh gate check"
       description: "SDK, lockfile, format, analyzer, DCM, unit, golden and tooling checks"
 
     check:flutter:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:format-check --include-private
-        - dart run melos run quality:analyze --include-private
-        - dart run melos run quality:unit --include-private
-        - dart run melos run quality:goldens --include-private
+      run: "bash scripts/quality_runner.sh gate check:flutter"
       description: "Local Flutter-only checks without DCM"
 
     security:secrets:
@@ -285,31 +264,23 @@ melos:
       description: "Preview explicit version/build; writes only with --write"
 
     test:unit:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:unit --include-private
-      description: "Run unit from central test suite"
+      run: "bash scripts/quality_runner.sh test unit --prepare"
+      description: "Run non-golden tests with coverage; use ANISTAR_TEST_SELECTORS_JSON for selectors containing spaces"
 
     test:goldens:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:goldens --include-private
-      description: "Run goldens from central test suite"
+      run: "bash scripts/quality_runner.sh test goldens --prepare"
+      description: "Compare golden tests; use ANISTAR_TEST_SELECTORS_JSON for selectors containing spaces"
 
     test:goldens:update:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:goldens:update --include-private
-      description: "Run goldens:update from central test suite"
+      run: "bash scripts/quality_runner.sh test-update goldens --prepare"
+      description: "Explicitly update selected or full golden baselines"
 
     test:coverage:
-      steps:
-        - dart run melos run quality:prepare --include-private
-        - dart run melos run quality:unit --include-private
-      description: "Run coverage from central test suite"
+      run: "bash scripts/quality_runner.sh test unit --prepare"
+      description: "Compatibility alias for test:unit; both produce the same coverage run"
 
     test:tooling:
-      run: "bash scripts/with_python.sh bash scripts/test_tooling.sh"
+      run: "bash scripts/quality_runner.sh tooling"
       description: "Run Python quality, E2E runner, version and optional graphify regressions"
 
     test:e2e:
@@ -392,75 +363,32 @@ melos:
     # Preparation belongs to the public profile; leaves never prepare recursively.
     quality:prepare:
       private: true
-      run: |
-        bash -euo pipefail <<'BASH'
-        sdk=${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}
-        seed=${ANISTAR_TEST_SEED:-20261010}
-        [[ $seed =~ ^[0-9]+$ ]] || { echo "ANISTAR_TEST_SEED must be a non-negative integer." >&2; exit 64; }
-        "$sdk/bin/flutter" --no-version-check --version --machine | "$sdk/bin/dart" tool/quality/verify_sdk.dart
-        "$sdk/bin/flutter" --no-version-check pub get --enforce-lockfile
-        sources=$(find lib infrastructure test integration_test tool/quality \
-          -type d \( -name build -o -name .dart_tool \) -prune -o \
-          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
-          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print)
-        [[ -n $sources ]] || { echo "No maintained Dart sources found." >&2; exit 1; }
-        BASH
+      run: "bash scripts/quality_runner.sh prepare"
 
     quality:format:
       private: true
-      run: |
-        bash -euo pipefail <<'BASH'
-        find lib infrastructure test integration_test tool/quality \
-          -type d \( -name build -o -name .dart_tool \) -prune -o \
-          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
-          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print0 |
-          xargs -0 "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/dart" format
-        BASH
+      run: "bash scripts/quality_runner.sh format"
 
     quality:format-check:
       private: true
-      run: |
-        bash -euo pipefail <<'BASH'
-        find lib infrastructure test integration_test tool/quality \
-          -type d \( -name build -o -name .dart_tool \) -prune -o \
-          -type f -name '*.dart' ! -name '*.g.dart' ! -name '*.gen.dart' \
-          ! -name '*.freezed.dart' ! -name generated_plugin_registrant.dart -print0 |
-          xargs -0 "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/dart" format --output=none --set-exit-if-changed
-        BASH
+      run: "bash scripts/quality_runner.sh format-check"
 
     quality:analyze:
       private: true
-      run: >-
-        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
-        analyze --no-pub --fatal-infos
+      run: "bash scripts/quality_runner.sh analyze"
 
     quality:dcm:
       private: true
-      run: >-
-        dcm analyze lib infrastructure test integration_test tool/quality
-        --sdk-path "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/cache/dart-sdk"
-        --fatal-style --fatal-warnings --no-analytics
+      run: "bash scripts/quality_runner.sh dcm"
 
     quality:unit:
       private: true
-      run: >-
-        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
-        test --no-pub --exclude-tags=golden --concurrency=4
-        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}" --coverage
-        --coverage-package=anistar_tv --coverage-package=core --coverage-package=networking
-        --coverage-package=storage --coverage-package=app_logging --coverage-package=anistar
-        --coverage-package=ui_kit
+      run: "bash scripts/quality_runner.sh test unit"
 
     quality:goldens:
       private: true
-      run: >-
-        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
-        test --no-pub --tags=golden --concurrency=1
-        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}"
+      run: "bash scripts/quality_runner.sh test goldens"
 
     quality:goldens:update:
       private: true
-      run: >-
-        "${ANISTAR_FLUTTER_SDK:-$PWD/.fvm/flutter_sdk}/bin/flutter" --no-version-check
-        test --no-pub --tags=golden --concurrency=1
-        --test-randomize-ordering-seed="${ANISTAR_TEST_SEED:-20261010}" --update-goldens
+      run: "bash scripts/quality_runner.sh test-update goldens"

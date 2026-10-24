@@ -66,9 +66,8 @@ void main() {
   testWidgets('rail expands from any first-column card and returns to the same card', (tester) async {
     await pumpTvApp(
       tester,
-      CatalogScreen(
+      HomeScreen(
         onAnimeTap: (_) => fail('Unexpected activation'),
-        onTabSelected: (_) => fail('Only focus should change'),
         onSignOut: () => fail('Unexpected logout'),
         onOpenLogs: () => fail('Unexpected logs'),
       ),
@@ -92,15 +91,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.getSize(rail).width, 264);
     final labels = <String?>[focusedControlLabel(tester)];
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 5; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.pumpAndSettle();
       labels.add(focusedControlLabel(tester));
     }
-    expect(labels, ['Главная', 'Избранное', 'Выйти из аккаунта', 'Открыть логи']);
+    expect(labels, ['Главная', 'Поиск', 'Избранное', 'Жанры', 'Выйти из аккаунта', 'Открыть логи']);
     expect(find.byKey(const ValueKey('catalog-refresh')), findsNothing);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-    await tester.pumpAndSettle();
     expect(focusedControlLabel(tester), 'Открыть логи');
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
@@ -110,13 +107,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('release rail skips logs and Back collapses it without leaving the catalog', (tester) async {
+  testWidgets('release rail skips logs and root Back keeps the catalog route active', (tester) async {
+    var rootBacks = 0;
     await pumpTvApp(
       tester,
-      CatalogScreen(
+      HomeScreen(
         onAnimeTap: (_) => fail('Unexpected activation'),
-        onTabSelected: (_) => fail('Unexpected navigation'),
         onSignOut: () => fail('Unexpected logout'),
+        onRootBack: () => rootBacks++,
       ),
       wrapInScaffold: false,
       overrides: [
@@ -126,7 +124,6 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    final card = FocusManager.instance.primaryFocus;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     for (var i = 0; i < 4; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -136,7 +133,7 @@ void main() {
     expect(find.byKey(const ValueKey('catalog-logs')), findsNothing);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus, same(card));
+    expect(rootBacks, 1);
     expect(find.byType(CatalogScreen), findsOneWidget);
   });
 
@@ -312,12 +309,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await pumpTvApp(
       tester,
-      CatalogScreen(
-        onAnimeTap: (_) => fail('Unexpected anime activation'),
-        onTabSelected: (_) => fail('Unexpected tab activation'),
-        onSignOut: () => fail('Unexpected logout'),
-        onOpenLogs: () => fail('Unexpected logs'),
-      ),
+      CatalogScreen(onAnimeTap: (_) => fail('Unexpected anime activation')),
       size: phoneSize,
       wrapInScaffold: false,
       overrides: [
