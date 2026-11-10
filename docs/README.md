@@ -40,9 +40,6 @@
 
 - [Согласованность доменных контрактов — revision 1](plans/domain-contract-consistency-2026-10-24.md).
 - [Полный редизайн приложения по прототипу — revision 3](plans/prototype-app-redesign-2026-10-22.md).
-- [Карточки, поиск, вход и управление TV/mobile по 15 intent — revision 2](plans/ui-intents-polish-2026-10-23.md).
-- [Карточки, серии и управление плеером — revision 1](plans/ui-player-intents-2026-10-19.md).
-- [Идентификаторы приложения и запуск iOS — revision 6](plans/app-identifiers-and-ios-launch.md).
 
 ## Предложения для выбора
 
@@ -51,7 +48,6 @@
 ## Задачи реализации
 
 - [Полный редизайн приложения по прототипу — эпик и 18 задач](tasks/epic_prototype-app-redesign-2026-10-22.md).
-- [Карточки, серии и управление плеером — эпик и шесть задач](tasks/epic_ui-player-intents-2026-10-19.md).
 
 ## Пакеты
 
