@@ -17,7 +17,6 @@ Intent описывает причину и желаемый результат 
 - [Скрыть гостевую кнопку входа для добавления в избранное](hide-guest-favorite-login-button.md).
 - [Описание аниме и фильтры без дублей — как в прототипе](anime-description-and-filters-like-prototype.md).
 - [Счётчик «В списке: N» рядом с заголовком «Серии»](anime-card-episode-label-like-prototype.md).
-- [Новые идентификаторы приложения и запуск на iOS](app-identifiers-and-ios-launch.md).
 - [Аватар профиля в левом меню с инициалами при отсутствии картинки](sidebar-profile-avatar-with-initials-fallback.md).
 - [Качество разработки с ИИ: линтеры, тесты и DCM Free](ai-development-quality.md).
 - [Рефакторинг приложения, UI Kit и тестового tooling](refactoring-ui-kit-and-test-tooling.md) — полный аудит, удаление Inter, общие UI-компоненты, выборочные тесты и краткие отчёты для ИИ.
