@@ -33,6 +33,10 @@ common gates, including commands requested by reviewers. Live tests require
 explicit scope. Do not replace missing Flutter/APK with Python
 fixtures. Parent checks commands against project rules before accepting evidence.
 
+При изменении общего состояния каталога и избранного координатор включает в
+проверки среза существующие widget-тесты затронутой навигации, переключения
+вкладок и pull-to-refresh. TestWriter или Generalist запускает их вместе с
+целевой регрессией, как только изменение можно проверить, до полного `check`.
 
 Diagnostic constraints: do not increase sleeps, timeouts or D-pad presses without evidence. A widget test cannot prove native IME behavior; fixture success cannot prove live behavior.
 
@@ -42,6 +46,11 @@ Diagnostic constraints: do not increase sleeps, timeouts or D-pad presses withou
 работы и назначает их TestWriter или Generalist. Исполнитель проверяет PNG и
 diff, обновляет только затронутые эталоны выборочной командой
 `test:goldens:update` и повторяет сравнение.
+
+Если задача затрагивает полупрозрачный элемент, до обновления эталона проверьте
+на пробном снимке, что контур элемента различим и через него виден фон.
+Используйте стабильное тестовое изображение с подходящей яркостью и текстурой.
+Проверьте каждый затронутый профиль TV и mobile.
 
 Если Judge обнаружил ожидаемое расхождение в рамках задачи, координатор
 возвращает эталоны владельцу тестов и повторяет итоговую проверку после записи.

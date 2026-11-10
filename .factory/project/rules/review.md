@@ -106,8 +106,10 @@ If a check changes selected feature source bytes, refresh the manifest and
 affected evidence before delivery.
 
 Live tests require explicit scope. Review golden updates against the expected
-behavior and affected paths of the current task. No automatic upgrades,
-generation, fixes, iOS/Pods, CI jobs, OpenAPI or l10n
+behavior and affected paths of the current task. When an updated golden covers a
+translucent element changed by the task, inspect the affected TV and mobile
+snapshots for a distinct outline and visible background detail through the element.
+No automatic upgrades, generation, fixes, iOS/Pods, CI jobs, OpenAPI or l10n
 checks are introduced here. Optional graph tooling is navigation/maintenance,
 not evidence that application behavior is correct.
 
