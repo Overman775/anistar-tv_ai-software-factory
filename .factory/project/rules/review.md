@@ -105,8 +105,9 @@ diagnosis or affected regressions; they do not replace required final checks.
 If a check changes selected feature source bytes, refresh the manifest and
 affected evidence before delivery.
 
-Live tests and golden baseline updates require explicit scope. No automatic
-upgrades, generation, fixes, iOS/Pods, CI jobs, OpenAPI or l10n
+Live tests require explicit scope. Review golden updates against the expected
+behavior and affected paths of the current task. No automatic upgrades,
+generation, fixes, iOS/Pods, CI jobs, OpenAPI or l10n
 checks are introduced here. Optional graph tooling is navigation/maintenance,
 not evidence that application behavior is correct.
 

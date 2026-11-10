@@ -12,5 +12,6 @@ Use `docs/README.md` and owning package READMEs for other affected contracts.
 Local verification commands come from `docs/melos_tooling.md`; version and Git
 policy comes from `docs/vcs_guidelines.md`. Planned checks use
 `fvm dart run melos run check`, fixture `test:e2e`, and
-`build:android:prod:apk` sequentially; live tests and golden updates require
-explicit scope. Planning itself does not execute these checks.
+`build:android:prod:apk` sequentially. Include affected goldens in the task scope
+when the expected behavior changes. Live tests require explicit scope. Planning
+itself does not execute these checks.

@@ -42,7 +42,7 @@ factory-meta-retro → session retrospective and factory improvements
 - Generate: `fvm dart run melos run generate`; Flutter/Gradle/codegen sequentially.
 - Checks: `check` → fixture `test:e2e` → `build:android:prod:apk` through `fvm dart run melos run`.
 - Tests in root `test/`; single: `fvm flutter test <file> --reporter=failures-only`.
-- Golden updates and live tests require explicit scope; report fresh results and blockers.
+- Update goldens affected by the current task within its authorized scope. Review PNG diffs and rerun comparison. Live tests require explicit scope. Report fresh results and blockers.
 
 ## Docs
 

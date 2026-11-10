@@ -253,7 +253,8 @@ ANISTAR_TEST_SEED=1337 fvm dart run melos run test:unit
 
 `test:unit` и `test:coverage` исключают тесты с тегом `golden`. Команда
 `test:goldens` сравнивает эталонные снимки. Обновляйте их командой
-`test:goldens:update` только в рамках явного запроса. После обновления просмотрите diff.
+`test:goldens:update` для сценариев, затронутых ожидаемым изменением текущей задачи.
+Выберите нужные тесты, просмотрите PNG и diff, затем запустите `test:goldens`.
 
 Для точечного теста без общего набора Melos используйте Flutter напрямую:
 

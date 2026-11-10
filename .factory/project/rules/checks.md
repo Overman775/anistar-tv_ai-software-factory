@@ -29,18 +29,25 @@ assignment when full project gates apply. No extra Generalist is required.
 Do not repeat full-project gates for each slice unless project policy requires it.
 Keep mandatory slice checks; assign run-wide gates explicitly to final integration.
 Serialize all Flutter/Gradle/codegen and
-common gates, including commands requested by reviewers. Live tests and golden
-updates require explicit scope. Do not replace missing Flutter/APK with Python
+common gates, including commands requested by reviewers. Live tests require
+explicit scope. Do not replace missing Flutter/APK with Python
 fixtures. Parent checks commands against project rules before accepting evidence.
 
 
 Diagnostic constraints: do not increase sleeps, timeouts or D-pad presses without evidence. A widget test cannot prove native IME behavior; fixture success cannot prove live behavior.
 
-При расхождении golden судья запрашивает `update-golden-baselines` только если
-в журнале `anistar-check` подтверждено, что требуется исключительно согласование
-эталонов. Вернуть `APPROVAL_REQUIRED` по общему контракту отчёта Implement. Если проверка выявила обычную ошибку или причина неоднозначна, действует
-обычная коррекция. Для каждого кандидата фиксируются путь и SHA-256 просмотренного
-PNG. Согласование может добавить точные пути из каталогов `test/**/goldens/`
-в область задачи. После явного согласования
-координатор применяет только согласованные PNG и вызывает `resume-approved`.
-Повторяются все обязательные проверки, затем независимое ревью.
+Владелец AniStar TV заранее разрешил добавлять и обновлять golden-эталоны,
+которые проверяют ожидаемое изменение в рамках текущей задачи. Для таких PNG
+отдельное согласование не требуется. Координатор включает точные пути в область
+работы и назначает их TestWriter или Generalist. Исполнитель проверяет PNG и
+diff, обновляет только затронутые эталоны выборочной командой
+`test:goldens:update` и повторяет сравнение.
+
+Если Judge обнаружил ожидаемое расхождение в рамках задачи, координатор
+возвращает эталоны владельцу тестов и повторяет итоговую проверку после записи.
+При дефекте или неясной причине сначала выясняют причину расхождения.
+Для расширения задачи на другие эталоны применяют отдельное согласование.
+Если `anistar-check` остановился только на таком расхождении, Judge может
+вернуть `APPROVAL_REQUIRED` с действием `update-golden-baselines`, точными
+путями и SHA-256 просмотренных PNG. После согласования координатор применяет
+эти PNG, вызывает `resume-approved` и повторяет обязательные проверки и ревью.
