@@ -1,0 +1,25 @@
+decisions:
+  - id: initial-developer-profile
+    type: choice
+    question: Which configured profile is preferred for the initial assignment given its requirements and constraints?
+    choices:
+      - value: junior-developer
+        description: Bounded low-risk local work with clear behavior, approach and reliable checks.
+      - value: middle-developer
+        description: Ordinary independent local work with clear requirements; default absent reason otherwise.
+      - value: senior-developer
+        description: Significant interactions, complex invariants or tradeoffs, or risk requiring senior capability.
+      - value: no-eligible-profile
+        description: All configured profiles are known to be incompatible with mandatory constraints.
+  - id: initial-test-writer-profile
+    type: choice
+    question: Which configured profile is preferred for the initial assignment given its requirements and constraints?
+    choices:
+      - value: junior-test-writer
+        description: Narrow checks with known expected behavior and testing approach.
+      - value: middle-test-writer
+        description: Independent selection of ordinary scenarios, boundaries and fixtures; default absent reason otherwise.
+      - value: senior-test-writer
+        description: Complex invariants, concurrency, significant negative scenarios or risk.
+      - value: no-eligible-profile
+        description: All configured profiles are known to be incompatible with mandatory constraints.

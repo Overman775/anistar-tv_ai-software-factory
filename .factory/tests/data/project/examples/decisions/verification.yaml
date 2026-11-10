@@ -1,0 +1,34 @@
+# Questions only. Answers belong in policy_decisions. Thresholds are illustrative.
+decisions:
+  - id: needs-e2e
+    type: predicate
+    question: Требуют ли изменения проверки сквозного пользовательского сценария?
+    min_confidence: 0.4
+    criteria:
+      "true": Изменён пользовательский сценарий или зависимость, влияющая на его выполнение.
+      "false": Свидетельства подтверждают отсутствие влияния на сквозные сценарии.
+  # Choice/score illustrate answer types; they do not select checks or roles.
+  - id: change-category
+    type: choice
+    question: Какова основная цель изменения?
+    min_confidence: 0.6
+    choices:
+      - value: fix
+        description: Восстановление ранее ожидаемого поведения.
+      - value: feature
+        description: Добавление нового поведения.
+      # Рекомендуется добавлять other в каждый Choice, чтобы модель могла не выбирать неподходящий вариант.
+      # Исключение — заведомо полный набор вариантов; other не означает «не знаю».
+      - value: other
+        description: Изменение не относится ни к исправлению, ни к новой функции.
+  - id: issue-severity
+    type: score
+    question: Как неисправность влияет на выполнение пользовательской задачи?
+    min_confidence: 0.6
+    levels:
+      - label: cosmetic
+        description: Внешний дефект без потери функциональности.
+      - label: workaround
+        description: Функция нарушена, но задачу можно выполнить обходным путём.
+      - label: blocked
+        description: Задачу нельзя выполнить, обходного пути нет.

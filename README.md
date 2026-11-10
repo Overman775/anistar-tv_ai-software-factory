@@ -31,8 +31,8 @@
 
 ## 🚀 Установка проекта
 
-**Через скилл:** попросите агента «Через `factory-install` установи или обнови окружение проекта».
-[Factory Install](.agents/skills/factory-install/SKILL.md) проверит окружение, покажет список изменений и дождётся вашего согласия.
+Для подготовки приложения используйте [AniStar Install](.agents/skills/anistar-install/SKILL.md).
+Установка и диагностика самой фабрики описаны в [Factory Install](.factory/skills/factory-install/SKILL.md).
 
 **Вручную:** нужны Git, Bash, FVM, Python 3.10+, JDK 17 и настроенный Android SDK. Команды из корня проекта:
 
@@ -51,7 +51,7 @@ fvm dart run melos run env:prepare
 fvm dart run melos run run:dev
 ```
 
-Для Android подключите устройство или эмулятор. Для iPhone Simulator используйте macOS с Xcode и выберите dev/prod конфигурацию VS Code. `env:prepare` проверяет `env/dev.json` и создаёт отсутствующий `env/prod.json` из шаблона, не перезаписывая существующий файл. Подробности находятся в [Melos tooling](docs/melos_tooling.md). [Настройка Android SDK](.agents/skills/factory-install/references/android.md), [Windows](.agents/skills/factory-install/references/windows.md), [Linux](.agents/skills/factory-install/references/linux.md).
+Для Android подключите устройство или эмулятор. Для iPhone Simulator используйте macOS с Xcode и выберите dev/prod конфигурацию VS Code. `env:prepare` проверяет `env/dev.json` и создаёт отсутствующий `env/prod.json` из шаблона, не перезаписывая существующий файл. Подробности находятся в [Melos tooling](docs/melos_tooling.md). [Требования к окружению](.agents/skills/anistar-install/references/project-environment.md).
 
 ## 📚 Документация
 

@@ -1,0 +1,295 @@
+{
+  "sources": {
+    "request": {
+      "text": "Example only: add a playback preference. Save it, restore it and apply it to playback; verify UI-to-storage-to-playback behavior. Do not change authentication or network trust.",
+      "acceptance": [
+        {
+          "id": "AC-01",
+          "applies_to": "global",
+          "requirement": "Preference is applied to playback",
+          "verification": "Verify UI-to-playback behavior"
+        },
+        {
+          "id": "AC-02",
+          "applies_to": "global",
+          "requirement": "Preference survives restart",
+          "verification": "Save, restart and restore"
+        }
+      ]
+    }
+  },
+  "agents": {
+    "developer": {
+      "role": "developer",
+      "profile": "middle-developer"
+    },
+    "tests": {
+      "role": "test-writer",
+      "profile": "middle-test-writer-zcode"
+    },
+    "reviewer": {
+      "role": "judge",
+      "profile": "judge"
+    }
+  },
+  "tasks": {
+    "preference": {
+      "slice": "save-and-apply-preference",
+      "source": "request",
+      "outcome": "A preference persists and controls playback consistently",
+      "reason": "Crosses UI, persistence and playback lifecycle; independent tests/review required",
+      "risk": "high",
+      "kind": "feature",
+      "independent_review": true,
+      "scope": [
+        "lib/example_preference.dart",
+        "test/example_preference_test.dart",
+        "docs/example_preference.md"
+      ],
+      "depends_on": [],
+      "acceptance_ids": [
+        "AC-01",
+        "AC-02"
+      ],
+      "required_checks": [
+        {
+          "id": "behavior",
+          "category": "acceptance",
+          "criteria": [
+            "AC-01",
+            "AC-02"
+          ],
+          "method": "Direct behavior regression for the declared criteria",
+          "kind": "tests",
+          "execution": {
+            "argv": [
+              "flutter",
+              "test",
+              "test/REPLACE_WITH_ACTUAL_TEST.dart"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 600
+          }
+        },
+        {
+          "id": "anistar-analyze",
+          "kind": "static",
+          "method": "AniStar required analyze",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "analyze"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-dcm",
+          "kind": "static",
+          "method": "AniStar required dcm",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "dcm"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-format-check",
+          "kind": "static",
+          "method": "AniStar required format:check",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "format:check"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-check",
+          "kind": "tests",
+          "method": "AniStar required check",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "check"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-test-e2e",
+          "kind": "tests",
+          "method": "AniStar required test:e2e",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "test:e2e"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-build-android-prod-apk",
+          "kind": "build",
+          "method": "AniStar required build:android:prod:apk",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "build:android:prod:apk"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        }
+      ],
+      "policy_decisions": {
+        "dart-changes": {
+          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
+          "probability": 0.9,
+          "source": "agent:coordinator (illustrative estimate)"
+        },
+        "application-changes": {
+          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
+          "probability": 0.9,
+          "source": "agent:coordinator (illustrative estimate)"
+        }
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "implement",
+      "task": "preference",
+      "stage": "work",
+      "agent": "developer",
+      "depends_on": [],
+      "owns": [
+        "lib/example_preference.dart",
+        "docs/example_preference.md"
+      ],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "write-tests",
+      "task": "preference",
+      "stage": "work",
+      "agent": "tests",
+      "depends_on": [
+        "implement"
+      ],
+      "owns": [
+        "test/example_preference_test.dart"
+      ],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "verify",
+      "task": "preference",
+      "stage": "verify",
+      "agent": "reviewer",
+      "depends_on": [
+        "write-tests"
+      ],
+      "owns": [],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "review",
+      "task": "preference",
+      "stage": "review",
+      "agent": "reviewer",
+      "depends_on": [
+        "verify"
+      ],
+      "owns": [],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "accept",
+      "task": "preference",
+      "stage": "accept",
+      "agent": null,
+      "depends_on": [
+        "review"
+      ],
+      "owns": [],
+      "resources": []
+    }
+  ]
+}

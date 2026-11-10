@@ -1,0 +1,31 @@
+# Developer / TestWriter / Generalist: implement.work
+# Paths/cwd/inputs refer to the application root, not this directory.
+gates:
+  - id: implementation-ready
+    at: [implement.work]
+    checks:
+      - id: api-lint
+        level: slice
+        kind: static
+        method: Проверить стиль и статические ошибки API.
+        for:
+          paths_any: ["services/api/**"]
+        execution:
+          argv: [python3, -m, ruff, check, .]
+          cwd: services/api
+          timeout_seconds: 120
+          inputs: [services/api/pyproject.toml]
+        after: []
+
+      - id: api-tests
+        level: slice
+        kind: tests
+        method: Выполнить тесты API после статических проверок.
+        for:
+          paths_any: ["services/api/**"]
+        execution:
+          argv: [python3, -m, pytest, tests]
+          cwd: services/api
+          timeout_seconds: 600
+          inputs: [services/api/pyproject.toml]
+        after: [api-lint]

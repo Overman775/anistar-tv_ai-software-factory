@@ -1,0 +1,17 @@
+Caveman
+Copyright 2026 Julius Brussee
+
+Adapted text from skills/ultracave/SKILL.md.
+Source: https://github.com/JuliusBrussee/caveman
+Commit: 9b68f7ed12b05e7efaff18e65c5a3fc2849fd0a4
+Changes: renamed Ultra as Telegraphic; activation and persistence omitted;
+factory routing, uncertainty, permissions and artifact boundaries take precedence;
+Floor condensed; six Rules and Pre-send check retained; introductory tone adapted.
+Modified file: .factory/contracts/common/communication.md.
+
+Before Caveman 3.0.0, the parts of this repository outside the Engine-linked
+runtime were licensed under the MIT License (see upstream LICENSING.md).
+Contributions made to those parts before 3.0.0 were received under the MIT License
+and remain available under it. Its copyright and permission notice is retained
+in LICENSE-MIT. The Apache License is provided in LICENSE.
+Only the Ultra skill text is adapted here; runtime components are not bundled.

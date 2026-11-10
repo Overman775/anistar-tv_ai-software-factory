@@ -1,0 +1,15 @@
+# Command script, cwd and inputs are relative to the application root.
+# {python} is the same interpreter as the common validator. Artifacts arrive on stdin.
+gates:
+  - id: example-decomposition-ready
+    at: [decompose.complete]
+    checks:
+      - id: example-task-outcomes
+        level: slice
+        kind: static
+        method: Example outcome check; customize for project requirements.
+        execution:
+          argv: ['{python}', .factory/project/examples/gates/skills/decompose/check.py]
+          cwd: .
+          timeout_seconds: 30
+          inputs: [.factory/project/examples/gates/skills/decompose/check.py]

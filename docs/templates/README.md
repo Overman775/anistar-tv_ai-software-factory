@@ -23,7 +23,7 @@ Intent может содержать нерешённые вопросы. Спе
 одних и тех же правил между документами.
 
 Фабричные задачи оформляются по отдельному
-[шаблону Factory Decompose](../../.agents/skills/factory-decompose/references/task-template.md).
+[шаблону Factory Decompose](../../.factory/skills/factory-decompose/references/task-template.md).
 
 Общая навигация: [документация проекта](../README.md).
 

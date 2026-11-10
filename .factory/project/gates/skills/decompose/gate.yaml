@@ -1,0 +1,15 @@
+# Command script, cwd and inputs are relative to the application root.
+# {python} is the same interpreter as the common validator. Artifacts arrive on stdin.
+gates:
+  - id: anistar-decomposition-ready
+    at: [decompose.complete]
+    checks:
+      - id: anistar-task-metadata
+        level: slice
+        kind: static
+        method: Check AniStar task layers and the existing 16-hour estimate limit.
+        execution:
+          argv: ['{python}', .factory/project/gates/skills/decompose/check.py]
+          cwd: .
+          timeout_seconds: 30
+          inputs: [.factory/project/gates/skills/decompose/check.py]

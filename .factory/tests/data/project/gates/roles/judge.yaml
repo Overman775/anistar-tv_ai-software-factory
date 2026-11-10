@@ -1,0 +1,65 @@
+# Final verification: implement.verify
+# Paths/cwd/inputs refer to the application root, not this directory.
+gates:
+  - id: verification-ready
+    at: [implement.verify]
+    checks:
+      - id: anistar-check
+        level: final
+        decision: application-changes
+        kind: tests
+        method: AniStar required check
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - check
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after: []
+      - id: anistar-test-e2e
+        level: final
+        decision: application-changes
+        kind: tests
+        method: AniStar required test:e2e
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - test:e2e
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after:
+          - anistar-check
+      - id: anistar-build-android-prod-apk
+        level: final
+        decision: application-changes
+        kind: build
+        method: AniStar required build:android:prod:apk
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - build:android:prod:apk
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after:
+          - anistar-test-e2e

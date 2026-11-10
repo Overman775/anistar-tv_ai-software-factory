@@ -1,0 +1,65 @@
+# Developer / TestWriter / Generalist: implement.work
+# Paths/cwd/inputs refer to the application root, not this directory.
+gates:
+  - id: implementation-ready
+    at: [implement.work]
+    checks:
+      - id: anistar-analyze
+        level: slice
+        decision: dart-changes
+        kind: static
+        method: AniStar required analyze
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - analyze
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after: []
+      - id: anistar-dcm
+        level: slice
+        decision: dart-changes
+        kind: static
+        method: AniStar required dcm
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - dcm
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after:
+          - anistar-analyze
+      - id: anistar-format-check
+        level: slice
+        decision: dart-changes
+        kind: static
+        method: AniStar required format:check
+        execution:
+          argv:
+            - fvm
+            - dart
+            - run
+            - melos
+            - run
+            - format:check
+          cwd: .
+          timeout_seconds: 3600
+          inputs:
+            - pubspec.yaml
+            - pubspec.lock
+        after:
+          - anistar-dcm

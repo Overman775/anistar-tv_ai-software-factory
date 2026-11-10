@@ -1,0 +1,50 @@
+# Final verification: implement.verify
+# Paths/cwd/inputs refer to the application root, not this directory.
+gates:
+  - id: verification-ready
+    at: [implement.verify]
+    checks:
+      - id: web-tests
+        level: final
+        kind: tests
+        method: Выполнить тесты frontend в однократном режиме.
+        for:
+          paths_any: ["apps/web/**"]
+        execution:
+          argv: [npm, run, "test:ci"]   # Скрипт должен существовать в package.json.
+          cwd: apps/web
+          timeout_seconds: 600
+          inputs: [apps/web/package.json, apps/web/package-lock.json]
+
+      - id: web-build
+        level: final
+        kind: build
+        method: Собрать frontend после успешных тестов.
+        for:
+          paths_any: ["apps/web/**"]
+        execution:
+          argv: [npm, run, build]
+          cwd: apps/web
+          timeout_seconds: 900
+          inputs: [apps/web/package.json, apps/web/package-lock.json]
+        after: [web-tests]
+
+      - id: end-to-end
+        level: final
+        decision: needs-e2e
+        kind: tests
+        method: Проверить сквозные сценарии в подготовленном тестовом окружении.
+        execution:
+          argv: [npm, run, "test:e2e"]
+          cwd: .
+          timeout_seconds: 1800
+          inputs: [package.json, package-lock.json]
+
+      # Observation не имеет execution и не выполняется Python как команда.
+      # Требует содержательного evidence от ответственного исполнителя.
+      - id: api-compatibility
+        level: final
+        kind: observation
+        method: Сопоставить изменения API с контрактом; указать совместимость и свидетельства.
+        for:
+          paths_any: ["services/api/**"]

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factory Install"
+  short_description: "Install, configure and verify the factory itself"
+  default_prompt: "Use $factory-install: inspect the factory bundle and agent environment, configure the factory and selected dependencies within the authorized scope, then verify the result. Do not install the application environment."

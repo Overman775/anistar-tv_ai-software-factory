@@ -1,0 +1,248 @@
+{
+  "sources": {
+    "request": {
+      "text": "Correct the specified label; preserve behavior.",
+      "acceptance": [
+        {
+          "id": "AC-01",
+          "applies_to": "global",
+          "requirement": "Specified label is shown without behavior change",
+          "verification": "Check the label and unchanged action"
+        }
+      ]
+    }
+  },
+  "agents": {
+    "author": {
+      "role": "generalist",
+      "profile": "generalist"
+    }
+  },
+  "tasks": {
+    "label": {
+      "slice": "ui-copy",
+      "source": "request",
+      "outcome": "Specified label is shown",
+      "reason": "Local copy-only change with direct oracle",
+      "risk": "low",
+      "kind": "fix",
+      "independent_review": false,
+      "scope": [
+        "lib/example.dart"
+      ],
+      "depends_on": [],
+      "acceptance_ids": [
+        "AC-01"
+      ],
+      "required_checks": [
+        {
+          "id": "behavior",
+          "category": "acceptance",
+          "criteria": [
+            "AC-01"
+          ],
+          "method": "Direct behavior regression for the declared criteria",
+          "kind": "tests",
+          "execution": {
+            "argv": [
+              "flutter",
+              "test",
+              "test/REPLACE_WITH_ACTUAL_TEST.dart"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 600
+          }
+        },
+        {
+          "id": "anistar-analyze",
+          "kind": "static",
+          "method": "AniStar required analyze",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "analyze"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-dcm",
+          "kind": "static",
+          "method": "AniStar required dcm",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "dcm"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-format-check",
+          "kind": "static",
+          "method": "AniStar required format:check",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "format:check"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-check",
+          "kind": "tests",
+          "method": "AniStar required check",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "check"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-test-e2e",
+          "kind": "tests",
+          "method": "AniStar required test:e2e",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "test:e2e"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        },
+        {
+          "id": "anistar-build-android-prod-apk",
+          "kind": "build",
+          "method": "AniStar required build:android:prod:apk",
+          "execution": {
+            "argv": [
+              "fvm",
+              "dart",
+              "run",
+              "melos",
+              "run",
+              "build:android:prod:apk"
+            ],
+            "cwd": ".",
+            "timeout_seconds": 3600,
+            "inputs": [
+              "pubspec.yaml",
+              "pubspec.lock"
+            ]
+          },
+          "category": "project",
+          "criteria": []
+        }
+      ],
+      "policy_decisions": {
+        "dart-changes": {
+          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
+          "probability": 0.9,
+          "source": "agent:coordinator (illustrative estimate)"
+        },
+        "application-changes": {
+          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
+          "probability": 0.9,
+          "source": "agent:coordinator (illustrative estimate)"
+        }
+      }
+    }
+  },
+  "nodes": [
+    {
+      "id": "write-label",
+      "task": "label",
+      "stage": "work",
+      "agent": "author",
+      "depends_on": [],
+      "owns": [
+        "lib/example.dart"
+      ],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "verify-label",
+      "task": "label",
+      "stage": "verify",
+      "agent": "author",
+      "depends_on": [
+        "write-label"
+      ],
+      "owns": [],
+      "resources": [
+        "project-checks"
+      ]
+    },
+    {
+      "id": "accept-label",
+      "task": "label",
+      "stage": "accept",
+      "agent": null,
+      "depends_on": [
+        "verify-label"
+      ],
+      "owns": [],
+      "resources": []
+    }
+  ]
+}

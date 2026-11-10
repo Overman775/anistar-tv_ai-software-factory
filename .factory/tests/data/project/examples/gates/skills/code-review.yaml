@@ -1,0 +1,43 @@
+# Judge review + standalone Code Review
+# Paths/cwd/inputs refer to the application root, not this directory.
+gates:
+  # 5. Критерии гейта ревью. Не подменяют общие gates и не запускают команды.
+  # lens: system-design, runtime-safety, verification-quality.
+  # for — только пути. Отсутствие for означает применимость ко всему scope.
+  # Проверка Review использует принятую политику baseline, не YAML кандидата.
+  - id: review-ready
+    at: [implement.review, code-review.complete]
+    # Judge: review_checks: [{id: PROJECT-API-CONTRACT, result: PASS, evidence: "пути/строки"}].
+    # NOT_APPLICABLE требует evidence + reason. Пропуск/NOT_RUN не открывает переход.
+    # Standalone Review сохраняет свой lens-протокол и вычисление verdict.
+    criteria:
+      - id: PROJECT-API-CONTRACT
+        lens: system-design
+        for:
+          paths_any: ["services/api/**", "docs/api.md"]
+        question: Согласованы ли API, потребители и изменения контракта?
+      - id: PROJECT-WEB-ERRORS
+        lens: runtime-safety
+        for:
+          path_regex: '^apps/web/.*\.(ts|tsx)$'
+        question: Проверены ли ошибки сети, пустые данные и восстановление интерфейса?
+      - id: PROJECT-TEST-EVIDENCE
+        lens: verification-quality
+        question: Доказывают ли проверки требуемое поведение, включая негативные сценарии?
+
+  # Отдельное обязательство команды для Review. Команда условная: адаптируйте проекту.
+  - id: review-api-tests
+    at: [code-review.complete]
+    checks:
+      - id: review-api-regression
+        level: slice
+        kind: tests
+        method: Проверка поведения API
+        for:
+          paths_any: ["services/api/**"]
+        execution:
+          argv: [python, -m, pytest, services/api/tests]
+          cwd: .
+          timeout_seconds: 600
+          inputs: []
+        after: []

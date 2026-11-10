@@ -33,15 +33,34 @@ class FreshWorktreeTest(unittest.TestCase):
                                               cwd=ROOT, capture_output=True, check=False))
         # No commits/staging: apply the candidate working bytes over the clean
         # baseline, including the newly shared ignore file and preparation code.
-        tracked = self.command(["git", "diff", "HEAD", "--name-only", "-z"]).stdout.split("\0")
+        tracked = self.command(["git", "diff", "HEAD", "--no-renames", "--name-only", "-z"]).stdout.split("\0")
         untracked = self.command(["git", "ls-files", "--others", "--exclude-standard", "-z"]).stdout.split("\0")
-        for relative in set(tracked + untracked) - {""}:
+        changed = sorted(set(tracked + untracked) - {""})
+        # A replaced directory may now resolve through a skill alias. Treat
+        # its old children as deletions and copy the alias itself separately.
+        nested_under_alias = {
+            relative for relative in changed
+            if any((ROOT / parent).is_symlink() for parent in Path(relative).parents)
+        }
+        for relative in changed:
             source, destination = ROOT / relative, worktree / relative
-            if source.is_file():
+            if relative in nested_under_alias or not (source.is_symlink() or source.is_file()):
+                destination.unlink(missing_ok=True)
+        for relative in changed:
+            if relative in nested_under_alias:
+                continue
+            source, destination = ROOT / relative, worktree / relative
+            if source.is_symlink():
                 destination.parent.mkdir(parents=True, exist_ok=True)
+                if destination.is_dir() and not destination.is_symlink():
+                    shutil.rmtree(destination)
+                else:
+                    destination.unlink(missing_ok=True)
+                destination.symlink_to(source.readlink())
+            elif source.is_file():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.unlink(missing_ok=True)
                 shutil.copy2(source, destination)
-            elif destination.exists():
-                destination.unlink()
         self.assertTrue((worktree / ".graphifyignore").is_file())
         self.assertFalse((worktree / "graphify-out/.graphify_python").exists())
         # The child --check runs the real suite, excluding only this integration
@@ -82,7 +101,10 @@ class FreshWorktreeTest(unittest.TestCase):
         self.assertIn("infrastructure/core/README.md", found)
         self.assertIn("docs/melos_tooling.md", found)
         self.assertIn("AGENTS.md", found)
-        self.assertIn(".agents/skills/factory-implement/SKILL.md", found)
+        self.assertIn(".factory/factory.yaml", found)
+        self.assertIn(".factory/project/project.yaml", found)
+        self.assertNotIn(".factory/skills/factory-implement/SKILL.md", found)
+        self.assertNotIn(".agents/skills/factory-implement/SKILL.md", found)
         self.assertTrue(any(p.startswith("test/") for p in found))
         self.assertFalse(any(p.startswith((".fvm/", "graphify-out/", "tool/e2e/media/", "coverage/", "ios/Pods/"))
                              or "/build/" in p for p in found))

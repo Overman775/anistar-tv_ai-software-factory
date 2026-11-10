@@ -1,0 +1,63 @@
+{
+  "gates": [
+    {
+      "id": "SYS-DATA",
+      "lens": "system-design",
+      "regex": "^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:data|api|repositories|repository|mapping|mapper|dto|models?)(?:/|_|\\.dart$)"
+    },
+    {
+      "id": "SYS-PLATFORM",
+      "lens": "system-design",
+      "regex": "^android/|^(?:(?:infrastructure/[^/]+|lib/packages/ui_kit)/)?pubspec\\.(?:yaml|lock)$|^(?:build\\.gradle(?:\\.kts)?|settings\\.gradle(?:\\.kts)?|libs\\.versions\\.toml|gradle\\.properties|flutter_native_splash\\.yaml)$|^tool/quality/verify_android_apk(?:_test)?\\.py$|^scripts/(?:flutter_app|e2e(?:-tv|-mobile|-all|_live)?)\\.sh$|^tool/e2e/|^(?:integration_test|tool/e2e)/README\\.md$|^docs/(?:melos_tooling|vcs_guidelines|adr/0006-android-direct-anistar)\\.md$"
+    },
+    {
+      "id": "SYS-CLIENT",
+      "lens": "system-design",
+      "regex": "^(?:infrastructure/(?:anistar|networking)|test/infrastructure/(?:anistar|networking)|test/mocks/(?:anistar|networking))/|^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:providers?|overrides|transport)(?:_|\\.dart$)|^(?:lib|test)/runner/|^(?:lib|test)/app/app_container(?:_test)?\\.dart$|^docs/adr/(?:0004-use-riverpod-for-app-di|0009-single-anistar-client-and-dio|0010-normalized-anistar-contract)\\.md$"
+    },
+    {
+      "id": "RUN-SESSION",
+      "lens": "runtime-safety",
+      "regex": "^(?:infrastructure/(?:networking|storage)|test/infrastructure/(?:networking|storage)|test/mocks/storage)/|^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:auth|session|cookie|cookies|mirror|mirrors|origin|storage)(?:/|_|\\.dart$)|^env/|^docs/(?:04_network_and_playback|specs/01_authentication|specs/05_mirrors|specs/07_watched_episodes)\\.md$"
+    },
+    {
+      "id": "RUN-PLAYER",
+      "lens": "runtime-safety",
+      "regex": "^(?:lib/packages/features|test/packages/features|test/mocks/features)/player/|^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:player|playback|hls)(?:/|_|\\.dart$)|^tool/e2e/media/|^docs/(?:04_network_and_playback|specs/04_playback)\\.md$"
+    },
+    {
+      "id": "VER-SDK",
+      "lens": "verification-quality",
+      "regex": "^(?:(?:infrastructure/[^/]+|lib/packages/ui_kit)/)?pubspec\\.(?:yaml|lock)$|^(?:\\.fvmrc|melos\\.yaml)$|^tool/(?:version/|quality/verify_sdk\\.dart$)|^scripts/(?:flutter_app|check|generate|e2e(?:-tv|-mobile|-all|_live)?)\\.sh$|^docs/(?:melos_tooling|vcs_guidelines)\\.md$"
+    },
+    {
+      "id": "RUN-ASYNC",
+      "lens": "runtime-safety",
+      "regex": "^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:bloc|cubit|providers?|controller|service|repositories|repository)(?:/|_|\\.dart$)"
+    },
+    {
+      "id": "RUN-UI",
+      "lens": "runtime-safety",
+      "regex": "^(?:lib/packages/ui_kit|test/packages/ui_kit|lib/app|test/app)/|^(?:lib/packages/features|test/packages/features)/[^/]+/(?:presentation|goldens)/|^(?:lib/packages/features|test/packages/features|test/mocks/features)/player/|^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:screen|widget|view|focus|motion|player)(?:_test)?\\.dart$|^integration_test/support/(?:remote_controls|mobile_controls)\\.dart$|^docs/(?:specs/(?:04_playback|06_tv_interaction|08_motion|10_mobile_interaction)|adr/0008-youtube-tv-interaction-reference)\\.md$"
+    },
+    {
+      "id": "VER-UI",
+      "lens": "verification-quality",
+      "regex": "^(?:lib/packages/ui_kit|test/packages/ui_kit|lib/app|test/app)/|^(?:lib/packages/features|test/packages/features)/[^/]+/(?:presentation|goldens)/|^(?:lib/packages/features|test/packages/features|test/mocks/features)/player/|^(?=(?:lib|infrastructure|test|integration_test)/)(?=.*\\.dart$).*(?:/|_)(?:screen|widget|view|focus|motion|player)(?:_test)?\\.dart$|^integration_test/support/(?:remote_controls|mobile_controls)\\.dart$|^docs/(?:specs/(?:04_playback|06_tv_interaction|08_motion|10_mobile_interaction)|adr/0008-youtube-tv-interaction-reference)\\.md$"
+    },
+    {
+      "id": "VER-PLATFORM",
+      "lens": "verification-quality",
+      "regex": "^android/|^(?:(?:infrastructure/[^/]+|lib/packages/ui_kit)/)?pubspec\\.(?:yaml|lock)$|^(?:build\\.gradle(?:\\.kts)?|settings\\.gradle(?:\\.kts)?|libs\\.versions\\.toml|gradle\\.properties|flutter_native_splash\\.yaml)$|^tool/quality/verify_android_apk(?:_test)?\\.py$|^scripts/(?:flutter_app|e2e(?:-tv|-mobile|-all|_live)?)\\.sh$|^tool/e2e/|^(?:integration_test|tool/e2e)/README\\.md$|^docs/(?:melos_tooling|vcs_guidelines|adr/0006-android-direct-anistar)\\.md$"
+    }
+  ],
+  "rule_ids": [
+    "BLOCK-CROSS-FEATURE-IMPORT",
+    "BLOCK-DYNAMIC",
+    "BLOCK-IGNORE",
+    "BLOCK-PRESENTATION-API",
+    "BLOCK-PRINT",
+    "BLOCK-REPOSITORY-CONTRACT",
+    "POLICY-UNFINISHED-IMPLEMENTATION"
+  ]
+}

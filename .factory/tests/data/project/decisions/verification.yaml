@@ -1,0 +1,13 @@
+# Initial, uncalibrated threshold: confidence = abs(2*p - 1); yes >= 0.7, no <= 0.3.
+# Questions only. Task-specific answers belong in policy_decisions.
+decisions:
+  - id: dart-changes
+    type: predicate
+    min_confidence: 0.4
+    question: Do assigned changes require the AniStar Dart/Flutter static checks? Include affected generated/code/toolchain
+      inputs; record evidence for false.
+  - id: application-changes
+    type: predicate
+    min_confidence: 0.4
+    question: Do these changes require full AniStar application completion (check, fixture E2E, production APK)? Record
+      evidence for false; focused tests alone cannot waive full gates.

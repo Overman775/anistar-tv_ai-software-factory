@@ -1,0 +1,223 @@
+# Идентификатор проекта.
+id: anistar-tv
+
+# Файлы гейтов относительно этого YAML; подключаются только перечисленные пути.
+gate_files:
+  - gates/skills/decompose/gate.yaml
+  - gates/roles/authors.yaml
+  - gates/roles/judge.yaml
+  - gates/skills/code-review.yaml
+
+# Файлы определений decisions; ответы хранятся в задаче или узле назначения.
+decision_files:
+  - decisions/verification.yaml
+  - decisions/routing.yaml
+
+# Каталог документов проекта; нужные документы подключаются через rules.
+documents:
+  architecture:
+    path: docs/01_architecture_principles.md
+    category: architecture
+  structure:
+    path: docs/02_project_structure.md
+    category: architecture
+  domain-glossary:
+    path: docs/01_01_domain_glossary.md
+    category: requirements
+  feature-responsibilities:
+    path: docs/01_02_feature_responsibilities.md
+    category: requirements
+  codestyle:
+    path: docs/03_codestyle_and_rules.md
+    category: development
+  testing:
+    path: docs/05_development_and_testing.md
+    category: testing
+  product:
+    path: PRODUCT.md
+    category: product
+  specifications:
+    path: docs/specs/README.md
+    category: requirements
+  decisions:
+    path: docs/adr/README.md
+    category: decisions
+  commands:
+    path: docs/melos_tooling.md
+    category: development
+  vcs:
+    path: docs/vcs_guidelines.md
+    category: development
+
+# Кому и когда передать материалы. Условия for — И; значения списка — ИЛИ.
+# Одинаковые условия объединены; порядок правил не задаёт приоритет норм.
+rules:
+  coordinator:
+    # Язык проектных результатов; без for — для всех процессов с профилем.
+    - id: language-coordinator
+      file: rules/language.md
+
+    - id: review-coordinator
+      for:
+        processes: [code-audit, code-review]
+      file: rules/review.md
+
+    - id: commands-coordinator
+      for:
+        processes: [planning, decompose, implement, code-review, pr]
+      file: rules/checks.md
+
+    - id: planning-context
+      for:
+        processes: [planning, decompose]
+      documents: [architecture, structure, product, specifications, decisions, commands, vcs]
+
+    - id: domain-context-coordinator
+      for:
+        processes: [planning, decompose, implement, code-audit, code-review]
+        paths_any: ["lib/**", "infrastructure/**", "test/**", "integration_test/**", "android/**", "ios/**",
+                    "docs/specs/**", "docs/adr/**", "docs/01_01_domain_glossary.md", "docs/01_02_feature_responsibilities.md",
+                    "PRODUCT.md"]
+      documents: [domain-glossary, feature-responsibilities]
+      usage: reference
+
+    - id: publication-context
+      for:
+        processes: [pr, implement, code-review]
+      documents: [commands, vcs]
+
+    - id: planning-routes
+      for:
+        processes: [planning]
+      file: rules/planning.md
+
+    - id: decomposition-coordinator
+      for:
+        processes: [decompose]
+      file: rules/decomposition.md
+
+  worker:
+    # То же правило получают все роли, включая планирование и ревью.
+    - id: language-worker
+      file: rules/language.md
+
+    - id: developer-reading
+      for:
+        roles: [developer, generalist]
+      file: rules/developer-reading.md
+
+    - id: test-writer-reading
+      for:
+        roles: [test-writer, generalist]
+      file: rules/test-writer-reading.md
+
+    - id: architect-reading
+      for:
+        roles: [architect]
+      file: rules/architect-reading.md
+
+    - id: code-explorer-reading
+      for:
+        roles: [code-explorer]
+      file: rules/code-explorer-reading.md
+
+    - id: doc-writer-reading
+      for:
+        roles: [doc-writer]
+      file: rules/doc-writer-reading.md
+
+    - id: bug-hunter-reading
+      for:
+        roles: [bug-hunter]
+      file: rules/bug-hunter-reading.md
+
+    - id: coding
+      for:
+        roles: [developer, generalist]
+      file: rules/coding.md
+
+    - id: exploration
+      for:
+        roles: [code-explorer]
+      file: rules/exploration.md
+
+    - id: documentation
+      for:
+        roles: [developer, generalist]
+        path_regex: \.md$
+      file: rules/documentation.md
+
+    - id: docwriter-conventions
+      for:
+        roles: [doc-writer]
+      file: rules/documentation.md
+
+    - id: review
+      for:
+        roles: [reviewer, judge]
+      file: rules/review.md
+
+    - id: commands-worker
+      for:
+        stages: [work, verify, review]
+        roles: [developer, test-writer, generalist, judge]
+      file: rules/checks.md
+
+    - id: document-architecture
+      for:
+        roles: [developer, generalist, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer]
+      documents: [architecture, structure]
+
+    - id: document-codestyle
+      for:
+        roles: [developer, generalist, reviewer, judge]
+      documents: [codestyle]
+
+    - id: document-testing
+      for:
+        roles: [test-writer, generalist, task-decomposer, task-reviewer, reviewer, judge, bug-hunter]
+      documents: [testing]
+
+    - id: document-product
+      for:
+        roles: [architect, task-decomposer, task-reviewer]
+      documents: [product]
+
+    - id: document-specifications
+      for:
+        roles: [architect, bug-hunter, code-explorer, developer, generalist, judge, reviewer, task-decomposer, task-reviewer,
+                test-writer]
+      documents: [specifications]
+
+    - id: domain-context-worker
+      for:
+        roles: [architect, bug-hunter, code-explorer, developer, doc-writer, generalist, judge, reviewer, task-decomposer,
+                task-reviewer, test-writer]
+        paths_any: ["lib/**", "infrastructure/**", "test/**", "integration_test/**", "android/**", "ios/**",
+                    "docs/specs/**", "docs/adr/**", "docs/01_01_domain_glossary.md", "docs/01_02_feature_responsibilities.md",
+                    "PRODUCT.md"]
+      documents: [domain-glossary, feature-responsibilities]
+      usage: reference
+
+    - id: document-decisions
+      for:
+        roles: [developer, generalist, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer, bug-hunter]
+      documents: [decisions]
+
+    - id: verification-context
+      for:
+        stages: [verify, review]
+        roles: [developer, test-writer, generalist, judge]
+        processes: [implement]
+      documents: [commands, testing]
+
+    - id: docs-index
+      for:
+        roles: [doc-writer]
+      project_file: docs/README.md
+      usage: reference
+
+    - id: decomposition-reading
+      for:
+        roles: [task-decomposer, task-reviewer]
+      file: rules/decomposition.md

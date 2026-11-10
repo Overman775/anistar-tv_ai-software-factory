@@ -42,8 +42,8 @@ class CorpusTest(unittest.TestCase):
     def test_shared_policy_excludes_outputs_but_keeps_maintained_corpus(self):
         included = {
             "lib/main.dart", "infrastructure/core/lib/result.dart", "test/unit_test.dart",
-            "docs/guide.md", "AGENTS.md", ".agents/skills/factory-implement/SKILL.md",
-            ".codex/agents/developer.md", ".claude/agents/developer.md",
+            "docs/guide.md", "AGENTS.md", ".factory/factory.yaml",
+            ".factory/project/project.yaml", ".factory/project/rules/checks.md",
             "scripts/check.py", "tool/client.ts", "env/prod.example.json",
         }
         excluded = {
@@ -57,6 +57,10 @@ class CorpusTest(unittest.TestCase):
             "tool/e2e/media/360/segment-00.ts", "assets/demo.json", "resources/binary.json",
             ".private/session.json", "env/prod.json", "env/device.local.json", "nested/key.properties",
             ".ai-pipeline/state/analysis.md", ".ai-pipeline/staging/result.json",
+            ".factory/roles/developer.md", ".factory/skills/factory-implement/SKILL.md",
+            ".factory/memory/state/workflow.json", ".factory/diagnostics/journal.json",
+            ".factory/.venv/example.py", ".agents/skills/factory-implement/SKILL.md",
+            ".claude/skills/factory-implement/SKILL.md",
             ".codex/skills/graphify/SKILL.md", ".agents/skills/impeccable/SKILL.md",
             ".claude/settings.local.json", "runtime.log", "capture.har", "test/failures/report.json",
         }

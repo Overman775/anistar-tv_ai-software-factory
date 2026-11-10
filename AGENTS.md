@@ -4,13 +4,18 @@ Flutter Android TV/mobile. CleanArch. Riverpod DI, BLoC, native HLS. FVM, Dart p
 
 ## Agents
 
-factory-install → project/toolchain scan, setup and update with consent (macOS, Windows, Linux)
+factory-install → factory setup, diagnosis and update
+anistar-install → AniStar application toolchain and environment
 anistar-flutter-update → SDK/dependencies
 impeccable → UI/UX
 graphify → architecture/flow
 
 factory-planning → factory-decompose → factory-implement
-factory-code-review / factory-code-simplify / factory-pr → focused workflows
+factory-code-review / factory-code-audit / factory-code-debt / factory-pr → focused workflows
+
+For factory execution, use [.factory/skills/factory-implement/SKILL.md](.factory/skills/factory-implement/SKILL.md).
+Read [.factory/factory.yaml](.factory/factory.yaml), its configured router and
+[.factory/workflow/orchestration.md](.factory/workflow/orchestration.md).
 factory-meta-retro → session retrospective and factory improvements
 
 ## BLOCK

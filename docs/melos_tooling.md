@@ -79,6 +79,16 @@ Melos использует `.fvm/flutter_sdk`. Переменная `ANISTAR_FLU
 вложенные Python-инструменты. Для прямого вызова скриптов настройте `PATH`
 самостоятельно.
 
+`test:tooling` и полный `check` запускают также тесты фабрики. Перед первым
+запуском подготовьте отдельное окружение фабрики на Python 3.11 или новее.
+
+```bash
+python3 -E -s -B .factory/tools/python_runtime.py setup --dev
+```
+
+Команда проверки использует готовое окружение и не устанавливает пакеты.
+Подробности в [руководстве по тулингу фабрики](../.factory/tools/README.md).
+
 Graphify-команды вызывают `python3 tool/graphify/prepare.py` напрямую; для них
 нужен Python 3.10+ в `PATH`. При `melos bootstrap --enforce-lockfile` проект вызывает
 подготовку Graphify в
