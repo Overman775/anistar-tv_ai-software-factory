@@ -9,6 +9,8 @@ gates:
         decision: application-changes
         kind: tests
         method: AniStar required check
+        approval_action: update-golden-baselines
+        approval_path_regex: 'test/(?:[^/]+/)*goldens/[^/]+[.]png'
         execution:
           argv:
             - fvm

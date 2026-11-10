@@ -37,6 +37,19 @@ For review, answer each selected project_policy.review_criteria in review_checks
 {id, result: PASS|NOT_APPLICABLE, evidence}; NOT_APPLICABLE also needs reason.
 Defects use existing findings and non-APPROVE verdicts; never hide them with N/A.
 
+## Verification awaiting approval
+
+On a verify node, use outcome `BLOCKED` and stage_result `APPROVAL_REQUIRED` only
+when the single failed check needs the approval action named in project rules.
+Include its real runner receipt in checks and add approval_request with action,
+execution_id, evidence and files. Files maps exact candidate paths to SHA-256
+digests of the inspected bytes. Include paths outside the current task only where
+the project check explicitly permits approval of those paths. Evidence identifies the candidate and
+explains why the failure requires only an external decision. Run the other
+required commands and keep their receipts current. Commands downstream of the
+failed check through declared dependencies wait until verification resumes. Send the request to the
+coordinator before applying any candidate. Ordinary failures follow correction.
+
 ## Dependency handoff
 
 Summarize consequential decisions and reasons, constraints, unverified behavior and

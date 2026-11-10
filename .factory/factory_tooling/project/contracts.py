@@ -38,6 +38,8 @@ ProjectCheck = TypedDict(
         "method": str,
         "execution": Execution,
         "after": list[str],
+        "approval_action": str,
+        "approval_path_regex": str,
     },
     total=False,
 )

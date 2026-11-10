@@ -37,17 +37,20 @@ risk-based checks. Preserve the skill's existing semantic and authorization boun
 
 For each ready node: recheck source, model/tools/permissions and host capacity;
 reserve with `claim`; deliver full role instructions and the current assignment;
-For native dispatch use `workflow.py prepare-packet NODE` and send its complete
-bootstrap to a generic agent in the same workspace. Spawn then `bind` the returned
-physical session; the worker reads all parts and waits for binding before work.
+For native dispatch use `workflow.py prepare-packet NODE --with-diagnostics`
+and send the complete `bootstrap` to a generic agent in the same workspace.
+Spawn then immediately `bind` the returned physical session. The worker reads
+all parts and confirms delivery after bind.
 Full `workflow.py packet NODE` output is an inline alternative. Adapter/profile
 capabilities are part of the assignment. Never create persistent role wrappers. Native tools come from the
 actual host; ACP uses `.factory/adapters/acpx.md` and its executable helper. Workers receive only configured worker_instructions, role/process/stage material and their assignment. Do not forward this coordinator skill or inherit the full parent conversation by default.
 Do not run multiple active turns in one session or duplicate an uncertain request.
 
 Parallel writers need nonoverlapping ownership. All shared build, generation
-and project checks share the serialized `project-checks` resource. Authoritative
-verification waits for every relevant writer. Update affected docs/specs before
+and project checks share the serialized `project-checks` resource. Before any
+`run-check` invocation, inspect the ledger and wait for every outstanding native
+packet confirmation, including other nodes. A ready check reservation alone
+does not clear this delivery gate. Authoritative verification waits for every relevant writer. Update affected docs/specs before
 final verification. Reuse the same suitable logical agent across related steps,
 with an explicit assignment/source handoff; reviewer sessions remain independent.
 

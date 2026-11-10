@@ -14,10 +14,10 @@
 4. Record concise result, actual profiles/models, original/final graph, changes
    of assignments and reasons, checks with file scope/hash, findings/retries,
    user decisions, outstanding work and measured usage (`null` if unknown).
-5. `workflow.py archive completed "<summary>"` saves a self-contained record in
-   `.factory/memory/history/<run-id>/run.json` and checks it before terminal state.
-   On failure retain state. This deliberately replaces the old parent-only
-   summary rule. Never archive credentials or full raw conversations by default.
+5. Save additional required evidence under the run's history directory. Then
+   `workflow.py archive completed "<summary>"` saves one verified
+   `.factory/memory/history/archive/YYYY-MM-DD_<run-id>.tar.gz` before terminal state.
+   On failure retain state. Never archive credentials or full raw conversations by default.
 6. Use [cleanup](shared-cleanup.md). Report history path and remaining temporary
    files if any. History stays until explicit deletion.
 7. Do not automatically stage, commit, push, publish, merge or release. These

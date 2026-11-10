@@ -1,14 +1,13 @@
 # Cleanup
 
-Permanent `.factory/memory/history/` and planning/decomposition `.factory/memory/staging/`
-are outside implementation cleanup. Keep active, blocked and unknown work.
+Keep active, blocked and unknown work. Preserve terminal archives and
+planning/decomposition `.factory/memory/staging/`.
 
-After actual worker termination, archive the completed/cancelled run, capture any
-required packet/read evidence, then invoke `workflow.py clean`. Do not delete a
-packet when its individual worker finishes: downstream work may need run state.
-The command requires verified history and removes its exact workflow.json and all
-registered helper artifacts after validating every cleanup path. It never recursively
-removes directories or deletes unregistered files.
+After actual worker termination, save additional required evidence in the run's
+history directory, archive the completed/cancelled run, then invoke `workflow.py clean`.
+Keep packets while downstream work may need them. Cleanup verifies the bundle
+and every removal path, then removes packed loose copies and its exact workflow.json.
+It removes directories only when empty.
 Reject symlinks, directories, traversal, foreign paths and ambiguous ownership.
 Unknown files remain. Do not delete application code, tests, docs, source tasks,
 approved plans, another skill's state or any history record.

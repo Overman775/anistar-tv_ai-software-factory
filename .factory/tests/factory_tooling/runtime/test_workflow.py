@@ -509,6 +509,25 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(unknown.exists())
         self.assertFalse(self.ledger.path.exists())
 
+    def test_archive_retry_after_interrupted_terminal_state_write(self) -> None:
+        run_id = self.init()["run_id"]
+        self.complete()
+        with (
+            patch(
+                "factory_tooling.runtime.workflow.atomic_json", side_effect=OSError("interrupted")
+            ),
+            self.assertRaisesRegex(OSError, "interrupted"),
+        ):
+            self.ledger.archive("completed", "done")
+        self.assertEqual("active", self.ledger.read()["status"])
+        folder = self.root / ".factory/memory/history/archive"
+        archives = list(folder.glob("*.tar.gz"))
+        self.assertEqual(1, len(archives))
+        self.assertEqual(archives[0].resolve(), Path(self.ledger.archive("completed", "done")))
+        self.ledger.clean()
+        self.assertEqual(archives, list(folder.glob("*.tar.gz")))
+        self.assertEqual("completed", read_task(self.root, "label", run_id=run_id)["run_status"])
+
     def test_memory_reads_task_from_the_requested_run_after_cleanup(self) -> None:
         archived_id = self.init()["run_id"]
         self.complete()

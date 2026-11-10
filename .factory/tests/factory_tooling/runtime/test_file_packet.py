@@ -4,9 +4,12 @@ import json
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from factory_tooling.runtime.memory import read_evidence
+from factory_tooling.runtime.run_archive import read_member
 from factory_tooling.runtime.workflow_core import Invalid, atomic_json
 from tests.factory_tooling.runtime import test_workflow
 
@@ -41,6 +44,11 @@ class FilePacketTests(unittest.TestCase):
         (self.f.root / "AGENTS.md").write_text("Ж🙂" * 12000)
         b = self.prepare()
         self.assertEqual(b, self.prepare())
+        diagnostics = self.f.ledger.prepare_packet("write-label", with_diagnostics=True)
+        last = diagnostics["diagnostics"]["chunks"]
+        self.assertGreater(last, 1)
+        self.f.ledger.read_packet("write-label", self.meta(b), last)
+        self.assertEqual(0, self.f.ledger.read()["nodes"]["write-label"]["packet_chunks_read"])
         parts = []
         ordinal = 1
         while ordinal is not None:
@@ -66,6 +74,8 @@ class FilePacketTests(unittest.TestCase):
         self.f.ledger.bind("write-label", "handle-author", model)
         self.assertEqual(b, self.prepare())
         self.f.ledger.read_packet("write-label", self.meta(b), 1)
+        self.f.ledger.confirm_packet("write-label", self.meta(b))
+        self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
 
     def test_rejects_bootstrap_digest_content_and_symlink_tampering(self) -> None:
         b = self.prepare()
@@ -192,16 +202,24 @@ class FilePacketTests(unittest.TestCase):
         profile = state["config"]["profiles"][state["nodes"]["write-label"]["profile"]]
         model = state["config"]["models"][profile["model"]]["id"] or "fixture-default"
         self.f.ledger.bind("write-label", "handle-author", model)
+        with self.assertRaisesRegex(Invalid, "Confirm native packet"):
+            self.f.ledger.finish("write-label", self.f.report("write-label"))
+        ordinal: int | None = 1
+        while ordinal is not None:
+            ordinal = self.f.ledger.read_packet("write-label", self.meta(b), ordinal)["next"]
+        self.f.ledger.confirm_packet("write-label", self.meta(b))
         self.f.ledger.finish("write-label", self.f.report("write-label"))
         self.f.start("verify-label")
         self.f.ledger.finish("verify-label", self.f.report("verify-label"))
         self.f.ledger.accept("accept-label")
         foreign = self.f.ledger.dir / "foreign.packet.json"
         foreign.write_text("preserve")
-        self.f.ledger.archive("completed", "done")
-        history = self.f.root / ".factory/memory/history" / b["run_id"] / "run.json"
+        history = Path(self.f.ledger.archive("completed", "done"))
+        self.assertRegex(history.name, rf"^\d{{4}}-\d{{2}}-\d{{2}}_{b['run_id']}\.tar\.gz$")
+        self.assertEqual(history.parent.name, "archive")
         self.assertEqual(
-            json.loads(history.read_text())["nodes"]["write-label"]["packet_file"], self.meta(b)
+            json.loads(read_member(history, "run.json"))["nodes"]["write-label"]["packet_file"],
+            self.meta(b),
         )
         self.f.ledger.clean()
         self.assertFalse((self.f.root / b["path"]).exists())
@@ -275,10 +293,10 @@ class PacketCleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "History"):
             self.f.ledger.clean()
         hist.write_text('{"status": "different"}')
-        with self.assertRaisesRegex(Invalid, "History"):
+        with self.assertRaisesRegex(Invalid, "Cannot verify archive"):
             self.f.ledger.clean()
-        hist.write_text("{invalid json")
-        with self.assertRaises(json.JSONDecodeError):
+        hist.write_bytes(original[:-4])
+        with self.assertRaisesRegex(Invalid, "Cannot verify archive"):
             self.f.ledger.clean()
         self.assertTrue(self.f.ledger.path.is_file())
         for b in (self.first, second):
@@ -292,21 +310,50 @@ class PacketCleanupTests(unittest.TestCase):
         unregistered = self.f.ledger.dir / f"{self.first['run_id']}-foreign.packet.json"
         unregistered.write_text("foreign")
         self.assertNotEqual(self.first["dispatch_id"], second["dispatch_id"])
+        bodies = [(self.f.root / b["path"]).read_bytes() for b in (self.first, second)]
         self.f.ledger.clean()
-        for b in (self.first, second):
+        for b, body in zip((self.first, second), bodies, strict=True):
             self.assertFalse((self.f.root / b["path"]).exists())
+            self.assertEqual(read_evidence(self.f.root, b["path"], run_id=b["run_id"]), body)
         self.assertFalse(self.f.ledger.path.exists())
         self.assertEqual(unregistered.read_text(), "foreign")
         self.assertTrue((self.f.root / history).is_file())
 
+    def test_legacy_terminal_migrates_packets_and_log_before_cleanup(self) -> None:
+        self.blocked()
+        state = self.f.ledger.read()
+        state["status"] = "cancelled"
+        state["summary"] = "legacy terminal"
+        run_id = state["run_id"]
+        legacy = self.f.root / ".factory/memory/history" / run_id / "run.json"
+        atomic_json(legacy, state)
+        atomic_json(self.f.ledger.path, state)
+        log = legacy.parent / "checks" / "legacy.log"
+        log.parent.mkdir()
+        log.write_text("legacy output")
+        packet = self.f.root / self.first["path"]
+        before = packet.read_bytes()
+        with self.assertRaisesRegex(Invalid, "Archive legacy terminal"):
+            self.f.ledger.clean()
+        self.assertTrue(packet.exists())
+        archive = Path(self.f.ledger.archive("cancelled", "legacy terminal"))
+        self.assertEqual(archive, Path(self.f.ledger.archive("cancelled", "legacy terminal")))
+        self.f.ledger.clean()
+        self.assertFalse(packet.exists())
+        self.assertFalse(log.exists())
+        self.assertEqual(before, read_evidence(self.f.root, self.first["path"], run_id=run_id))
+        self.assertEqual(
+            b"legacy output",
+            read_evidence(self.f.root, log.relative_to(self.f.root).as_posix(), run_id=run_id),
+        )
+
     def test_foreign_registered_path_rejected_before_any_deletion(self) -> None:
-        second, history = self.archived_with_retry()
+        second, _history = self.archived_with_retry()
         foreign = self.f.ledger.dir / "foreign.packet.json"
         foreign.write_text("preserve")
         state = self.f.ledger.read()
         state["transport_artifacts"].append(str(foreign.relative_to(self.f.ledger.root)))
         atomic_json(self.f.ledger.path, state)
-        atomic_json(history, state)
         with self.assertRaisesRegex(Invalid, "ownership"):
             self.f.ledger.clean()
         for b in (self.first, second):

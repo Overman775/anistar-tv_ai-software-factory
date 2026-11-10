@@ -54,7 +54,36 @@ def freeze_packet(root: Path, directory: Path, s: State, n: Node, v: Dispatch) -
         os.unlink(temp)
     v["packet_file"] = meta
     s.setdefault("transport_artifacts", []).append(rel)
+    s.setdefault("packet_hashes", {})[rel] = meta["sha256"]
     return meta
+
+
+def packet_chunks(data: bytes) -> list[str]:
+    chunks = []
+    start = 0
+    while start < len(data):
+        end = min(start + 12000, len(data))
+        while end < len(data) and data[end] & 0xC0 == 0x80:
+            end -= 1
+        chunks.append(data[start:end].decode("utf-8"))
+        start = end
+    return chunks
+
+
+def packet_diagnostics(data: bytes) -> dict[str, object]:
+    packet = json.loads(data)
+
+    def size(value: object) -> int:
+        return len(json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
+
+    sections = {key: size(value) for key, value in packet.items()}
+    instructions = {entry["path"]: size(entry) for entry in packet["instructions"]}
+    return {
+        "bytes": len(data),
+        "chunks": len(packet_chunks(data)),
+        "section_bytes": dict(sorted(sections.items(), key=lambda item: -item[1])),
+        "largest_instructions": dict(sorted(instructions.items(), key=lambda item: -item[1])[:5]),
+    }
 
 
 def read_packet_bytes(

@@ -28,6 +28,7 @@ from factory_tooling.project.profile_io import load_profile, parse_yaml
 from factory_tooling.project.profile_rules import boundary_gates as boundary_gates
 from factory_tooling.project.profile_rules import project_checks as project_checks
 from factory_tooling.runtime import acceptance as acceptance
+from factory_tooling.runtime import approval, run_archive
 from factory_tooling.runtime import escalation as escalation
 from factory_tooling.runtime import review_findings as review_findings
 from factory_tooling.runtime import transition_gates as transition_gates
@@ -44,7 +45,12 @@ from factory_tooling.runtime.contracts import Node as Node
 from factory_tooling.runtime.contracts import State as State
 from factory_tooling.runtime.contracts import Task as Task
 from factory_tooling.runtime.contracts import agent_key as agent_key
-from factory_tooling.runtime.packet_io import freeze_packet, read_packet_bytes
+from factory_tooling.runtime.packet_io import (
+    freeze_packet,
+    packet_chunks,
+    packet_diagnostics,
+    read_packet_bytes,
+)
 from factory_tooling.runtime.state_io import parse_state
 from factory_tooling.runtime.workflow_config import (
     check_capabilities as check_capabilities,
@@ -263,7 +269,7 @@ class Ledger:
             self.check_sources(s, task)
             return acceptance_guard(implement_packet, s, node_id)
 
-    def prepare_packet(self, node_id: str) -> dict[str, Any]:
+    def prepare_packet(self, node_id: str, *, with_diagnostics: bool = False) -> dict[str, Any]:
         """Freeze a native assignment and return its worker bootstrap."""
         with self.locked():
             s = self.read()
@@ -271,8 +277,13 @@ class Ledger:
             already_prepared = "packet_file" in v
             meta = freeze_packet(self.root, self.dir, s, n, v)
             if not already_prepared:
+                v["packet_chunks_read"] = 0
                 self.save(s, "packet_prepared", node=node_id, dispatch_id=v["dispatch_id"])
-            return self._packet_bootstrap(s, n, meta)
+            bootstrap = self._packet_bootstrap(s, n, meta)
+            if with_diagnostics:
+                data = read_packet_bytes(self.root, s, n, meta, meta)
+                return {"bootstrap": bootstrap, "diagnostics": packet_diagnostics(data)}
+            return bootstrap
 
     def packet_dispatch(
         self, s: State, node_id: str, *, runner: str = "native"
@@ -309,30 +320,28 @@ class Ledger:
             meta["dispatch_id"],
             meta["source_hash"],
             meta["revision"],
-            "--chunk",
-            "1",
         ]
         if platform.system() == "Windows":
             # PowerShell single quotes prevent shell interpolation of workspace paths.
             quote = lambda value: "'" + value.replace("'", "''") + "'"  # noqa: E731
-            command = "& " + " ".join(
-                map(
-                    quote,
-                    [
-                        ".\\.factory\\.venv\\Scripts\\python.exe",
-                        "-E",
-                        "-s",
-                        "-B",
-                        ".factory/tools/python_runtime.py",
-                        "run",
-                        *args,
-                    ],
-                )
-            )
+            prefix = [
+                ".\\.factory\\.venv\\Scripts\\python.exe",
+                "-E",
+                "-s",
+                "-B",
+                ".factory/tools/python_runtime.py",
+                "run",
+            ]
             shell = "PowerShell"
         else:
-            command = shlex.join(["sh", ".factory/tools/python.sh", *args])
+            quote = shlex.quote
+            prefix = ["sh", ".factory/tools/python.sh"]
             shell = "POSIX shell"
+        read_args = [*prefix, *args, "--chunk", "1"]
+        confirm_args = [*prefix, *args[:3], "confirm-packet", *args[4:]]
+        operator = "& " if shell == "PowerShell" else ""
+        command = operator + " ".join(map(quote, read_args))
+        confirm = operator + " ".join(map(quote, confirm_args))
         return {
             **meta,
             "workspace": str(self.root),
@@ -341,10 +350,12 @@ class Ledger:
             "stage": n["stage"],
             "read_command": command,
             "read_shell": shell,
+            "confirm_command": confirm,
             "instruction": (
                 "In read_shell, run read_command once per tool result. Follow next by changing --chunk; "
                 "do not combine outputs or truncate. Read all chunks in order; "
-                "wait for running bind before writes or assigned commands."
+                "wait for running bind before writes or assigned commands. "
+                "Run confirm_command after receiving the last chunk."
             ),
         }
 
@@ -357,16 +368,12 @@ class Ledger:
             if expected is None:
                 raise Invalid("Prepare packet first")
             data = read_packet_bytes(self.root, s, n, expected, bootstrap)
-            chunks = []
-            start = 0
-            while start < len(data):
-                end = min(start + 12000, len(data))
-                while end < len(data) and data[end] & 0xC0 == 0x80:
-                    end -= 1
-                chunks.append(data[start:end].decode("utf-8"))
-                start = end
+            chunks = packet_chunks(data)
             total = len(chunks)
             require(type(chunk) is int and 1 <= chunk <= total, "Invalid packet chunk")
+            if chunk == v.get("packet_chunks_read", 0) + 1:
+                v["packet_chunks_read"] = chunk
+                self.save(s, "packet_chunk_served", node=node_id, ordinal=chunk)
             return {
                 "ordinal": chunk,
                 "total": total,
@@ -376,6 +383,29 @@ class Ledger:
                 "ready_for_work": v["status"] == "running" and chunk == total,
                 "ready_condition": "Only after reading all chunks in order and a running bind.",
             }
+
+    def confirm_packet(self, node_id: str, bootstrap: dict[str, str]) -> None:
+        with self.locked():
+            s = self.read()
+            n, dispatch = self.packet_dispatch(s, node_id)
+            expected = dispatch.get("packet_file")
+            if expected is None:
+                raise Invalid("Prepare packet first")
+            require(dispatch["status"] == "running", "Bind before confirming packet")
+            data = read_packet_bytes(self.root, s, n, expected, bootstrap)
+            require(
+                dispatch.get("packet_chunks_read") == len(packet_chunks(data)),
+                "Packet chunks must be served in order before confirmation",
+            )
+            if not dispatch.get("packet_confirmed"):
+                dispatch["packet_confirmed"] = True
+                self.save(
+                    s,
+                    "packet_confirmed",
+                    node=node_id,
+                    dispatch_id=expected["dispatch_id"],
+                    sha256=expected["sha256"],
+                )
 
     def claim(self, node_id: str) -> dict[str, object]:
         with self.locked():
@@ -499,6 +529,15 @@ class Ledger:
             nodes = validate_graph(s["graph"], s["config"], self.root)
             n, v = nodes[node_id], s["nodes"][node_id]
             require(v["status"] == "running", "Check needs a bound running node")
+            require(
+                not any(
+                    d["status"] in {"reserved", "running"}
+                    and "packet_chunks_read" in d
+                    and not d.get("packet_confirmed")
+                    for d in s["nodes"].values()
+                ),
+                "Wait for outstanding native packet delivery before running checks",
+            )
             require(
                 "project-checks" in n.get("resources", []),
                 "Check needs project-checks reservation",
@@ -701,6 +740,10 @@ class Ledger:
             outcome = report.get("outcome")
             require(outcome in {"PASS", "FAIL", "BLOCKED"}, "Invalid outcome")
             if outcome == "PASS":
+                require(
+                    "packet_chunks_read" not in v or v.get("packet_confirmed"),
+                    "Confirm native packet before finishing successful work",
+                )
                 check_config(s)
             acceptance_guard(review_findings.consistent, report, n["stage"] == "review")
             if self.source_drifted(s, task, outcome):
@@ -800,6 +843,13 @@ class Ledger:
                         report.get("verdict") == "APPROVE",
                         "Missing independent APPROVE",
                     )
+            if report.get("stage_result") == "APPROVAL_REQUIRED" or "approval_request" in report:
+                require(
+                    isinstance(report.get("approval_request"), dict),
+                    "Invalid approval request",
+                )
+                approval.bind_request(self.root, s, n, task, report)
+                validate_graph(approval.expanded_graph(s, n, report), s["config"], self.root)
             acceptance_guard(review_findings.apply, s, n, report)
             if "implement." + n["stage"] in transition_gates.CORE_BOUNDARIES:
                 core_gate = transition_gates.stage_result(s, n, report)
@@ -1349,6 +1399,53 @@ class Ledger:
             )
             # Work is pending; dispatch still requires a separate claim and bind.
 
+    def resume_approved(self, node_id: str, request_id: str, evidence: str) -> None:
+        with self.locked():
+            state = self.read()
+            require(state["status"] == "active", "Run is not active")
+            check_config(state)
+            require(
+                not any(v["status"] in escalation.ACTIVE for v in state["nodes"].values()),
+                "Quiesce runtime before resuming approval",
+            )
+            nodes = validate_graph(state["graph"], state["config"], self.root)
+            node = nodes[node_id]
+            task = state["graph"]["tasks"][node["task"]]
+            self.check_sources(state, task)
+            acceptance_guard(escalation.guard, state, node["task"])
+            approval.validate_resume(self.root, state, node, task, request_id, evidence)
+            graph = approval.expanded_graph(state, node, state["nodes"][node_id]["report"])
+            added = sorted(set(graph["tasks"][node["task"]]["scope"]) - set(task["scope"]))
+            if added:
+                validate_graph(graph, state["config"], self.root)
+                state["config"] = freeze_project(state["config"], graph, self.root)
+                state["graph"] = graph
+                state["revision"] += 1
+            roots = {node_id} | {
+                key
+                for key, candidate in nodes.items()
+                if candidate["task"] == node["task"]
+                and candidate["stage"] in {"verify", "review"}
+                and state["nodes"][key]["status"] == "done"
+            }
+            affected = roots | {key for key in nodes if ancestors(nodes, key) & roots}
+            for key in sorted(affected):
+                old = state["nodes"][key]
+                if key != node_id and old["status"] == "blocked":
+                    continue  # This approval resolves only its own blocker.
+                state["events"].append(
+                    dict(at=time.time(), event="invalidated", node=key, previous=old)
+                )
+                state["nodes"][key] = dict(status="pending", attempt=old["attempt"])
+            self.save(
+                state,
+                "approval_resumed",
+                node=node_id,
+                request_id=request_id,
+                evidence=evidence,
+                added_scope=added,
+            )
+
     def accept(self, node_id: str) -> None:
         with self.locked():
             s = self.read()
@@ -1421,12 +1518,16 @@ class Ledger:
             )
             require(summary, "Final summary required")
             if s["status"] in {"completed", "cancelled"}:
-                hist = relative(self.root, f".factory/memory/history/{s['run_id']}/run.json")
                 require(
-                    s["status"] == outcome and s["summary"] == summary and read_json(hist) == s,
+                    s["status"] == outcome and s["summary"] == summary,
                     "Terminal history is immutable",
                 )
-                return str(hist)
+                if "archive_path" in s:
+                    run_archive.verified_cleanup_paths(self.root, s)
+                    return str(relative(self.root, s["archive_path"]))
+                hist = relative(self.root, f".factory/memory/history/{s['run_id']}/run.json")
+                require(read_json(hist) == s, "Terminal history is immutable")
+                return self._save_terminal_archive(s)
             require(
                 not any(
                     v["status"] in {"reserved", "running", "unknown"} for v in s["nodes"].values()
@@ -1471,36 +1572,29 @@ class Ledger:
                             task,
                             s["nodes"][n["id"]]["report"],
                         )
-            hist = relative(self.root, f".factory/memory/history/{s['run_id']}")
-            relative(self.root, f".factory/memory/history/{s['run_id']}/run.json")
             s["status"], s["summary"] = outcome, summary
-            # Same authoritative snapshot in history and state; cleanup is a separate action.
-            atomic_json(hist / "run.json", s)
-            require(read_json(hist / "run.json") == s, "History verification failed")
-            atomic_json(self.path, s)
-            log_event("archived", run_id=s["run_id"], outcome=outcome)
-            return str(hist / "run.json")
+            return self._save_terminal_archive(s)
+
+    def _save_terminal_archive(self, state: State) -> str:
+        path = run_archive.pack_run(self.root, state)
+        atomic_json(self.path, state)
+        log_event("archived", run_id=state["run_id"], outcome=state["status"])
+        return str(path)
 
     def clean(self) -> None:
         with self.locked():
             s = self.read()
             require(s["status"] in {"completed", "cancelled"}, "Keep resumable state")
-            hist = relative(self.root, f".factory/memory/history/{s['run_id']}/run.json")
-            require(
-                hist.is_file() and read_json(hist) == s,
-                "History must be saved before cleanup",
-            )
-            paths = []
-            for rel in set(s.get("transport_artifacts", [])):
-                p = relative(self.root, rel)
-                require(
-                    p.parent == self.dir and p.name.startswith(s["run_id"] + "-"),
-                    "Invalid cleanup ownership",
-                )
-                require(not p.is_symlink() and not p.is_dir(), "Unsafe cleanup entry")
-                paths.append(p)
-            for p in paths:
-                p.unlink(missing_ok=True)
+            require("archive_path" in s, "Archive legacy terminal run before cleanup")
+            paths = run_archive.verified_cleanup_paths(self.root, s)
+            for path in paths:
+                path.unlink(missing_ok=True)
+            # Remove empty run-owned history folders, preserving any late artifacts.
+            history = relative(self.root, f".factory/memory/history/{s['run_id']}")
+            parents = {p for path in paths for p in path.parents if p.is_relative_to(history)}
+            for parent in sorted(parents, key=lambda p: -len(p.parts)):
+                if parent.is_dir() and not any(parent.iterdir()):
+                    parent.rmdir()
             self.path.unlink()  # Owns only this literal manifest, never foreign artifacts.
 
 

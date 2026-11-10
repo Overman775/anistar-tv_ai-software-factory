@@ -1,8 +1,10 @@
 """Read task records from the active ledger or a terminal archive."""
 
+import json
 from pathlib import Path
 from typing import Any, TypedDict
 
+from factory_tooling.runtime import run_archive
 from factory_tooling.runtime.contracts import Dispatch
 from factory_tooling.runtime.review_findings import view
 from factory_tooling.runtime.state_io import parse_state
@@ -17,14 +19,32 @@ class TaskMemory(TypedDict):
     open_findings: dict[str, Any]
 
 
-def resolve_evidence(workspace: str | Path, path: str) -> Path:
-    """Resolve an archived memory reference without rewriting the archive or following links."""
+def _evidence_path(path: str) -> str:
     if path.startswith(".ai-pipeline/"):
         path = ".factory/memory/" + path[len(".ai-pipeline/") :]
     require(path.startswith(".factory/memory/"), "Expected a memory evidence path")
-    result = relative(Path(workspace).resolve(), path)
+    return path
+
+
+def resolve_evidence(workspace: str | Path, path: str) -> Path:
+    """Resolve an existing loose memory reference without following links."""
+    result = relative(Path(workspace).resolve(), _evidence_path(path))
     require(result.is_file(), f"Memory evidence not found: {path}")
     return result
+
+
+def read_evidence(workspace: str | Path, path: str, *, run_id: str | None = None) -> bytes:
+    """Read a loose reference or a member of the selected run archive."""
+    root = Path(workspace).resolve()
+    name = _evidence_path(path)
+    result = relative(root, name)
+    if run_id is not None:
+        archive = run_archive.find_archive(root, run_id)
+        if archive is not None:
+            return run_archive.read_member(archive, name)
+    if result.is_file():
+        return result.read_bytes()
+    raise Invalid(f"Memory evidence not found: {path}")
 
 
 def read_task(workspace: str | Path, task_id: str, *, run_id: str | None) -> TaskMemory:
@@ -43,7 +63,13 @@ def read_task(workspace: str | Path, task_id: str, *, run_id: str | None) -> Tas
         record_path = f".factory/memory/history/{run_id}/run.json"
 
     try:
-        state = parse_state(read_json(relative(root, record_path)))
+        archive = run_archive.find_archive(root, run_id) if run_id is not None else None
+        record = (
+            json.loads(run_archive.read_member(archive, "run.json"))
+            if archive is not None
+            else read_json(relative(root, record_path))
+        )
+        state = parse_state(record)
     except FileNotFoundError as exc:
         raise Invalid(f"Run not found: {record_path}") from exc
     except Invalid:

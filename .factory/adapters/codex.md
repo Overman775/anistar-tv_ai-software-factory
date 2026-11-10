@@ -40,11 +40,12 @@ physical session released host capacity. Preserve command handles until completi
 Read `.factory/factory.yaml`; resolve role → profile → adapter. The adapter entry
 owns harness, runner, connection and instructions; the profile owns role files,
 model, capabilities, MCP allowlist and enforcement. For native use a generic
-spawned agent, never assume a registered named role. For Implement, after claim use `workflow.py prepare-packet NODE` and send its
-complete short bootstrap, including `read_command`, to the native worker sharing
-this exact workspace. Spawn, then bind the returned actual handle/model. The worker
-reads every chunk before work and waits for running bind; do not wait for its work
-before binding. `workflow.py packet NODE` remains an inline alternative when its
+spawned agent, never assume a registered named role. For Implement, after claim
+use `workflow.py prepare-packet NODE --with-diagnostics`. Review the diagnostics
+and send the complete `bootstrap` to the native worker sharing this exact workspace.
+Spawn, then bind the returned actual handle/model immediately. The worker reads
+every chunk, observes the bind and confirms delivery. Wait for outstanding delivery
+confirmations before coordinator checks. `workflow.py packet NODE` remains an inline alternative when its
 full contents can be delivered. A filename or digest alone is not delivery.
 Planning/Decompose/Code Review use their owning skill’s `context.py` assignment
 route and staging; do not add Implement claim/ledger to those processes.

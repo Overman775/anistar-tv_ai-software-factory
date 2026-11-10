@@ -222,6 +222,7 @@ class Report(TypedDict, total=False):
     not_applicable: dict[str, str]
     verdict: str
     observed_source_drift: bool
+    approval_request: dict[str, Any]
     gate_results: list[GateResult]
     findings: list[dict[str, Any]]
     finding_updates: list[dict[str, Any]]
@@ -240,6 +241,8 @@ class Dispatch(TypedDict, total=False):
     report: Report
     prompt: dict[str, str]
     packet_file: dict[str, str]
+    packet_chunks_read: int
+    packet_confirmed: bool
     prompt_submitted: bool
     prompt_hash: str
     gate_result: GateResult
@@ -282,6 +285,8 @@ class State(TypedDict):
     executions: NotRequired[dict[str, ExecutionReceipt]]
     sessions: dict[str, dict[str, str]]
     transport_artifacts: NotRequired[list[str]]
+    packet_hashes: NotRequired[dict[str, str]]
+    archive_path: NotRequired[str]
     acp_created: NotRequired[dict[str, str]]
     epochs: NotRequired[dict[str, int]]
     retired_handles: NotRequired[list[str]]

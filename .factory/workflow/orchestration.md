@@ -170,11 +170,11 @@ decomposition staging. Before terminal cleanup, save a self-contained record in
 versions, final graph/assignments, change reasons, checks/revisions/findings/retries,
 unresolved work and measured usage (`null` if unknown). Separate observations
 from facts; exclude secrets and exhaustive transcripts. After all workers actually
-stop, archive the completed/cancelled run, capture any required packet/read evidence,
-then call `workflow.py clean`. It removes only registered run-owned transport files
-and the manifest; keep history and foreign files. Do not remove individual packets
-while the run may need them. Failed history writes and live or resumable runs block
-cleanup; report failures and remaining paths.
+stop, put any additional required evidence in the run's history directory, then
+archive the completed/cancelled run. Call `workflow.py clean` after the bundle
+is verified. It removes packed loose copies and the active manifest. Keep
+foreign files and the archive. Failed archive writes and live or resumable
+runs block cleanup; report failures and remaining paths.
 
 ## Final integration execution
 

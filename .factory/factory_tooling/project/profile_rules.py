@@ -223,7 +223,18 @@ def validate(profile: Any) -> ProjectData:
     for item in project_checks(profile):
         fields(
             item,
-            {"id", "for", "level", "decision", "kind", "method", "execution", "after"},
+            {
+                "id",
+                "for",
+                "level",
+                "decision",
+                "kind",
+                "method",
+                "execution",
+                "after",
+                "approval_action",
+                "approval_path_regex",
+            },
             "check",
         )
         require(
@@ -245,6 +256,22 @@ def validate(profile: Any) -> ProjectData:
         )
         if not (isinstance(item.get("method"), str) and item["method"].strip()):
             raise ValueError("Project policy: " + "check needs method")
+        if "approval_action" in item:
+            action = item["approval_action"]
+            require(
+                item["kind"] != "observation" and isinstance(action, str) and action.strip(),
+                "approval action needs a named command check",
+            )
+        if "approval_path_regex" in item:
+            pattern = item["approval_path_regex"]
+            require(
+                "approval_action" in item and isinstance(pattern, str) and pattern.strip(),
+                "approval paths require an action and a regular expression",
+            )
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError("Project policy: invalid approval path expression") from exc
         strings(item.get("after", []), "after", empty=True)
         require(
             set(item.get("after", [])) <= checks and item["id"] not in item.get("after", []),

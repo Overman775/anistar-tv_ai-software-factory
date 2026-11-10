@@ -93,17 +93,18 @@ packet inline or by the file route below; ACP persists it in its prompt.
 ```bash
 sh .factory/tools/python.sh .factory/tools/workflow.py accept accept-label
 sh .factory/tools/python.sh .factory/tools/workflow.py archive completed "Brief outcome"
-# Capture required packet and recipient-read evidence before cleanup.
 sh .factory/tools/python.sh .factory/tools/workflow.py clean
 ```
 
-Archive verifies all required nodes and final evidence, then atomically saves
-`.factory/memory/history/<run-id>/run.json`. After all workers stop and required
-packet/read evidence is captured, the coordinator calls `clean` for the whole
-completed/cancelled run. It removes the manifest and all exact registered helper
-artifacts, including current and retired native packets. Do not remove individual
-packets early; downstream tasks may need them. Unknown files and history remain;
-active, blocked and unknown work is not cleaned.
+Archive verifies terminal obligations and writes one
+`.factory/memory/history/archive/YYYY-MM-DD_<run-id>.tar.gz` (UTC date). It contains
+`run.json`, a digest manifest, all registered transport files, and evidence saved
+under the run's history directory. Put any external evidence needed for later
+review in that directory before archive. After archive, `clean` verifies the
+bundle and removes its exact loose copies and active ledger. For a legacy terminal
+ledger, call `archive` with the same outcome and summary to pack its loose history
+and transport before cleanup. Active, blocked
+and unknown work remains resumable. Keep individual packets until run cleanup.
 
 ## Repair, revision and recovery
 
@@ -268,9 +269,15 @@ and waits for running bind before writes or assigned commands. Each chunk is at 
 12,000 UTF-8 bytes of packet content, without splitting a character. Calls recheck
 identity, config, source and the complete file hash. Preparation is idempotent only
 for the registered unchanged file; conflicting files block. `ready_for_work` on the
-last chunk assumes all preceding chunks were read; it is not a delivery receipt.
-Record actual recipient reads and preserve the packet and output before cleanup when
-delivery evidence is needed. The file and hash alone do not prove recipient reading.
+last chunk describes binding and ordinal only. After receiving all chunks and
+running bind, the worker executes `confirm_command`. The ledger validates ordered
+serving and exact dispatch identity. This records the worker's confirmation.
+A file or receipt alone does not prove comprehension.
+
+Use `prepare-packet NODE --with-diagnostics` to get separate `bootstrap` and
+`diagnostics` objects. Send only `bootstrap` to the worker. Diagnostics report
+exact file bytes and chunk count, and standalone serialized sizes of sections
+and the largest instruction entries.
 Inline full-packet delivery remains available. These helpers do not spawn; ACP prepare
 similarly includes adapter and profile.
 No `.codex/agents/`, `.claude/agents/` or registration files are generated.
@@ -346,6 +353,11 @@ hash. The latest attempt of the check on that dispatch supersedes previous ones.
 Verify, accept and completed archival recheck required receipts. Repeated command
 execution is explicit, never an automatic failure retry; diagnose failures and use
 existing node retry budgets when correcting/recovering work.
+
+The runner rejects checks while any prepared native delivery is reserved or
+running without confirmation. Finish those deliveries before a synchronous check
+and start new deliveries after it. Wait outside the ledger lock and reconcile a
+failed or unknown delivery through normal recovery.
 
 The minimal runner is synchronous and holds the ledger lock for the whole command.
 Other state mutations wait operationally: they return `Ledger locked` and must be
@@ -458,6 +470,33 @@ For `replace-session`, a single-task agent accepts a plain handoff string.
 A multi-task agent requires a JSON object string mapping every assigned task ID
 to its own handoff; packets select only the current task's entry. Replacement
 itself remains bookkeeping, not backend termination or a budgeted correction.
+
+## Continue after an external approval
+
+A project check can declare `approval_action`. When independent verification
+finds that its only failed check needs an explicit decision, return `BLOCKED`
+with `stage_result: APPROVAL_REQUIRED` and `approval_request` containing
+`action`, `execution_id`, `evidence` and a `files` map of exact paths to candidate
+SHA-256 digests. A project check may set `approval_path_regex` to permit
+matching candidates outside the existing task scope. Keep the failed check receipt in `checks`. Describe
+the inspected candidate and why ordinary failures are absent in `evidence`.
+Every required command outside the failed check's dependency chain needs a
+current receipt. The ledger validates executed receipts even if the report
+omits them. Commands that depend on the failed check wait until resumption.
+The ledger binds the request to the run, dispatch, revision, source and file
+snapshot and returns its ID in `show`. The request includes original hashes of any
+proposed additions.
+
+The coordinator obtains explicit user approval of the candidate and records its
+evidence. Check the original hashes and apply the approved update through the project's
+scoped procedure.
+Then call `workflow.py resume-approved NODE REQUEST_ID APPROVAL_EVIDENCE`.
+The helper checks that the task scope matches the approved candidate and that
+the request is current. It adds only authorized candidate paths to the scope,
+revalidates the graph, consumes the request and reopens all completed verification
+and review for the task, along with their dependent nodes. Separate blockers and
+retry counters stay in place. A new claim and fresh checks and
+review are required. Use ordinary correction for test or code failures.
 
 ## Audit corrections: integration and source recovery
 

@@ -11,8 +11,11 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from factory_tooling.project.profile_io import load_profile
+from factory_tooling.project.profile_rules import required_checks
+from factory_tooling.runtime.memory import read_evidence
 from factory_tooling.runtime.workflow import Ledger
-from factory_tooling.runtime.workflow_core import Invalid, atomic_json
+from factory_tooling.runtime.workflow_core import Invalid, atomic_json, digest
 from tests.factory_tooling.runtime import test_workflow
 
 _TOOLS = Path(__file__).resolve().parents[3] / "tools"
@@ -171,9 +174,292 @@ class CheckRunnerTests(unittest.TestCase):
         self.assertEqual("real output\n", (f.root / result["evidence"]).read_text())
         f.ledger.finish("verify-label", self.report(result))
         f.ledger.accept("accept-label")
+        run_id = f.ledger.read()["run_id"]
         f.ledger.archive("completed", "done")
         f.ledger.clean()
-        self.assertTrue((f.root / result["evidence"]).is_file())
+        self.assertFalse((f.root / result["evidence"]).exists())
+        self.assertEqual(b"real output\n", read_evidence(f.root, result["evidence"], run_id=run_id))
+
+    def test_check_waits_for_native_delivery_and_valid_confirmation(self) -> None:
+        f = self.ready()
+        node = "verify-label"
+        prepared = f.ledger.prepare_packet(node, with_diagnostics=True)
+        bootstrap = prepared["bootstrap"]
+        meta = {
+            key: bootstrap[key]
+            for key in (
+                "node_id",
+                "path",
+                "sha256",
+                "run_id",
+                "dispatch_id",
+                "source_hash",
+                "revision",
+            )
+        }
+        with self.assertRaisesRegex(Invalid, "outstanding native packet"):
+            f.ledger.run_check(node, "behavior")
+        with self.assertRaisesRegex(Invalid, "served in order"):
+            f.ledger.confirm_packet(node, meta)
+        chunk = f.ledger.read_packet(node, meta, 1)
+        self.assertEqual(chunk["total"], prepared["diagnostics"]["chunks"])
+        self.assertEqual((f.root / meta["path"]).stat().st_size, prepared["diagnostics"]["bytes"])
+        for ordinal in range(2, chunk["total"] + 1):
+            f.ledger.read_packet(node, meta, ordinal)
+        with self.assertRaisesRegex(Invalid, "bootstrap mismatch"):
+            f.ledger.confirm_packet(node, {**meta, "dispatch_id": "old"})
+        with self.assertRaisesRegex(Invalid, "outstanding native packet"):
+            f.ledger.run_check(node, "behavior")
+        f.ledger.confirm_packet(node, meta)
+        self.assertEqual("PASS", f.ledger.run_check(node, "behavior")["result"])
+        self.assertEqual(1, len(f.ledger.read()["executions"]))
+
+    def test_pending_delivery_on_another_node_blocks_check_until_confirmed(self) -> None:
+        f = self.f
+        (f.root / "AGENTS.md").write_text("Ж🙂" * 6000)
+        f.g["agents"]["explorer"] = {"role": "code-explorer", "profile": "code-explorer"}
+        f.g["nodes"].append(
+            {
+                "id": "inspect-label",
+                "task": "label",
+                "stage": "explore",
+                "agent": "explorer",
+                "depends_on": ["write-label"],
+                "owns": [],
+                "resources": [],
+            }
+        )
+        f.g["nodes"][2]["depends_on"].append("inspect-label")
+        self.ready()
+        node = "inspect-label"
+        f.ledger.claim(node)
+        bootstrap = f.ledger.prepare_packet(node)
+        meta = {
+            key: bootstrap[key]
+            for key in (
+                "node_id",
+                "path",
+                "sha256",
+                "run_id",
+                "dispatch_id",
+                "source_hash",
+                "revision",
+            )
+        }
+        chunk = f.ledger.read_packet(node, meta, 1)
+        self.assertGreater(chunk["total"], 1)
+        with self.assertRaisesRegex(Invalid, "outstanding native packet"):
+            f.ledger.run_check("verify-label", "behavior")
+        model = (
+            f.ledger.read()["config"]["models"][
+                f.ledger.read()["config"]["profiles"]["code-explorer"]["model"]
+            ]["id"]
+            or "fixture-default"
+        )
+        f.ledger.bind(node, "explorer", model)
+        for ordinal in range(2, chunk["total"] + 1):
+            f.ledger.read_packet(node, meta, ordinal)
+        with self.assertRaisesRegex(Invalid, "outstanding native packet"):
+            f.ledger.run_check("verify-label", "behavior")
+        self.assertFalse(f.ledger.read().get("executions"))
+        f.ledger.confirm_packet(node, meta)
+        self.assertEqual("PASS", f.ledger.run_check("verify-label", "behavior")["result"])
+        self.assertEqual(1, len(f.ledger.read()["executions"]))
+
+    def approval_fixture(
+        self, *, sibling: bool = False, downstream: bool = False
+    ) -> tuple[Path, Path]:
+        f = self.f
+        gate_path = f.root / "fixture-gate.yaml"
+        gate_path.write_text(
+            json.dumps(
+                {
+                    "gates": [
+                        {
+                            "id": "verify-fixture",
+                            "at": ["implement.verify"],
+                            "checks": [
+                                {
+                                    "id": "baseline",
+                                    "level": "final",
+                                    "kind": "tests",
+                                    "method": "fixture baseline",
+                                    "approval_action": "update-baseline",
+                                    "approval_path_regex": r"test/goldens/[^/]+[.]txt",
+                                    "execution": {
+                                        "argv": [
+                                            sys.executable,
+                                            "-c",
+                                            "from pathlib import Path; "
+                                            "raise SystemExit(Path('test/goldens/label.txt').read_bytes() "
+                                            "!= Path('candidate.txt').read_bytes())",
+                                        ],
+                                        "cwd": ".",
+                                        "timeout_seconds": 10,
+                                        "inputs": ["candidate.txt", "test/goldens/label.txt"],
+                                    },
+                                }
+                            ],
+                        }
+                    ]
+                }
+            )
+        )
+        if downstream:
+            gate_data = json.loads(gate_path.read_text())
+            checks = gate_data["gates"][0]["checks"]
+            for name, dependency in (
+                ("post-baseline", "baseline"),
+                ("post-final", "post-baseline"),
+            ):
+                checks.append(
+                    {
+                        "id": name,
+                        "level": "final",
+                        "kind": "tests",
+                        "method": "Later fixture check",
+                        "execution": checks[0]["execution"],
+                        "after": [dependency],
+                    }
+                )
+            gate_path.write_text(json.dumps(gate_data))
+        f.fixture_profile.write_text(f.fixture_policy + "gate_files: [fixture-gate.yaml]\n")
+        f.config["_project"] = load_profile(f.fixture_profile)
+        f.config["_files"].update(f.config["_project"]["files"])
+        task = f.g["tasks"]["label"]
+        task["required_checks"].extend(
+            required_checks(f.config["_project"]["data"], task, final=True)
+        )
+        f.require_fixture_review()
+        f.g["nodes"][1]["agent"] = "fixture-judge"
+        path = "test/goldens/label.txt"
+        target = f.root / path
+        target.parent.mkdir(parents=True)
+        target.write_text("old")
+        candidate = f.root / "candidate.txt"
+        candidate.write_text("old" if sibling else "approved")
+        (f.root / "ordinary-input.txt").write_text("current")
+        task["required_checks"][0]["execution"]["inputs"] = ["ordinary-input.txt"]
+        if sibling:
+            f.g["nodes"].append({**f.g["nodes"][1], "id": "verify-sibling"})
+            review = next(n for n in f.g["nodes"] if n["id"] == "review-label")
+            review["depends_on"].append("verify-sibling")
+        f.init()
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        return target, candidate
+
+    def test_approval_rejects_missing_or_stale_ordinary_receipt_even_when_omitted(self) -> None:
+        f = self.f
+        self.approval_fixture(downstream=True)
+        node = "verify-label"
+        f.start(node, "judge")
+        failed = f.ledger.run_check(node, "baseline")
+        report = {
+            **self.report(failed),
+            "outcome": "BLOCKED",
+            "stage_result": "APPROVAL_REQUIRED",
+            "approval_request": {
+                "action": "update-baseline",
+                "evidence": "independent candidate comparison",
+                "files": {"test/goldens/label.txt": digest(b"approved")},
+                "execution_id": failed["execution_id"],
+            },
+        }
+        with self.assertRaisesRegex(Invalid, "Missing required check before approval"):
+            f.ledger.finish(node, report)
+        ordinary = f.ledger.run_check(node, "behavior")
+        self.assertEqual("PASS", ordinary["result"])
+        (f.root / "ordinary-input.txt").write_text("changed")
+        with self.assertRaisesRegex(Invalid, "Runner evidence invalidated"):
+            f.ledger.finish(node, report)
+        f.ledger.run_check(node, "behavior")
+        f.ledger.finish(node, report)
+        self.assertEqual("blocked", f.ledger.read()["nodes"][node]["status"])
+
+    def test_approval_resumes_only_exact_candidate_at_exhausted_budget(self) -> None:
+        f = self.f
+        target, candidate = self.approval_fixture(sibling=True)
+        path = target.relative_to(f.root).as_posix()
+        sibling = "verify-sibling"
+        f.start(sibling, "judge")
+        old_checks = [f.ledger.run_check(sibling, name) for name in ("behavior", "baseline")]
+        with patch.object(f.ledger, "run_check", return_value=old_checks[0]):
+            f.ledger.finish(sibling, f.report(sibling, checks=old_checks))
+        candidate.write_text("approved")
+        node = "verify-label"
+        budget = f.ledger.read()["config"]["execution"]["retry_budgets"]["tests"]
+        for _ in range(budget):
+            f.start(node, "judge")
+            failure = f.ledger.run_check(node, "baseline")
+            f.ledger.finish(node, {**self.report(failure), "outcome": "FAIL"})
+            f.ledger.retry(node, "tests", "diagnosed and stopped", "terminal test fixture")
+        f.start(node, "judge")
+        ok = f.ledger.run_check(node, "behavior")
+        failed = f.ledger.run_check(node, "baseline")
+        report = self.report(ok)
+        request = {
+            "action": "update-baseline",
+            "evidence": "independent candidate comparison",
+            "files": {path: digest(b"approved")},
+            "execution_id": failed["execution_id"],
+        }
+        report.update(outcome="BLOCKED", stage_result="APPROVAL_REQUIRED", checks=[ok, failed])
+        with self.assertRaisesRegex(Invalid, "Invalid approval request"):
+            f.ledger.finish(node, report)
+        with self.assertRaisesRegex(Invalid, "does not allow"):
+            f.ledger.finish(
+                node, {**report, "approval_request": {**request, "action": "unrelated"}}
+            )
+        with self.assertRaisesRegex(Invalid, "outside allowed scope"):
+            f.ledger.finish(
+                node,
+                {
+                    **report,
+                    "approval_request": {
+                        **request,
+                        "files": {"lib/example.dart": digest(b"wrong scope")},
+                    },
+                },
+            )
+        f.ledger.finish(node, {**report, "approval_request": request})
+        state = f.ledger.read()
+        request_id = state["nodes"][node]["report"]["approval_request"]["id"]
+        self.assertEqual(budget, state["counters"]["label:tests"])
+        self.assertNotIn(path, state["graph"]["tasks"]["label"]["scope"])
+        with self.assertRaisesRegex(Invalid, "RETRY_BUDGET_EXHAUSTED"):
+            f.ledger.retry(node, "tests", "no retry left", "terminal")
+        target.write_text("wrong")
+        with self.assertRaisesRegex(Invalid, "do not match"):
+            f.ledger.resume_approved(node, request_id, "user approval")
+        target.write_text("approved")
+        with self.assertRaisesRegex(Invalid, "Need current approval"):
+            f.ledger.resume_approved(node, "stale", "user approval")
+        f.ledger.resume_approved(node, request_id, "user approval")
+        with self.assertRaisesRegex(Invalid, "Need current approval"):
+            f.ledger.resume_approved(node, request_id, "replay")
+        resumed = f.ledger.read()
+        self.assertEqual(budget, resumed["counters"]["label:tests"])
+        self.assertEqual("pending", resumed["nodes"][node]["status"])
+        self.assertEqual("pending", resumed["nodes"]["accept-label"]["status"])
+        self.assertEqual("pending", resumed["nodes"][sibling]["status"])
+        self.assertEqual(state["revision"] + 1, resumed["revision"])
+        self.assertIn(path, resumed["graph"]["tasks"]["label"]["scope"])
+        f.start(node, "judge")
+        fresh = [f.ledger.run_check(node, name) for name in ("behavior", "baseline")]
+        self.assertTrue(all(check["result"] == "PASS" for check in fresh))
+        self.assertNotEqual(failed["execution_id"], fresh[1]["execution_id"])
+        f.ledger.finish(node, {**self.report(fresh[0]), "checks": fresh})
+        f.start(sibling, "judge")
+        peer = [f.ledger.run_check(sibling, name) for name in ("behavior", "baseline")]
+        self.assertTrue(all(check["result"] == "PASS" for check in peer))
+        self.assertNotEqual(old_checks[1]["execution_id"], peer[1]["execution_id"])
+        with patch.object(f.ledger, "run_check", return_value=peer[0]):
+            f.ledger.finish(sibling, f.report(sibling, checks=peer))
+        f.start("review-label", "judge")
+        f.ledger.finish("review-label", f.report("review-label", verdict="APPROVE"))
+        f.ledger.accept("accept-label")
+        self.assertEqual("done", f.ledger.read()["nodes"]["accept-label"]["status"])
 
     def test_claimed_green_without_execution_is_rejected(self) -> None:
         f = self.ready()

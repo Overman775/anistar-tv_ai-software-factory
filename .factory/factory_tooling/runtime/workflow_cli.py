@@ -51,6 +51,10 @@ def main() -> None:
     resume = sub.add_parser("resume-task")
     resume.add_argument("task")
     resume.add_argument("evidence")
+    approved = sub.add_parser("resume-approved")
+    approved.add_argument("node")
+    approved.add_argument("request_id")
+    approved.add_argument("evidence")
     sub.add_parser("show")
     sub.add_parser("diagram")
     rev = sub.add_parser("revise")
@@ -67,16 +71,23 @@ def main() -> None:
     rep.add_argument("handoff")
     for name in ("claim", "accept", "packet"):
         sub.add_parser(name).add_argument("node")
-    sub.add_parser("prepare-packet").add_argument("node")
-    read_packet = sub.add_parser("read-packet")
-    read_packet.add_argument("node")
-    read_packet.add_argument("path")
-    read_packet.add_argument("sha256")
-    read_packet.add_argument("run_id")
-    read_packet.add_argument("dispatch_id")
-    read_packet.add_argument("source_hash")
-    read_packet.add_argument("revision")
-    read_packet.add_argument("--chunk", type=int, default=1)
+    prepare = sub.add_parser("prepare-packet")
+    prepare.add_argument("node")
+    prepare.add_argument("--with-diagnostics", action="store_true")
+    for name in ("read-packet", "confirm-packet"):
+        packet = sub.add_parser(name)
+        for field in (
+            "node",
+            "path",
+            "sha256",
+            "run_id",
+            "dispatch_id",
+            "source_hash",
+            "revision",
+        ):
+            packet.add_argument(field)
+        if name == "read-packet":
+            packet.add_argument("--chunk", type=int, default=1)
     b = sub.add_parser("bind")
     b.add_argument("node")
     b.add_argument("handle")
@@ -177,6 +188,9 @@ def main() -> None:
         elif args.action == "diagram":
             print(diagram(ledger.read()))
             return
+        elif args.action == "resume-approved":
+            ledger.resume_approved(args.node, args.request_id, args.evidence)
+            result = None
         elif args.action == "revise":
             ledger.revise(read_json(args.graph), args.reason)
             result = None
@@ -189,21 +203,22 @@ def main() -> None:
         elif args.action in {"claim", "accept", "packet"}:
             result = getattr(ledger, args.action)(args.node)
         elif args.action == "prepare-packet":
-            result = ledger.prepare_packet(args.node)
-        elif args.action == "read-packet":
-            result = ledger.read_packet(
-                args.node,
-                {
-                    "node_id": args.node,
-                    "path": args.path,
-                    "sha256": args.sha256,
-                    "run_id": args.run_id,
-                    "dispatch_id": args.dispatch_id,
-                    "source_hash": args.source_hash,
-                    "revision": args.revision,
-                },
-                args.chunk,
-            )
+            result = ledger.prepare_packet(args.node, with_diagnostics=args.with_diagnostics)
+        elif args.action in {"read-packet", "confirm-packet"}:
+            bootstrap = {
+                "node_id": args.node,
+                "path": args.path,
+                "sha256": args.sha256,
+                "run_id": args.run_id,
+                "dispatch_id": args.dispatch_id,
+                "source_hash": args.source_hash,
+                "revision": args.revision,
+            }
+            if args.action == "read-packet":
+                result = ledger.read_packet(args.node, bootstrap, args.chunk)
+            else:
+                ledger.confirm_packet(args.node, bootstrap)
+                result = None
         elif args.action == "bind":
             ledger.bind(args.node, args.handle, args.model)
             result = None

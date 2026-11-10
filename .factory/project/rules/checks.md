@@ -35,3 +35,12 @@ fixtures. Parent checks commands against project rules before accepting evidence
 
 
 Diagnostic constraints: do not increase sleeps, timeouts or D-pad presses without evidence. A widget test cannot prove native IME behavior; fixture success cannot prove live behavior.
+
+При расхождении golden судья запрашивает `update-golden-baselines` только если
+в журнале `anistar-check` подтверждено, что требуется исключительно согласование
+эталонов. Вернуть `APPROVAL_REQUIRED` по общему контракту отчёта Implement. Если проверка выявила обычную ошибку или причина неоднозначна, действует
+обычная коррекция. Для каждого кандидата фиксируются путь и SHA-256 просмотренного
+PNG. Согласование может добавить точные пути из каталогов `test/**/goldens/`
+в область задачи. После явного согласования
+координатор применяет только согласованные PNG и вызывает `resume-approved`.
+Повторяются все обязательные проверки, затем независимое ревью.

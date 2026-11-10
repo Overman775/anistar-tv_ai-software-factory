@@ -171,6 +171,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
                 "BLOCKED_TOOL_ERROR",
                 "BLOCKED_UNTESTABLE",
                 "GOLDEN_DIFF",
+                "APPROVAL_REQUIRED",
                 "BEHAVIOR_CHANGE",
             },
             "Diagnose the real blocker first",
