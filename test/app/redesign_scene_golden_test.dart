@@ -104,7 +104,10 @@ void main() {
   for (final mobile in [false, true]) {
     for (final scene in ['login', 'home', 'favorites', 'genres', 'browse', 'detail']) {
       testWidgets('rich redesign $scene ${mobile ? 'mobile' : 'tv'}', (tester) async {
-        final decoded = await cacheDecodedFixtureImage(tester);
+        final decoded = await cacheDecodedFixtureImage(
+          tester,
+          filePath: scene == 'home' || scene == 'browse' ? 'prototype/assets/frieren.jpg' : null,
+        );
         final settle = tester.pumpAndSettle;
         const capture = expectLater;
         final app = find.byType(MaterialApp).first;
@@ -189,6 +192,9 @@ void main() {
             isTrue,
             reason: 'the bundled poster must render successfully alongside nullable image fallbacks',
           );
+        }
+        if (scene == 'home' || scene == 'browse') {
+          expect(find.byType(MediaCardBookmark), findsOneWidget);
         }
         await capture(app, matchesGoldenFile('goldens/redesign_${scene}_${mobile ? 'mobile' : 'tv'}.png'));
         if (scene == 'detail') {

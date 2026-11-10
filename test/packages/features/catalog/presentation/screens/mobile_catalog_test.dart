@@ -295,7 +295,13 @@ void main() {
                 AnimePage(
                   items: List.generate(
                     50,
-                    (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-anime', title: 'Аниме ${i + 1}', posterUri: Uri()),
+                    (i) => AnimeSummary(
+                      id: i + 1,
+                      slug: '${i + 1}-anime',
+                      title: 'Аниме ${i + 1}',
+                      posterUri: Uri(),
+                      isFavorite: false,
+                    ),
                   ),
                   page: 1,
                   hasNext: false,

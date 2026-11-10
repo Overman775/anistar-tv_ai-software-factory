@@ -26,7 +26,10 @@ Future<void> pull(WidgetTester tester, Finder scroll) async {
 }
 
 AnimePage page(List<int> ids, {bool hasNext = false, int number = 1}) => AnimePage(
-  items: [for (final id in ids) AnimeSummary(id: id, slug: '$id-test', title: 'Аниме $id', posterUri: Uri())],
+  items: [
+    for (final id in ids)
+      AnimeSummary(id: id, slug: '$id-test', title: 'Аниме $id', posterUri: Uri(), isFavorite: false),
+  ],
   page: number,
   hasNext: hasNext,
 );

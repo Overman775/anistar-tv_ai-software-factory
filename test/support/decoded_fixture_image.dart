@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 
 // Seed the production UI kit's public image provider with bundled fixture bytes.
@@ -10,10 +11,12 @@ import 'package:ui_kit/ui_kit.dart';
 
 const decodedFixtureUrl = 'https://fixture.test/decoded-local-poster.png';
 
-Future<ui.Image> cacheDecodedFixtureImage(WidgetTester tester) async {
+Future<ui.Image> cacheDecodedFixtureImage(WidgetTester tester, {String? filePath}) async {
   final image = await tester.runAsync(() async {
-    final bytes = await rootBundle.load(Assets.images.anistarLauncher.keyName);
-    final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+    final bytes = filePath == null
+        ? (await rootBundle.load(Assets.images.anistarLauncher.keyName)).buffer.asUint8List()
+        : await File(filePath).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
     final frame = await codec.getNextFrame();
     codec.dispose();
 

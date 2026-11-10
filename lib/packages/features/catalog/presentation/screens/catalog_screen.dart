@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../auth/auth_providers.dart';
+import '../../../favorites/favorite_catalog_status_provider.dart';
 import '../../../favorites/favorites_providers.dart';
 import '../../../favorites/presentation/favorite_actions_sheet.dart';
 import '../../catalog_providers.dart';
@@ -174,68 +175,83 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     final viewport = MediaQuery.sizeOf(context);
     final horizontalInset = CatalogLayout.horizontalInset(viewport.width);
 
-    return Column(
-      children: [
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: CatalogLayout.inspectorHeight(viewport.height, MediaQuery.textScalerOf(context).scale(16) / 16),
-          ),
-          child: ValueListenableBuilder<AnimeSummary?>(
-            valueListenable: _inspected,
-            builder: (context, selected, child) => CatalogInspector(
-              anime: state.items.where((item) => item.id == selected?.id).firstOrNull ?? state.items.first,
-            ),
-          ),
-        ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => Focus(
-              canRequestFocus: false,
-              onKeyEvent: (_, event) => _handleCatalogKey(event, _columnCount(constraints.maxWidth)),
-              child: CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(horizontalInset, AppSpacing.md, horizontalInset, 72),
-                    sliver: SliverGrid.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: _columnCount(constraints.maxWidth),
-                        childAspectRatio: 0.68,
-                        crossAxisSpacing: AppSpacing.lg,
-                        mainAxisSpacing: AppSpacing.xl,
-                      ),
-                      itemCount: state.items.length + (showTail ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == state.items.length) {
-                          return CatalogTail(
-                            error: state is CatalogFailure ? state.message : null,
-                            onRetry: _requestMore,
-                          );
-                        }
-                        final anime = state.items[index];
-
-                        return Builder(
-                          key: ValueKey(anime.id),
-                          builder: (cardContext) => AnimeCard(
-                            anime: anime,
-                            isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
-                            showFavorite: !widget.favoritesOnly && ref.watch(authAccessProvider).canUseAccount,
-                            onLongPressed: () => unawaited(_favoriteActions(anime)),
-                            autofocus: !_keepSortFocus && index == _selectedIndex,
-                            onFocusChanged: (focused) =>
-                                _onCardFocusChanged(cardContext, index, focused, _columnCount(constraints.maxWidth)),
-                            onTap: () => _selectAndOpen(anime, index),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+    return Consumer(
+      builder: (context, cardRef, child) {
+        final favoriteIds = _favoriteIds(state, cardRef);
+        return Column(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: CatalogLayout.inspectorHeight(
+                  viewport.height,
+                  MediaQuery.textScalerOf(context).scale(16) / 16,
+                ),
+              ),
+              child: ValueListenableBuilder<AnimeSummary?>(
+                valueListenable: _inspected,
+                builder: (context, selected, child) => CatalogInspector(
+                  anime: state.items.where((item) => item.id == selected?.id).firstOrNull ?? state.items.first,
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => Focus(
+                  canRequestFocus: false,
+                  onKeyEvent: (_, event) => _handleCatalogKey(event, _columnCount(constraints.maxWidth)),
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      SliverPadding(
+                        padding: EdgeInsets.fromLTRB(horizontalInset, AppSpacing.md, horizontalInset, 72),
+                        sliver: SliverGrid.builder(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: _columnCount(constraints.maxWidth),
+                            childAspectRatio: 0.68,
+                            crossAxisSpacing: AppSpacing.lg,
+                            mainAxisSpacing: AppSpacing.xl,
+                          ),
+                          itemCount: state.items.length + (showTail ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == state.items.length) {
+                              return CatalogTail(
+                                error: state is CatalogFailure ? state.message : null,
+                                onRetry: _requestMore,
+                              );
+                            }
+                            final anime = state.items[index];
+
+                            return Builder(
+                              key: ValueKey(anime.id),
+                              builder: (cardContext) => AnimeCard(
+                                anime: anime,
+                                isFavorite:
+                                    cardRef.read(favoritesControllerProvider).known[anime.id] ??
+                                    anime.isFavorite ??
+                                    (favoriteIds.contains(anime.id) ? true : null),
+                                showFavorite: !widget.favoritesOnly && cardRef.read(authAccessProvider).canUseAccount,
+                                onLongPressed: () => unawaited(_favoriteActions(anime)),
+                                autofocus: !_keepSortFocus && index == _selectedIndex,
+                                onFocusChanged: (focused) => _onCardFocusChanged(
+                                  cardContext,
+                                  index,
+                                  focused,
+                                  _columnCount(constraints.maxWidth),
+                                ),
+                                onTap: () => _selectAndOpen(anime, index),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -268,49 +284,72 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
   }
 
-  Widget _mobileGrid(CatalogState state) => LayoutBuilder(
-    builder: (context, constraints) {
-      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-      final columns = (constraints.maxWidth / (scale > 1.5 ? 220 : 160)).floor().clamp(1, 6);
-      final horizontalPadding = AppLayoutScope.horizontalPaddingOf(context);
-      final width = (constraints.maxWidth - horizontalPadding * 2 - (columns - 1) * 12) / columns;
-      final tail = state is CatalogFailure && !state.isRefreshFailure || state is CatalogReady && state.isLoadingMore;
+  Set<int> _favoriteIds(CatalogState state, WidgetRef cardRef) {
+    final account = cardRef.watch(favoritesAccountProvider);
+    final favorites = cardRef.watch(favoritesControllerProvider);
+    if (widget.favoritesOnly ||
+        !TickerMode.valuesOf(cardRef.context).enabled ||
+        !cardRef.watch(authAccessProvider).canUseAccount ||
+        account == null ||
+        !state.items.any((anime) => anime.isFavorite == null && !favorites.known.containsKey(anime.id))) {
+      return const {};
+    }
 
-      return CustomScrollView(
-        key: PageStorageKey(('mobile-catalog', widget.favoritesOnly, widget.filter?.path)),
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
-            sliver: SliverGrid.builder(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisExtent: width / AppSizes.posterRatio,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 20,
+    return cardRef.watch(favoriteCatalogStatusProvider((account, favorites.revision))).asData?.value ?? const {};
+  }
+
+  Widget _mobileGrid(CatalogState state) => Consumer(
+    builder: (context, cardRef, child) {
+      final favoriteIds = _favoriteIds(state, cardRef);
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+          final columns = (constraints.maxWidth / (scale > 1.5 ? 220 : 160)).floor().clamp(1, 6);
+          final horizontalPadding = AppLayoutScope.horizontalPaddingOf(context);
+          final width = (constraints.maxWidth - horizontalPadding * 2 - (columns - 1) * 12) / columns;
+          final tail =
+              state is CatalogFailure && !state.isRefreshFailure || state is CatalogReady && state.isLoadingMore;
+
+          return CustomScrollView(
+            key: PageStorageKey(('mobile-catalog', widget.favoritesOnly, widget.filter?.path)),
+            controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: EdgeInsets.fromLTRB(horizontalPadding, 8, horizontalPadding, 24),
+                sliver: SliverGrid.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisExtent: width / AppSizes.posterRatio,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 20,
+                  ),
+                  itemCount: state.items.length,
+                  itemBuilder: (context, index) {
+                    final anime = state.items[index];
+
+                    return MobileAnimeCard(
+                      key: ValueKey(anime.id),
+                      anime: anime,
+                      isFavorite:
+                          cardRef.read(favoritesControllerProvider).known[anime.id] ??
+                          anime.isFavorite ??
+                          (favoriteIds.contains(anime.id) ? true : null),
+                      showFavorite: !widget.favoritesOnly && cardRef.read(authAccessProvider).canUseAccount,
+                      onTap: () => _selectAndOpen(anime, index),
+                      onActions: () => unawaited(_favoriteActions(anime)),
+                    );
+                  },
+                ),
               ),
-              itemCount: state.items.length,
-              itemBuilder: (context, index) {
-                final anime = state.items[index];
-
-                return MobileAnimeCard(
-                  key: ValueKey(anime.id),
-                  anime: anime,
-                  isFavorite: ref.read(favoritesControllerProvider).known[anime.id],
-                  showFavorite: !widget.favoritesOnly && ref.watch(authAccessProvider).canUseAccount,
-                  onTap: () => _selectAndOpen(anime, index),
-                  onActions: () => unawaited(_favoriteActions(anime)),
-                );
-              },
-            ),
-          ),
-          if (tail)
-            SliverToBoxAdapter(
-              child: CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore),
-            ),
-          SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)),
-        ],
+              if (tail)
+                SliverToBoxAdapter(
+                  child: CatalogTail(error: state is CatalogFailure ? state.message : null, onRetry: _requestMore),
+                ),
+              SliverPadding(padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom)),
+            ],
+          );
+        },
       );
     },
   );

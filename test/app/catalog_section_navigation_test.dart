@@ -21,6 +21,20 @@ import '../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../mocks/features/favorites/fake_favorites_repository.dart';
 import '../support/test_app.dart';
 
+FakeCatalogScreenRepository _nonFavoriteCatalog() => FakeCatalogScreenRepository(
+  load: (page) async => Result.success(
+    AnimePage(
+      items: List.generate(
+        12,
+        (index) =>
+            AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}', isFavorite: false),
+      ),
+      page: page,
+      hasNext: false,
+    ),
+  ),
+);
+
 void main() {
   for (final reducedMotion in [false, true]) {
     testWidgets('menu arrows defer selection and OK collapses into retained section content (reduced=$reducedMotion)', (
@@ -37,7 +51,7 @@ void main() {
         overrides: [
           authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
           favoritesAccountProvider.overrideWithValue('test'),
-          catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+          catalogRepositoryProvider.overrideWithValue(_nonFavoriteCatalog()),
           favoritesRepositoryProvider.overrideWithValue(favorites),
         ],
       );
@@ -89,7 +103,7 @@ void main() {
       overrides: [
         authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
         favoritesAccountProvider.overrideWithValue('test'),
-        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        catalogRepositoryProvider.overrideWithValue(_nonFavoriteCatalog()),
         favoritesRepositoryProvider.overrideWithValue(favorites),
       ],
     );

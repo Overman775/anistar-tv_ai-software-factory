@@ -15,8 +15,8 @@ class MediaCardBookmark extends StatelessWidget {
       child: CustomPaint(
         painter: _BookmarkPainter(),
         child: const Padding(
-          padding: EdgeInsets.fromLTRB(8, 8, 8, 20),
-          child: Center(child: AppIcon(AppIconType.heart, color: AppPalette.textPrimary, size: 20)),
+          padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
+          child: Center(child: AppIcon(AppIconType.heart, color: AppPalette.textPrimary, size: 28)),
         ),
       ),
     ),

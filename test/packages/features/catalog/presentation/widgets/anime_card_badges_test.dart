@@ -40,6 +40,30 @@ void main() {
   }
 
   for (final mobile in [false, true]) {
+    testWidgets('bookmark follows prototype geometry mobile=$mobile', (tester) async {
+      const anime = AnimeSummary(id: 1, slug: 'anime', title: 'Anime', isFavorite: true, rating: 8.7);
+      final card = _AnimeCardBadgesTest(mobile: mobile, anime: anime);
+      if (mobile) {
+        await pumpMobileApp(tester, card);
+      } else {
+        await pumpTvApp(tester, card);
+      }
+      await tester.pumpAndSettle();
+      final bookmark = find.byType(MediaCardBookmark);
+      final poster = find.descendant(of: find.byType(MediaCard), matching: find.byType(AspectRatio)).first;
+      final heart = find.descendant(of: bookmark, matching: find.byType(AppIcon));
+      final bookmarkRect = tester.getRect(bookmark);
+      final posterRect = tester.getRect(poster);
+      final heartRect = tester.getRect(heart);
+      expect(bookmarkRect.size, const Size(36, 48));
+      expect(bookmarkRect.top, posterRect.top);
+      expect(posterRect.right - bookmarkRect.right, 16);
+      expect(heartRect.size, const Size(28, 28));
+      expect(heartRect.top - bookmarkRect.top, 8);
+      expect(heartRect.center.dx, bookmarkRect.center.dx);
+      expect(find.text('8,7'), mobile ? findsNothing : findsOneWidget);
+    });
+
     for (final (source, override, visible) in [
       (true, null, true),
       (false, null, false),
