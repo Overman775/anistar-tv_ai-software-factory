@@ -38,16 +38,13 @@
 
 ## Согласованные планы
 
-- [Согласованность доменных контрактов — revision 1](plans/domain-contract-consistency-2026-10-24.md).
-- [Полный редизайн приложения по прототипу — revision 3](plans/prototype-app-redesign-2026-10-22.md).
-
-## Предложения для выбора
-
-- [CI/CD: проверки PR, Android gate, версии и GitHub Releases](plans/ci-cd-proposal-2026-10-19.md) — анализ и варианты, внедрение не согласовано.
+- [Редизайн AniStar TV — редакция 3](plans/prototype-redesign-2026-11-12.md).
+- [Workflow редизайна и распределение ролей](plans/prototype-redesign-2026-11-12.workflow.md).
 
 ## Задачи реализации
 
-- [Полный редизайн приложения по прототипу — эпик и 18 задач](tasks/epic_prototype-app-redesign-2026-10-22.md).
+- [Редизайн AniStar TV — эпик и 20 задач](tasks/prototype-redesign-2026-11-12/epic.md).
+- [Повышение версии и changelog после приёмки редизайна](tasks/redesign-release-preparation/21-redesign-version-changelog.md).
 
 ## Пакеты
 
