@@ -158,7 +158,7 @@ profiles:
     mcp: []
     variants:
       doc-writer:
-        model: sol
+        model: terra
         adapter: codex
 
   architect:
@@ -169,7 +169,7 @@ profiles:
     mcp: []
     variants:
       architect:
-        model: sol
+        model: astra
         adapter: codex
 
   task-decomposer:
@@ -217,7 +217,10 @@ models:
     effort: high
   sol:
     id: gpt-6.1-sol
-    effort: high
+    effort: medium
+  astra:
+    id: gpt-6-astra
+    effort: medium
   glm-5-3:
     id: builtin:zai-coding-plan\GLM-5.3
 
