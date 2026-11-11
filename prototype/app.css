@@ -71,7 +71,7 @@
    Для будущих ИИ: миграция Flutter на lucide_icons_flutter обязательна;
    переиспользовать AppIcon, не вводить альтернативные иконпаки.
    Оригинальные Lucide SVG, одна геометрия и один stroke для всего UI.
-   icon() и таблица lucideIcons в app.js; источники/лицензия — assets/lucide/.
+   icon() и встроенная таблица lucideIcons в app.js; лицензия — assets/lucide/LICENSE.
    Flutter: lucide_icons_flutter, соответствия LucideIcons.* описаны в таблице.
    Не добавлять иконочные шрифты или отдельные стили под каждый экран. */
 :root{--app-icon-stroke:2}
@@ -92,12 +92,12 @@ button,input,a[href]{
   transition:outline-color var(--focus-ring-duration) var(--focus-ring-ease);
 }
 :where(button,input,a[href]):focus{--focus-ring-duration:var(--focus-fade-in);--focus-ring-ease:var(--motion-enter)}
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif}body{font-size:var(--body);line-height:1.5}button,input{font:inherit}button{cursor:pointer;color:inherit;background:none;border:0;text-align:inherit}button:disabled{opacity:.45;cursor:default}button:focus,input:focus,a:focus{outline:var(--focus-ring-width) solid var(--accent);outline-offset:var(--focus-ring-offset)}button:focus{background-color:var(--raised)}input:focus{outline-offset:4px}h1,h2,h3,p{margin:0}h1,h2,h3{font-weight:800;letter-spacing:-.04em;line-height:1.16}h1{font-size:var(--title)}h2{font-size:var(--heading)}h3{font-size:var(--body)}p{line-height:1.6}.od-icon{--od-icon-size:28px}.muted{color:var(--muted)}.small{font-size:var(--small)}.eyebrow{display:block;color:var(--accent);font-size:var(--small);font-weight:800;letter-spacing:.16em;text-transform:uppercase}.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);height:100dvh}.sidebar{position:relative;z-index:5;background:var(--color-menu-bg-base);border-right:1px solid var(--color-menu-border);min-width:0}.menu-inner{display:flex;flex-direction:column;width:var(--rail);height:100%;padding:40px 24px;background:var(--color-menu-bg-base)}.sidebar:focus-within .menu-inner{position:absolute;top:0;left:0;width:320px;box-shadow:32px 0 64px var(--color-shadow-strong)}.brand{display:flex;align-items:center;gap:16px;font-size:24px;font-weight:800;white-space:nowrap}.brand img{display:block;width:64px;height:auto;flex:none}.brand span{display:none}.sidebar:focus-within .brand span{display:block}.brand em{font-style:normal;color:var(--accent)}.menu{display:grid;gap:16px;margin-top:64px}.menu button{display:flex;align-items:center;gap:24px;min-height:64px;padding:16px 18px;border-radius:var(--radius-control);white-space:nowrap;color:var(--muted);position:relative}.menu button>span:not(.od-icon){display:none}.sidebar:focus-within .menu button>span:not(.od-icon){display:block}.menu button[aria-current=page]{color:var(--accent);background:var(--color-accent-subtle)}.menu button[aria-current=page]:before{content:'';position:absolute;left:-24px;top:20px;width:4px;height:24px;background:var(--accent)}.menu button:focus{color:var(--text)}.account{margin-top:auto;display:grid;gap:16px}.account .menu{margin:0}.avatar{display:flex;align-items:center;gap:16px;padding-left:8px;white-space:nowrap;font-size:16px;color:var(--muted)}.avatar b{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--color-avatar-surface);color:var(--accent);font-size:16px;flex:none}.avatar span{display:none}.sidebar:focus-within .avatar span{display:block}.main{min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) var(--bg)}.topbar{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:40px var(--gutter) 24px;color:var(--muted);font-size:var(--small)}.topbar strong{color:var(--text);font-size:var(--body);font-weight:600}.topbar .right{display:flex;align-items:center;gap:24px}.live-mark{display:flex;align-items:center;gap:8px}.live-mark:before{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent)}.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,28%);gap:48px;padding:16px var(--gutter) 32px;align-items:center;max-width:1800px;margin:auto}.hero-copy{max-width:900px}.hero h1{margin:16px 0 24px;max-width:900px}.hero p{max-width:64ch;color:var(--muted);margin-bottom:24px}.meta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;color:var(--muted);font-size:var(--small);margin:16px 0}.meta span{display:block}.meta .tag{padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius-small);color:var(--text)}.hero-art{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:16px;max-width:320px;justify-self:center}.hero-art img{border-radius:var(--radius-card)}.poster-caption{writing-mode:vertical-rl;letter-spacing:.2em;font-size:12px;color:var(--muted)}.actions{display:flex;flex-wrap:wrap;gap:16px;margin-top:32px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:16px;padding:16px 28px;min-height:64px;border-radius:var(--radius-control);font-size:var(--body);font-weight:600;background:var(--surface);border:1px solid var(--line);white-space:nowrap}.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}.btn.primary:focus{background:var(--color-accent-hover)}.btn.icon{padding:16px;min-width:64px}.catalog{padding:24px var(--gutter) 64px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:32px}.section-head .count{color:var(--muted);font-size:var(--small)}.poster-grid{--od-cols:6;--od-gap:32px 24px;align-items:start}.anime-card{display:block;width:100%;padding:0;border-radius:var(--radius-card);min-width:0}.poster-wrap{position:relative;display:block;border-radius:var(--radius-card);background:var(--surface)}.poster-wrap img{border-radius:var(--radius-card)}.anime-card h3{margin-top:16px;font-weight:600;font-size:var(--small);line-height:1.5;letter-spacing:-.02em}.anime-card .year{display:block;color:var(--muted);font-size:var(--small);margin-top:4px}.anime-card:focus{background:none}.badge{position:absolute;top:12px;right:12px;display:flex;align-items:center;justify-content:center;background:var(--color-badge-bg);color:var(--accent);border-radius:var(--radius-small);padding:8px;--od-icon-size:20px}.page-title{padding:24px var(--gutter) 32px}.page-title p{margin-top:16px;color:var(--muted)}.genre-grid{--od-cols:3;--od-gap:24px}.genre{min-height:144px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--surface);font-size:var(--heading);font-weight:600}.genre .od-icon{color:var(--accent)}.genres-note{margin-top:40px;color:var(--muted);font-size:var(--small)}.detail-hero{grid-template-columns:minmax(0,1fr) minmax(200px,24%);align-items:start;padding-top:24px;padding-bottom:48px}.detail-hero h1{font-size:clamp(32px,3vw,56px)}.detail-hero .hero-art{max-width:280px}.genre-links{display:flex;flex-wrap:wrap;gap:16px}.genre-links button{min-height:48px;color:var(--accent);padding:8px 16px;border:1px solid var(--line);border-radius:var(--radius-control);font-size:var(--small)}.episode-grid{--od-cols:3;--od-gap:24px}.episode{display:flex;align-items:center;gap:24px;padding:24px;min-height:112px;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-card)}.ep-num{display:block;font-size:clamp(24px,2vw,36px);color:var(--muted);font-weight:800}.episode .od-field{flex:1}.episode .od-icon{color:var(--accent)}.episode .small{color:var(--muted)}.empty{max-width:800px;margin:64px auto;text-align:center;padding:40px}.empty p{color:var(--muted);margin:24px 0}.empty .actions{justify-content:center}.empty-symbol{display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:32px;--od-icon-size:64px}.back-btn{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px;border-radius:var(--radius-control);color:var(--text)}.overlay{position:fixed;inset:0;z-index:20;display:flex;justify-content:flex-end;background:var(--color-scrim-heavy)}.side-sheet{width:min(600px,90vw);max-height:100dvh;overflow:auto;background:var(--surface);padding:48px;display:flex;flex-direction:column;gap:24px;border-left:1px solid var(--line)}.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.sheet-option{display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%;min-height:80px;padding:20px;border:1px solid var(--line);border-radius:var(--radius-control)}.sheet-option[aria-pressed=true]{color:var(--accent);background:var(--color-accent-subtle)}.sheet-copy{color:var(--muted);font-size:var(--small)}.danger{color:var(--danger)}.toast{position:fixed;z-index:40;bottom:48px;left:50%;transform:translateX(-50%);max-width:80vw;padding:20px 32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--text);color:var(--bg);font-size:var(--body);box-shadow:0 16px 40px var(--color-shadow-soft)}.login{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,560px);gap:64px;align-items:center;min-height:100dvh;max-width:1600px;margin:auto;padding:64px}.login-copy .brand{margin-bottom:64px}.login-copy .brand span{display:block}.login-copy h1{margin:24px 0;max-width:700px}.login-copy p{color:var(--muted);max-width:48ch}.login-form{padding:40px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card)}.login-form h2{margin-bottom:32px}.field{display:grid;gap:8px;margin-bottom:24px}.field label{font-size:var(--small)}.field input{display:block;width:100%;min-height:64px;padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-control);color:var(--text)}.field .error{color:var(--danger);font-size:16px}.login-form .btn{width:100%;margin-bottom:16px}.login-note{font-size:16px;color:var(--muted);line-height:1.6;margin-top:24px}.error-summary{padding:16px;border:1px solid var(--danger);margin-bottom:24px;font-size:16px}.error-summary a{color:var(--danger);display:block;padding:8px}.player{min-height:100dvh;display:flex;flex-direction:column;background:var(--color-player-bg-legacy);padding:48px var(--gutter)}.player-top{display:flex;justify-content:space-between;align-items:center;gap:24px}.player-top .od-field{text-align:right}.player-stage{flex:1;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:24px;padding:48px}.player-stage img{width:96px;height:auto;border-radius:var(--radius-card);opacity:.75}.player-stage h1{font-size:var(--heading)}.player-stage p{max-width:48ch;color:var(--muted);font-size:var(--small)}.playback{max-width:1600px;width:100%;margin:0 auto}.timeline{width:100%;accent-color:var(--accent);min-height:44px;cursor:pointer}.time-row{display:flex;justify-content:space-between;font-size:var(--small);color:var(--muted)}.controls{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px}.transport{display:flex;align-items:center;gap:24px}.controls .od-icon{--od-icon-size:28px}.player-status{color:var(--accent);font-size:var(--small)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.footer-note{margin-top:40px;font-size:var(--small);color:var(--muted)}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif}body{font-size:var(--body);line-height:1.5}button,input{font:inherit}button{cursor:pointer;color:inherit;background:none;border:0;text-align:inherit}button:disabled{opacity:.45;cursor:default}button:focus,input:focus,a:focus{outline:var(--focus-ring-width) solid var(--accent);outline-offset:var(--focus-ring-offset)}button:focus{background-color:var(--raised)}input:focus{outline-offset:4px}h1,h2,h3,p{margin:0}h1,h2,h3{font-weight:800;letter-spacing:-.04em;line-height:1.16}h1{font-size:var(--title)}h2{font-size:var(--heading)}h3{font-size:var(--body)}p{line-height:1.6}.od-icon{--od-icon-size:28px}.muted{color:var(--muted)}.small{font-size:var(--small)}.eyebrow{display:block;color:var(--accent);font-size:var(--small);font-weight:800;letter-spacing:.16em;text-transform:uppercase}.shell{display:grid;grid-template-columns:var(--rail) minmax(0,1fr);height:100dvh}.sidebar{position:relative;z-index:5;background:var(--color-menu-bg-base);border-right:1px solid var(--color-menu-border);min-width:0}.menu-inner{display:flex;flex-direction:column;width:var(--rail);height:100%;padding:40px 24px;background:var(--color-menu-bg-base)}.sidebar:focus-within .menu-inner{position:absolute;top:0;left:0;width:320px;box-shadow:32px 0 64px var(--color-shadow-strong)}.brand{display:flex;align-items:center;gap:16px;font-size:24px;font-weight:800;white-space:nowrap}.brand img{display:block;width:64px;height:auto;flex:none}.brand span{display:none}.sidebar:focus-within .brand span{display:block}.brand em{font-style:normal;color:var(--accent)}.menu{display:grid;gap:16px;margin-top:64px}.menu button{display:flex;align-items:center;gap:24px;min-height:64px;padding:16px 18px;border-radius:var(--radius-control);white-space:nowrap;color:var(--muted);position:relative}.menu button>span:not(.od-icon){display:none}.sidebar:focus-within .menu button>span:not(.od-icon){display:block}.menu button[aria-current=page]{color:var(--accent);background:var(--color-accent-subtle)}.menu button[aria-current=page]:before{content:'';position:absolute;left:-24px;top:20px;width:4px;height:24px;background:var(--accent)}.menu button:focus{color:var(--text)}.account{margin-top:auto;display:grid;gap:16px}.account .menu{margin:0}.avatar{display:flex;align-items:center;gap:16px;padding-left:8px;white-space:nowrap;font-size:16px;color:var(--muted)}.avatar b{display:flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:var(--color-avatar-surface);color:var(--accent);font-size:16px;flex:none}.avatar span{display:none}.sidebar:focus-within .avatar span{display:block}.main{min-width:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) var(--bg)}.topbar{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:40px var(--gutter) 24px;color:var(--muted);font-size:var(--small)}.topbar strong{color:var(--text);font-size:var(--body);font-weight:600}.topbar .right{display:flex;align-items:center;gap:24px}.meta{display:flex;flex-wrap:wrap;align-items:center;gap:16px;color:var(--muted);font-size:var(--small);margin:16px 0}.meta span{display:block}.meta .tag{padding:4px 12px;border:1px solid var(--line);border-radius:var(--radius-small);color:var(--text)}.actions{display:flex;flex-wrap:wrap;gap:16px;margin-top:32px}.btn{display:inline-flex;align-items:center;justify-content:center;gap:16px;padding:16px 28px;min-height:64px;border-radius:var(--radius-control);font-size:var(--body);font-weight:600;background:var(--surface);border:1px solid var(--line);white-space:nowrap}.btn.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:600}.btn.primary:focus{background:var(--color-accent-hover)}.btn.icon{padding:16px;min-width:64px}.catalog{padding:24px var(--gutter) 64px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:32px}.section-head .count{color:var(--muted);font-size:var(--small)}.poster-grid{--od-cols:6;--od-gap:32px 24px;align-items:start}.anime-card{display:block;width:100%;padding:0;border-radius:var(--radius-card);min-width:0}.poster-wrap{position:relative;display:block;border-radius:var(--radius-card);background:var(--surface)}.poster-wrap img{border-radius:var(--radius-card)}.anime-card h3{margin-top:16px;font-weight:600;font-size:var(--small);line-height:1.5;letter-spacing:-.02em}.anime-card .year{display:block;color:var(--muted);font-size:var(--small);margin-top:4px}.anime-card:focus{background:none}.badge{position:absolute;top:12px;right:12px;display:flex;align-items:center;justify-content:center;background:var(--color-badge-bg);color:var(--accent);border-radius:var(--radius-small);padding:8px;--od-icon-size:20px}.page-title{padding:24px var(--gutter) 32px}.page-title p{margin-top:16px;color:var(--muted)}.genre-grid{--od-cols:3;--od-gap:24px}.genre{min-height:144px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--surface);font-size:var(--heading);font-weight:600}.genre .od-icon{color:var(--accent)}.genres-note{margin-top:40px;color:var(--muted);font-size:var(--small)}.genre-links{display:flex;flex-wrap:wrap;gap:16px}.genre-links button{min-height:48px;color:var(--accent);padding:8px 16px;border:1px solid var(--line);border-radius:var(--radius-control);font-size:var(--small)}.episode-grid{--od-cols:3;--od-gap:24px}.episode{display:flex;align-items:center;gap:24px;padding:24px;min-height:112px;border:1px solid var(--line);background:var(--surface);border-radius:var(--radius-card)}.ep-num{display:block;font-size:clamp(24px,2vw,36px);color:var(--muted);font-weight:800}.episode .od-field{flex:1}.episode .od-icon{color:var(--accent)}.episode .small{color:var(--muted)}.empty{max-width:800px;margin:64px auto;text-align:center;padding:40px}.empty p{color:var(--muted);margin:24px 0}.empty .actions{justify-content:center}.empty-symbol{display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:32px;--od-icon-size:64px}.back-btn{display:flex;align-items:center;gap:16px;min-height:56px;padding:8px;border-radius:var(--radius-control);color:var(--text)}.overlay{position:fixed;inset:0;z-index:20;display:flex;justify-content:flex-end;background:var(--color-scrim-heavy)}.side-sheet{width:min(600px,90vw);max-height:100dvh;overflow:auto;background:var(--surface);padding:48px;display:flex;flex-direction:column;gap:24px;border-left:1px solid var(--line)}.sheet-head{display:flex;align-items:center;justify-content:space-between;gap:16px}.sheet-option{display:flex;align-items:center;justify-content:space-between;gap:24px;width:100%;min-height:80px;padding:20px;border:1px solid var(--line);border-radius:var(--radius-control)}.sheet-option[aria-pressed=true]{color:var(--accent);background:var(--color-accent-subtle)}.sheet-copy{color:var(--muted);font-size:var(--small)}.danger{color:var(--danger)}.toast{position:fixed;z-index:40;bottom:48px;left:50%;transform:translateX(-50%);max-width:80vw;padding:20px 32px;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--text);color:var(--bg);font-size:var(--body);box-shadow:0 16px 40px var(--color-shadow-soft)}.login{display:grid;grid-template-columns:minmax(0,1fr) minmax(340px,560px);gap:64px;align-items:center;min-height:100dvh;max-width:1600px;margin:auto;padding:64px}.login-copy .brand{margin-bottom:64px}.login-copy .brand span{display:block}.login-copy h1{margin:24px 0;max-width:700px}.login-copy p{color:var(--muted);max-width:48ch}.login-form{padding:40px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card)}.login-form h2{margin-bottom:32px}.field{display:grid;gap:8px;margin-bottom:24px}.field label{font-size:var(--small)}.field input{display:block;width:100%;min-height:64px;padding:16px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-control);color:var(--text)}.field .error{color:var(--danger);font-size:16px}.login-form .btn{width:100%;margin-bottom:16px}.login-note{font-size:16px;color:var(--muted);line-height:1.6;margin-top:24px}.error-summary{padding:16px;border:1px solid var(--danger);margin-bottom:24px;font-size:16px}.error-summary a{color:var(--danger);display:block;padding:8px}.player{min-height:100dvh;display:flex;flex-direction:column;background:var(--color-player-bg-legacy);padding:48px var(--gutter)}.player-top{display:flex;justify-content:space-between;align-items:center;gap:24px}.player-top .od-field{text-align:right}.player-stage{flex:1;min-height:280px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:24px;padding:48px}.player-stage img{width:96px;height:auto;border-radius:var(--radius-card);opacity:.75}.player-stage h1{font-size:var(--heading)}.player-stage p{max-width:48ch;color:var(--muted);font-size:var(--small)}.playback{max-width:1600px;width:100%;margin:0 auto}.timeline{width:100%;accent-color:var(--accent);min-height:44px;cursor:pointer}.time-row{display:flex;justify-content:space-between;font-size:var(--small);color:var(--muted)}.controls{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:24px}.transport{display:flex;align-items:center;gap:24px}.controls .od-icon{--od-icon-size:28px}.player-status{color:var(--accent);font-size:var(--small)}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}.footer-note{margin-top:40px;font-size:var(--small);color:var(--muted)}
 @media(hover:hover){button:hover{background-color:var(--raised)}.anime-card:hover{background:none;color:var(--accent)}.btn.primary:hover{background:var(--color-accent-hover)}.genre-links button:hover{border-color:var(--accent)}}
-@media(max-width:1440px){:root{--rail:96px;--gutter:40px}.menu-inner{padding:32px 16px}.brand img{width:56px}.hero{gap:32px}.hero-art{max-width:256px}.hero h1{margin-bottom:16px}.hero p{margin-bottom:16px}.actions{margin-top:24px}.btn{min-height:56px;padding:12px 24px}.topbar{padding-top:32px}.poster-grid{--od-gap:24px 16px}.menu button[aria-current=page]:before{left:-16px}}
-@media(max-width:1024px){:root{--rail:88px;--gutter:32px}.poster-grid{--od-cols:4}.hero{grid-template-columns:minmax(0,1fr) 24%;gap:24px}.hero p{font-size:16px}.hero h1{font-size:40px}.hero-art{max-width:200px}.topbar .right .live-mark{display:none}.genre-grid{--od-cols:2}.controls{flex-wrap:wrap}.login{gap:32px;padding:40px;grid-template-columns:minmax(0,1fr) minmax(300px,1fr)}.login-form{padding:24px}}
-@media(max-width:768px){:root{--rail:80px;--gutter:24px;--title:36px}.menu-inner{padding:24px 12px}.menu button{padding:16px 12px}.hero{grid-template-columns:minmax(0,1fr) 28%;gap:16px}.hero h1{font-size:32px}.hero-copy p{display:none}.poster-grid{--od-cols:3}.topbar{padding-top:24px}.genre{font-size:20px;padding:24px}.episode{gap:16px;padding:16px}.episode .ep-num{font-size:24px}.episode .od-icon{display:none}.login{grid-template-columns:1fr}.login-copy .brand{margin-bottom:24px}.side-sheet{padding:32px}.brand img{width:48px}.menu button[aria-current=page]:before{left:-12px}}
-@media(max-width:480px){:root{--rail:72px;--gutter:20px}.hero{grid-template-columns:1fr}.hero-art{display:none}.hero h1{font-size:32px}.poster-grid{--od-cols:2}.hero-copy p{display:block}.topbar .right{display:none}.genre-grid{--od-cols:1}.episode-grid{--od-gap:12px}.episode{display:grid;gap:8px;padding:12px}.episode .small{font-size:12px}.episode .od-field{font-size:14px}.btn{font-size:16px;gap:8px;padding:12px 16px}.topbar{padding-bottom:16px}.section-head{align-items:start;flex-wrap:wrap}.login{padding:24px}.player{padding:24px}.player-top{align-items:start}.player-stage{padding:24px}.transport{gap:12px}.controls{gap:16px}.poster-caption{display:none}.menu-inner{padding-inline:8px}.menu button[aria-current=page]:before{left:-8px}.side-sheet{padding:24px}}
+@media(max-width:1440px){:root{--rail:96px;--gutter:40px}.menu-inner{padding:32px 16px}.brand img{width:56px}.actions{margin-top:24px}.btn{min-height:56px;padding:12px 24px}.topbar{padding-top:32px}.poster-grid{--od-gap:24px 16px}.menu button[aria-current=page]:before{left:-16px}}
+@media(max-width:1024px){:root{--rail:88px;--gutter:32px}.poster-grid{--od-cols:4}.genre-grid{--od-cols:2}.controls{flex-wrap:wrap}.login{gap:32px;padding:40px;grid-template-columns:minmax(0,1fr) minmax(300px,1fr)}.login-form{padding:24px}}
+@media(max-width:768px){:root{--rail:80px;--gutter:24px;--title:36px}.menu-inner{padding:24px 12px}.menu button{padding:16px 12px}.poster-grid{--od-cols:3}.topbar{padding-top:24px}.genre{font-size:20px;padding:24px}.episode{gap:16px;padding:16px}.episode .ep-num{font-size:24px}.episode .od-icon{display:none}.login{grid-template-columns:1fr}.login-copy .brand{margin-bottom:24px}.side-sheet{padding:32px}.brand img{width:48px}.menu button[aria-current=page]:before{left:-12px}}
+@media(max-width:480px){:root{--rail:72px;--gutter:20px}.poster-grid{--od-cols:2}.topbar .right{display:none}.genre-grid{--od-cols:1}.episode-grid{--od-gap:12px}.episode{display:grid;gap:8px;padding:12px}.episode .small{font-size:12px}.episode .od-field{font-size:14px}.btn{font-size:16px;gap:8px;padding:12px 16px}.topbar{padding-bottom:16px}.section-head{align-items:start;flex-wrap:wrap}.login{padding:24px}.player{padding:24px}.player-top{align-items:start}.player-stage{padding:24px}.transport{gap:12px}.controls{gap:16px}.menu-inner{padding-inline:8px}.menu button[aria-current=page]:before{left:-8px}.side-sheet{padding:24px}}
 /* UI Kit / MediaCard: один renderer mediaCard() в app.js и один набор стилей.
    Параметры экземпляра: --media-card-ratio, --media-card-height, --media-card-fit.
    Внешний экран управляет сеткой; компонент — изображением, подписью и фокусом.
@@ -239,6 +239,8 @@ button,input,a[href]{
   --motion-page:280ms;
   --motion-reverse:200ms;
   --motion-focus-exit:104ms;
+  --motion-card-focus-in:var(--motion-page);
+  --motion-card-focus-out:180ms;
   /* AppMotion / источник: Flutter Curves.easeOutCubic и Curves.easeInCubic.
      Общие кривые для MediaCard, меню и панелей; не дублировать по разделам.
      Вход замедляется к концу, выход ускоряется; время задаём токенами выше.
@@ -451,7 +453,7 @@ button,input,a[href]{
 .home-catalog:has(>.catalog-inspector)>.home-grid-wrap{padding-block-start:var(--catalog-focus-clearance)}
 /* Лёгкий backdrop blur отделяет sticky-текст от проходящих под ним постеров.
    Почти непрозрачная основа сохраняет контраст; без поддержки blur фон сплошной. */
-@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+@supports (backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px)){
   .home-main .catalog-inspector{background:var(--inspector-surface);backdrop-filter:blur(var(--inspector-blur));-webkit-backdrop-filter:blur(var(--inspector-blur))}
 }
 @media(prefers-reduced-transparency:reduce){
@@ -718,4 +720,434 @@ button,input,a[href]{
 /* Системная настройка важнее декоративного проявления: без задержки и fade. */
 @media(prefers-reduced-motion:reduce){
   :root{--focus-fade-in:0ms;--focus-fade-out:0ms}
+}
+
+/* Flutter UI parity — 2026-11-11.
+   Source: lib/packages/ui_kit/{theme,widgets}, features/<feature>/presentation.
+   Эталон — текущий Flutter, не старый export в Flutter/prototype/.
+   AppPalette/AppSpacing/AppRadii/AppMotion остаются единственными токенами.
+   Все числа ниже — CSS logical pixels, как на эталонном TV viewport 1280×720.
+   Native DPR/TextScaler не моделируются размером окна; телефонные overrides —
+   только responsive.css. Сетевые операции и HLS в этом HTML имитируются. */
+@font-face{font-family:Manrope;src:url('assets/manrope-500.ttf');font-weight:500;font-display:swap}
+@font-face{font-family:Manrope;src:url('assets/manrope-700.ttf');font-weight:700;font-display:swap}
+:root{
+  --color-focus-glow:#D986A633;--color-success:#A9D4BC;--color-warning:#E2CB9A;
+  --native-control:56px;--native-touch:48px;--native-card-title:15px;
+  --native-episode-title:18px;--native-episode-caption:14px;--native-frame:2px;
+  --native-rail:88px;--native-menu:264px;--native-prose:720px;
+  --focus-ring-width:var(--native-frame);--focus-ring-offset:-2px;
+  --rail:var(--native-rail);--menu-width:var(--native-menu);--menu-pad:16px;
+  --body:18px;--small:14px;--heading:24px;
+}
+body{font-size:18px}
+.btn{min-height:var(--native-control);padding:16px;font-size:16px;font-weight:800;gap:8px}
+.btn.primary{font-weight:800}
+.btn.icon{min-width:var(--native-control);padding:8px}
+.btn>.od-icon{--od-icon-size:24px}
+button:focus,input:focus,a:focus,.side-sheet .btn:focus,.side-sheet .sheet-option:focus,
+.home-main .detail-page .metadata-chip:focus,.watch-order-link:focus{outline-offset:var(--focus-ring-offset)}
+/* Cards: AppFocusBorder is painted over the clipped image, never outside it.
+   Fixed 2px contour shares the 12px radius; focus changes colour, not geometry. */
+.native-media-item{position:relative;min-width:0;align-self:start}
+.ui-media-card{--media-card-ratio:2/3;--media-card-radius:var(--radius-card);--media-card-title-size:var(--native-card-title);--media-card-caption-pad:48px 16px 16px;position:relative;border:0;outline:0;outline-offset:0;background:var(--surface)}
+.ui-media-card::after{content:'';position:absolute;inset:0;border:var(--native-frame) solid var(--line);border-radius:inherit;pointer-events:none;transition:border-color var(--motion-card-focus-out) var(--motion-exit)}
+.ui-media-card:focus,.home-main .ui-media-card:focus{outline:0;outline-offset:0;box-shadow:0 0 12px var(--color-focus-glow)}
+.ui-media-card:focus::after{border-color:var(--accent);transition-duration:var(--motion-card-focus-in);transition-timing-function:var(--motion-enter)}
+.ui-media-card.is-current-episode::after{border-color:var(--muted)}
+.ui-media-card.is-current-episode:focus::after{border-color:var(--accent)}
+.ui-media-card:active{transform:scale(1)}
+.ui-media-card--landscape{--media-card-ratio:219/92}
+.ui-media-card .poster-title{font-size:var(--native-card-title);font-weight:600;line-height:1.4;padding:var(--media-card-caption-pad);letter-spacing:0}
+.ui-media-card .media-card-favorite{padding:8px 4px 12px;--od-icon-size:28px;align-items:center}
+.home-main .anime-card:hover .poster-wrap{outline:0}
+.home-shell{--home-title:26px;--home-body:16px;--home-caption:14px;--home-poster:15px;--home-gap:24px;--home-inset:40px;--inspector-padding-block:32px;--inspector-blur:14px;--catalog-focus-clearance:16px}
+.home-main .anime-title{font-size:26px;line-height:1.25;font-weight:800;letter-spacing:-.4px}
+.home-main .inspector-copy.od-stack{--od-gap:8px}
+.home-main .catalog-inspector{gap:32px;grid-template-columns:minmax(0,3fr) minmax(0,1fr);border-bottom:1px solid var(--line);max-height:50dvh;overflow:auto}
+.home-main .inspector-category-row{--od-gap:16px}
+.home-main .inspector-description{font-size:16px;line-height:1.4;max-width:var(--native-prose)}
+.home-main .inspector-news{font-size:16px;--od-gap:8px;padding:0;border:0}
+.home-main .episode-news{font-size:16px;line-height:1.4}
+.home-main .publication-date{font-size:14px;line-height:1.4}
+.home-main .inspector-rating{font-size:14px;gap:4px;padding:4px;border:1px solid var(--line);border-radius:var(--radius-small);background:var(--color-badge-bg);--od-icon-size:20px}
+.home-main .inspector-rating>strong{font-weight:700}
+.home-main .inspector-rating>span{display:none}
+.home-main .inspector-rating>.od-icon{color:var(--accent)}
+.home-main .inspector-categories{font-size:16px;line-height:1.4}
+.home-grid-wrap .poster-grid,.home-grid{--od-cols:4;--od-gap:32px 24px}
+.home-main .section-title{font-size:24px;font-weight:800;line-height:1.3}
+.skeleton-poster{aspect-ratio:2/3;animation:native-skeleton var(--motion-shimmer,1100ms) var(--motion-enter) infinite alternate}
+@keyframes native-skeleton{from{opacity:.5}to{opacity:1}}
+/* CatalogNavigationRail: fixed 88px rail, 264px expanded surface, 56px items. */
+.shell .sidebar .menu-inner,.shell .sidebar:focus-within .menu-inner{padding:0 16px 16px}
+.shell .sidebar .brand{height:88px;flex:none;gap:16px;padding-left:8px;font-size:24px}
+.shell .sidebar .brand img{width:40px;height:auto}
+.shell .sidebar .menu{display:flex;flex:1;flex-direction:column;gap:8px;margin-top:8px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;padding:0 0 8px}
+.shell .sidebar .menu button{min-height:56px;padding:16px;gap:16px;font-size:16px;font-weight:800;--od-icon-size:24px;flex:none}
+.shell .sidebar .menu button:focus{outline-offset:-2px;box-shadow:0 0 12px var(--color-focus-glow)}
+.shell .sidebar .account{flex:none;margin-top:16px;min-height:64px}
+.shell .sidebar .account-summary .account-picture{width:48px;height:48px}
+.shell .sidebar .account-name{font-size:16px;line-height:1.4;max-width:160px;overflow-wrap:anywhere}
+/* EpisodeCard: preview and caption share one surface; dimensions follow
+   MediaCardMetrics (imageWidth / 219*92, minimum copy height, TextScaler). */
+.native-episode{--media-card-ratio:219/92;--media-card-caption-pad:48px 16px 16px;--media-card-title-size:var(--native-episode-title);width:100%;min-height:104px}
+.native-episode .poster-wrap{min-height:104px;aspect-ratio:219/92;overflow:hidden}
+.native-episode .poster-title{--od-gap:4px;text-align:left}
+.native-episode .media-card-label{font-size:var(--native-episode-title);line-height:1.35;font-weight:600;white-space:normal}
+.native-episode .media-card-status{font-size:var(--native-episode-caption);line-height:1.4;white-space:normal}
+.native-watched,.native-current{position:absolute;top:8px;display:flex;align-items:center;justify-content:center;padding:4px;border-radius:var(--radius-small);background:var(--color-badge-bg);--od-icon-size:20px}
+.native-watched{right:8px;color:var(--color-success)}
+.native-current{left:8px;color:var(--accent)}
+.episode-card-grid{--od-cols:3;--od-gap:24px;align-items:stretch}
+.episode-picker{--od-cols:1;--od-gap:16px;padding:0}
+.episode-picker .is-current-episode{box-shadow:none}
+/* Own AnimeScreen route on TV. AppBar + scrollable content, no catalog rail. */
+.detail-main>.native-route-header{position:sticky;top:0;z-index:4;min-height:80px}
+.native-route-header{display:flex;align-items:center;padding:0 24px;background:var(--inspector-surface);border-bottom:1px solid var(--line)}
+.native-route-header .btn{background:var(--color-transparent);border:0}
+.native-route-header .btn>span{display:none}
+.detail-main .detail-page{padding:24px 48px 48px}
+.detail-title{margin-bottom:24px}
+.detail-intro{--detail-poster-width:clamp(140px,22vw,240px);grid-template-columns:var(--detail-poster-width) minmax(0,1fr);gap:32px}
+.detail-poster .od-media{aspect-ratio:2/3;object-fit:cover;border-radius:var(--radius-card)}
+.detail-overview{--od-gap:24px}
+.detail-overview .detail-meta{order:0;--od-gap:16px}
+.detail-overview .detail-filters{order:1;margin:0}
+.detail-overview .detail-actions{order:2;margin:0}
+.detail-rating{font-size:19px;min-height:0;gap:8px}
+.detail-rating>.od-icon{--od-icon-size:20px;color:var(--text)}
+.detail-page .metadata-chip,.detail-meta .metadata-chip,.detail-filter-row .metadata-chip{min-height:48px;padding:8px 16px;font-size:14px;gap:8px;font-weight:500}
+.detail-filter-label{font-size:14px;line-height:1.4}
+.detail-filter-row{grid-template-columns:96px minmax(0,1fr);gap:16px}
+.detail-actions{display:flex;flex-wrap:wrap;gap:16px}
+.detail-actions .btn{min-height:56px;font-size:16px}
+.detail-description{margin-top:32px;gap:16px}
+.detail-page h2{font-size:24px;line-height:1.25;font-weight:800}
+.detail-description p{font-size:17px;line-height:1.45;max-width:var(--native-prose)}
+.detail-credits{display:grid;gap:8px;margin-top:24px;font-size:16px;line-height:1.4}
+.detail-episodes{margin-top:24px}
+.detail-episodes .section-head{margin-bottom:16px}
+.detail-update{margin-top:24px}
+.detail-update p{font-size:18px;line-height:1.45;font-weight:400}
+.detail-watch-order{margin-top:24px}
+.watch-order-link{font-size:14px;min-height:48px;font-weight:500}
+.watch-order-current{font-size:14px}
+.native-description-toggle{padding:12px 8px;min-height:48px;color:var(--accent);font-size:14px;border-radius:var(--radius-control)}
+/* IntroScreen / LoginScreen / StartupScreen — independent native surfaces. */
+.native-intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:64px;align-items:center;min-height:100dvh;padding:clamp(24px,5vw,96px);background:var(--bg)}
+.native-intro-brand{display:grid;place-items:center}
+.native-intro .brand{flex-direction:column;gap:24px;font-size:32px;font-weight:800}
+.native-intro .brand img{width:160px;height:auto}
+.native-intro .brand>span{display:block}
+.native-intro-actions{width:100%;max-width:560px;justify-self:center;text-align:center}
+.native-intro-actions h1{font-size:28px;line-height:1.25;font-weight:800;letter-spacing:-.4px}
+.native-intro-actions p{font-size:18px;line-height:1.45;color:var(--muted);margin-top:16px}
+.native-intro-actions>.od-stack{--od-gap:16px;margin-top:48px}
+.native-intro-actions .btn{width:100%;min-height:56px}
+.native-startup{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:100dvh;padding:32px;text-align:center;background:var(--bg)}
+.native-startup>img{width:96px;height:auto}
+.native-startup h1{font-size:32px;font-weight:800}
+.native-startup p{font-size:19px;line-height:1.4;max-width:520px}
+.native-spinner{display:flex;justify-content:center;align-items:center;--od-icon-size:42px;color:var(--accent);margin-top:8px;animation:playback-loading 1s linear infinite}
+.tv-login{--login-control:58px;--login-text:18px;grid-template-columns:minmax(0,1fr) minmax(0,560px);gap:64px;padding:clamp(24px,5vw,96px)}
+.tv-login .brand img{width:160px}
+.tv-login .login-copy .brand{font-size:32px;font-weight:800}
+.tv-login .login-form h1{font-size:28px;font-weight:800;margin-bottom:24px;line-height:1.25}
+.tv-login .field label{font-size:18px}
+.tv-login .field{gap:8px;margin-bottom:24px}
+.tv-login .field input{padding:16px;font-size:18px;min-height:58px}
+.tv-login .password-visibility{min-width:56px;min-height:58px;padding:16px;--od-icon-size:24px}
+.tv-login .login-actions{--od-gap:16px;margin-top:32px}
+.tv-login .login-actions .btn{font-size:16px;min-height:56px}
+.tv-login .auth-feedback{display:flex;gap:0;border:1px solid var(--danger);border-radius:var(--radius-control);padding:16px;color:var(--danger)}
+.tv-login .auth-feedback:empty{display:none}
+.tv-login .auth-feedback>.od-icon{display:none}
+.tv-login .auth-feedback p{font-size:16px;color:var(--danger);line-height:1.4}
+/* Shared native sheets: intrinsic-height controls, no stretched confirm buttons. */
+.side-sheet{width:min(440px,100vw);padding:24px;gap:24px;scroll-padding-block:24px}
+.side-sheet .sheet-head h2{font-size:24px;font-weight:800;line-height:1.3}
+.side-sheet .btn,.side-sheet .sheet-option{min-height:56px;font-size:16px;padding:16px;gap:8px;flex:none}
+.side-sheet .sheet-option{justify-content:flex-start}
+.side-sheet .sheet-copy{font-size:16px;line-height:1.4}
+.side-sheet .favorite-action{font-size:16px;min-height:56px}
+.browse-sort-draft .sheet-option{font-size:16px;min-height:56px;padding:16px}
+.sort-order-title{font-size:16px;font-weight:400}
+.sort-panel-actions .btn{font-size:16px;min-height:56px}
+/* PlayerOverlay: same header/control order as Flutter. Boundary actions hidden. */
+:root{--player-control:56px;--player-safe:32px;--player-body:16px;--player-gap:8px}
+.tv-player .player-top{justify-content:flex-start;gap:16px;min-width:0}
+.tv-player .player-top>.od-field{flex:1;text-align:left;min-width:0}
+.tv-player .player-title{font-size:24px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-player .player-episode{font-size:18px;line-height:1.45}
+.tv-player .player-back{display:flex;width:56px;min-width:56px;min-height:56px;padding:8px;background:var(--color-player-control);border:0;--od-icon-size:30px}
+.tv-player .player-back>span{display:none}
+.tv-player .player-control{width:56px;height:56px;min-height:56px;padding:8px;--od-icon-size:30px}
+.tv-player .player-quality{min-height:56px;padding:8px 16px;font-size:16px}
+.tv-player .player-time{font-size:16px;white-space:nowrap}
+.tv-player .player-control:focus,.tv-player .player-quality:focus{outline-offset:-2px}
+.player-chrome{padding:32px;gap:16px}
+.tv-player .controls{margin-top:16px;gap:16px}
+.tv-player .transport{gap:8px}
+.native-seek-preview{display:flex;grid-row:2;align-self:center;justify-self:center;align-items:center;justify-content:center;padding:12px 24px;background:var(--color-badge-bg);border-radius:var(--radius-control);font-size:24px;font-variant-numeric:tabular-nums;z-index:2;color:var(--color-player-text)}
+/* SearchScreen: field/form does not scroll away; only its results scroll. */
+.search-page{height:100%;min-height:0;padding:24px 0 0;overflow:hidden}
+.search-title{margin:0 24px 16px;font-size:24px}
+.search-form{margin:0 24px 24px;gap:8px;max-width:none;flex:none}
+.search-page{--search-control:56px;--search-font:16px}
+.search-input-row input{min-height:56px;padding:16px;font-size:16px}
+.search-page .search-icon-button{min-width:48px;min-height:56px;padding:8px}
+.search-page .search-submit{min-height:56px;padding:16px;font-weight:800}
+.search-input-row,.search-input-row:focus-within{outline-offset:-2px}
+.search-input-error{font-size:14px;line-height:1.4}
+#search-body{overflow:auto;min-height:0;overscroll-behavior:contain;scroll-padding-block:16px}
+.search-status{padding:0 var(--home-inset) 16px;font-size:16px}
+.search-feedback h2{font-size:24px;font-weight:800}
+.search-feedback p{font-size:18px;line-height:1.45}
+.search-history{max-width:none}
+.search-history h2{font-size:24px;font-weight:800}
+.search-history-heading .btn,.search-recent{font-size:16px;min-height:56px}
+.native-search-tail{display:grid;justify-items:center;gap:16px;padding:24px var(--home-inset);font-size:16px;color:var(--muted)}
+.native-search-tail:empty{display:none}
+#search-sentinel{height:4px;flex:none}
+/* LogViewerView — uses local UI events only. No private Flutter files are read. */
+.native-logs-route{height:100dvh;overflow:auto;background:var(--bg);padding:8px 24px 24px}
+.native-logs{display:flex;flex-direction:column;min-height:calc(100dvh - 32px);gap:16px}
+.native-log-header{display:flex;align-items:center;gap:16px;min-height:64px}
+.native-log-header h1{flex:1;font-size:24px;font-weight:800}
+.native-log-header .btn>span{display:none}
+.native-log-header .od-row{--od-gap:8px}
+.native-log-select{--od-gap:8px;font-size:16px}
+.native-log-select select{display:block;width:100%;min-height:56px;padding:12px 16px;border:1px solid var(--line);border-radius:var(--radius-control);background:var(--surface);color:var(--text);font:inherit}
+.native-log-content{flex:1;min-height:240px;max-height:65dvh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);border-radius:var(--radius-card);background:var(--bg);padding:24px;font-family:ui-monospace,monospace;font-size:13px;line-height:1.55;color:var(--text);margin:0}
+.native-log-scroll{--od-gap:8px;justify-content:flex-end}
+.native-log-scroll .btn{font-size:14px}
+.native-refresh{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;flex:none;color:var(--accent);font-size:16px}
+.native-refresh>.od-icon{--od-icon-size:24px;animation:playback-loading 1s linear infinite}
+@media(min-width:1440px){.home-shell{--home-inset:64px}.home-grid-wrap .poster-grid,.home-grid{--od-cols:5}}
+@media(prefers-reduced-motion:reduce){.skeleton-poster,.native-spinner,.native-refresh>.od-icon{animation:none}.ui-media-card::after{transition:none}}
+::view-transition-group(anime-poster){animation-duration:var(--motion-page);animation-timing-function:var(--motion-enter);border-radius:var(--radius-card)}
+::view-transition-old(root),::view-transition-new(root){animation:none}
+::view-transition-old(anime-poster),::view-transition-new(anime-poster){border-radius:var(--radius-card);mix-blend-mode:normal}
+/* AnimeSkeleton / AppNetworkImage failure fallback share the same endpoint geometry. */
+.native-skeleton-line{height:24px;width:72%;background:var(--surface);border-radius:var(--radius-small);animation:native-skeleton 1100ms var(--motion-enter) infinite alternate}
+.native-skeleton-line.wide{width:100%}
+.native-skeleton-line.short{width:48%}
+.native-skeleton-copy{--od-gap:16px;max-width:720px;margin-top:32px}
+.native-preview-fallback{display:flex;align-items:center;justify-content:center;min-height:104px;background:var(--surface);color:var(--line);--od-icon-size:40px;border-radius:var(--radius-card);aspect-ratio:219/92}
+.native-detail-loading .detail-overview{padding-top:8px}
+@media(prefers-reduced-motion:reduce){.native-skeleton-line{animation:none}}
+/* Fixed header + independently scrolling sheet body, as AppActionSheet.expandChild. */
+.side-sheet{height:100%;max-height:100dvh;overflow:hidden;min-height:0;display:flex;flex-direction:column}
+.sheet-head{flex:none}
+.native-sheet-body{display:flex;flex:1 1 auto;flex-direction:column;min-height:0;overflow-y:auto;gap:16px;overscroll-behavior:contain;scroll-padding-block:8px;padding:4px;scrollbar-width:thin;scrollbar-color:var(--line) var(--menu-bg)}
+.native-sheet-body>*{flex:none;min-width:0}
+.native-sheet-body .sheet-option{min-height:64px}
+.native-sheet-body .browse-sort-draft .sheet-option{min-height:56px}
+.home-main .catalog-inspector .anime-title{font-size:28px}
+.ui-media-card{box-shadow:0 0 12px var(--color-transparent);transition:transform var(--motion-card-focus-out) var(--motion-exit),box-shadow var(--motion-card-focus-out) var(--motion-exit)}
+.ui-media-card:focus,.home-main .ui-media-card:focus{transition-duration:var(--motion-card-focus-in);transition-timing-function:var(--motion-enter)}
+@media(prefers-reduced-motion:reduce){.ui-media-card,.ui-media-card:focus,.home-main .ui-media-card:focus{transition:none}}
+/* SearchScreen is Expanded below AppBar; restoring search uses its own scroll offset. */
+.main:has(>.search-page){display:flex;flex-direction:column;overflow:hidden}
+.main:has(>.search-page)>.compact-header{flex:none}
+.main>.search-page{flex:1 1 0;min-height:0;height:auto}
+@media(min-width:1024px){.native-episode .poster-wrap,.native-preview-fallback{min-height:156px}}
+.native-episode .media-card-status{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.native-episode .media-card-label{white-space:nowrap}
+/* AnimeWatchOrder uses full-width TvFocusTile rows in source DOM order. */
+.watch-order-list{display:flex;flex-direction:column;align-items:stretch;--od-gap:8px}
+.watch-order-list>li{width:100%}
+.watch-order-link{width:100%;min-height:56px;padding:16px;font-size:18px;font-weight:400}
+.native-watch-order-unavailable{display:block;margin:0;padding:16px;font-size:18px;overflow-wrap:anywhere}
+/* GenresScreen computes columns from available content width, excluding the rail.
+   1100px content = 1188px window with the native persistent 88px rail. */
+.genres-catalog{padding:24px}
+.genres-catalog>.section-header{display:none}
+.genre-card-grid{--od-gap:16px;--od-cols:3}
+@media(min-width:1188px){.genre-card-grid{--od-cols:4}}
+
+/* Series screen: independently scoped from the TV-home chips.
+   Flex children must shrink before text wraps; icon size belongs to the icon. */
+.detail-page .detail-overview,.detail-page .detail-filters,.detail-page .detail-filter-row,.detail-page .detail-filter-row>.od-cluster { min-width:0; }
+.detail-page .metadata-chip { display:inline-flex; align-items:center; min-width:0; max-width:100%; white-space:normal; }
+.detail-page .metadata-chip>span { display:block; min-width:0; white-space:normal; overflow-wrap:anywhere; }
+.detail-main .detail-poster .od-media { display:block; width:100%; height:auto; aspect-ratio:auto; object-fit:contain; }
+@media(min-width:1024px){
+  .detail-main .detail-intro { align-items:start; }
+  .detail-main .detail-overview { align-items:stretch; }
+  .detail-main .detail-filter-row { grid-template-columns:96px minmax(0,1fr); }
+  .detail-main .detail-actions { justify-content:flex-start; }
+  .detail-main .detail-actions .btn { flex:0 1 auto; max-width:100%; white-space:normal; }
+}
+
+/* Смотреть также: как MetadataFilter, но без иконки. Ширина — по содержимому,
+   не 100% строки. Список переносится целиком, длинная подпись — внутри кнопки. */
+.detail-page .watch-order-list { display:flex; flex-direction:row; flex-wrap:wrap; align-items:flex-start; justify-content:flex-start; gap:8px; --od-gap:8px; padding:0; margin:0; list-style:none; }
+.detail-page .watch-order-list>li { display:block; flex:0 1 auto; width:auto; max-width:100%; min-width:0; }
+.detail-page .watch-order-link,.detail-page .native-watch-order-unavailable { display:inline-flex; align-items:center; justify-content:flex-start; width:auto; max-width:100%; min-width:0; min-height:48px; padding:8px 16px; margin:0; border:1px solid var(--line); border-radius:var(--radius-control); background:var(--surface); color:var(--text); font-size:14px; font-weight:500; line-height:1.5; white-space:normal; text-align:left; }
+.detail-page .watch-order-link>span { display:block; flex:0 1 auto; min-width:0; white-space:normal; overflow-wrap:anywhere; }
+.detail-page .watch-order-link.is-current { border-color:var(--accent); background:var(--raised); }
+.detail-page .watch-order-link:focus { outline:var(--focus-ring-width) solid var(--accent); outline-offset:var(--focus-ring-offset); background:var(--raised); }
+.detail-page .native-watch-order-unavailable { color:var(--muted); }
+@media(hover:hover){.detail-page .watch-order-link:hover { background:var(--raised); color:var(--text); }}
+
+/* Detail disclosure: TV-only toggle, normal-flow information; no watch action.
+   Tokens shared with metadata chips. Favorite follows Подробнее, never stretches. */
+.detail-page .detail-actions { display:flex; flex-flow:row wrap; align-items:center; justify-content:flex-start; gap:8px; }
+.detail-page .detail-actions .btn { flex:0 1 auto; width:auto; max-width:100%; min-height:48px; padding:8px 16px; font-size:16px; }
+.detail-page .detail-actions .od-icon { --od-icon-size:20px; }
+.detail-page .detail-overview>.detail-meta:empty,.detail-page .detail-actions:empty { display:none; }
+.detail-page .detail-information { order:3; --od-gap:24px; gap:24px; min-width:0; }
+.detail-page .detail-information[hidden],.detail-page .detail-more[hidden] { display:none!important; }
+.detail-page .detail-information>.detail-meta,.detail-page .detail-information>.detail-filters { order:0; margin:0; }
+.detail-page .detail-information>.detail-description,.detail-page .detail-information>.detail-update,.detail-page .detail-information>.detail-credits { margin:0; }
+.detail-page .detail-information[inert] { pointer-events:none; }
+
+/* TV: only title/actions/episodes remain when details are collapsed.
+   Poster + rating + related parts belong to the same disclosure region. */
+.detail-page>.detail-information { margin-top:24px; }
+.detail-page .detail-information .detail-overview { --od-gap:24px; }
+.detail-page .detail-information .detail-watch-order { margin-top:0; }
+
+/* Measured disclosure height is temporary, not a locked content dimension.
+   Keep spacing INSIDE the animated region to avoid a 24px jump at its boundary. */
+.detail-page>.detail-information { margin-top:0; }
+.detail-page>.detail-information>.detail-intro { padding-top:24px; }
+.detail-page .detail-information.is-animating { overflow:clip; }
+.detail-page .detail-more .od-icon { transform:rotate(90deg); transition:transform var(--motion-page,280ms) var(--motion-enter,cubic-bezier(.215,.61,.355,1)); }
+.detail-page .detail-more[aria-expanded="true"] .od-icon { transform:rotate(270deg); }
+@media(prefers-reduced-motion:reduce){.detail-page .detail-more .od-icon { transition:none; }}
+
+/* Detail: poster on the left; rating/year and all filters on the right.
+   Story/publication/credits follow below the whole introductory row. */
+@media(min-width:1024px){
+  .detail-main .detail-page { --detail-section-gap:24px; --detail-text-size:16px; --detail-heading-size:24px; }
+  .detail-page .detail-information { --od-gap:var(--detail-section-gap); gap:var(--detail-section-gap); }
+  .detail-page .detail-information>.detail-description { display:grid; gap:16px; }
+  .detail-page .detail-information>.detail-description p { font-size:var(--detail-text-size); line-height:1.6; max-width:72ch; }
+  .detail-page .detail-information>.detail-update { --od-gap:8px; gap:8px; }
+  .detail-page .detail-information>.detail-update p,.detail-page .detail-information>.detail-credits { font-size:var(--detail-text-size); line-height:1.5; }
+  .detail-page .detail-information>.detail-update .detail-publication-date { font-size:14px; }
+  .detail-page h2 { font-size:var(--detail-heading-size); line-height:1.3; }
+  .detail-page .detail-overview .detail-filter-label { font-size:var(--detail-text-size); line-height:1.5; }
+  .detail-page .detail-overview .metadata-chip { font-size:var(--detail-text-size); line-height:1.5; }
+  .detail-page .detail-episodes { margin-top:var(--detail-section-gap); }
+  .detail-page .detail-episodes .section-head { margin-bottom:16px; }
+}
+
+/* Restore the useful TV side column; filters wrap inside the remaining width. */
+@media(min-width:1024px){
+  .detail-page .detail-information .detail-intro { grid-template-columns:clamp(160px,18vw,240px) minmax(0,1fr); gap:32px; align-items:start; }
+  .detail-page .detail-information .detail-overview { --detail-filter-height:36px; --detail-filter-icon:16px; --detail-filter-gap:8px; --od-gap:var(--detail-filter-gap); gap:var(--detail-filter-gap); min-width:0; }
+  .detail-page .detail-overview .detail-meta { gap:var(--detail-filter-gap); --od-gap:var(--detail-filter-gap); align-items:center; }
+  .detail-page .detail-overview .detail-filters { --od-gap:var(--detail-filter-gap); gap:var(--detail-filter-gap); margin:0; }
+  .detail-page .detail-overview .detail-filter-row { grid-template-columns:96px minmax(0,1fr); gap:var(--detail-filter-gap); align-items:start; }
+  .detail-page .detail-overview .detail-filter-label { padding-top:4px; line-height:1.5; }
+  .detail-page .detail-overview .metadata-chip { display:inline-flex; align-items:center; min-height:var(--detail-filter-height); padding:4px 8px; gap:4px; border-radius:var(--radius-small); font-size:16px; line-height:1.5; font-weight:500; }
+  .detail-page .detail-overview .metadata-chip>.od-icon { --od-icon-size:var(--detail-filter-icon); }
+  .detail-page .detail-overview .detail-filter-row>.od-cluster { --od-gap:8px; gap:8px; flex-wrap:wrap; }
+}
+
+/* Same rating hierarchy as home: accented star, bold score, regular / 10. */
+.detail-page .detail-rating { display:inline-flex; align-items:center; gap:8px; min-height:0; font-size:16px; line-height:1.5; white-space:nowrap; }
+.detail-page .detail-rating>strong { font-weight:700; line-height:1.5; }
+.detail-page .detail-rating>.detail-rating-scale { display:block; font-size:16px; font-weight:400; line-height:1.5; color:var(--muted); }
+.detail-page .detail-rating>.od-icon { --od-icon-size:20px; color:var(--accent); }
+
+/* Rating and year use the same label/value columns as genres. */
+@media(min-width:1024px){
+  .detail-page .detail-overview .detail-rating-row { align-items:center; min-height:var(--detail-filter-height); }
+  .detail-page .detail-overview .detail-rating-row>.detail-filter-label { padding-top:0; }
+}
+
+/* One score badge for poster cards on TV/mobile. Font/offset are instance tokens.
+   The same 64% background token also paints the favorite ribbon. */
+.ui-media-card { --media-card-rating-size:14px; --media-card-rating-icon:16px; --media-card-badge-inset:8px; }
+.ui-media-card .media-card-rating { position:absolute; top:var(--media-card-badge-inset); left:var(--media-card-badge-inset); display:inline-flex; align-items:center; gap:4px; max-width:calc(100% - 2 * var(--media-card-badge-inset)); padding:4px 8px; border-radius:var(--radius-small); background:var(--media-card-status-bg); color:var(--text); font-size:var(--media-card-rating-size); font-weight:700; line-height:1.5; white-space:nowrap; pointer-events:none; }
+.media-card-rating>.od-icon { --od-icon-size:var(--media-card-rating-icon); color:var(--accent); }
+.media-card-rating>span { display:block; }
+
+/* Shared panel trigger: same compact geometry as detail metadata filters. */
+/* A single caption needs its actual text width, not the detail table's 96px column.
+   Otherwise the nominal 8px gap includes a large empty tail after «Фильтр». */
+.catalog-filter-row { display:grid; grid-template-columns:max-content minmax(0,1fr); align-items:start; gap:8px; min-width:0; max-width:100%; }
+.catalog-filter-label { display:block; padding-top:4px; font-size:16px; line-height:1.5; color:var(--muted); }
+.home-main .catalog-filter-row .browse-sort-button { display:inline-flex; align-items:center; justify-self:start; min-height:36px; min-width:0; width:auto; max-width:100%; padding:4px 8px; gap:4px; border-radius:var(--radius-small); font-size:16px; line-height:1.5; font-weight:500; white-space:normal; }
+.home-main .catalog-filter-row .browse-sort-button>.od-icon { --od-icon-size:16px; flex:none; }
+
+/* Desktop filter lists: symmetric breathing room, including first/last rows.
+   Overrides the legacy no-inspector padding-top:0 that removed the genres inset. */
+@media(min-width:1024px){
+  .home-main { --filter-list-inset:24px; }
+  .home-main .genres-catalog { padding:var(--filter-list-inset); }
+  .home-main .browse-catalog { padding:0; }
+  .home-main .browse-catalog>.catalog-inspector,
+  .home-main .browse-catalog>.home-grid-wrap { padding:var(--filter-list-inset); }
+  .home-main .browse-catalog>.section-header { padding:var(--filter-list-inset); }
+  .home-main .browse-catalog>.catalog-feedback { margin:var(--filter-list-inset); }
+}
+
+/* Common control focus, deliberately scoped OUTSIDE the persistent left menu.
+   A constant border width prevents movement; only its colour and glow change.
+   Cards keep their own scale while sharing these motion/colour tokens. */
+:is(#main,.side-sheet,.tv-player) :is(.btn,.sheet-option,.player-control) {
+  border:var(--native-frame) solid var(--control-rest-border,var(--line));
+  outline:0; outline-offset:0;
+  box-shadow:0 0 12px var(--color-transparent);
+  transition:border-color var(--motion-card-focus-out) var(--motion-exit),box-shadow var(--motion-card-focus-out) var(--motion-exit),background-color var(--motion-card-focus-out) var(--motion-exit),color var(--motion-card-focus-out) var(--motion-exit);
+}
+:is(#main,.side-sheet,.tv-player) :is(.btn,.sheet-option,.player-control):is(:focus,:focus-visible) {
+  border-color:var(--accent); outline:0; outline-offset:0;
+  box-shadow:0 0 12px var(--color-focus-glow);
+  transition-duration:var(--motion-card-focus-in); transition-timing-function:var(--motion-enter);
+}
+/* Utility/icon actions are quiet controls: reserve the same border geometry,
+   but paint it only for focus. Do not put a grey box around every button. */
+:is(#main,.side-sheet,.tv-player) :is(.btn.icon,.search-icon-button,.compact-back,.compact-account,.sheet-dismiss,[data-action="back"],[data-action="close"],[data-action="signout"]) {
+  --control-rest-border:var(--color-transparent);
+}
+/* Selected value and keyboard focus remain distinct states. */
+:is(#main,.side-sheet,.tv-player) .sheet-option[aria-pressed=true]:not(:focus) { border-color:var(--muted); }
+.side-sheet .btn { min-height:48px; padding:8px 16px; font-size:16px; }
+@media(prefers-reduced-motion:reduce){
+  :is(#main,.side-sheet,.tv-player) :is(.btn,.sheet-option,.player-control),
+  :is(#main,.side-sheet,.tv-player) :is(.btn,.sheet-option,.player-control):focus { transition:none; }
+}
+
+/* Navigation has its own focus contract: no scale, stable row size, current
+   destination remains selected while arrow keys only move keyboard focus. */
+.shell .sidebar .menu button {
+  border:var(--native-frame) solid var(--color-transparent);
+  padding:14px; outline:0; outline-offset:0;
+  box-shadow:0 0 12px var(--color-transparent);
+  transition:border-color var(--motion-card-focus-out) var(--motion-exit),box-shadow var(--motion-card-focus-out) var(--motion-exit),background-color var(--motion-card-focus-out) var(--motion-exit),color var(--motion-card-focus-out) var(--motion-exit);
+}
+.shell .sidebar .menu button[aria-current=page]:not(:focus) {
+  border-color:var(--color-transparent); color:var(--accent); background:var(--color-menu-control);
+}
+.shell .sidebar .menu button:is(:focus,:focus-visible) {
+  border-color:var(--accent); outline:0; outline-offset:0;
+  color:var(--text); background:var(--color-control-focus);
+  box-shadow:0 0 12px var(--color-focus-glow);
+  transition-duration:var(--motion-card-focus-in); transition-timing-function:var(--motion-enter);
+}
+@media(hover:hover){.shell .sidebar .menu button:hover:not(:focus){color:var(--text);}}
+@media(prefers-reduced-motion:reduce){.shell .sidebar .menu button,.shell .sidebar .menu button:focus {transition:none;}}
+
+/* Collapsed rail: the invisible label must not consume flex width or a gap.
+   Centre the actual 24px icon within the 56px button, not its text+icon group. */
+.shell .sidebar:not(.is-expanded) .menu button {
+  justify-content:center; gap:0; padding-inline:0;
+}
+/* Same geometry in both states: never inherit the global 28px icon size. */
+.shell .sidebar .menu button>.od-icon {
+  --od-icon-size:24px; flex:none; inline-size:24px; block-size:24px;
+}
+.shell .sidebar .menu button {
+  height:56px; min-height:56px; flex:0 0 56px; align-items:center;
+}
+.shell .sidebar .menu button>span:not(.od-icon) { line-height:24px; }
+.shell .sidebar:not(.is-expanded) .menu button>span:not(.od-icon) {
+  flex:0 0 0; inline-size:0; max-inline-size:0; overflow:hidden;
 }

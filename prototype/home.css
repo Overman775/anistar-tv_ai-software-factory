@@ -1,0 +1,257 @@
+/* Общая TV-композиция списков аниме, 16:9. Мобильная сетка не получает .home-stage.
+   Отступы: 8 / 16 / 24 / 32 / 48 / 64. Геометрия в одном месте:
+   не добавлять локальные margin/padding в app.js или дублирующие media overrides. */
+.home-stage {
+  --home-space-1: 8px;
+  --home-space-2: 16px;
+  --home-space-3: 24px;
+  --home-space-4: 32px;
+  --home-feature-inset: 48px;
+  --home-feature-pad: 24px;
+  --home-feature-gap: var(--home-space-1);
+  --home-rail-response: 64ms; /* Follow focus immediately; no idle debounce. */
+  --home-card-width: clamp(104px,17dvh,232px);
+  --home-feature-title: clamp(28px,3vw,56px);
+  --home-feature-body: clamp(16px,1.7dvh,22px);
+  --home-rail-gap: var(--home-space-3);
+  --home-actions-slot: 48px;
+  --home-update-slot: 48px;
+  /* По запросу все TV-карточки имеют единый кадр 2:3.
+     Исходные размеры изображений остаются в HTML для стабильной загрузки,
+     но не определяют высоту карточки. Лишнее кадрируется строго по центру. */
+  --home-card-ratio: 2 / 3;
+  --home-card-height: calc(var(--home-card-width) * 3 / 2);
+  --home-rail-height: calc(var(--home-card-height) + var(--home-space-3) + var(--home-space-4));
+  --home-description-min: calc(2 * var(--home-feature-body) * 1.5);
+  --home-focus-gutter: var(--home-space-1);
+  --home-filter-height: 36px;
+  --home-filter-icon: 16px;
+  --home-copy-width: calc(100% * 2 / 3);
+  --home-backdrop-blur: 24px;
+  --home-backdrop-tone: .88;
+  --home-backdrop-copy-mask: linear-gradient(90deg,var(--color-transparent),var(--color-black) 48%);
+  --home-backdrop-bottom-mask: linear-gradient(0deg,var(--color-transparent) 0%,var(--color-black) 12%,var(--color-black) 100%);
+  --home-backdrop-shade: linear-gradient(90deg,var(--bg),var(--color-transparent) 72%);
+  --home-focus-outline: 3px;
+  --home-card-rest-scale: .94;
+  --home-card-selected-scale: 1.08;
+  --home-card-enter: var(--motion-card-focus-in); /* easeOutCubic: fast response, soft landing. */
+  --home-card-exit: var(--motion-card-focus-out); /* Shorter return; does not delay rail movement. */
+  --home-skeleton-duration: 1100ms;
+  min-height: 0;
+  overflow: clip;
+  background: var(--bg);
+  scroll-padding: 0;
+}
+/* Нижняя строка всегда принадлежит ленте. Текст не меняет её координату.
+   Вся компоновка остаётся в normal flow; absolute — только у декоративного фона. */
+.home-stage .home-redesign {
+  /* Декоративный фон привязан ко всему экрану, включая область за карточками.
+     Только последние 12% у нижнего края растворяются в цвете страницы. */
+  position: relative; isolation: isolate;
+  display: grid;
+  grid-template-rows: minmax(0,1fr) auto;
+  height: 100%; min-height: 0; min-width: 0; padding: 0;
+}
+.home-stage .home-feature.catalog-inspector {
+  /* Сбрасываем z-index:3 общего catalog-inspector. Grid-элемент создаёт
+     stacking context даже с position:static: без этого фон перекрывал ленту.
+     При opacity-переходах верхний блок также остаётся ниже карточек. */
+  position: static; isolation: auto; z-index: 0; display: grid;
+  grid-template-columns: minmax(0,1fr); align-items: start;
+  height: 100%; min-height: 0; max-height: none;
+  gap: 0; margin: 0;
+  padding: var(--home-feature-pad) var(--home-feature-inset);
+  overflow: visible; border: 0; background: none;
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+}
+/* Верхний стек всегда прижат к верху: название → рейтинг/сведения → жанры.
+   Описание расположено НИЖЕ и занимает остаток высоты даже при пустом тексте.
+   Не удалять его строку и не ставить 1fr между заголовком и метаданными:
+   это раздвигает верхний стек или сдвигает его при отсутствии описания.
+   Обновление и кнопки сохраняют свои нижние строки. */
+.home-stage .home-feature-copy {
+  position: relative; z-index: 1; display: grid;
+  grid-template-rows: auto auto auto minmax(0,1fr) var(--home-update-slot) var(--home-actions-slot);
+  width: var(--home-copy-width); max-width: none; height: 100%; min-height: 0;
+  gap: var(--home-feature-gap); align-items: start; align-content: stretch;
+}
+.home-stage .home-feature-copy > * { min-width: 0; min-height: 0; max-width: 100%; margin: 0; }
+/* Общий focus-gutter выравнивает текст, подписи фильтров и кнопки по одной
+   вертикали. Внутренние 8px защищают рамку фокуса в прокручиваемом блоке. */
+.home-stage .home-feature .anime-title {
+  grid-row: 1; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2; overflow: hidden;
+  max-height: calc(var(--home-feature-title) * 1.16 * 2);
+  padding-inline: var(--home-focus-gutter);
+  font-size: var(--home-feature-title); font-weight: 800; line-height: 1.16;
+  letter-spacing: -.04em; color: var(--text); text-wrap: balance; overflow-wrap: anywhere;
+}
+.home-stage .home-feature-facts {
+  grid-row: 2; --od-gap: var(--home-space-2);
+  padding-inline: var(--home-focus-gutter); max-height: 3em;
+  font-size: clamp(16px,1.7dvh,20px); line-height: 1.5; color: var(--muted);
+  overflow-y: auto; align-content: start;
+}
+.home-feature-rating { --od-gap: var(--home-space-1); --od-icon-size: 20px; color: var(--text); white-space: nowrap; }
+.home-feature-rating .od-icon { color: var(--accent); }
+.home-voice-publication { --od-gap: var(--home-space-2); }
+.home-voice-publication > span { display: block; }
+.home-publication-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+.home-rating-scale { display: block; font-size: 16px; font-weight: 400; color: var(--muted); }
+/* Жанры занимают не больше ширины текстового блока (2/3), но любую
+   необходимую высоту. Новая строка — обычный flex-wrap, не горизонтальный скролл. */
+.home-stage .home-feature-tags {
+  grid-row: 3; display: flex; flex-wrap: wrap; align-items: flex-start;
+  --od-gap: var(--home-space-1); gap: var(--home-space-1);
+  width: 100%; height: auto; max-height: none;
+  padding: var(--home-focus-gutter); overflow: visible;
+}
+.home-stage .home-feature-tags .metadata-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 100%; min-height: var(--home-filter-height); padding: 4px 8px;
+  border: 1px solid var(--line); border-radius: var(--radius-small);
+  background: var(--surface); color: var(--text);
+  font-size: 16px; line-height: 1.5; text-align: left; white-space: normal;
+  --od-icon-size: var(--home-filter-icon);
+}
+.home-feature-tags .metadata-chip > span { display: block; overflow-wrap: anywhere; }
+.home-stage .home-feature-tags .metadata-chip:focus { background: var(--raised); outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-stage .home-feature-description {
+  grid-row: 4; display: block; height: 100%; min-height: 0; max-height: none;
+  padding-inline: var(--home-focus-gutter); max-width: 100%;
+  /* Внешняя область сохраняет высоту, внутренний текст измеряется без clamp.
+     JS подбирает полные слова и добавляет … только при реальном переполнении. */
+  overflow: hidden;
+  font-size: var(--home-feature-body); line-height: 1.5; color: var(--muted); text-wrap: pretty;
+}
+.home-description-text { display: block; width: 100%; overflow-wrap: anywhere; }
+.home-stage .home-feature-actions {
+  /* Кнопки занимают ширину содержимого, не доли ширины текстового блока. */
+  grid-row: 6; display: flex; flex-wrap: nowrap;
+  height: 100%; width: 100%; padding-inline: var(--home-focus-gutter);
+  gap: var(--home-space-2); align-items: stretch; justify-content: flex-start;
+}
+.home-stage .home-feature-actions .btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: auto; min-width: 0; min-height: 0; height: 100%; padding: 8px 16px;
+  gap: 8px; font-size:16px; font-weight: 600;
+  border-radius: var(--radius-control); --od-icon-size:20px;
+}
+.home-stage .home-watch-action { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.home-stage .home-favorite-action { background: var(--surface); color: var(--text); border-color: var(--line); }
+.home-stage .home-feature-actions .btn>.od-icon { --od-icon-size:20px; }
+/* Border/glow focus comes from the common control contract in app.css. */
+.home-stage .home-watch-action:focus { background: var(--color-accent-hover); color: var(--on-accent); }
+.home-stage .home-favorite-action:focus { background: var(--raised); }
+.home-feature-actions [aria-disabled=true] { cursor: progress; }
+.home-stage .home-feature-update {
+  grid-row: 5; --od-gap: var(--home-space-1); padding-inline: var(--home-focus-gutter);
+  max-height: 100%; overflow-y: auto; overscroll-behavior: contain;
+}
+.home-update-text,.home-update-date { display: block; font-size: 16px; line-height: 1.5; }
+.home-update-text { color: var(--text); overflow-wrap: anywhere; }
+.home-update-date { color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Слой остаётся внутри hero в DOM, но его containing block — .home-redesign.
+   Не возвращать position:relative на hero: градиент снова закончится над лентой. */
+.home-feature-backdrop {
+  display: block; position: absolute; z-index: -1; top: 0; right: 0;
+  /* Width follows the intrinsic poster ratio at full screen height.
+     Masks/blur stay inside this same image-sized box, never the empty left side. */
+  width:auto; height:100%; aspect-ratio:var(--home-backdrop-ratio,225 / 350); max-width:100%; overflow:hidden;
+  pointer-events: none; user-select: none;
+  mask-image: var(--home-backdrop-bottom-mask); -webkit-mask-image: var(--home-backdrop-bottom-mask);
+}
+.home-backdrop-image,.home-backdrop-halo {
+  display: block; position: absolute; top: 0; right: 0; width: 100%; height: 100%;
+  object-fit:contain; object-position:center; border-radius:0;
+  filter: brightness(var(--home-backdrop-tone));
+  mask-image: var(--home-backdrop-copy-mask); -webkit-mask-image: var(--home-backdrop-copy-mask);
+}
+.home-backdrop-halo { filter: blur(var(--home-backdrop-blur)); opacity: .64; }
+.home-feature-backdrop::after { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--home-backdrop-shade); }
+.home-preview-empty { --od-gap: var(--home-space-3); grid-column: 1/-1; padding-inline: var(--home-focus-gutter); color: var(--muted); }
+.home-preview-empty h2 { font-size: var(--home-feature-title); color: var(--text); }
+/* Заголовок связан с лентой, не с процентной границей экрана:
+   сверху 16px, снизу 8px; у ленты 24px под масштаб и 32px снизу.
+   Свободная высота уходит верхнему блоку, а не в пустоту между заголовком и лентой. */
+.home-stage .home-shelf { position: relative; z-index: 2; display: grid; grid-template-rows: auto auto; height: auto; min-height: 0; min-width: 0; }
+.home-shelf-header { --od-gap: var(--home-space-3); align-items: end; padding: var(--home-space-2) calc(var(--home-feature-inset) + var(--home-focus-gutter)) var(--home-space-1); }
+.home-shelf-header .od-field { --od-gap: var(--home-space-1); }
+.home-shelf-header h1 { font-size: clamp(20px,2.4dvh,28px); line-height: 1.25; letter-spacing: -.03em; }
+.home-stage .home-redesign > .home-shelf > .home-grid-wrap { min-height: 0; min-width: 0; padding: 0; margin: 0; }
+.home-poster-rail.od-rail {
+  --od-gap: var(--home-rail-gap);
+  --od-rail-pad: calc(var(--home-feature-inset) + var(--home-focus-gutter));
+  display: flex; align-items: start; width: 100%; max-width: 100%; height: var(--home-rail-height);
+  /* Общая верхняя линия постеров убирает лишний зазор над короткими обложками.
+     8px после заголовка + 24px внутри ленты оставляют около 8–16px до рамки
+     увеличенной карточки; высота резерва рассчитана по самому высокому постеру. */
+  gap: var(--home-rail-gap); padding-block: var(--home-space-3) var(--home-space-4);
+  scroll-snap-type: none;
+  scroll-padding-inline: var(--od-rail-pad); overscroll-behavior-inline: contain; touch-action: pan-x pan-y;
+}
+/* Хвост — геометрия PageView, не новая карточка и не бесконечный loader.
+   Он позволяет последнему постеру занять тот же левый якорь, что и первому. */
+.home-poster-rail::after { content: ''; display: block; flex: 0 0 max(0px,calc(100% - var(--home-card-width) - 2 * var(--od-rail-pad))); height: 1px; pointer-events: none; }
+.home-poster-rail > .native-media-item { display: block; flex: 0 0 var(--home-card-width); width: var(--home-card-width); min-width: 0; align-self: start; }
+.home-stage .home-poster-card {
+  display: grid; grid-template-rows: auto; width: 100%; min-width: 0; padding: 0;
+  background: none; color: var(--text); text-decoration: none; border-radius: var(--radius-card); box-shadow:0 0 12px var(--color-transparent);
+  transform: scale(var(--home-card-rest-scale)); transform-origin: center;
+  transition: transform var(--home-card-exit) var(--motion-exit),box-shadow var(--home-card-exit) var(--motion-exit); --media-card-ratio: var(--home-card-ratio);
+}
+.home-stage .home-poster-card .poster-wrap { display: block; width: 100%; height: var(--home-card-height); aspect-ratio: var(--home-card-ratio); overflow: hidden; border-radius: var(--radius-card); background: var(--color-media-bg); }
+.home-stage .home-poster-card .poster-wrap > .od-media { display: block; width: 100%; height: 100%; aspect-ratio: var(--home-card-ratio); object-fit: cover; object-position: center center; border-radius: var(--radius-card); }
+/* Keep the shared MediaCard 2px inner border, including its focus transition. */
+.home-stage .home-poster-card.is-selected { transform: scale(var(--home-card-selected-scale)); transition-duration: var(--home-card-enter); transition-timing-function: var(--motion-enter); }
+.home-stage .home-poster-card:focus,.home-stage .home-poster-card:focus-visible { outline:0; outline-offset:0; background:none; box-shadow:0 0 12px var(--color-focus-glow); transform: scale(var(--home-card-selected-scale)); transition-duration:var(--home-card-enter); transition-timing-function:var(--motion-enter); }
+.home-stage .home-poster-rail .catalog-pagination { display: flex; align-items: start; justify-content: start; flex: none; align-self: start; min-height: 0; padding: 0; margin: 0; }
+.home-stage .home-poster-rail .catalog-pagination:empty { display: none; }
+.home-loading-cards { --od-gap: var(--home-rail-gap); align-items: start; }
+.home-loading-card { --od-gap: var(--home-space-2); flex: none; width: var(--home-card-width); }
+.home-stage .home-loading-card .skeleton-poster { width: 100%; height: var(--home-card-height); aspect-ratio: var(--home-card-ratio); border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); animation: native-skeleton var(--home-skeleton-duration) ease-in-out infinite alternate; }
+.home-rail-error { --od-gap: var(--home-space-3); width: var(--home-card-width); padding: var(--home-space-3); border: 1px solid var(--line); border-radius: var(--radius-card); font-size: 16px; }
+.home-stage #catalog-sentinel { display: block; flex: 0 0 1px; width: 1px; height: 1px; }
+@media (hover:hover) {
+  .home-stage .home-watch-action:hover { background: var(--color-accent-hover); }
+  .home-stage .home-favorite-action:hover,.home-stage .home-feature-tags .metadata-chip:hover { background: var(--raised); border-color: var(--muted); }
+  .home-stage .home-poster-card:hover { outline:0; background:none; }
+  .home-stage .home-poster-card:hover:not(:focus)::after { border-color:var(--muted); }
+}
+@media (min-width:1440px) {
+  .home-stage { --home-feature-inset: 64px; --home-rail-gap: 32px; }
+}
+@media (min-height:900px) and (min-width:1024px) {
+  .home-stage { --home-feature-pad: 32px; --home-feature-gap: 16px; --home-actions-slot: 64px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .home-stage .skeleton-poster { animation: none; }
+  .home-stage .home-poster-card { transition: none; }
+}
+
+/* Shared poster card content; only TV dimensions/typography differ from mobile.
+   Scaling the whole card keeps captions, score and ribbon attached to its frame. */
+.home-stage .home-poster-card { --media-card-rating-size:16px; --media-card-rating-icon:16px; --media-card-title-size:clamp(14px,1.6dvh,18px); --media-card-caption-pad:48px 12px 12px; }
+.home-stage .home-poster-card .poster-title { font-size:var(--media-card-title-size); padding:var(--media-card-caption-pad); }
+
+/* Shared TV catalogs: hero/shelf remain the same component on every data source. */
+.home-stage .tv-catalog-stage { padding:0; grid-template-columns:minmax(0,2fr) minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; }
+.home-stage .tv-catalog-stage>.home-feature { grid-column:1/-1; grid-row:1; padding:var(--home-feature-pad) var(--home-feature-inset); }
+.home-stage .tv-catalog-stage>.home-shelf { grid-column:1/-1; grid-row:2; }
+.home-stage .tv-catalog-stage>.tv-catalog-tools { grid-column:2; grid-row:1; align-self:start; justify-self:end; z-index:2; min-width:0; max-width:100%; padding:var(--home-feature-pad) var(--home-feature-inset) 0 16px; }
+.home-stage .tv-catalog-tools .catalog-filter-row { grid-template-columns:max-content minmax(0,1fr); }
+.home-stage .tv-catalog-tools .browse-sort-button { max-width:100%; background:var(--color-favorite-ribbon-bg); }
+.home-stage .tv-catalog-stage .home-shelf-header h1 { overflow-wrap:anywhere; }
+.home-stage .native-search-tail { display:flex; flex:none; align-items:start; }
+/* A search form occupies its own normal-flow row above the shared results stage. */
+.home-stage>.search-page { display:flex; flex-direction:column; height:100%; min-height:0; padding:0; overflow:hidden; }
+.home-stage>.search-page>.search-title { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
+.home-stage .search-form { flex:none; margin:0; padding:16px var(--home-feature-inset); gap:8px; }
+.home-stage #search-body { display:flex; flex-direction:column; flex:1 1 0; min-height:0; overflow:hidden; padding:0; }
+.home-stage #search-body>.tv-catalog-stage { flex:1 1 0; min-height:0; height:100%; }
+.home-stage #search-body>.search-history,.home-stage #search-body>.search-feedback { overflow:auto; padding:24px var(--home-feature-inset); }
+.home-stage #search-body>.poster-grid { overflow:auto; }
+/* Empty/error states retain their existing actions and can scroll on short screens. */
+.home-stage>.catalog-state-page,
+.home-stage>.favorites-catalog:not(.home-redesign) { height:100%; min-height:0; overflow:auto; }

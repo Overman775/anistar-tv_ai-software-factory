@@ -77,11 +77,9 @@
   .ui-media-card:focus,.home-main .ui-media-card:focus{transform:none;outline-offset:3px}
   .ui-media-card:active{transform:none}
   .home-main .section-title{font-size:var(--compact-title)}
-  .browse-heading{flex-direction:row;align-items:center;gap:16px}
-  /* Заголовок любого CatalogFilter уже в compactHeader(): жанр/год/режиссёр.
-     Скрываем только повтор #browse-title; сортировка и состояния остаются доступны.
-     ТВ-заголовки не затрагивать, не скрывать целиком .browse-heading. */
-  .browse-heading>.section-title{display:none}
+  /* One full title in content, sorting below it; no copy in the mobile bar. */
+  .browse-heading{flex-direction:column;align-items:flex-start;gap:16px}
+  .browse-heading>.section-title{display:block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
   .home-main .browse-sort-button{font-size:16px;min-height:48px;gap:8px;max-width:100%;padding:12px 16px}
   .section-header{padding:0 0 24px}
   .catalog-pagination{padding-top:24px;font-size:16px}
@@ -387,3 +385,231 @@ body.handheld-playback .toast{bottom:max(16px,env(safe-area-inset-bottom));font-
   .episode-picker .episode-current-mark{top:8px;right:8px;padding:4px;--od-icon-size:16px}
   .side-sheet .sheet-head h2{min-width:0}
 }
+
+/* Flutter parity — MobileHomeShell / MobileAnimeContent / MobilePlayerControls.
+   Не растягивать телефонный UI в TV при повороте; HTML breakpoint — лишь preview.
+   На реальном Flutter профиль выбирает AppLayoutScope/platform capabilities. */
+@media(max-width:1023px){
+  html,body{font-size:16px}
+  body{font-size:16px}
+  .home-shell{--home-inset:16px;--home-title:24px;--home-body:14px;--home-caption:14px;--home-poster:15px;--home-gap:12px;--catalog-focus-clearance:8px;--native-control:48px}
+  .home-main .btn,.btn{font-size:14px;min-height:48px;padding:16px;gap:8px}
+  .btn>.od-icon{--od-icon-size:24px}
+  .home-grid-wrap .poster-grid,.home-grid{--od-cols:2;--od-gap:16px 12px}
+  .home-main .anime-card .poster-title{font-size:15px;line-height:1.4}
+  .genre-card-grid{--od-cols:2;--od-gap:16px}
+  .compact-header{min-height:56px;padding-block:4px;gap:8px}
+  .compact-header .brand img{width:40px}
+  .compact-heading,.compact-header .compact-context-heading{font-size:20px;font-weight:800;line-height:1.3}
+  .compact-nav{gap:8px;min-height:72px;padding-inline:8px}
+  .compact-nav button{font-size:14px;padding-inline:0}
+  .compact-nav button>span{font-size:14px;font-weight:500}
+  .home-main .catalog-inspector{border:0;max-height:none;overflow:visible}
+  .home-main .catalog-inspector:has(.browse-heading){padding-bottom:16px}
+  .home-main .browse-sort-button{font-size:14px;min-height:48px;padding:8px 16px}
+  .catalog-feedback{gap:24px}
+  .home-main .catalog-feedback h2{font-size:22px;font-weight:800;line-height:1.25}
+  .catalog-feedback p{font-size:16px;line-height:1.45}
+  .catalog-feedback-actions .btn{font-size:14px}
+  .home-main .section-title{font-size:20px;font-weight:800}
+  .detail-page{padding:12px 16px 32px}
+  .home-main .detail-title{display:block;font-size:20px;line-height:1.25;margin:0 0 24px;letter-spacing:0}
+  .detail-intro{display:flex;flex-direction:column;align-items:stretch;gap:24px}
+  .detail-poster{padding:0;width:100%;max-width:none}
+  .detail-poster .od-media{width:100%;height:auto;aspect-ratio:2/3;object-fit:cover}
+  .detail-overview{padding:0;gap:16px;--od-gap:16px}
+  .detail-overview .detail-meta{order:0;gap:8px;--od-gap:8px}
+  .detail-overview .detail-actions{order:1;display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:0}
+  .detail-overview .detail-filters{order:2;gap:16px;--od-gap:16px;margin-top:4px}
+  .detail-actions .btn{width:100%;min-height:48px;white-space:normal;font-size:14px}
+  .detail-rating{min-height:0;padding:4px;font-size:14px;background:var(--color-badge-bg);border:1px solid var(--line);border-radius:var(--radius-small);gap:4px}
+  .detail-rating>.od-icon{--od-icon-size:20px;color:var(--accent)}
+  .detail-rating>strong{font-weight:700}
+  .detail-meta .metadata-chip,.detail-page .metadata-chip,.detail-filter-row .metadata-chip{font-size:14px;min-height:48px;padding:8px 16px;gap:8px}
+  .detail-filter-row{grid-template-columns:minmax(0,1fr);gap:8px}
+  .detail-filter-label{font-size:14px;padding:0}
+  .detail-page>.detail-description,.detail-page>.detail-update,.detail-page>.detail-credits,.detail-page>.detail-watch-order,.detail-page>.detail-episodes{margin-inline:0}
+  .detail-description{margin-top:24px;gap:8px}
+  .detail-page h2{font-size:19px;font-weight:800;line-height:1.3}
+  .detail-description p{font-size:14px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden}
+  .detail-description.is-expanded p{display:block;overflow:visible;-webkit-line-clamp:unset}
+  .native-description-toggle.touch-only{display:flex;align-items:center;width:fit-content;justify-content:flex-start;padding:12px 8px}
+  .detail-update{margin-top:24px}
+  .detail-update p{font-size:16px;line-height:1.45}
+  .detail-update .detail-publication-date,.detail-credits{font-size:14px;line-height:1.4}
+  .detail-credits{gap:8px;margin-top:16px}
+  .detail-watch-order{margin-top:24px}
+  .watch-order-list{--od-gap:8px}
+  .watch-order-link{font-size:14px;min-height:48px}
+  .watch-order-current{font-size:14px;padding-left:0}
+  .detail-episodes{margin-top:24px}
+  .detail-episodes .count{font-size:14px}
+  /* Both mobile episode lists share spacing and the episode() renderer.
+     Keep one column in portrait/landscape; 1px previously made detail cards merge. */
+  :root{--mobile-episode-list-gap:16px}
+  .episode-card-grid,.episode-picker{--od-cols:1;--od-gap:var(--mobile-episode-list-gap)}
+  .native-episode{--native-episode-title:15px;--native-episode-caption:14px;min-height:92px}
+  .native-episode .poster-wrap{min-height:92px;aspect-ratio:219/92}
+  .native-episode .poster-title{--media-card-caption-pad:48px 16px 16px;padding:48px 16px 16px}
+  .native-episode .media-card-label{font-size:15px}
+  .native-episode .media-card-status{font-size:14px}
+  .side-sheet .sheet-head h2{font-size:20px;font-weight:800}
+  .side-sheet .btn,.side-sheet .sheet-option{font-size:14px;min-height:48px;padding:16px}
+  .side-sheet .favorite-action{font-size:14px;min-height:48px}
+  .browse-sort-draft .sheet-option{font-size:14px;min-height:48px;padding:16px}
+  .sort-order-title{font-size:16px}
+  .sort-panel-actions .btn{font-size:14px;min-height:48px}
+  .native-intro{display:flex;flex-direction:column;justify-content:center;gap:64px;padding:24px;min-height:100dvh}
+  .native-intro .brand{font-size:28px;gap:16px;flex-direction:row;flex-wrap:wrap;justify-content:center}
+  .native-intro .brand img{width:64px}
+  .native-intro-actions h1{font-size:24px;line-height:1.25}
+  .native-intro-actions p{font-size:16px;line-height:1.45}
+  .native-intro-actions>.od-stack{margin-top:48px}
+  .native-intro-actions .btn{min-height:48px;font-size:14px}
+  .native-startup h1{font-size:28px}
+  .native-startup p{font-size:16px}
+  .tv-login{grid-template-columns:minmax(0,1fr);align-content:center;--login-text:16px;--login-control:56px;padding:24px;gap:48px}
+  .tv-login .brand img{width:64px}
+  .tv-login .login-copy .brand{font-size:28px;gap:16px}
+  .tv-login .login-form{max-width:560px}
+  .tv-login .login-form h1{font-size:24px;margin-bottom:24px}
+  .tv-login .field label{font-size:16px}
+  .tv-login .field input{min-height:56px;font-size:16px;padding:16px}
+  .tv-login .password-visibility{min-width:48px;min-height:56px;padding:12px}
+  .tv-login .login-actions{margin-top:32px}
+  .tv-login .login-actions .btn{min-height:48px;font-size:14px}
+  .tv-login .auth-feedback p{font-size:14px}
+  .search-page{padding-top:16px;height:100%;--search-font:14px}
+  .search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin:0 16px 16px}
+  .search-page .search-submit{min-height:48px;font-size:14px;padding:16px;gap:8px}
+  .search-input-row input{min-height:48px;font-size:14px;padding:12px 16px}
+  .search-page .search-icon-button{min-width:48px;min-height:48px;padding:12px}
+  .search-status{font-size:14px;padding:0 16px 16px}
+  .search-feedback p{font-size:16px}
+  .search-history h2{font-size:20px}
+  .search-history-heading .btn,.search-recent{font-size:14px;min-height:48px}
+  .native-search-tail{font-size:14px;padding:16px}
+  .native-logs-route{padding:8px 16px 24px}
+  .native-log-header{gap:8px;min-height:56px}
+  .native-log-header h1{font-size:20px}
+  .native-log-header .btn{min-width:48px;min-height:48px;padding:12px}
+  .native-log-select{font-size:14px}
+  .native-log-content{padding:16px;font-size:13px}
+}
+@media(min-width:768px) and (max-width:1023px){
+  .detail-intro{display:grid;grid-template-columns:200px minmax(0,1fr);gap:24px}
+  .detail-poster{grid-column:1;grid-row:1/3}
+  .detail-overview{grid-column:2;grid-row:1}
+  .native-intro{padding-inline:48px}
+}
+@media(max-width:1023px) and (orientation:landscape) and (max-height:500px){
+  .native-intro{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px;align-content:center}
+  .native-intro .brand{flex-direction:column}
+  .native-intro-actions>.od-stack{margin-top:24px}
+  .tv-login{align-content:start;gap:24px}
+  .tv-player.handheld-player .player-title{font-size:16px}
+  .home-grid-wrap .poster-grid,.home-grid{--od-cols:4}
+  .episode-card-grid,.episode-picker{--od-cols:1}
+}
+/* MobilePlayerControls uses the same mounted controls, not a duplicated video. */
+.tv-player.handheld-player .player-back{display:flex;width:48px;min-width:48px;min-height:48px;padding:8px;--od-icon-size:26px}
+.tv-player.handheld-player .player-control{width:48px;height:48px;min-width:48px;min-height:48px;padding:8px}
+.tv-player.handheld-player .mobile-player-center [data-action=toggle]{width:64px;height:64px;min-height:64px;background:var(--accent);color:var(--on-accent)}
+.tv-player.handheld-player .player-quality{min-height:48px;font-size:16px;padding:8px}
+.tv-player.handheld-player .player-title{font-size:16px;white-space:normal}
+.tv-player.handheld-player .player-episode{font-size:16px}
+.tv-player.handheld-player .player-time{font-size:16px}
+.tv-player.handheld-player .player-chrome{padding:max(8px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+@media(prefers-reduced-motion:reduce){.native-episode::after{transition:none}}
+@media(max-width:767px){
+  .side-sheet{height:auto;max-height:var(--compact-sheet-max,82dvh)}
+  .native-sheet-body{flex:1 1 auto}
+  .native-sheet-body .sheet-option{min-height:64px}
+}
+@media(max-width:1023px){
+  .native-detail-loading .detail-intro{gap:24px}
+  .native-detail-loading .detail-overview{padding:0}
+  .native-detail-loading .native-skeleton-copy{margin-top:24px}
+}
+@media(max-width:1023px){
+  .watch-order-link,.native-watch-order-unavailable{font-size:16px;min-height:48px}
+}
+@media(max-width:1023px){.genre-card-grid{--od-cols:3;--od-gap:16px}}
+@media(max-width:599px){.genre-card-grid{--od-cols:2}}
+@media(max-width:299px){.genre-card-grid{--od-cols:1}}
+
+@media(max-width:1023px){.detail-main>.native-route-header{display:none}.detail-main .detail-page{padding:12px 16px 32px}}
+/* homeDestinations(account:false) omits Favorites in the guest shell. */
+@media(max-width:1023px){.compact-nav:has(>button:nth-child(3):last-child){grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Mobile detail metadata matches compact TV chips by explicit design choice.
+   Label/value columns persist; values wrap within the remaining column. */
+@media(max-width:1023px){
+  .detail-main .detail-page { padding:16px var(--compact-inset,16px) 32px; }
+  .detail-page .detail-filter-row { display:grid; grid-template-columns:96px minmax(0,1fr); gap:8px; min-width:0; align-items:start; }
+  .detail-page .detail-filter-label { padding:4px 0 0; font-size:16px; line-height:1.5; }
+  .detail-page .detail-filter-row>.od-cluster { --od-gap:8px; display:flex; flex-wrap:wrap; align-items:flex-start; min-width:0; }
+  .detail-page .metadata-chip,.detail-page .detail-meta .metadata-chip { display:inline-flex; flex:0 1 auto; align-items:center; gap:4px; min-width:0; max-width:100%; min-height:36px; padding:4px 8px; border-radius:var(--radius-small); font-size:16px; font-weight:500; line-height:1.5; text-align:left; }
+  .detail-page .metadata-chip>.od-icon { --od-icon-size:16px; flex:none; }
+  .detail-page .metadata-chip>span { display:block; min-width:0; overflow-wrap:anywhere; white-space:normal; }
+  .detail-page .metadata-chip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .detail-page .detail-filters { --od-gap:8px; gap:8px; }
+}
+
+@media(max-width:1023px){
+  /* Связанные части также идут чипами; мобильная зона касания остаётся 48px. */
+  .detail-page .watch-order-link,.detail-page .native-watch-order-unavailable { min-height:48px; font-size:16px; padding:8px 12px; }
+}
+
+/* Mobile uses its own disclosure state; actions remain above the information. */
+@media(max-width:1023px){
+  .detail-page .detail-actions { display:flex; flex-flow:row wrap; gap:8px; }
+  .detail-page .detail-actions .btn { width:auto; flex:0 1 auto; min-height:48px; font-size:16px; }
+  .detail-page .detail-information { --od-gap:24px; gap:24px; }
+  .detail-page .detail-information .detail-description { gap:8px; }
+}
+
+@media(max-width:1023px){
+  .detail-page .detail-information .detail-overview { --od-gap:8px; gap:8px; }
+  .detail-page .detail-rating-row { min-height:36px; align-items:center; }
+  .detail-page .detail-rating-row>.detail-filter-label { padding-top:0; }
+  .detail-page .detail-rating { padding:0; background:none; border:0; }
+}
+
+/* Mobile detail: poster and rating are inside the same disclosure as metadata. */
+@media(max-width:1023px){
+  .detail-page .detail-information>.detail-intro { display:block; padding-top:16px; }
+  .detail-page .detail-information>.detail-intro>.detail-poster { display:block; width:100%; max-width:240px; margin:0 auto 24px; }
+  .detail-page .detail-information .detail-poster .od-media { display:block; width:100%; height:auto; aspect-ratio:auto; object-fit:contain; }
+  .detail-page .detail-information .detail-rating-row { display:grid; }
+  .detail-page .detail-information .detail-description p { display:block; overflow:visible; -webkit-line-clamp:unset; }
+  .detail-page .detail-information .native-description-toggle { display:none; }
+  .detail-page .detail-information { overflow-anchor:none; }
+}
+
+@media(max-width:1023px){.browse-heading>.catalog-filter-row { width:100%; }}
+
+/* Search row: one OUTER height for field and submit, including borders.
+   Do not let input/clear-button minimums or vertical padding enlarge the row.
+   Errors remain below the field and never stretch the submit button. */
+.search-page .search-form { align-items:start; }
+.search-page .search-form .search-input-row,
+.search-page .search-form .search-submit {
+  box-sizing:border-box; height:var(--search-control); min-height:var(--search-control);
+}
+.search-page .search-form .search-input-row { border-width:2px; }
+.search-page .search-form .search-input-row input {
+  box-sizing:border-box; height:100%; min-height:0; padding:0 12px;
+  font-size:16px; line-height:1.5;
+}
+.search-page .search-form .search-input-row .search-icon-button {
+  box-sizing:border-box; align-self:stretch; height:100%; min-height:0;
+  width:calc(var(--search-control) - 4px); min-width:calc(var(--search-control) - 4px);
+  padding:0; flex:none;
+}
+.search-page .search-form .search-submit {
+  padding:0 16px; margin-top:0; font-size:16px; line-height:1.5; gap:8px;
+}
+.search-page .search-form :is(.search-submit,.search-icon-button)>.od-icon { --od-icon-size:20px; }
+@media(max-width:1023px){.search-page { --search-control:48px; }}
+@media(min-width:1024px){.search-page { --search-control:56px; }}
