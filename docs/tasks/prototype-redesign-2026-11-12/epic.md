@@ -22,6 +22,7 @@ Source: prototype-redesign-2026-11-12 revision 3
 - [tv-detail-player-goldens-18](18-tv-detail-player-goldens.md)
 - [mobile-and-common-goldens-19](19-mobile-and-common-goldens.md)
 - [redesign-final-verification-20](20-redesign-final-verification.md)
+- [redesign-version-changelog-21](../redesign-release-preparation/21-redesign-version-changelog.md) — отдельная задача после итоговой приёмки редизайна.
 
 ```mermaid
 flowchart TD
@@ -157,6 +158,7 @@ flowchart TD
   task_001 --> task_018
   task_004 --> task_018
   task_016 --> task_018
+  task_009 --> release_followup["21. Повысить версию и обновить changelog"]
 ```
 
 ```json
