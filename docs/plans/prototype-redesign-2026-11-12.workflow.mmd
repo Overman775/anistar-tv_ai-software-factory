@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant O as 🧭 Orchestrator
+    participant A1 as visual · developer / terra / native
+    participant A2 as behavior · developer / terra / native
+    participant A3 as tests · test-writer / terra / native
+    participant A4 as docs · doc-writer / sol / native
+    participant A5 as judge · judge / sol / native
+        O->>A1: ui-foundation · planned
+        A1-->>O: Result and evidence
+        O->>A2: source-contracts · planned
+        A2-->>O: Result and evidence
+        O->>A1: tv-listings · planned
+        A1-->>O: Result and evidence
+        O->>A2: anime-and-player · planned
+        A2-->>O: Result and evidence
+        O->>A1: mobile-and-integration · planned
+        A1-->>O: Result and evidence
+        O->>A3: regression-tests · planned
+        A3-->>O: Result and evidence
+        O->>A4: product-docs · planned
+        A4-->>O: Result and evidence
+        O->>A3: golden-migration · planned
+        A3-->>O: Result and evidence
+        O->>A5: integrated-checks · planned
+        A5-->>O: Result and evidence
+        O->>A5: independent-review · planned
+        A5-->>O: Result and evidence
+        O->>O: redesign acceptance · planned
