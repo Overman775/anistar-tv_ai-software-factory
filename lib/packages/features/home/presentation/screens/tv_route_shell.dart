@@ -52,7 +52,9 @@ class _TvRouteShellState extends State<TvRouteShell> {
   List<HomeDestination> get _destinations => homeDestinations(account: widget.onSignIn == null);
 
   void _openNavigation() {
-    _lastContentFocus = FocusManager.instance.primaryFocus;
+    if (_contentFocus.hasFocus) {
+      _lastContentFocus = FocusManager.instance.primaryFocus;
+    }
     (_menuFocus[widget.destination] ?? _menuFocus[HomeDestination.home])?.requestFocus();
   }
 
@@ -78,6 +80,11 @@ class _TvRouteShellState extends State<TvRouteShell> {
   }
 
   void _activate(HomeDestination destination) {
+    if (widget.root && destination == widget.destination) {
+      _focusContent();
+
+      return;
+    }
     _lastContentFocus = null;
     widget.onDestinationSelected(destination);
     WidgetsBinding.instance.addPostFrameCallback((_) {

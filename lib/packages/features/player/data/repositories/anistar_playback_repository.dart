@@ -62,7 +62,10 @@ final class AnistarPlaybackRepository extends BaseRepository implements Playback
                 )
                 .toList()
               ..sort((left, right) => left.number.compareTo(right.number))),
-        httpHeaders: source.httpHeaders,
+        httpHeaders: {
+          for (final entry in source.httpHeaders.entries)
+            if (entry.key.toLowerCase() != 'cookie') entry.key: entry.value,
+        },
         expiresAt: source.expiresAt,
       );
     }),

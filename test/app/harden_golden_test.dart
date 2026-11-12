@@ -6,6 +6,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres
 import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:core/data.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -35,6 +36,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/harden_error_${name}_scaled.png'));
+      final title = find.text('Каталог недоступен');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(title).dy, greaterThanOrEqualTo(0));
+      expect(tester.getBottomRight(title).dy, lessThanOrEqualTo(size.height));
     }, tags: ['golden']);
   }
 

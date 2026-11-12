@@ -101,6 +101,8 @@ Future<T?> showAppActionSheet<T>({required BuildContext context, required Widget
     sheetAnimationStyle: AnimationStyle(
       duration: AppMotion.durationOf(context, AppMotion.panelEnter),
       reverseDuration: AppMotion.durationOf(context, AppMotion.panelExit),
+      curve: AppMotion.enterCurve,
+      reverseCurve: AppMotion.exitCurve.flipped,
     ),
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
     builder: builder,

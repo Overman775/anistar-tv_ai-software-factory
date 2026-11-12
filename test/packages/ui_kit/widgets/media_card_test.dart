@@ -1,3 +1,5 @@
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -254,7 +256,7 @@ void main() {
     final initialCard = tester.widget<MediaCard>(card);
     expect(bookmark, findsOneWidget);
     expect(initialCard.showBookmark, isTrue);
-    expect(find.bySemanticsLabel('Избранное аниме'), findsOneWidget);
+    expect(find.bySemanticsLabel('Избранное аниме, В избранном'), findsOneWidget);
     await tester.tap(card);
     await settle();
     final activatedCard = tester.widget<MediaCard>(card);
@@ -288,6 +290,159 @@ void main() {
     expect(find.text('★ 8,7'), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('Аниме без года')), findsOneWidget);
     expect(tester.takeException(), isNull);
+    semantics.dispose();
+  });
+
+  for (final profile in AppDeviceProfile.values) {
+    testWidgets('$profile poster metadata belongs to the single card activation target', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final focus = FocusNode();
+      addTearDown(focus.dispose);
+      var calls = 0;
+      final content = Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 140,
+              child: MediaCard(
+                label: 'Аниме',
+                ratingLabel: '9,2',
+                showBookmark: true,
+                focusNode: focus,
+                scaleOnFocus: false,
+                onPressed: () => calls++,
+              ),
+            ),
+            const SizedBox(
+              width: 100,
+              child: MediaCard(label: 'Без меток', onPressed: _unexpectedActivation),
+            ),
+          ],
+        ),
+      );
+      if (profile == AppDeviceProfile.tv) {
+        await pumpTvApp(tester, content);
+      } else {
+        await pumpMobileApp(tester, content);
+      }
+      await tester.pumpAndSettle();
+
+      final card = find.byType(MediaCard).first;
+      final bounds = tester.getRect(card);
+      final badge = find.byType(AppMetadataBadge);
+      final bookmark = find.byType(MediaCardBookmark);
+      expect(badge, findsOneWidget);
+      expect(bookmark, findsOneWidget);
+      expect(tester.getTopLeft(badge) - bounds.topLeft, const Offset(8, 8));
+      expect(tester.getTopLeft(bookmark).dy, bounds.top);
+      final score = tester.widget<Text>(find.text('9,2'));
+      expect(score.style?.fontSize, profile == AppDeviceProfile.tv ? 16 : 14);
+      expect(find.textContaining('/ 10'), findsNothing);
+      expect(find.bySemanticsLabel('Без меток'), findsOneWidget);
+      final node = tester.getSemantics(find.bySemanticsLabel('Аниме, Рейтинг 9,2 из 10, В избранном'));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      node.owner?.performAction(node.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(card), bounds);
+      expect(focus.hasFocus, isTrue);
+      await tester.tapAt(tester.getCenter(bookmark));
+      if (profile == AppDeviceProfile.tv) await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      expect(calls, profile == AppDeviceProfile.tv ? 3 : 2);
+      semantics.dispose();
+    });
+  }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('104dp poster keeps rating, bookmark and title separate at text scale $scale', (tester) async {
+      const title = 'Длинное название аниме для проверки подписи';
+      final semantics = tester.ensureSemantics();
+      var opens = 0;
+      await pumpTvApp(
+        tester,
+        Center(
+          child: SizedBox(
+            width: 104,
+            child: MediaCard(label: title, ratingLabel: '10,0', showBookmark: true, onPressed: () => opens++),
+          ),
+        ),
+        textScale: scale,
+        disableAnimations: true,
+      );
+      await tester.pumpAndSettle();
+      final card = tester.getRect(find.byType(MediaCard));
+      final badgeFinder = find.byType(AppMetadataBadge);
+      final badge = tester.getRect(badgeFinder);
+      final scoreFinder = find.text('10,0');
+      final score = tester.getRect(scoreFinder);
+      final scoreParagraph = tester.renderObject<RenderParagraph>(scoreFinder);
+      final lastDigit = scoreParagraph.getBoxesForSelection(const TextSelection(baseOffset: 3, extentOffset: 4));
+      final star = tester.getRect(find.descendant(of: badgeFinder, matching: find.byType(AppIcon)));
+      final bookmark = tester.getRect(find.byType(MediaCardBookmark));
+      final titleFinder = find.text(title);
+      final caption = tester.getRect(titleFinder);
+      expect(tester.widget<Text>(titleFinder).maxLines, scale == 2 ? 1 : 2);
+      expect(MediaQuery.textScalerOf(tester.element(titleFinder)).scale(15), 15 * scale);
+      expect(card.size, const Size(104, 156));
+      expect(badge.topLeft - card.topLeft, const Offset(8, 8));
+      expect(card.right - badge.right, greaterThanOrEqualTo(2));
+      expect(scoreParagraph.didExceedMaxLines, isFalse);
+      expect(lastDigit, hasLength(1));
+      expect(score.left + lastDigit.single.right, lessThanOrEqualTo(badge.right));
+      expect(MediaQuery.textScalerOf(tester.element(scoreFinder)).scale(16), 16 * scale);
+      expect(badge.right - score.right, scale == 1 ? closeTo(8, 0.01) : inInclusiveRange(0, 7.99));
+      if (star.left - badge.left < 7.99) expect(badge.right - score.right, closeTo(1, 0.01));
+      expect(bookmark.size, const Size(36, 48));
+      expect(card.right - bookmark.right, 16);
+      expect(bookmark.top - badge.bottom, 4);
+      expect(caption.top, greaterThanOrEqualTo(bookmark.bottom));
+      expect(caption.bottom, lessThanOrEqualTo(card.bottom));
+      final node = tester.getSemantics(find.bySemanticsLabel('$title, Рейтинг 10,0 из 10, В избранном'));
+      node.owner?.performAction(node.id, SemanticsAction.tap);
+      await tester.tapAt(bookmark.center);
+      expect(opens, 2);
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  }
+
+  testWidgets('episode selection and confirmed viewing use independent indicators', (tester) async {
+    const repeated = EpisodeCaption(number: 7, title: '  сЕРИЯ   7  ');
+    const empty = EpisodeCaption(number: 7, title: '  ');
+    const descriptive = EpisodeCaption(number: 7, title: 'Начало пути');
+    expect(repeated.descriptiveTitle, isNull);
+    expect(empty.descriptiveTitle, isNull);
+    expect(repeated.semanticLabel(isWatched: true), 'Серия 7, просмотрена');
+    final semantics = tester.ensureSemantics();
+    var opens = 0;
+    await pumpTvApp(
+      tester,
+      Center(
+        child: SizedBox(
+          width: 300,
+          child: MediaCard(
+            label: descriptive.numberLabel,
+            caption: descriptive.descriptiveTitle,
+            variant: MediaCardVariant.episode,
+            selected: true,
+            isWatched: true,
+            autofocus: true,
+            onPressed: () => opens++,
+          ),
+        ),
+      ),
+      disableAnimations: true,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Серия 7'), findsOneWidget);
+    expect(find.text('Начало пути'), findsOneWidget);
+    expect(find.bySemanticsLabel('Серия 7, Начало пути, текущая, просмотрена'), findsOneWidget);
+    final marks = tester
+        .widgetList<AppIcon>(find.byType(AppIcon))
+        .where((icon) => icon.color == AppPalette.primary || icon.color == AppPalette.success);
+    expect(marks.map((icon) => icon.color), [AppPalette.primary, AppPalette.success]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    expect(opens, 1);
     semantics.dispose();
   });
 }

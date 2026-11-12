@@ -19,10 +19,10 @@ import '../../../../../support/test_app.dart';
 
 void main() {
   test('metadata groups consume matching filters once and retain unmatched paths', () {
-    const year = CatalogFilter(label: '2026', path: '/year/2026/');
-    const comedy = CatalogFilter(label: 'Комедия', path: '/genre/comedy/');
-    const fantasy = CatalogFilter(label: 'Фэнтези', path: '/genre/fantasy/');
-    const director = CatalogFilter(label: 'Режиссёр: Наоко Ямада', path: '/director/yamada/');
+    const year = CatalogFilter(label: '2026', path: '/filter/year/2026/');
+    const comedy = CatalogFilter(label: 'Комедия', path: '/filter/janrs/comedy/');
+    const fantasy = CatalogFilter(label: 'Фэнтези', path: '/filter/janrs/fantasy/');
+    const director = CatalogFilter(label: 'Режиссёр: Наоко Ямада', path: '/filter/director/yamada/');
     const studio = CatalogFilter(label: 'Студия Kyoto Animation', path: '/studio/kyoani/');
     final groups = AnimeDetailFilterGroups.fromDetails(
       AnimeDetails(
@@ -46,10 +46,53 @@ void main() {
     expect(groups.indices, {year.path: 0, comedy.path: 1, fantasy.path: 2, director.path: 3, studio.path: 4});
   });
 
+  test('same named author and director match their own roles in either source order', () {
+    const author = CatalogFilter(label: 'Синохара Тиэ', path: '/filter/author/%f1%E8+%fd/');
+    const director = CatalogFilter(label: 'Синохара Тиэ', path: '/filter/director/%f1%E8+%fd/');
+    for (final filters in [
+      <CatalogFilter>[author, director],
+      <CatalogFilter>[director, author],
+    ]) {
+      final groups = AnimeDetailFilterGroups.fromDetails(
+        AnimeDetails(
+          id: 1,
+          slug: 'details',
+          title: 'Детали',
+          genres: const [],
+          isOngoing: false,
+          author: 'Синохара Тиэ',
+          director: 'Синохара Тиэ',
+        ),
+        filters,
+      );
+      expect(groups.rows.singleWhere((row) => row.heading == 'Автор').values.single.filter, same(author));
+      expect(groups.director, same(director));
+      expect(groups.remaining, isEmpty);
+    }
+  });
+
+  testWidgets('unsupported genre target stays plain and cannot activate a filter', (tester) async {
+    const unsupported = CatalogFilter(label: 'Фэнтези', path: '/filter/janrs/%2f/');
+    final groups = AnimeDetailFilterGroups.fromDetails(
+      AnimeDetails(id: 1, slug: 'details', title: 'Детали', genres: const ['Фэнтези'], isOngoing: false),
+      const [unsupported],
+    );
+    final selected = <CatalogFilter>[];
+    final focusNodes = <String, FocusNode>{};
+    await pumpTvApp(tester, AnimeDetailFilterActions(groups: groups, focusNodes: focusNodes, onSelected: selected.add));
+    await tester.pumpAndSettle();
+    expect(groups.genreText, ['Фэнтези']);
+    expect(find.text('Фэнтези'), findsOneWidget);
+    await tester.tap(find.text('Фэнтези'));
+    expect(selected, isEmpty);
+    expect(find.bySemanticsLabel('Показать аниме: Фэнтези'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('metadata filters keep their source paths, icons, and unmatched category', (tester) async {
-    const year = CatalogFilter(label: '2026', path: '/year/2026/');
-    const comedy = CatalogFilter(label: 'Комедия', path: '/genre/comedy/');
-    const director = CatalogFilter(label: 'Режиссёр: Наоко Ямада', path: '/director/yamada/');
+    const year = CatalogFilter(label: '2026', path: '/filter/year/2026/');
+    const comedy = CatalogFilter(label: 'Комедия', path: '/filter/janrs/comedy/');
+    const director = CatalogFilter(label: 'Режиссёр: Наоко Ямада', path: '/filter/director/yamada/');
     const studio = CatalogFilter(label: 'Студия Kyoto Animation', path: '/studio/kyoani/');
     CatalogFilter? selected;
     final focusNodes = <String, FocusNode>{};
@@ -81,11 +124,11 @@ void main() {
 
     expect(find.text('Жанры'), findsOneWidget);
     expect(find.text('Режиссёр'), findsOneWidget);
-    expect(find.text('Категории'), findsOneWidget);
-    expect(find.text('2026'), findsNothing);
+    expect(find.text('Категории'), findsNothing);
+    expect(find.text('2026'), findsOneWidget);
     expect(find.text('Комедия'), findsOneWidget);
-    expect(find.text('Режиссёр: Наоко Ямада'), findsOneWidget);
-    expect(find.text('Студия Kyoto Animation'), findsOneWidget);
+    expect(find.text('Наоко Ямада'), findsOneWidget);
+    expect(find.text('Студия Kyoto Animation'), findsNothing);
     expect(find.byType(AppIcon), findsNWidgets(3));
     await tester.tap(find.text('Комедия'));
     expect(selected, same(comedy));
@@ -94,7 +137,7 @@ void main() {
   });
 
   for (final mobile in [false, true]) {
-    testWidgets('${mobile ? 'mobile' : 'TV'} uses actual nonconsecutive episode count and compact episode cards', (
+    testWidgets('${mobile ? 'mobile' : 'TV'} opens collapsed with compact nonconsecutive episode cards', (
       tester,
     ) async {
       final pumpAndSettle = tester.pumpAndSettle;
@@ -125,7 +168,11 @@ void main() {
       }
       await pumpAndSettle();
 
-      expect(find.text('В списке: 3'), findsOneWidget);
+      expect(find.textContaining('В списке'), findsNothing);
+      expect(find.text('Подробнее'), findsOneWidget);
+      expect(find.byType(Hero), findsNothing);
+      expect(find.textContaining('Смотреть серию'), findsNothing);
+      if (!mobile) expect(find.byType(AppBar), findsNothing);
       expect(find.byType(FavoriteButton), findsNothing);
       final episodeCards = tester
           .widgetList<MediaCard>(find.byType(MediaCard))
@@ -143,8 +190,6 @@ void main() {
         await tester.scrollUntilVisible(firstEpisode, -160, scrollable: scrollable);
         await tester.tap(firstEpisode);
       } else {
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-        await pumpAndSettle();
         final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
         expect((grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount).crossAxisCount, 3);
         await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -177,16 +222,17 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('В списке: 0'), findsOneWidget);
+      expect(find.text('Не удалось загрузить аниме'), findsOneWidget);
+      expect(find.text('Подробнее'), findsNothing);
       expect(find.byType(FavoriteButton), findsNothing);
       expect(find.text('В избранное'), findsNothing);
-      final retry = find.text('Обновить серии');
+      final retry = find.text('Повторить');
       if (mobile) {
         await tester.ensureVisible(retry);
         await tester.pumpAndSettle();
         expect(retry.hitTestable(), findsOneWidget);
       } else {
-        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить серии');
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
         expect(retry.hitTestable(), findsOneWidget);
       }
       expect(tester.takeException(), isNull);

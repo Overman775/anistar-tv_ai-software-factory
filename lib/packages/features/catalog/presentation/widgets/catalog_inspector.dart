@@ -1,125 +1,229 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
+import '../../domain/models/catalog_filter.dart';
 import 'catalog_inspector_copy.dart';
+import 'catalog_layout.dart';
 
-/// The catalog owns dwell and its two text buffers; focus never fetches details.
+/// A single displayed title drives both the inspector and its backdrop.
 class CatalogInspector extends StatefulWidget {
-  const CatalogInspector({required this.anime, super.key});
+  const CatalogInspector({
+    required this.anime,
+    this.immediate = false,
+    this.rail,
+    this.trailingInset = 0,
+    this.actions,
+    this.lastGenreFocus,
+    this.onGenreTap,
+    this.onGenreTop,
+    this.onGenreRight,
+    this.onGenreBottom,
+    super.key,
+  });
 
   final AnimeSummary anime;
+  final bool immediate;
+  final Widget? rail;
+  final double trailingInset;
+  final Widget? actions;
+  final FocusNode? lastGenreFocus;
+  final void Function(AnimeSummary, CatalogFilter)? onGenreTap;
+  final ValueChanged<FocusNode>? onGenreTop;
+  final ValueChanged<FocusNode>? onGenreRight;
+  final VoidCallback? onGenreBottom;
 
   @override
   State<CatalogInspector> createState() => _CatalogInspectorState();
 }
 
-class _CatalogInspectorState extends State<CatalogInspector> {
-  late AnimeSummary _first = widget.anime;
-  late AnimeSummary _second = widget.anime;
-  bool _showSecond = false;
-  Timer? _dwell;
-  Timer? _settle;
+class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerProviderStateMixin {
+  static const _fadeOut = Duration(milliseconds: 110);
+  static const _fadeIn = Duration(milliseconds: 220);
 
-  void _update() {
-    if (!mounted) {
-      return;
-    }
-    _settle?.cancel();
-    setState(() {
-      if (_showSecond) {
-        _first = widget.anime;
-      } else {
-        _second = widget.anime;
-      }
-      _showSecond = !_showSecond;
-    });
-    _settle = Timer(AppMotion.inspectorContent, _finishTransition);
+  late AnimeSummary _displayed = widget.anime;
+  late final _opacity = AnimationController(vsync: this, value: 1);
+  Timer? _dwell;
+  final _genreFocus = <String, FocusNode>{};
+
+  void _showCurrent() {
+    _dwell?.cancel();
+    _opacity.value = 1;
+    _displayed = widget.anime;
   }
 
-  void _finishTransition() {
-    if (!mounted) {
+  Future<void> _fadeToSelection(int id) async {
+    try {
+      await _opacity.animateBack(0, duration: _fadeOut, curve: Curves.easeInCubic).orCancel;
+    } on TickerCanceled {
       return;
     }
-    // Release the outgoing height after the fade, without animating layout.
-    setState(() {
-      if (_showSecond) {
-        _first = _second;
-      } else {
-        _second = _first;
-      }
-    });
+    if (!mounted || widget.anime.id != id) {
+      return;
+    }
+    setState(() => _displayed = widget.anime);
+    unawaited(_opacity.animateTo(1, duration: _fadeIn, curve: Curves.easeOutCubic));
   }
 
   @override
   void didUpdateWidget(covariant CatalogInspector oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (identical(oldWidget.anime, widget.anime)) {
+    if (widget.immediate || AppMotion.reducedOf(context)) {
+      _showCurrent();
+
+      return;
+    }
+    if (oldWidget.anime.id == widget.anime.id) {
+      if (_displayed.id == widget.anime.id) _displayed = widget.anime;
+
       return;
     }
     _dwell?.cancel();
-    if (AppMotion.reducedOf(context)) {
-      _settle?.cancel();
-      if (_showSecond) {
-        _first = widget.anime;
-      } else {
-        _second = widget.anime;
-      }
-      _showSecond = !_showSecond;
-    } else {
-      _dwell = Timer(AppMotion.inspectorDwell, _update);
+    unawaited(_opacity.animateTo(1, duration: _fadeIn, curve: Curves.easeOutCubic));
+    if (_displayed.id == widget.anime.id) {
+      _displayed = widget.anime;
+
+      return;
     }
+    _dwell = Timer(AppMotion.inspectorDwell, () => unawaited(_fadeToSelection(widget.anime.id)));
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (AppMotion.reducedOf(context)) {
-      _dwell?.cancel();
-      _settle?.cancel();
-      _first = widget.anime;
-      _second = widget.anime;
+      _showCurrent();
     }
   }
 
   @override
   void dispose() {
     _dwell?.cancel();
-    _settle?.cancel();
+    _opacity.dispose();
+    for (final node in _genreFocus.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (AppMotion.reducedOf(context)) {
-      return CatalogInspectorCopy(anime: widget.anime);
+    final viewport = MediaQuery.sizeOf(context);
+    final inset = CatalogLayout.horizontalInset(viewport.width) + CatalogLayout.focusGutter;
+    final actions = widget.actions;
+    final selectionReady = _displayed.id == widget.anime.id;
+    final copy = CatalogInspectorCopy(
+      anime: _displayed,
+      opacity: _opacity,
+      actions: actions == null
+          ? null
+          : ExcludeFocus(
+              excluding: !selectionReady,
+              child: IgnorePointer(
+                ignoring: !selectionReady,
+                child: Opacity(opacity: selectionReady ? 1 : 0, child: actions),
+              ),
+            ),
+      lastGenreFocus: widget.lastGenreFocus,
+      onGenreTap: selectionReady ? widget.onGenreTap : null,
+      genreFocus: _genreFocus,
+      onGenreTop: widget.onGenreTop,
+      onGenreRight: widget.onGenreRight,
+      onGenreBottom: widget.onGenreBottom,
+    );
+    final rail = widget.rail;
+    if (rail == null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: CatalogLayout.inspectorHeight(viewport.height, 1)),
+        child: copy,
+      );
     }
 
-    // Both text buffers determine the natural height. Tight intrinsic bounds
-    // keep AnimatedCrossFade's AnimatedSize from moving the grid during a fade.
-    return IntrinsicHeight(
-      child: AnimatedCrossFade(
-        duration: AppMotion.durationOf(context, AppMotion.inspectorContent),
-        reverseDuration: AppMotion.durationOf(context, AppMotion.inspectorContent),
-        firstCurve: const Interval(0, 0.5, curve: Curves.easeInCubic),
-        secondCurve: const Interval(0.5, 1, curve: Curves.easeOutCubic),
-        crossFadeState: _showSecond ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-        firstChild: ExcludeSemantics(
-          excluding: _showSecond,
-          child: CatalogInspectorCopy(anime: _first),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) => FadeTransition(
+            opacity: _opacity,
+            child: _CatalogBackdrop(imageUrl: _displayed.posterUri?.toString(), height: constraints.maxHeight),
+          ),
         ),
-        secondChild: ExcludeSemantics(
-          excluding: !_showSecond,
-          child: CatalogInspectorCopy(anime: _second),
-        ),
-        layoutBuilder: (top, topKey, bottom, bottomKey) => Stack(
-          alignment: Alignment.topLeft,
+        Column(
           children: [
-            KeyedSubtree(key: bottomKey, child: bottom),
-            KeyedSubtree(key: topKey, child: top),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(inset, 16, inset, 0),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => SizedBox(
+                      width: math.min(
+                        constraints.maxWidth * 2 / 3,
+                        math.max(0, constraints.maxWidth - widget.trailingInset),
+                      ),
+                      height: constraints.maxHeight,
+                      child: copy,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            rail,
           ],
+        ),
+      ],
+    );
+  }
+}
+
+class _CatalogBackdrop extends StatelessWidget {
+  const _CatalogBackdrop({required this.imageUrl, required this.height});
+
+  final String? imageUrl;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: ExcludeSemantics(
+        child: ShaderMask(
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0.88, 1],
+            colors: [Colors.white, Colors.transparent],
+          ).createShader(bounds),
+          child: ShaderMask(
+            blendMode: BlendMode.dstIn,
+            shaderCallback: (bounds) =>
+                const LinearGradient(stops: [0, 0.55], colors: [Colors.transparent, Colors.white]).createShader(bounds),
+            child: ClipRect(
+              child: ColorFiltered(
+                colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.50), BlendMode.srcATop),
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                  child: AppNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.fitHeight,
+                    height: height,
+                    animateLoading: false,
+                    placeholder: SizedBox(width: height * AppSizes.posterRatio, height: height),
+                    errorWidget: const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

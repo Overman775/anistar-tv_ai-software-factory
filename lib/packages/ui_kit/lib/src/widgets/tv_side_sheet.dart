@@ -105,14 +105,22 @@ class _TvSideSheetRoute<T> extends RawDialogRoute<T> {
         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
         directionalTraversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
         pageBuilder: (context, _, _) => builder(context),
-        transitionBuilder: (context, animation, _, child) => SlideTransition(
-          position: Tween(begin: const Offset(1, 0), end: Offset.zero)
-              .chain(
-                CurveTween(
-                  curve: animation.status == AnimationStatus.reverse ? AppMotion.exitCurve : AppMotion.enterCurve,
-                ),
-              )
-              .animate(animation),
+        transitionBuilder: (context, animation, _, child) => DualTransitionBuilder(
+          animation: animation,
+          forwardBuilder: (context, animation, child) => SlideTransition(
+            position: Tween(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).chain(CurveTween(curve: AppMotion.enterCurve)).animate(animation),
+            child: child,
+          ),
+          reverseBuilder: (context, animation, child) => SlideTransition(
+            position: Tween(
+              begin: Offset.zero,
+              end: const Offset(1, 0),
+            ).chain(CurveTween(curve: AppMotion.exitCurve)).animate(animation),
+            child: child,
+          ),
           child: child,
         ),
       );

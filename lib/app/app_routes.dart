@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../packages/features/anime/anime_providers.dart';
 import '../packages/features/anime/domain/models/anime_episode.dart';
 import '../packages/features/anime/domain/models/anime_part.dart';
+import '../packages/features/anime/domain/models/anime_watch_action.dart';
 import '../packages/features/anime/presentation/screens/anime_screen.dart';
 import '../packages/features/auth/auth_providers.dart';
 import '../packages/features/catalog/domain/models/anime_summary.dart';
@@ -21,6 +23,7 @@ import '../packages/features/home/presentation/screens/home_screen.dart';
 import '../packages/features/home/presentation/screens/tv_route_shell.dart';
 import '../packages/features/log_viewer/presentation/screens/log_viewer_screen.dart';
 import '../packages/features/player/presentation/screens/player_screen.dart';
+import '../packages/features/watch_history/watched_episodes.dart';
 import 'app_config.dart';
 import 'app_confirmation.dart';
 import 'app_navigation_page.dart';
@@ -85,6 +88,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
       onRootBack: supportsAppExit ? () => unawaited(confirmAppExit(context)) : null,
       onOpenLogs: AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null,
       onAnimeTap: (anime) => _openHomeAnime(context, anime, destination),
+      onWatchAnime: (anime) => _watchAnime(context, ref, anime, destination),
     ),
   );
 }
@@ -93,7 +97,7 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
   final int animeId;
   final String slug;
   final String title;
-  final AnimeSummary? $extra;
+  final Object? $extra;
   final HomeDestination destination;
 
   const AnimeRoute({
@@ -104,6 +108,12 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
     this.$extra,
   });
 
+  AnimeSummary? get _summary => switch ($extra) {
+    final AnimeSummary summary => summary,
+    final _PlayerRouteExtra player => player.summary,
+    _ => null,
+  };
+
   @override
   Page<void> buildPage(BuildContext context, GoRouterState state) =>
       AppNavigationPage(context: context, key: state.pageKey, child: build(context, state));
@@ -112,16 +122,26 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
   Widget build(BuildContext context, GoRouterState state) => _RouteShell(
     destination: destination,
     title: title,
+    showMobileContextTitle: false,
     builder: (onOpenNavigation) => AnimeScreen(
       embedded: !AppLayoutScope.isTvOf(context),
       onOpenNavigation: onOpenNavigation,
       animeId: animeId,
       slug: slug,
       fallbackTitle: title,
-      fallbackPosterUri: $extra?.id == animeId ? $extra?.posterUri : null,
+      fallbackPosterUri: _summary?.id == animeId ? _summary?.posterUri : null,
       onFilterTap: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
       onPartTap: (part) => _openAnimePart(context, part, animeId, destination),
-      onEpisodeTap: (episode) => _openEpisode(context, episode, animeId, destination, slug, title, $extra),
+      onEpisodePlay: (episode, onEpisodeChanged) => _openEpisode(
+        context,
+        episode,
+        animeId,
+        destination,
+        slug,
+        title,
+        summary: _summary,
+        onEpisodeChanged: onEpisodeChanged,
+      ),
     ),
   );
 }
@@ -132,7 +152,7 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
   final int episodeNumber;
   final String slug;
   final String title;
-  final AnimeSummary? $extra;
+  final Object? $extra;
 
   const PlayerRoute({
     required this.animeId,
@@ -148,9 +168,20 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
       AppNavigationPage(context: context, key: state.pageKey, player: true, child: build(context, state));
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      PlayerScreen(animeId: animeId, episodeNumber: episodeNumber, title: title);
+  Widget build(BuildContext context, GoRouterState state) => PlayerScreen(
+    animeId: animeId,
+    episodeNumber: episodeNumber,
+    title: title,
+    onEpisodeChanged: switch ($extra) {
+      final _PlayerRouteExtra player => player.onEpisodeChanged,
+      final ValueChanged<int> receiver => receiver,
+      _ => null,
+    },
+  );
 }
+
+// GoRouter may provide the same extra to the player and its parent match.
+typedef _PlayerRouteExtra = ({AnimeSummary? summary, ValueChanged<int>? onEpisodeChanged});
 
 Future<void> _signOut(BuildContext context, WidgetRef ref) async {
   if (ModalRoute.of(context)?.isCurrent != true) {
@@ -180,6 +211,7 @@ class GenresRoute extends GoRouteData with $GenresRoute {
   Widget build(BuildContext context, GoRouterState state) => _RouteShell(
     destination: HomeDestination.genres,
     title: 'Жанры',
+    showMobileContextTitle: false,
     builder: (onOpenNavigation) => GenresScreen(
       onOpenNavigation: onOpenNavigation,
       onSelected: (filter) => FilterRoute(path: filter.path, title: filter.label).push<void>(context),
@@ -208,7 +240,7 @@ class FilterRoute extends GoRouteData with $FilterRoute {
       );
 
       return mobile
-          ? _AppMobileRouteShell(destination: destination, title: title, content: catalog)
+          ? _AppMobileRouteShell(destination: destination, title: title, content: catalog, showContextTitle: false)
           : _RouteShell(
               destination: destination,
               title: title,
@@ -216,7 +248,15 @@ class FilterRoute extends GoRouteData with $FilterRoute {
                 key: ValueKey(path),
                 filter: CatalogFilter(label: title, path: path),
                 onOpenNavigation: onNavigation,
+                onFilterSelected: (filter) {
+                  if (filter.path != path) {
+                    unawaited(
+                      FilterRoute(path: filter.path, title: filter.label, destination: destination).push<void>(context),
+                    );
+                  }
+                },
                 onAnimeTap: (anime) => _openAnime(context, anime, destination),
+                onWatchAnime: (anime) => _watchAnime(context, ref, anime, destination),
               ),
             );
     },
@@ -227,6 +267,11 @@ VoidCallback? _logsAction(BuildContext context) =>
     AppConfig.isDebugToolsEnabled ? () => const LogViewerRoute().push<void>(context) : null;
 
 void _openHomeAnime(BuildContext context, AnimeSummary anime, HomeDestination destination) {
+  if (AppLayoutScope.isTvOf(context)) {
+    _openAnime(context, anime, destination);
+
+    return;
+  }
   AnimeRoute(
     animeId: anime.id,
     slug: anime.slug,
@@ -244,25 +289,44 @@ void _openAnimePart(BuildContext context, AnimePart part, int animeId, HomeDesti
   }
 }
 
-void _openEpisode(
+Future<void> _openEpisode(
   BuildContext context,
   AnimeEpisode episode,
   int animeId,
   HomeDestination destination,
   String slug,
-  String title,
-  AnimeSummary? extra,
-) {
-  unawaited(
-    PlayerRoute(
-      animeId: animeId,
-      episodeNumber: episode.number,
-      destination: destination,
-      slug: slug,
-      title: title,
-      $extra: extra,
-    ).push<void>(context),
-  );
+  String title, {
+  AnimeSummary? summary,
+  ValueChanged<int>? onEpisodeChanged,
+}) => PlayerRoute(
+  animeId: animeId,
+  episodeNumber: episode.number,
+  destination: destination,
+  slug: slug,
+  title: title,
+  $extra: (summary: summary, onEpisodeChanged: onEpisodeChanged),
+).push<void>(context);
+
+void _watchAnime(BuildContext context, WidgetRef ref, AnimeSummary anime, HomeDestination destination) {
+  if (ModalRoute.isCurrentOf(context) == false) return;
+  final access = ref.read(authAccessProvider);
+  final available = access.canBrowse
+      ? ref.read(animeKnownEpisodesProvider).available(anime.id, anime.slug)
+      : const <AnimeEpisode>[];
+  if (available.isEmpty) {
+    _openAnime(context, anime, destination);
+
+    return;
+  }
+  final history = watchedEpisodesProvider(anime.id);
+  final loaded = access.canUseAccount && ref.exists(history) ? ref.read(history) : null;
+  final watched = loaded != null && !loaded.isLoading ? loaded.asData?.value : null;
+  final choice = selectAnimeWatchAction(available, watched ?? const {}, includeEpisodeMarks: access.canUseAccount);
+  if (choice.episode case final episode?) {
+    unawaited(_openEpisode(context, episode, anime.id, destination, anime.slug, anime.title, summary: anime));
+  } else {
+    _openAnime(context, anime, destination);
+  }
 }
 
 void _openAnime(BuildContext context, AnimeSummary anime, HomeDestination destination) {
@@ -294,11 +358,17 @@ String? _accountImageUrl(WidgetRef ref) {
 }
 
 class _RouteShell extends ConsumerWidget {
-  const _RouteShell({required this.destination, required this.title, required this.builder});
+  const _RouteShell({
+    required this.destination,
+    required this.title,
+    required this.builder,
+    this.showMobileContextTitle = true,
+  });
 
   final HomeDestination destination;
   final String title;
   final Widget Function(VoidCallback? onOpenNavigation) builder;
+  final bool showMobileContextTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => AppLayoutScope.isTvOf(context)
@@ -314,5 +384,10 @@ class _RouteShell extends ConsumerWidget {
           onOpenLogs: _logsAction(context),
           builder: builder,
         )
-      : _AppMobileRouteShell(destination: destination, title: title, content: builder(null));
+      : _AppMobileRouteShell(
+          destination: destination,
+          title: title,
+          content: builder(null),
+          showContextTitle: showMobileContextTitle,
+        );
 }

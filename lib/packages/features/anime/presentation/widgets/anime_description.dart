@@ -9,7 +9,7 @@ class AnimeDescription extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = AppContentTypography.descriptionOf(context)?.copyWith(color: AppPalette.textSecondary);
+    final style = AppContentTypography.descriptionOf(context)?.copyWith(fontSize: 16, color: AppPalette.textSecondary);
     final lineHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 18) * (style?.height ?? 1.45);
 
     return LayoutBuilder(

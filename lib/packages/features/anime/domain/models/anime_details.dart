@@ -16,6 +16,7 @@ final class AnimeDetails {
   final String? year;
   final double? rating;
   final String? director;
+  final String? author;
   final String? updateMessage;
   final String? publicationDate;
   final List<AnimePart> parts;
@@ -35,6 +36,7 @@ final class AnimeDetails {
     this.year,
     this.rating,
     this.director,
+    this.author,
     this.updateMessage,
     this.publicationDate,
     List<AnimePart> parts = const [],

@@ -18,6 +18,7 @@ class TvFocusable extends StatefulWidget {
     this.onFocusChanged,
     this.onLongPressed,
     this.semanticLabel,
+    this.selected,
   }) : assert(builder != null || stateBuilder != null, 'Provide builder or stateBuilder.');
 
   final bool autofocus;
@@ -30,6 +31,7 @@ class TvFocusable extends StatefulWidget {
   final VoidCallback? onLongPressed;
   final VoidCallback onPressed;
   final String? semanticLabel;
+  final bool? selected;
 
   @override
   State<TvFocusable> createState() => _TvFocusableState();
@@ -194,6 +196,7 @@ class _TvFocusableState extends State<TvFocusable> {
     child: Semantics(
       button: true,
       focused: _focused,
+      selected: widget.selected,
       enabled: _canActivate,
       value: widget.busy ? 'Выполняется' : null,
       onTap: _canActivate ? _onTap : null,

@@ -10,7 +10,7 @@ class EpisodeCaption {
   String? get descriptiveTitle {
     final normalized = title.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-    return normalized == numberLabel.toLowerCase() ? null : title;
+    return normalized.isEmpty || normalized == numberLabel.toLowerCase() ? null : title;
   }
 
   String semanticLabel({required bool isWatched}) {

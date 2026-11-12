@@ -22,6 +22,7 @@ class MobileHomeShell extends StatefulWidget {
     this.onRootBack,
     this.destination = HomeDestination.home,
     this.contextTitle,
+    this.showContextTitle = true,
     this.onBack,
     super.key,
   });
@@ -37,6 +38,7 @@ class MobileHomeShell extends StatefulWidget {
   final ValueChanged<HomeDestination> onDestinationSelected;
   final Widget content;
   final String? contextTitle;
+  final bool showContextTitle;
   final VoidCallback? onBack;
 
   @override
@@ -47,10 +49,13 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   bool _headerVisible = true;
   bool _accountOpen = false;
 
-  @override
-  void initState() {
-    super.initState();
-  }
+  bool? _pendingHeaderVisible;
+
+  bool get _keepHeaderVisible =>
+      ModalRoute.of(context)?.isCurrent != true ||
+      AppMotion.reducedOf(context) ||
+      MediaQuery.viewInsetsOf(context).bottom > 0 ||
+      _accountOpen;
 
   List<HomeDestination> get _destinations => homeDestinations(account: widget.onSignIn == null);
 
@@ -61,13 +66,12 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   bool _onScroll(ScrollNotification notification) {
     // Only the active destination's primary vertical list owns this chrome.
     // Sheets, nested lists and horizontal gestures keep their own behavior.
-    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+    if (notification.depth != 0 ||
+        notification.metrics.axis != Axis.vertical ||
+        !TickerMode.valuesOf(notification.context ?? context).enabled) {
       return false;
     }
-    if (ModalRoute.of(context)?.isCurrent != true ||
-        AppMotion.reducedOf(context) ||
-        MediaQuery.viewInsetsOf(context).bottom > 0 ||
-        _accountOpen) {
+    if (_keepHeaderVisible) {
       _showHeader(true);
 
       return false;
@@ -88,6 +92,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   }
 
   double _headerHeight(BuildContext context) {
+    if (!widget.showContextTitle) return kToolbarHeight;
     final title = widget.contextTitle;
     if (title == null) {
       return (MediaQuery.textScalerOf(context).scale(20) * 1.3 + 16).clamp(kToolbarHeight, double.infinity);
@@ -105,9 +110,20 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   }
 
   void _showHeader(bool visible) {
-    if (_headerVisible != visible) {
-      setState(() => _headerVisible = visible);
-    }
+    final scheduled = _pendingHeaderVisible != null;
+    _pendingHeaderVisible = visible;
+    if (scheduled) return;
+
+    // Scroll notifications can arrive while the viewport is laying out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = _pendingHeaderVisible;
+      _pendingHeaderVisible = null;
+      if (!mounted || pending == null) return;
+      final show = pending || _keepHeaderVisible;
+      if (_headerVisible != show) {
+        setState(() => _headerVisible = show);
+      }
+    });
   }
 
   Future<void> _account() async {
@@ -121,6 +137,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
     }
     setState(() {
       _accountOpen = true;
+      _pendingHeaderVisible = null;
       _headerVisible = true;
     });
     await showAppActionSheet<void>(
@@ -173,6 +190,7 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   void didUpdateWidget(covariant MobileHomeShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.destination != widget.destination) {
+      _pendingHeaderVisible = null;
       _headerVisible = true;
     }
   }
@@ -180,25 +198,26 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
   @override
   Widget build(BuildContext context) {
     final label = homeDestinationLabel(widget.destination);
-    final headerVisible =
-        _headerVisible ||
-        AppMotion.reducedOf(context) ||
-        MediaQuery.viewInsetsOf(context).bottom > 0 ||
-        _accountOpen ||
-        ModalRoute.of(context)?.isCurrent != true;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final headerHeight = _headerHeight(context);
+    final navigationHeight = MediaQuery.textScalerOf(context).scale(12) * 2 + 56;
+    final availableHeight = MediaQuery.sizeOf(context).height - keyboardInset - MediaQuery.paddingOf(context).top;
+    final headerFits =
+        keyboardInset == 0 ||
+        availableHeight >= headerHeight + navigationHeight + AppSizes.touchControl + AppSpacing.md * 2;
+    final headerVisible = headerFits && (_headerVisible || _keepHeaderVisible);
     return PopScope(
       canPop: !widget.root || widget.destination == HomeDestination.home && widget.onRootBack == null,
       onPopInvokedWithResult: _handleBack,
       child: Scaffold(
-        extendBody: true,
+        extendBody: keyboardInset == 0,
         body: SafeArea(
           bottom: false,
           child: Column(
             children: [
               TweenAnimationBuilder<double>(
                 tween: Tween(end: headerVisible ? 1 : 0),
-                duration: AppMotion.durationOf(context, AppMotion.fast),
+                duration: headerFits ? AppMotion.durationOf(context, AppMotion.fast) : Duration.zero,
                 curve: AppMotion.enterCurve,
                 builder: (context, value, child) => ClipRect(
                   child: Align(alignment: Alignment.topCenter, heightFactor: value, child: child),
@@ -222,7 +241,9 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
                                   onPressed: widget.onBack,
                                   icon: const AppIcon(AppIconType.arrowLeft),
                                 ),
-                          title: Text(widget.contextTitle ?? label, maxLines: 2, overflow: TextOverflow.ellipsis),
+                          title: widget.showContextTitle
+                              ? Text(widget.contextTitle ?? label, maxLines: 2, overflow: TextOverflow.ellipsis)
+                              : null,
                           automaticallyImplyLeading: false,
                           actions: [
                             IconButton(
@@ -248,34 +269,37 @@ class _MobileHomeShellState extends State<MobileHomeShell> {
             ],
           ),
         ),
-        bottomNavigationBar: ClipRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppPalette.backgroundElevated.withValues(alpha: 0.92),
-                border: const Border(top: BorderSide(color: AppPalette.outline)),
-              ),
-              child: NavigationBar(
-                key: const ValueKey('mobile-navigation'),
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                elevation: 0,
-                height: MediaQuery.textScalerOf(context).scale(12) * 2 + 56,
-                selectedIndex: _destinations.indexOf(widget.destination).clamp(0, _destinations.length - 1),
-                onDestinationSelected: _select,
-                destinations: [
-                  for (final destination in _destinations)
-                    NavigationDestination(
-                      icon: AppIcon(switch (destination) {
-                        HomeDestination.home => AppIconType.home,
-                        HomeDestination.search => AppIconType.search,
-                        HomeDestination.favorites => AppIconType.heart,
-                        HomeDestination.genres => AppIconType.layoutGrid,
-                      }),
-                      label: homeDestinationLabel(destination),
-                    ),
-                ],
+        bottomNavigationBar: Padding(
+          padding: EdgeInsets.only(bottom: keyboardInset),
+          child: ClipRect(
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppPalette.backgroundElevated.withValues(alpha: 0.92),
+                  border: const Border(top: BorderSide(color: AppPalette.outline)),
+                ),
+                child: NavigationBar(
+                  key: const ValueKey('mobile-navigation'),
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  height: navigationHeight,
+                  selectedIndex: _destinations.indexOf(widget.destination).clamp(0, _destinations.length - 1),
+                  onDestinationSelected: _select,
+                  destinations: [
+                    for (final destination in _destinations)
+                      NavigationDestination(
+                        icon: AppIcon(switch (destination) {
+                          HomeDestination.home => AppIconType.home,
+                          HomeDestination.search => AppIconType.search,
+                          HomeDestination.favorites => AppIconType.heart,
+                          HomeDestination.genres => AppIconType.layoutGrid,
+                        }),
+                        label: homeDestinationLabel(destination),
+                      ),
+                  ],
+                ),
               ),
             ),
           ),

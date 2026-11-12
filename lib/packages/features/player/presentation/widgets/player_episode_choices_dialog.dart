@@ -11,12 +11,14 @@ class PlayerEpisodeChoicesDialog extends StatefulWidget {
     required this.episodes,
     required this.selected,
     required this.watchedEpisodeNumbers,
+    this.showWatched = true,
     super.key,
   });
 
   final List<PlaybackEpisode> episodes;
   final int selected;
   final Set<int> watchedEpisodeNumbers;
+  final bool showWatched;
 
   @override
   State<PlayerEpisodeChoicesDialog> createState() => _PlayerEpisodeChoicesDialogState();
@@ -28,11 +30,14 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
   final GlobalKey _selectedEpisodeKey = GlobalKey();
   late final List<PlaybackEpisode> _episodes = widget.episodes.toList()
     ..sort((left, right) => right.number.compareTo(left.number));
+  late final _initialFocusEpisode =
+      _episodes.where((episode) => episode.number == widget.selected).firstOrNull ?? _episodes.firstOrNull;
   ScrollController? _scrollController;
 
   Widget _episodeCard(BuildContext context, PlaybackEpisode episode) {
     final isCurrent = episode.number == widget.selected;
-    final isWatched = episode.isWatched || widget.watchedEpisodeNumbers.contains(episode.number);
+    final isWatched =
+        widget.showWatched && (episode.isWatched || widget.watchedEpisodeNumbers.contains(episode.number));
     final caption = EpisodeCaption(number: episode.number, title: episode.title);
     final description = caption.descriptiveTitle;
     final semanticLabel = [
@@ -51,8 +56,8 @@ class _PlayerEpisodeChoicesDialogState extends State<PlayerEpisodeChoicesDialog>
       imageUrl: episode.previewUri?.toString(),
       episodeHeight: _minimumEpisodeHeight,
       selected: isCurrent,
-      autofocus: isCurrent,
-      badges: [if (isWatched) const AppIcon(AppIconType.check, size: 20, color: AppPalette.success)],
+      autofocus: episode == _initialFocusEpisode,
+      isWatched: isWatched,
       onPressed: () => Navigator.of(context).pop(episode.number),
     );
   }

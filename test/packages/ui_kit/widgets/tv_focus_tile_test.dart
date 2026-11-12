@@ -30,9 +30,13 @@ void main() {
       );
       await settle();
       final before = tester.getSize(content);
+      final tile = find.byType(TvFocusTile);
+      expect(
+        _focusDecoration(tester, tile).border,
+        const Border.fromBorderSide(BorderSide(color: AppPalette.outline, width: 2)),
+      );
       focus.requestFocus();
       await settle();
-      final tile = find.byType(TvFocusTile);
       final scale = tester.widget<AnimatedScale>(find.descendant(of: tile, matching: find.byType(AnimatedScale)));
       final surface = tester.widget<AnimatedContainer>(
         find.descendant(of: tile, matching: find.byType(AnimatedContainer)),
@@ -40,12 +44,14 @@ void main() {
       final clip = tester.widget<ClipRRect>(find.descendant(of: tile, matching: find.byType(ClipRRect)));
       final outline = _focusDecoration(tester, tile);
       expect(scale.scale, variant == TvFocusTileVariant.card ? 1.025 : 1);
-      expect(scale.duration, AppMotion.fast);
-      expect(surface.duration, AppMotion.fast);
+      expect(scale.duration, AppMotion.focusBorderEnter);
+      expect(surface.duration, AppMotion.focusBorderEnter);
       expect(tester.getSize(content), before);
       expect(clip.borderRadius, outline.borderRadius);
       expect(outline.border, const Border.fromBorderSide(BorderSide(color: AppPalette.focusOutline, width: 2)));
-      expect(_requireBoxDecoration(surface.decoration).boxShadow, isNotEmpty);
+      final painted = tester.widgetList<DecoratedBox>(find.descendant(of: tile, matching: find.byType(DecoratedBox)));
+      final shadows = painted.expand((box) => _requireBoxDecoration(box.decoration).boxShadow ?? const []);
+      expect(shadows, [const BoxShadow(color: AppPalette.focusGlow, blurRadius: 12)]);
     });
   }
 
@@ -102,6 +108,10 @@ void main() {
       find.descendant(of: selected, matching: find.byType(AnimatedContainer)),
     );
     expect(_requireBoxDecoration(surface.decoration).color, AppPalette.accentSubtle);
+    expect(
+      _focusDecoration(tester, selected).border,
+      const Border.fromBorderSide(BorderSide(color: AppPalette.textSecondary, width: 2)),
+    );
     expect(find.descendant(of: selected, matching: find.byType(AppIcon)), findsOneWidget);
     expect(second.hasFocus, isTrue);
     expect(tester.widgetList<AnimatedScale>(find.byType(AnimatedScale)).every((scale) => scale.scale == 1), isTrue);

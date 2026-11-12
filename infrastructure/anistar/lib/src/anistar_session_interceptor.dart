@@ -6,9 +6,11 @@ import 'package:html/parser.dart' as html;
 import 'anistar_auth_html.dart';
 import 'anistar_failure.dart';
 import 'anistar_session.dart';
+import 'html_catalog_parameters.dart';
 import 'html_decoder.dart';
 
 final class AnistarSessionInterceptor extends Interceptor {
+  static const expectedAccessKey = 'anistarExpectedAccess';
   final AnistarSession _session;
 
   AnistarSessionInterceptor(this._session);
@@ -20,16 +22,25 @@ final class AnistarSessionInterceptor extends Interceptor {
   void onResponse(Response<Object?> response, ResponseInterceptorHandler handler) =>
       unawaited(_response(response, handler));
 
+  void _verifyAccess(RequestOptions options) {
+    final expected = options.extra[expectedAccessKey];
+    if (expected != null && (!_session.owns(options.uri) || expected != _session.accessGeneration)) {
+      throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
+    }
+  }
+
   Future<void> _request(RequestOptions options, RequestInterceptorHandler handler) async {
     try {
+      _verifyAccess(options);
       if (_session.owns(options.uri)) {
         options.followRedirects = false;
         var cookie = await _session.cookieHeader(options.uri);
+        _verifyAccess(options);
         final sort = options.extra['anistarSortCookies'];
         if (sort is Map<String, String>) {
           final existing = (cookie ?? '')
               .split('; ')
-              .where((part) => part.isNotEmpty && !sort.containsKey(part.split('=').first));
+              .where((part) => part.isNotEmpty && !HtmlCatalogParameters.isSortCookie(part.split('=').first.trim()));
           cookie = [...existing, ...sort.entries.map((entry) => '${entry.key}=${entry.value}')].join('; ');
         }
         options.extra['anistarGeneration'] = _session.generation;
@@ -55,6 +66,7 @@ final class AnistarSessionInterceptor extends Interceptor {
   Future<void> _response(Response<Object?> response, ResponseInterceptorHandler handler) async {
     final options = response.requestOptions;
     try {
+      _verifyAccess(options);
       if (_session.owns(options.uri)) {
         final generation = options.extra['anistarGeneration'];
         if (generation is! int || generation != _session.generation) {
@@ -62,9 +74,13 @@ final class AnistarSessionInterceptor extends Interceptor {
         }
         final sort = options.extra['anistarSortCookies'];
         final cookies = (response.headers['set-cookie'] ?? const <String>[])
-            .where((header) => sort is! Map<String, String> || !sort.containsKey(header.split('=').first))
+            .where(
+              (header) =>
+                  sort is! Map<String, String> || !HtmlCatalogParameters.isSortCookie(header.split('=').first.trim()),
+            )
             .toList(growable: false);
         await _session.saveCookies(options.uri, cookies, generation);
+        _verifyAccess(options);
         if (generation != _session.generation) {
           throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
         }

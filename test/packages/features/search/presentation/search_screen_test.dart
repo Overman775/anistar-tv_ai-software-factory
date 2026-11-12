@@ -6,7 +6,11 @@ import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
+import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_poster_rail.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tail.dart';
 import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:anistar_tv/packages/features/search/presentation/search_screen.dart';
@@ -147,6 +151,125 @@ void main() {
       expect(find.text('Повторить загрузку'), findsNothing);
     },
   );
+
+  testWidgets('explicit submit enforces Unicode code point boundaries and blank stays local', (tester) async {
+    final repository = FakeSearchRepository();
+    final history = FakeSearchHistoryRepository();
+    await pumpMobileApp(
+      tester,
+      SearchScreen(onAnimeTap: (_) => fail('Unexpected detail')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(history),
+      ],
+    );
+    await tester.pumpAndSettle();
+    Future<void> submitText(String text) async {
+      await tester.enterText(query, text);
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+    }
+
+    await submitText('   ');
+    expect(repository.requests, isEmpty);
+    await submitText('😀' * 3);
+    expect(repository.requests, isEmpty);
+    expect(find.textContaining('4'), findsWidgets);
+    await tester.enterText(query, '😀' * 4);
+    await tester.pump();
+    expect(repository.requests, isEmpty, reason: 'editing alone never submits');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(repository.requests.map((request) => request.query), ['😀' * 4]);
+    await submitText('😀' * 120);
+    expect(repository.requests.last.query, '😀' * 120);
+    await submitText('😀' * 121);
+    expect(repository.requests, hasLength(2));
+    expect(tester.widget<TextField>(query).controller?.text.runes.length, 121);
+    expect(history.writes.last, ['😀' * 120, '😀' * 4]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('duplicate pending submit sends once and response does not steal focus', (tester) async {
+    final pending = Completer<Result<AnimePage, Failure>>();
+    final repository = FakeSearchRepository(load: (_) => pending.future);
+    await pumpTvApp(
+      tester,
+      SearchScreen(onAnimeTap: (_) => fail('Unexpected detail')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(query, 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    await tester.tap(submit);
+    await tester.pump();
+    expect(repository.requests, hasLength(1));
+    final focus = FocusManager.instance.primaryFocus;
+    pending.complete(
+      Result.success(
+        AnimePage(
+          items: const [AnimeSummary(id: 1, slug: '1-test', title: 'Тест')],
+          page: 1,
+          hasNext: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(focus));
+    expect(find.byKey(const ValueKey('search-card-1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('leaving search cancels a pending query and ignores its late result', (tester) async {
+    final pending = Completer<Result<AnimePage, Failure>>();
+    final repository = FakeSearchRepository(load: (_) => pending.future);
+    var active = true;
+    late StateSetter update;
+    await pumpTvApp(
+      tester,
+      StatefulBuilder(
+        builder: (_, setState) {
+          update = setState;
+          return SearchScreen(active: active, onAnimeTap: (_) => fail('Unexpected detail'));
+        },
+      ),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(query, 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    expect(repository.requests, hasLength(1));
+    update(() => active = false);
+    await tester.pump();
+    expect(repository.requests.single.cancellation?.isCancelled, isTrue);
+    pending.complete(
+      Result.success(
+        AnimePage(
+          items: const [AnimeSummary(id: 99, slug: '99-old', title: 'Старый ответ')],
+          page: 1,
+          hasNext: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    update(() => active = true);
+    await tester.pumpAndSettle();
+    expect(find.text('Старый ответ'), findsNothing);
+    expect(repository.requests, hasLength(1));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('TV rail focus cancels a pending editable search reset', (tester) async {
     final repository = FakeSearchRepository();
@@ -351,11 +474,12 @@ void main() {
     await enterText(query, 'Наруто');
     await submitQuery(TextInputAction.search);
     await settle();
-    final tvCard = tester.widget<MediaCard>(searchCard);
+    final tvCard = tester.widget<MediaCard>(find.descendant(of: searchCard, matching: find.byType(MediaCard)));
     expect(tvCard.showCaption, isTrue);
-    expect(tvCard.caption, '2026');
+    expect(tvCard.caption, isNull);
+    expect(tvCard.ratingLabel, '9,1');
     expect(tvCard.showBookmark, isTrue);
-    expect(tvCard.badges, hasLength(1));
+    expect(tvCard.badges, isEmpty);
     expect(find.byType(CatalogInspector), findsOneWidget);
     expect(find.text('Результаты для «Наруто» · Найдено: 1'), findsOneWidget);
   });
@@ -402,40 +526,31 @@ void main() {
     await tester.enterText(query, 'Наруто');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await settle();
-    final allCards = find.byType(MediaCard);
     void expectFocus(FocusNode? target) => expect(FocusManager.instance.primaryFocus, same(target));
-    void expectRetainedCards() => expect(allCards, findsNWidgets(24));
+    void expectRetainedCards() => expect(find.byKey(const ValueKey('search-card-24')), findsOneWidget);
     final requestedPages = repository.requests.map((request) => request.page);
-    final top = tester.getTopLeft(allCards.first).dy;
-    final columns = allCards
-        .evaluate()
-        .where((element) => tester.getTopLeft(find.byWidget(element.widget)).dy == top)
-        .length;
     await key(LogicalKeyboardKey.arrowDown);
     await settle();
-    var selected = 0;
-    while (selected < 23) {
-      final down = selected + columns < 24;
-      await key(down ? LogicalKeyboardKey.arrowDown : LogicalKeyboardKey.arrowRight);
-      selected += down ? columns : 1;
+    for (var index = 1; index < 24; index++) {
+      await key(LogicalKeyboardKey.arrowRight);
       await settle();
     }
-    final last = tester.widget<MediaCard>(find.byKey(const ValueKey('search-card-24'))).focusNode;
+    final last = tester.widget<AnimeCard>(find.byKey(const ValueKey('search-card-24'))).focusNode;
     expectFocus(last);
     expect(requestedPages, [1, 2]);
     final retry = find.byKey(const ValueKey('search-pagination-retry'));
-    final retryNode = tester.widget<TextButton>(retry).focusNode;
-    final scroll = tester.widget<SingleChildScrollView>(find.byKey(const PageStorageKey('search-results'))).controller;
-    final cardOffset = scroll?.offset;
+    final retryNode = tester.widget<CatalogTail>(retry).focusNode;
+    final scroll = tester.widget<CatalogPosterRail>(find.byType(CatalogPosterRail)).controller;
+    final cardOffset = scroll.offset;
     expect(cardOffset, greaterThan(0));
-    await key(LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.arrowRight);
     await settle();
     expectFocus(retryNode);
     await key(LogicalKeyboardKey.arrowUp);
     await settle();
     expectFocus(last);
-    expect(scroll?.offset, cardOffset);
-    await key(LogicalKeyboardKey.arrowDown);
+    expect(scroll.offset, cardOffset);
+    await key(LogicalKeyboardKey.arrowRight);
     await settle();
     await key(LogicalKeyboardKey.select);
     await tester.pump();
@@ -450,12 +565,241 @@ void main() {
     await key(LogicalKeyboardKey.arrowUp);
     await settle();
     expectFocus(last);
-    await key(LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.arrowRight);
     await settle();
     expectFocus(retryNode);
     expect(requestedPages, [1, 2, 2]);
     expect(tester.widget<TextField>(query).controller?.text, 'Наруто');
     expectRetainedCards();
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final leaveAnchor in [false, true]) {
+    testWidgets('visible search continuation transfers only while the anchor stays focused; leave=$leaveAnchor', (
+      tester,
+    ) async {
+      final pending = Completer<Result<AnimePage, Failure>>();
+      final repository = FakeSearchRepository(
+        load: (request) async {
+          if (request.page == 2) return pending.future;
+          return Result.success(
+            AnimePage(
+              items: List.generate(
+                24,
+                (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-test', title: 'Аниме ${index + 1}'),
+              ),
+              page: 1,
+              hasNext: true,
+            ),
+          );
+        },
+      );
+      await pumpTvApp(
+        tester,
+        SearchScreen(onAnimeTap: (_) => fail('Unexpected detail')),
+        overrides: [
+          authAccessProvider.overrideWithValue(const AnonymousAccess()),
+          searchRepositoryProvider.overrideWithValue(repository),
+          searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+        ],
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(query, 'Наруто');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+      expect(repository.requests.map((request) => request.page), [
+        1,
+      ], reason: 'cached but offscreen continuation is not visible');
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump(const Duration(milliseconds: 100));
+      for (var i = 0; i < 30 && FocusManager.instance.primaryFocus?.debugLabel != 'Поиск: Аниме 24'; i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Поиск: Аниме 24');
+      expect(repository.requests.map((request) => request.page), [1, 2]);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      if (leaveAnchor) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+        await tester.pump();
+      }
+      final before = FocusManager.instance.primaryFocus;
+      pending.complete(
+        Result.success(
+          AnimePage(
+            items: const [AnimeSummary(id: 25, slug: '25-test', title: 'Аниме 25')],
+            page: 2,
+            hasNext: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (leaveAnchor) {
+        expect(FocusManager.instance.primaryFocus, same(before));
+      } else {
+        expect(FocusManager.instance.primaryFocus?.debugLabel, 'Поиск: Аниме 25');
+      }
+      expect(repository.requests.map((request) => request.page), [1, 2]);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('search cached continuation waits for viewport overlap', (tester) async {
+    final pending = Completer<Result<AnimePage, Failure>>();
+    final repository = FakeSearchRepository(
+      load: (request) async => request.page == 1
+          ? Result.success(
+              AnimePage(
+                items: List.generate(8, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Аниме ${i + 1}')),
+                page: 1,
+                hasNext: true,
+              ),
+            )
+          : pending.future,
+    );
+    await pumpTvApp(
+      tester,
+      SearchScreen(onAnimeTap: (_) => fail('Unexpected detail')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(query, 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    final slot = find.byKey(const ValueKey('tv-catalog-unloaded-slot'), skipOffstage: false).first;
+    final viewport = find.byKey(const ValueKey('tv-catalog-poster-rail'));
+    expect(slot, findsOneWidget);
+    expect(tester.getRect(slot).overlaps(tester.getRect(viewport)), isFalse);
+    expect(repository.requests.map((request) => request.page), [1]);
+    tester.widget<CatalogPosterRail>(find.byType(CatalogPosterRail)).controller.jumpTo(300);
+    await tester.pump();
+    await tester.pump();
+    expect(repository.requests.map((request) => request.page), [1, 2]);
+    expect(find.byKey(const ValueKey('tv-catalog-loading-slot')), findsWidgets);
+    pending.complete(Result.success(AnimePage(items: const [], page: 2, hasNext: false)));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('covered search does not chain continuation or move focus', (tester) async {
+    final pending = Completer<Result<AnimePage, Failure>>();
+    final repository = FakeSearchRepository(
+      load: (request) async {
+        if (request.page == 2) return pending.future;
+        return Result.success(
+          AnimePage(
+            items: List.generate(
+              24,
+              (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-test', title: 'Аниме ${index + 1}'),
+            ),
+            page: 1,
+            hasNext: true,
+          ),
+        );
+      },
+    );
+    await pumpTvApp(
+      tester,
+      Builder(
+        builder: (context) => SearchScreen(
+          onAnimeTap: (_) {
+            unawaited(Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => const Text('Detail route'))));
+          },
+        ),
+      ),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AnonymousAccess()),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(query, 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump(const Duration(milliseconds: 120));
+    for (var i = 0; i < 30 && FocusManager.instance.primaryFocus?.debugLabel != 'Поиск: Аниме 24'; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump(const Duration(milliseconds: 120));
+    }
+    expect(repository.requests.map((request) => request.page), [1, 2]);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Detail route'), findsOneWidget);
+    pending.complete(
+      Result.success(
+        AnimePage(
+          items: const [AnimeSummary(id: 25, slug: '25-test', title: 'Аниме 25')],
+          page: 2,
+          hasNext: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.requests.map((request) => request.page), [1, 2]);
+    expect(find.text('Detail route'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Search remote traverses poster, Watch, genres, form and Favorite', (tester) async {
+    const genre = CatalogFilter(label: 'Комедия', path: '/anime/comedy/');
+    final repository = FakeSearchRepository(
+      load: (_) async => Result.success(
+        AnimePage(
+          items: [
+            AnimeSummary.withGenreFilters(
+              id: 1,
+              slug: '1-test',
+              title: 'Аниме',
+              genreText: genre.label,
+              genreFilters: [genre],
+            ),
+          ],
+          page: 1,
+          hasNext: false,
+        ),
+      ),
+    );
+    await pumpTvApp(
+      tester,
+      SearchScreen(onAnimeTap: (_) => fail('Unexpected detail'), onFilterSelected: (_) => fail('Unexpected filter')),
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        searchRepositoryProvider.overrideWithValue(repository),
+        searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(query, 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    Future<void> key(LogicalKeyboardKey value) async {
+      await tester.sendKeyEvent(value);
+      await tester.pumpAndSettle();
+    }
+
+    await key(LogicalKeyboardKey.arrowDown);
+    final poster = FocusManager.instance.primaryFocus;
+    expect(poster?.debugLabel, 'Поиск: Аниме');
+    await key(LogicalKeyboardKey.arrowUp);
+    expect(focusedControlLabel(tester), 'Смотреть');
+    await key(LogicalKeyboardKey.arrowUp);
+    expect(focusedControlLabel(tester), 'Комедия');
+    await key(LogicalKeyboardKey.arrowUp);
+    expect(tester.widget<TextField>(query).focusNode?.hasFocus, isTrue);
+    await key(LogicalKeyboardKey.arrowDown);
+    await key(LogicalKeyboardKey.arrowUp);
+    await key(LogicalKeyboardKey.arrowRight);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Избранное тайтла');
+    await key(LogicalKeyboardKey.arrowDown);
+    expect(FocusManager.instance.primaryFocus, same(poster));
+    expect(repository.requests, hasLength(1));
     expect(tester.takeException(), isNull);
   });
 
@@ -495,19 +839,26 @@ void main() {
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await settle();
     await key(LogicalKeyboardKey.arrowDown);
-    await key(LogicalKeyboardKey.arrowDown);
-    await settle();
+    for (var i = 0; i < 8; i++) {
+      await key(LogicalKeyboardKey.arrowRight);
+      await settle();
+    }
     final selected = FocusManager.instance.primaryFocus;
-    final scroll = tester.widget<SingleChildScrollView>(find.byKey(const PageStorageKey('search-results'))).controller;
-    final offset = scroll?.offset;
+    final scroll = tester.widget<CatalogPosterRail>(find.byType(CatalogPosterRail)).controller;
+    scroll.jumpTo(scroll.offset + 17);
+    await tester.pump();
+    final offset = scroll.offset;
     expect(offset, greaterThan(0));
+    await key(LogicalKeyboardKey.arrowUp);
+    await settle();
+    expect(focusedControlLabel(tester), 'Смотреть');
     await key(LogicalKeyboardKey.select);
     await settle();
     await tester.binding.handlePopRoute();
     await settle();
     final queryField = tester.widget<TextField>(query);
     expect(FocusManager.instance.primaryFocus, same(selected));
-    expect(scroll?.offset, offset);
+    expect(scroll.offset, offset);
     expect(queryField.controller?.text, 'Наруто');
     expect(queryField.readOnly, isTrue);
     expect(repository.requests, hasLength(1));
@@ -516,7 +867,21 @@ void main() {
 
   testWidgets('empty and error share an action-free feedback surface and retain field focus', (tester) async {
     final settle = tester.pumpAndSettle;
-    final repository = FakeSearchRepository(load: (_) async => const Result.failure(UnknownFailure()));
+    var attempts = 0;
+    final repository = FakeSearchRepository(
+      load: (_) async {
+        attempts++;
+        return attempts == 1
+            ? const Result.failure(UnknownFailure())
+            : Result.success(
+                AnimePage(
+                  items: const [AnimeSummary(id: 1, slug: '1-test', title: 'Результат')],
+                  page: 1,
+                  hasNext: false,
+                ),
+              );
+      },
+    );
     await pumpTvApp(
       tester,
       SearchScreen(onAnimeTap: (_) => fail('Unexpected detail')),
@@ -539,5 +904,11 @@ void main() {
     expect(find.text('Поиск недоступен'), findsOneWidget);
     expect(tester.widget<TextField>(query).focusNode?.hasFocus, isTrue);
     expect(feedbackActions, findsNothing);
+    expect(attempts, 1);
+    await tester.tap(submit);
+    await settle();
+    expect(attempts, 2);
+    expect(repository.requests.map((request) => request.query), ['Наруто', 'Наруто']);
+    expect(find.byKey(const ValueKey('search-card-1')), findsOneWidget);
   });
 }

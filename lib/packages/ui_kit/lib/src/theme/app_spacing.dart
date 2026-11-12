@@ -20,6 +20,9 @@ abstract final class AppRadii {
 }
 
 abstract final class AppSizes {
+  static const double focusStroke = 2;
+  static const double focusBlur = 12;
+  static const double metadataControl = 36;
   static const double cardFocusScale = 1.025;
   static const double tvControl = 56;
   static const double touchControl = 48;

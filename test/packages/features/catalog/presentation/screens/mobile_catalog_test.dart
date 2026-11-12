@@ -57,7 +57,7 @@ void main() {
   final favoritesDestination = destinations.at(2);
   final genresDestination = destinations.at(3);
   final app = find.byType(MaterialApp);
-  final firstCardActions = find.byKey(const ValueKey('anime-actions-1'));
+  final firstCard = find.byKey(const ValueKey(1));
   final longCatalogOverride = catalogRepositoryProvider.overrideWithValue(longMobileCatalog());
 
   // Pumps must execute after each gesture; geometry must be sampled again after layout.
@@ -92,6 +92,30 @@ void main() {
     expect(mobileCatalogController(tester, scroll).offset, greaterThan(0));
     expect(tester.takeException(), isNull);
     semantics.dispose();
+  });
+
+  testWidgets('header scroll notification and immediate card tap stay safe', (tester) async {
+    int? opened;
+    await pumpMobileApp(
+      tester,
+      HomeScreen(onAnimeTap: (anime) => opened = anime.id),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        longCatalogOverride,
+      ],
+    );
+    await tester.pumpAndSettle();
+    final controller = mobileCatalogController(tester, catalogScroll)..jumpTo(200);
+    await tester.pump();
+    controller.jumpTo(0);
+    await tester.pump();
+    await tester.tap(firstCard);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+    expect(visibleAccount, findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('short mobile catalog keeps its header during overscroll', (tester) async {
@@ -143,7 +167,7 @@ void main() {
     final navigationTop = tester.getTopLeft(navigationBar).dy;
     final lastCard = find.byKey(const ValueKey(50));
     expect(tester.getBottomLeft(lastCard).dy, lessThanOrEqualTo(navigationTop));
-    expect(find.byKey(const ValueKey('anime-actions-50')).hitTestable(), findsOneWidget);
+    expect(lastCard.hitTestable(), findsOneWidget);
     expect(visibleAccount, findsNothing);
     final lastOffset = controller.offset;
     await tester.drag(scroll, const Offset(0, -100));
@@ -335,6 +359,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('mobile catalog requests continuation only below 500dp remaining', (tester) async {
+    final requests = <int>[];
+    final firstPage = await longMobileCatalog().getPage(1);
+    final items = firstPage.when(
+      success: (page) => page.items,
+      failure: (_) => throw TestFailure('Missing first page'),
+    );
+    await pumpMobileApp(
+      tester,
+      const CatalogScreen(onAnimeTap: ignoreAnimeTap),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (page) async {
+              requests.add(page);
+              return Result.success(AnimePage(items: page == 1 ? items : [], page: page, hasNext: page == 1));
+            },
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final controller = mobileCatalogController(tester, catalogScroll);
+    final position = controller.position;
+    controller.jumpTo(position.maxScrollExtent - 500);
+    await tester.pumpAndSettle();
+    expect(position.extentAfter, 500);
+    expect(requests, [1]);
+    controller.jumpTo(position.maxScrollExtent - 499);
+    expect(position.extentAfter, 499);
+    await tester.pumpAndSettle();
+    expect(requests, [1, 2]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('two mobile catalog pages keep their scroll and fresh favorite flags after section return', (
     tester,
   ) async {
@@ -394,7 +454,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('visible card action opens bottom panel and applies confirmed favorite', (tester) async {
+  testWidgets('long press opens bottom panel and applies confirmed favorite', (tester) async {
     final favorites = FakeFavoritesRepository();
     int? opened;
     await pumpMobileApp(
@@ -409,7 +469,7 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    await tester.tap(firstCardActions);
+    await tester.longPress(firstCard);
     await tester.pumpAndSettle();
     expect(bottomSheet, findsOneWidget);
     await tester.tap(find.text('Добавить в избранное'));
@@ -420,6 +480,33 @@ void main() {
     expect(opened, isNull);
     await tester.tap(find.byType(MobileAnimeCard).first);
     expect(opened, 1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('moving before long press cancels actions and does not open or write', (tester) async {
+    final favorites = FakeFavoritesRepository();
+    int? opened;
+    await pumpMobileApp(
+      tester,
+      CatalogScreen(onAnimeTap: (anime) => opened = anime.id),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(longMobileCatalog()),
+        favoritesRepositoryProvider.overrideWithValue(favorites),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(tester.getCenter(firstCard));
+    await tester.pump(const Duration(milliseconds: 100));
+    await gesture.moveBy(const Offset(0, -100));
+    await tester.pump(const Duration(seconds: 1));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(bottomSheet, findsNothing);
+    expect(opened, isNull);
+    expect(favorites.writes, isEmpty);
     expect(tester.takeException(), isNull);
   });
 
@@ -459,7 +546,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_home_390.png'));
-    await tester.tap(firstCardActions);
+    await tester.longPress(firstCard);
     await tester.pumpAndSettle();
     await expectLater(app, matchesGoldenFile('goldens/mobile_actions_390.png'));
     await tester.tap(find.byTooltip('Закрыть').last);

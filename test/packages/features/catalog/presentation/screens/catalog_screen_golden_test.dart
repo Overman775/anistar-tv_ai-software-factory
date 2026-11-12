@@ -16,7 +16,9 @@ import '../../../../../support/test_app.dart';
 
 void main() {
   for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize), ('portrait', const Size(412, 915))]) {
-    testWidgets('catalog loading at $name viewport', (tester) async {
+    testWidgets(name == 'portrait' ? 'mobile catalog portrait loading' : 'catalog loading at $name viewport', (
+      tester,
+    ) async {
       final pending = Completer<Result<AnimePage, Failure>>();
       await _pumpCatalogHome(
         tester,
@@ -32,39 +34,43 @@ void main() {
       expect(tester.takeException(), isNull);
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_loading_$name.png'));
     }, tags: ['golden']);
-    testWidgets('catalog layout/focus at $name viewport', (tester) async {
-      await _pumpCatalogHome(
-        tester,
-        size: size,
-        overrides: [
-          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
-          favoritesAccountProvider.overrideWithValue('test'),
-          catalogRepositoryProvider.overrideWithValue(
-            FakeCatalogScreenRepository(
-              load: (_) async => Result.success(
-                AnimePage(
-                  page: 1,
-                  hasNext: false,
-                  items: List.generate(
-                    12,
-                    (index) => AnimeSummary(
-                      id: index + 1,
-                      slug: '${index + 1}-anime',
-                      title: 'Аниме ${index + 1}',
-                      posterUri: Uri(),
-                      isFavorite: index == 0,
-                      rating: index == 2 ? null : 8.4,
+    testWidgets(
+      name == 'portrait' ? 'mobile catalog portrait layout/focus' : 'catalog layout/focus at $name viewport',
+      (tester) async {
+        await _pumpCatalogHome(
+          tester,
+          size: size,
+          overrides: [
+            authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+            favoritesAccountProvider.overrideWithValue('test'),
+            catalogRepositoryProvider.overrideWithValue(
+              FakeCatalogScreenRepository(
+                load: (_) async => Result.success(
+                  AnimePage(
+                    page: 1,
+                    hasNext: false,
+                    items: List.generate(
+                      12,
+                      (index) => AnimeSummary(
+                        id: index + 1,
+                        slug: '${index + 1}-anime',
+                        title: 'Аниме ${index + 1}',
+                        posterUri: Uri(),
+                        isFavorite: index == 0,
+                        rating: index == 2 ? null : 8.4,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      );
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_$name.png'));
-    }, tags: ['golden']);
+          ],
+        );
+        await tester.pumpAndSettle();
+        await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_$name.png'));
+      },
+      tags: ['golden'],
+    );
   }
 }
 

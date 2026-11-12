@@ -156,6 +156,9 @@ void main() {
     await tester.ensureVisible(submit);
     await settle();
     expect(submit.hitTestable(), findsOneWidget);
+    await tester.tap(submit);
+    await settle();
+    expect(auth.loginCalls, 1);
     expect(tester.takeException(), isNull);
   });
 

@@ -36,28 +36,20 @@ class _CatalogSortSheetState extends State<CatalogSortSheet> {
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.escape) {
+    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
       if (event is KeyDownEvent) {
         Navigator.of(context).pop();
       }
 
       return KeyEventResult.handled;
     }
-    if (![
-      LogicalKeyboardKey.arrowUp,
-      LogicalKeyboardKey.arrowDown,
-      LogicalKeyboardKey.arrowRight,
-      LogicalKeyboardKey.arrowLeft,
-    ].contains(key)) {
+    if (key == LogicalKeyboardKey.arrowRight || key == LogicalKeyboardKey.arrowLeft) return KeyEventResult.handled;
+    if (key != LogicalKeyboardKey.arrowUp && key != LogicalKeyboardKey.arrowDown) {
       return KeyEventResult.ignored;
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       final index = _nodes.indexWhere((item) => item.hasFocus);
-      final delta = switch (key) {
-        LogicalKeyboardKey.arrowDown => 1,
-        LogicalKeyboardKey.arrowUp => -1,
-        _ => 0,
-      };
+      final delta = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
       _nodes[(index + delta).clamp(0, _nodes.length - 1)].requestFocus();
     }
 

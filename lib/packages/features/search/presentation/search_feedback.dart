@@ -15,7 +15,10 @@ class SearchFeedback extends StatelessWidget {
         constraints: BoxConstraints(minHeight: constraints.hasBoundedHeight ? constraints.maxHeight : 0),
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
+            padding: EdgeInsets.symmetric(
+              horizontal: TvStateView.headingInsetOf(context, title, constraints.maxWidth),
+              vertical: AppSpacing.xl,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 800),
               child: Semantics(

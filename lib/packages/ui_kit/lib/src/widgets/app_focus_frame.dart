@@ -21,18 +21,36 @@ class AppFocusFrame extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<Color?>(
-    tween: ColorTween(begin: restingColor, end: active ? color : restingColor),
-    duration: AppMotion.durationOf(context, active ? AppMotion.focusBorderEnter : AppMotion.focusBorderExit),
-    curve: active ? AppMotion.enterCurve : AppMotion.exitCurve,
-    builder: (context, value, child) => DecoratedBox(
+  Widget build(BuildContext context) {
+    if (AppMotion.reducedOf(context)) return _paintFrame(active ? 1 : 0, child);
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: active ? 1 : 0),
+      duration: active ? AppMotion.focusBorderEnter : AppMotion.focusBorderExit,
+      curve: active ? AppMotion.enterCurve : AppMotion.exitCurve,
+      builder: (context, progress, child) => _paintFrame(progress, child),
+      child: child,
+    );
+  }
+
+  Widget _paintFrame(double progress, Widget? child) => DecoratedBox(
+    decoration: BoxDecoration(
+      borderRadius: radius,
+      boxShadow: [
+        if (progress > 0)
+          BoxShadow(
+            color: AppPalette.focusGlow.withValues(alpha: AppPalette.focusGlow.a * progress),
+            blurRadius: AppSizes.focusBlur,
+          ),
+      ],
+    ),
+    child: DecoratedBox(
       position: DecorationPosition.foreground,
       decoration: BoxDecoration(
         borderRadius: radius,
-        border: Border.all(color: value ?? restingColor, width: width),
+        border: Border.all(color: Color.lerp(restingColor, color, progress) ?? restingColor, width: width),
       ),
       child: child,
     ),
-    child: child,
   );
 }

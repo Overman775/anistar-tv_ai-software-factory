@@ -145,7 +145,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/':
             body = (MEMBER if self.authenticated() else GUEST) + SEARCH_FORM
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
-        elif path in ('/anime/', '/anime/page/2/', '/anime/comedy/', '/anime/comedy/page/2/', '/new/', '/new/page/2/'):
+        elif path in ('/anime/', '/anime/page/2/', '/anime/comedy/', '/anime/comedy/page/2/', '/anime/drama/', '/anime/drama/page/2/', '/new/', '/new/page/2/'):
             if self.server.catalog_error and self.authenticated():
                 self.reply(403, b'Forbidden', 'text/plain')
             else:
@@ -166,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
                     cards += f'<div class="pages"><a href="{path}page/2/">2</a></div>'
                 self.reply(200, cards.encode('cp1251'), 'text/html; charset=windows-1251')
         elif re.fullmatch(r'/\d+-test.html', path):
-            body = (MEMBER if self.authenticated() else GUEST) + '<h1 itemprop="name">Тестовое аниме</h1><p class="tags"><a href="/new/">Онгоинги</a><a href="/anime/comedy/">Комедия</a></p><ul class="head"><li>Год выпуска: 2026</li><li>Жанр: Комедия</li><li>Серии: 2 эп.</li></ul><div class="descripts">Локальный E2E fixture.</div>'
+            body = (MEMBER if self.authenticated() else GUEST) + '<h1 itemprop="name">Тестовое аниме</h1><p class="tags"><a href="/new/">Онгоинги</a><a href="/anime/comedy/">Комедия</a><a href="/anime/drama/">Драма</a></p><ul class="head"><li>Год выпуска: 2026</li><li>Жанр: Комедия, Драма</li><li>Серии: 2 эп.</li></ul><div class="descripts">Локальный E2E fixture.</div>'
             body += SETTINGS + self.favorite_control(int(path.split('-')[0][1:]))
             self.reply(200, body.encode('cp1251'), 'text/html; charset=windows-1251')
         elif path == '/test/player2/videoas_p2p_new.php':

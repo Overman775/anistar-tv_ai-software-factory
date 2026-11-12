@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../theme/app_palette.dart';
 import 'app_button.dart';
 import 'app_icon.dart';
+import 'app_layout_scope.dart';
 
 class TvStateView extends StatelessWidget {
   const TvStateView({
@@ -76,6 +77,29 @@ class TvStateView extends StatelessWidget {
     });
   }
 
+  /// Retains the standard padding unless enlarged mobile text needs more room.
+  static double headingInsetOf(BuildContext context, String title, double width) {
+    final scaler = MediaQuery.textScalerOf(context);
+    if (AppLayoutScope.isTvOf(context) || scaler.scale(16) <= 16) return AppSpacing.xl;
+
+    final style = DefaultTextStyle.of(context).style.merge(Theme.of(context).textTheme.headlineSmall);
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+      locale: Localizations.maybeLocaleOf(context),
+    );
+    var inset = AppSpacing.xl;
+    for (final word in title.split(RegExp(r'\s+'))) {
+      painter
+        ..text = TextSpan(text: word, style: style)
+        ..layout();
+      inset = ((width - painter.width.ceilToDouble()) / 2).clamp(0.0, inset);
+    }
+    painter.dispose();
+
+    return inset;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -95,7 +119,10 @@ class TvStateView extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 520),
                   child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: headingInsetOf(context, title, constraints.maxWidth.clamp(0.0, 520.0) - 2),
+                      vertical: AppSpacing.xl,
+                    ),
                     decoration: BoxDecoration(
                       color: AppPalette.surface.withValues(alpha: 0.84),
                       borderRadius: AppRadii.large,

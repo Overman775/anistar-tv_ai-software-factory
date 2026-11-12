@@ -20,6 +20,7 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     on<SearchSubmitted>(_submit);
     on<SearchMoreRequested>(_more);
     on<SearchHistoryChanged>(_changeHistory);
+    on<SearchSuspended>(_suspend);
     on<_HistoryLoaded>((event, emit) {
       if (!_historyChanged) {
         emit(_copy(history: event.queries, message: state.message));
@@ -34,6 +35,18 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     _cancellation?.cancel();
 
     return super.close();
+  }
+
+  void _suspend(SearchSuspended event, Emitter<SearchState> emit) {
+    if (!state.loadingMore && state.status != SearchStatus.loading) return;
+    ++_generation;
+    _cancellation?.cancel();
+    _cancellation = null;
+    if (state.status == SearchStatus.loading) {
+      emit(SearchState(history: state.history));
+    } else {
+      emit(_copy(loadingMore: false, message: state.message));
+    }
   }
 
   Future<void> _loadHistory() async {
@@ -57,6 +70,7 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
 
   Future<void> _submit(SearchSubmitted event, Emitter<SearchState> emit) async {
     final query = event.query.trim();
+    if (state.status == SearchStatus.loading && state.query == query && _cancellation?.isCancelled == false) return;
     final generation = ++_generation;
     _cancellation?.cancel();
     final cancellation = _cancellation = RequestCancellation();
@@ -122,10 +136,10 @@ final class SearchBloc extends Bloc<SearchEvent, SearchState> {
     final generation = _generation;
     final query = state.query;
     final nextPage = state.page + 1;
-    final cancellation = _cancellation;
+    final cancellation = _cancellation ??= RequestCancellation();
     emit(_copy(loadingMore: true));
     final result = await _repository.search(query, page: nextPage, cancellation: cancellation);
-    if (isClosed || generation != _generation || cancellation?.isCancelled == true) {
+    if (isClosed || generation != _generation || cancellation.isCancelled) {
       return;
     }
     result.when(
@@ -189,6 +203,12 @@ final class SearchHistoryChanged extends SearchEvent {
 final class _HistoryLoaded extends SearchEvent {
   final List<String> queries;
   const _HistoryLoaded(this.queries);
+}
+
+/// Leaving the section invalidates in-flight work but retains a settled snapshot.
+@immutable
+final class SearchSuspended extends SearchEvent {
+  const SearchSuspended();
 }
 
 enum SearchStatus { idle, loading, ready, error }

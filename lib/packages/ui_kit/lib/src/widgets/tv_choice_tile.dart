@@ -44,26 +44,25 @@ class TvChoiceTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    selected: selected,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: TvFocusTile(
-        variant: TvFocusTileVariant.row,
-        selected: selected,
-        enabled: enabled,
-        busy: busy,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        semanticLabel: label,
-        onPressed: onPressed,
-        onFocusChanged: (focused) => _reveal(context, focused),
-        builder: (context, focused) => Container(
-          constraints: const BoxConstraints(minHeight: 56),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: TvFocusTile(
+      variant: TvFocusTileVariant.row,
+      selected: selected,
+      enabled: enabled,
+      busy: busy,
+      focusNode: focusNode,
+      autofocus: autofocus,
+      semanticLabel: label,
+      onPressed: onPressed,
+      onFocusChanged: (focused) => _reveal(context, focused),
+      builder: (context, focused) => Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: ExcludeSemantics(
                 child: Text(
                   label,
                   maxLines: 2,
@@ -71,12 +70,12 @@ class TvChoiceTile extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textPrimary),
                 ),
               ),
-              if (busy)
-                const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              else if (selected)
-                const AppIcon(AppIconType.check, color: AppPalette.primary),
-            ],
-          ),
+            ),
+            if (busy)
+              const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            else if (selected)
+              const AppIcon(AppIconType.check, color: AppPalette.primary),
+          ],
         ),
       ),
     ),

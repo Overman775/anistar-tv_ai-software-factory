@@ -25,7 +25,7 @@ final class WatchedEpisodes extends AsyncNotifier<Set<int>> {
     if (_account == null) {
       return const {};
     }
-    final result = await ref.read(watchedEpisodesRepositoryProvider).getWatched(animeId);
+    final result = await ref.watch(watchedEpisodesRepositoryProvider).getWatched(animeId);
 
     return result.when(success: Set<int>.unmodifiable, failure: (failure) => throw failure);
   }
@@ -47,6 +47,7 @@ final class WatchedEpisodes extends AsyncNotifier<Set<int>> {
       if (!ref.mounted || episodeNumber <= 0 || _account == null || generation != _generation) {
         return false;
       }
+      if (state.asData?.value.contains(episodeNumber) == true) return true;
       final result = await ref
           .read(watchedEpisodesRepositoryProvider)
           .markStarted(animeId: animeId, episodeNumber: episodeNumber);

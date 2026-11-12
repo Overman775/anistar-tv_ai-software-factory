@@ -10,6 +10,52 @@ void main() {
   final origin = Uri.parse('https://v31.astar.bz/');
   final parser = AnistarHtmlParser(origin);
 
+  test('summary retains source metadata and only supported same-origin genre paths', () {
+    final page = parser.catalog('''
+<div class="news"><div class="title_left"><a href="/42-test.html">Fixture</a></div>
+<ul class="head"><li><b>Серии:</b> ТВ (&gt;12 эп.)</li><li><b>Озвучка:</b> AniStar</li>
+<li><b>Жанр:</b> <a href="/filter/janrs/%e4%f0%e0%ec%e0+%f2%e5%f1%f2/">Драма</a>,
+<a href="https://foreign.test/filter/janrs/test/">Чужой</a>,
+<a href="/unsupported/test/">Другой</a></li></ul>
+<div class="reason">Добавлена 7 серия</div><span class="date-icon">Сегодня, 23:59</span></div>
+<div class="news"><div class="title_left"><a href="/43-test.html">Partial</a></div>
+<ul class="head"><li><b>Озвучка:</b> Другая</li></ul></div>
+<div class="news"><div class="title_left"><a href="/44-test.html">Empty</a></div></div>
+''', 1);
+    final full = page.items.first;
+    expect((full.seriesInfo, full.voiceover), ('ТВ (>12 эп.)', 'AniStar'));
+    expect(full.genres, ['Драма', 'Чужой', 'Другой']);
+    expect(full.genreFilters.map((filter) => (filter.label, filter.path)), [
+      ('Драма', '/filter/janrs/%e4%f0%e0%ec%e0+%f2%e5%f1%f2/'),
+    ]);
+    expect((full.updateMessage, full.publicationDate), ('Добавлена 7 серия', 'Сегодня, 23:59'));
+    expect((page.items[1].seriesInfo, page.items[1].voiceover), (null, 'Другая'));
+    expect(page.items[1].genreFilters, isEmpty);
+    expect((page.items[2].seriesInfo, page.items[2].voiceover), (null, null));
+    expect(page.items[2].genreFilters, isEmpty);
+  });
+
+  test('author text survives invalid links and supported spelling is preserved', () {
+    final full = parser.details(
+      detailHtml.replaceFirst('</ul>', '''
+<li><b>Автор:</b> <a href="/filter/author/%f1%e8%ed%ee%f5%e0%f0%e0+%f2%e8%fd/">Синохара Тиэ</a></li></ul>'''),
+      '10938-test',
+    );
+    expect(full.author, 'Синохара Тиэ');
+    expect(full.filters.map((filter) => (filter.label, filter.path)), [
+      ('Синохара Тиэ', '/filter/author/%f1%e8%ed%ee%f5%e0%f0%e0+%f2%e8%fd/'),
+    ]);
+    for (final path in ['https://foreign.test/filter/author/name/', '/unsupported/name/']) {
+      final data = parser.details(
+        detailHtml.replaceFirst('</ul>', '<li><b>Автор:</b> <a href="$path">Автор без перехода</a></li></ul>'),
+        '10938-test',
+      );
+      expect(data.author, 'Автор без перехода');
+      expect(data.filters, isEmpty);
+    }
+    expect(parser.details(detailHtml, '10938-test').author, isNull);
+  });
+
   test('summary keeps only actual metadata, raw publication text and immutable genres', () {
     final page = parser.catalog('''
       <div class="news"><div class="title_left"><a href="/42-fixture.html">Fixture</a></div>

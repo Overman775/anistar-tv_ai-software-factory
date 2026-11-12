@@ -145,7 +145,7 @@ abstract final class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadii.medium,
-          borderSide: BorderSide(color: primaryColor, width: 2),
+          borderSide: BorderSide(color: primaryColor, width: AppSizes.focusStroke),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -163,7 +163,7 @@ abstract final class AppTheme {
               side: const WidgetStatePropertyAll(BorderSide.none),
               backgroundBuilder: (context, states, child) => AppFocusBorder(
                 focused: states.contains(WidgetState.focused),
-                color: AppPalette.onPrimary,
+                restingColor: AppPalette.outline,
                 child: child ?? const SizedBox.shrink(),
               ),
               backgroundColor: WidgetStateProperty.resolveWith((states) {

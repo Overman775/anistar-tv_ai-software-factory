@@ -20,7 +20,7 @@ class FavoriteActionsSheet extends ConsumerStatefulWidget {
 }
 
 class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
-  late Future<Result<bool, Failure>> _future;
+  Future<Result<bool, Failure>>? _future;
   String? _error;
   bool _busy = false;
 
@@ -34,19 +34,23 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
 
   void _load() {
     _error = null;
-    _future = ref.read(favoritesRepositoryProvider).getStatus(animeId: widget.animeId, slug: widget.slug);
+    _future = ref.read(favoritesControllerProvider.notifier).readStatus(animeId: widget.animeId, slug: widget.slug);
   }
 
   Future<void> _change(bool favorite) async {
+    final account = ref.read(favoritesAccountProvider);
+    if (_busy || account == null || ref.read(favoritesControllerProvider).updatingAnimeId != null) return;
     setState(() => _busy = true);
     final failure = await ref
         .read(favoritesControllerProvider.notifier)
         .setFavorite(animeId: widget.animeId, slug: widget.slug, favorite: favorite);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted || ref.read(favoritesAccountProvider) != account) return;
     if (failure == null) {
-      Navigator.of(context).pop(true);
+      if (ModalRoute.isCurrentOf(context) == true) {
+        Navigator.of(context).pop(true);
+      } else {
+        setState(() => _busy = false);
+      }
     } else {
       setState(() {
         _busy = false;
@@ -61,7 +65,7 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
     }
   }
 
-  Widget _content(BuildContext context, AsyncSnapshot<Result<bool, Failure>> snapshot) {
+  Widget _content(AsyncSnapshot<Result<bool, Failure>> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
       return const SizedBox(height: 64, child: Center(child: CircularProgressIndicator()));
     }
@@ -80,20 +84,23 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
         ],
       );
     }
-    final favorite = result.successOrNull;
+    final status = ref.read(favoritesControllerProvider);
+    final favorite = status.confirmedStatus(widget.animeId, reported: result.successOrNull);
+    final updating = status.updatingAnimeId;
+    final busy = _busy || updating == widget.animeId;
 
     return AppButton(
       autofocus: true,
-      busy: _busy,
-      enabled: favorite != null,
+      busy: busy,
+      enabled: favorite != null && (updating == null || updating == widget.animeId),
       onPressed: () => _requestChange(favorite),
       icon: AppIcon(favorite == true ? AppIconType.heartMinus : AppIconType.heartPlus),
-      label: _label(favorite),
+      label: _label(favorite, busy),
     );
   }
 
-  String _label(bool? favorite) {
-    if (_busy) {
+  String _label(bool? favorite, bool busy) {
+    if (busy) {
       return 'Обновляем избранное…';
     }
 
@@ -102,6 +109,15 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(favoritesAccountProvider, (previous, next) {
+      if (previous == next) return;
+      setState(() {
+        _busy = false;
+        _error = null;
+        _future = null;
+        if (next != null && ref.read(authAccessProvider).canUseAccount) _load();
+      });
+    });
     if (!ref.watch(authAccessProvider).canUseAccount) {
       return AppActionSheet(
         title: widget.title,
@@ -121,7 +137,7 @@ class _FavoriteActionsSheetState extends ConsumerState<FavoriteActionsSheet> {
       expandChild: true,
       child: ListView(
         children: [
-          FutureBuilder<Result<bool, Failure>>(future: _future, builder: _content),
+          FutureBuilder<Result<bool, Failure>>(future: _future, builder: (_, snapshot) => _content(snapshot)),
           const SizedBox(height: AppSpacing.md),
           TextButton.icon(
             onPressed: () => Navigator.of(context).pop(false),

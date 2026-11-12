@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../common/presentation/rating_presentation.dart';
 import '../../domain/models/anime_summary.dart';
 import 'anime_rating_badge.dart';
 
@@ -14,12 +15,18 @@ class AnimeCard extends StatelessWidget {
     this.onLongPressed,
     this.isFavorite,
     this.showFavorite = true,
+    this.focusNode,
+    this.rail = false,
+    this.selected = false,
   });
 
   final AnimeSummary anime;
   final bool autofocus;
   final bool? isFavorite;
   final bool showFavorite;
+  final FocusNode? focusNode;
+  final bool rail;
+  final bool selected;
   final ValueChanged<bool>? onFocusChanged;
   final VoidCallback onTap;
   final VoidCallback? onLongPressed;
@@ -27,14 +34,18 @@ class AnimeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MediaCard(
     label: anime.title,
-    caption: anime.year,
+    caption: rail ? null : anime.year,
     imageUrl: anime.posterUri?.toString(),
-    heroTag: 'anime-poster-${anime.id}',
+    heroTag: rail ? null : 'anime-poster-${anime.id}',
+    focusNode: focusNode,
     autofocus: autofocus,
     onFocusChanged: onFocusChanged,
     onPressed: onTap,
     onLongPressed: onLongPressed,
     showBookmark: showFavorite && (isFavorite ?? anime.isFavorite) == true,
-    badges: [AnimeRatingBadge(rating: anime.rating)],
+    badges: rail ? const [] : [AnimeRatingBadge(rating: anime.rating)],
+    ratingLabel: rail ? RatingPresentation.from(anime.rating)?.label : null,
+    selected: selected,
+    scaleOnFocus: !rail,
   );
 }

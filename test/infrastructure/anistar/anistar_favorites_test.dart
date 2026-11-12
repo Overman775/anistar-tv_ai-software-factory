@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'package:anistar/anistar.dart';
+import 'package:anistar/html.dart';
 import 'package:anistar/parsing.dart';
 import 'package:app_logging/app_logging.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:networking/networking.dart';
+import 'package:storage/storage.dart';
 
 import '../../mocks/anistar/anistar_fixtures.dart';
 import '../../mocks/anistar/favorites_fixture_adapter.dart';
 import '../../mocks/anistar/test_anistar_client.dart';
+import '../../mocks/storage/memory_secure_storage.dart';
 
 void main() {
   const id = 10938;
@@ -91,6 +97,136 @@ void main() {
     addTearDown(() => dio.close(force: true));
   });
 
+  for (final stage in ['detail', 'after-detail', 'before-mutation', 'after-mutation']) {
+    test('account switch at $stage rejects stale favorites traffic with real session interceptor', () async {
+      final session = AnistarSession(origin, MemorySecureStorage());
+      addTearDown(session.close);
+      await session.initialize();
+      final firstGeneration = session.generation;
+      await session.saveCookies(origin, ['dle_user_id=42; Path=/'], firstGeneration);
+      await session.authenticate('first', firstGeneration);
+      final reached = Completer<void>();
+      final gate = Completer<void>();
+      final localAdapter = FavoritesFixtureAdapter();
+      final dio = DioClient.create(
+        config: NetworkConfig(baseUri: origin),
+        logger: AppLogger.logger,
+      )..httpClientAdapter = localAdapter;
+      addTearDown(() => dio.close(force: true));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            final matches =
+                stage == 'detail' && options.uri.path.endsWith('.html') ||
+                stage == 'before-mutation' && options.uri.path.contains('/ajax/');
+            if (matches && !reached.isCompleted) {
+              reached.complete();
+              unawaited(gate.future.then((_) => handler.next(options)));
+            } else {
+              handler.next(options);
+            }
+          },
+          onResponse: (response, handler) {
+            if (((stage == 'after-mutation' && response.requestOptions.uri.path.contains('/ajax/')) ||
+                    (stage == 'after-detail' && response.requestOptions.uri.path.endsWith('.html'))) &&
+                !reached.isCompleted) {
+              reached.complete();
+              unawaited(gate.future.then((_) => handler.next(response)));
+            } else {
+              handler.next(response);
+            }
+          },
+        ),
+      );
+      dio.interceptors.add(AnistarSessionInterceptor(session));
+      final client = createTestAnistarClient(dio, session: session);
+      final pending = client.setFavorite(animeId: id, slug: slug, favorite: true);
+      final failure = expectLater(pending, throwsA(isA<AnistarClientException>()));
+      await reached.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => throw StateError(
+          'requests ${localAdapter.requests.map((r) => r.uri.path).toList()}, account ${session.account}',
+        ),
+      );
+      await session.clear();
+      final secondGeneration = session.generation;
+      await session.saveCookies(origin, ['dle_user_id=99; Path=/'], secondGeneration);
+      await session.authenticate('second', secondGeneration);
+      gate.complete();
+      await failure;
+      final paths = localAdapter.requests.map((request) => request.uri.path).toList();
+      expect(paths.where((path) => path.endsWith('.html')), hasLength(stage == 'detail' ? 0 : 1));
+      expect(paths.where((path) => path.contains('/ajax/')), hasLength(stage == 'after-mutation' ? 1 : 0));
+      for (final request in localAdapter.requests) {
+        expect(request.headers['Cookie'], contains('dle_user_id=42'));
+        expect(request.headers['Cookie'], isNot(contains('dle_user_id=99')));
+      }
+      expect(session.account, 'second');
+    });
+  }
+
+  test('tagged favorite request cannot leave its original origin', () async {
+    final session = AnistarSession(origin, MemorySecureStorage());
+    addTearDown(session.close);
+    await session.initialize();
+    final generation = session.generation;
+    await session.authenticate('first', generation);
+    final localAdapter = FavoritesFixtureAdapter();
+    final dio = DioClient.create(
+      config: NetworkConfig(baseUri: origin),
+      logger: AppLogger.logger,
+    )..httpClientAdapter = localAdapter;
+    addTearDown(() => dio.close(force: true));
+    dio.interceptors.add(AnistarSessionInterceptor(session));
+    await expectLater(
+      dio.get<List<int>>(
+        'https://other.test/engine/ajax/favorites.php',
+        options: Options(
+          responseType: ResponseType.bytes,
+          extra: {AnistarSessionInterceptor.expectedAccessKey: session.accessGeneration},
+        ),
+      ),
+      throwsA(isA<DioException>()),
+    );
+    expect(localAdapter.requests, isEmpty);
+  });
+
+  test('queued cookie lookup rechecks access after a concurrent session clear', () async {
+    final storage = _AnistarFavoritesTest();
+    final session = AnistarSession(origin, storage);
+    addTearDown(session.close);
+    await session.initialize();
+    final generation = session.generation;
+    await session.saveCookies(origin, ['dle_user_id=42; Path=/'], generation);
+    await session.authenticate('first', generation);
+    final expected = session.accessGeneration;
+    final localAdapter = FavoritesFixtureAdapter();
+    final dio = DioClient.create(
+      config: NetworkConfig(baseUri: origin),
+      logger: AppLogger.logger,
+    )..httpClientAdapter = localAdapter;
+    addTearDown(() => dio.close(force: true));
+    dio.interceptors.add(AnistarSessionInterceptor(session));
+    storage.block = true;
+    final clearing = session.clear();
+    await storage.reached.future.timeout(const Duration(seconds: 3));
+    final request = dio.get<List<int>>(
+      'engine/ajax/favorites.php',
+      options: Options(
+        responseType: ResponseType.bytes,
+        extra: {AnistarSessionInterceptor.expectedAccessKey: expected},
+      ),
+    );
+    final failure = expectLater(request, throwsA(isA<DioException>()));
+    await Future<void>.delayed(Duration.zero);
+    expect(localAdapter.requests, isEmpty);
+    storage.release.complete();
+    await clearing;
+    await failure;
+    expect(localAdapter.requests, isEmpty);
+    expect(session.account, isNull);
+  });
+
   test('reads the website list through canonical DLE pagination', () async {
     expect((await source.favorites(2)).items, isEmpty);
     expect(adapter.requests.single.uri.queryParameters, {'do': 'favorites', 'cstart': '2'});
@@ -145,4 +281,28 @@ void main() {
     );
     expect(adapter.requests, hasLength(requestCount));
   });
+}
+
+final class _AnistarFavoritesTest extends SecureStorage {
+  final values = <String, String>{};
+  final reached = Completer<void>();
+  final release = Completer<void>();
+  bool block = false;
+
+  @override
+  Future<String?> get(String key) async => values[key];
+
+  @override
+  Future<void> set(String key, String value) async {
+    values[key] = value;
+  }
+
+  @override
+  Future<void> remove(String key) async {
+    if (block) {
+      reached.complete();
+      await release.future;
+    }
+    values.remove(key);
+  }
 }

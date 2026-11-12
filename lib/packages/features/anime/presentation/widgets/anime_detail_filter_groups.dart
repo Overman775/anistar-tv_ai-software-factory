@@ -1,81 +1,74 @@
 import '../../../catalog/domain/models/catalog_filter.dart';
 import '../../domain/models/anime_details.dart';
 
-/// Presentation-only grouping keeps site links beside their matching metadata.
+typedef AnimeMetadataValue = ({String label, CatalogFilter? filter});
+
+/// Match display fields to validated source links without changing their paths.
 final class AnimeDetailFilterGroups {
-  final CatalogFilter? year;
-  final List<CatalogFilter> genres;
-  final List<String> genreText;
-  final CatalogFilter? director;
-  final String? directorText;
+  final List<({String heading, List<AnimeMetadataValue> values})> rows;
   final List<CatalogFilter> remaining;
   final Map<String, int> indices;
 
-  bool get hasGroups =>
-      genres.isNotEmpty || genreText.isNotEmpty || director != null || directorText != null || remaining.isNotEmpty;
+  bool get hasGroups => rows.isNotEmpty;
 
-  AnimeDetailFilterGroups._({
-    required this.year,
-    required this.genres,
-    required this.genreText,
-    required this.director,
-    required this.directorText,
-    required this.remaining,
-    required this.indices,
-  });
+  List<AnimeMetadataValue> _values(String heading) =>
+      rows.where((row) => row.heading == heading).firstOrNull?.values ?? const [];
+
+  CatalogFilter? get year => _values('Год').firstOrNull?.filter;
+  CatalogFilter? get director => _values('Режиссёр').firstOrNull?.filter;
+  String? get directorText => director == null ? _values('Режиссёр').firstOrNull?.label : null;
+  List<CatalogFilter> get genres => _values('Жанры').map((value) => value.filter).whereType<CatalogFilter>().toList();
+  List<String> get genreText => [
+    for (final value in _values('Жанры'))
+      if (value.filter == null) value.label,
+  ];
+
+  AnimeDetailFilterGroups._(this.rows, this.remaining, this.indices);
 
   factory AnimeDetailFilterGroups.fromDetails(AnimeDetails details, List<CatalogFilter> filters) {
-    final remaining = filters.toList(growable: true);
+    final remaining = filters.toList();
     final indices = <String, int>{};
     for (var index = 0; index < filters.length; index++) {
       indices.putIfAbsent(filters[index].path, () => index);
     }
+    final rows = <({String heading, List<AnimeMetadataValue> values})>[];
 
-    CatalogFilter? take(String? value, {bool director = false}) {
-      final normalizedValue = _normalize(value, stripDirectorPrefix: director);
-      if (normalizedValue.isEmpty) {
-        return null;
+    void addRow(String heading, Iterable<String?> labels, RegExp category) {
+      final values = <AnimeMetadataValue>[];
+      for (final value in labels) {
+        final label = value?.trim();
+        if (label == null || label.isEmpty) continue;
+        final normalized = _normalize(label, heading);
+        final index = remaining.indexWhere(
+          (filter) => category.hasMatch(filter.path) && _normalize(filter.label, heading) == normalized,
+        );
+        values.add((label: label, filter: index < 0 ? null : remaining.removeAt(index)));
       }
-      final index = remaining.indexWhere(
-        (filter) => _normalize(filter.label, stripDirectorPrefix: director) == normalizedValue,
-      );
-      if (index < 0) {
-        return null;
-      }
-
-      return remaining.removeAt(index);
+      if (values.isNotEmpty) rows.add((heading: heading, values: values));
     }
 
-    final year = take(details.year);
-    final genres = <CatalogFilter>[];
-    final genreText = <String>[];
-    for (final genre in details.genres) {
-      final filter = take(genre);
-      if (filter == null) {
-        genreText.add(genre);
-      } else {
-        genres.add(filter);
-      }
-    }
-    final director = take(details.director, director: true);
+    addRow('Год', [details.year], _yearPath);
+    addRow('Жанры', details.genres, _genrePath);
+    addRow('Режиссёр', [details.director], _directorPath);
+    addRow('Автор', [details.author], _authorPath);
 
-    return AnimeDetailFilterGroups._(
-      year: year,
-      genres: List.unmodifiable(genres),
-      genreText: List.unmodifiable(genreText),
-      director: director,
-      directorText: director == null ? details.director : null,
-      remaining: List.unmodifiable(remaining),
-      indices: Map.unmodifiable(indices),
-    );
+    return AnimeDetailFilterGroups._(List.unmodifiable(rows), List.unmodifiable(remaining), Map.unmodifiable(indices));
   }
 
-  static String _normalize(String? value, {bool stripDirectorPrefix = false}) {
-    var normalized = value?.trim().toLowerCase().replaceAll('ё', 'е') ?? '';
-    if (stripDirectorPrefix) {
-      normalized = normalized.replaceFirst(RegExp(r'^режис[сс]?ер\s*:\s*'), '');
-    }
+  static final _yearPath = _fieldPath('year');
+  static final _directorPath = _fieldPath('director');
+  static final _authorPath = _fieldPath('author');
+  static final _genrePath = RegExp(
+    r'^/(?:filter/janrs/(?:[a-zA-Z0-9+_-]|%(?:[89a-fA-F][a-fA-F0-9]|20))+|anime/[a-z][a-z0-9-]*)/$',
+  );
 
-    return normalized;
+  static RegExp _fieldPath(String field) =>
+      RegExp('^/filter/$field/${r'(?:[a-zA-Z0-9+_-]|%(?:[89a-fA-F][a-fA-F0-9]|20))+/$'}');
+
+  static String _normalize(String value, String heading) {
+    final normalized = value.trim().toLowerCase().replaceAll('ё', 'е').replaceAll(RegExp(r'\s+'), ' ');
+    final field = heading.toLowerCase().replaceAll('ё', 'е');
+
+    return normalized.replaceFirst(RegExp('^$field\\s*:\\s*'), '');
   }
 }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
@@ -75,6 +77,7 @@ class CatalogNavigationRail extends StatelessWidget {
               ),
               Expanded(
                 child: ListView(
+                  scrollCacheExtent: const ScrollCacheExtent.pixels(600),
                   padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   children: [
                     for (final item in items)
@@ -90,6 +93,25 @@ class CatalogNavigationRail extends StatelessWidget {
                               focusNode: item.focusNode,
                               autofocus: item.autofocus,
                               onPressed: item.onPressed,
+                              onFocusChange: (focused) {
+                                if (!focused) return;
+                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                  final target = item.focusNode.context;
+                                  if (target == null || !target.mounted || !item.focusNode.hasFocus) return;
+                                  unawaited(
+                                    Scrollable.ensureVisible(
+                                      target,
+                                      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+                                    ),
+                                  );
+                                  unawaited(
+                                    Scrollable.ensureVisible(
+                                      target,
+                                      alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+                                    ),
+                                  );
+                                });
+                              },
                               style: AppFocusStyle.button(selected: item.selected).copyWith(
                                 padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: AppSpacing.md)),
                               ),

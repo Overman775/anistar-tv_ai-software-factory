@@ -3,68 +3,75 @@ import 'package:ui_kit/ui_kit.dart';
 
 import 'catalog_layout.dart';
 
-/// Catalog-owned placeholder layout. Grid decisions remain inside the feature.
+/// The first-page placeholders reserve the same poster geometry as the rail.
 class CatalogSkeleton extends StatelessWidget {
-  const CatalogSkeleton({super.key});
+  const CatalogSkeleton({this.title = 'Каталог аниме', super.key});
+
+  final String title;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => TvSkeleton(
+  Widget build(BuildContext context) {
+    final viewport = MediaQuery.sizeOf(context);
+    final width = CatalogLayout.posterWidth(viewport.height);
+    final gap = CatalogLayout.posterGap(viewport.width);
+    final anchor = CatalogLayout.horizontalInset(viewport.width) + CatalogLayout.focusGutter;
+    final height = width / AppSizes.posterRatio;
+
+    return TvSkeleton(
       isLoading: true,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: CatalogLayout.inspectorHeight(
-                MediaQuery.sizeOf(context).height,
-                MediaQuery.textScalerOf(context).scale(16) / 16,
-              ),
-            ),
+          Expanded(
             child: Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
-                vertical: MediaQuery.sizeOf(context).width <= 768 ? AppSpacing.lg : AppSpacing.xl,
-              ),
-              child: const Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TvSkeletonBox(height: 32),
-                  SizedBox(height: AppSpacing.md),
-                  TvSkeletonBox(height: 20),
-                  SizedBox(height: AppSpacing.md),
-                  Flexible(child: TvSkeletonBox(height: 32)),
-                ],
+              padding: EdgeInsets.fromLTRB(anchor, 16, anchor, 0),
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: FractionallySizedBox(
+                  widthFactor: 2 / 3,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      const heading = TvSkeletonBox(height: 32);
+                      final subtitleFits = constraints.maxHeight >= 32 + AppSpacing.md + 20;
+                      final descriptionFits = constraints.maxHeight > 32 + 20 + 2 * AppSpacing.md;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: AppSpacing.md,
+                        children: [
+                          if (subtitleFits) heading else const Flexible(child: heading),
+                          if (subtitleFits) const TvSkeletonBox(height: 20, width: 180),
+                          if (descriptionFits) const Flexible(child: TvSkeletonBox(height: 48)),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ),
-          Expanded(
-            child: CustomScrollView(
+          Padding(
+            padding: EdgeInsets.fromLTRB(anchor, 16, anchor, 8),
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+          ),
+          SizedBox(
+            height: height + CatalogLayout.railTopPadding + CatalogLayout.railBottomPadding,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
               physics: const NeverScrollableScrollPhysics(),
-              slivers: [
-                SliverPadding(
-                  padding: EdgeInsets.fromLTRB(
-                    CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
-                    AppSpacing.md,
-                    CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
-                    72,
-                  ),
-                  sliver: SliverGrid.builder(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: CatalogLayout.columnCount(constraints.maxWidth),
-                      childAspectRatio: 0.68,
-                      crossAxisSpacing: AppSpacing.lg,
-                      mainAxisSpacing: AppSpacing.xl,
-                    ),
-                    itemCount: CatalogLayout.columnCount(constraints.maxWidth) * 2,
-                    itemBuilder: (_, _) => const TvSkeletonBox(borderRadius: AppRadii.large),
-                  ),
-                ),
-              ],
+              padding: EdgeInsets.fromLTRB(anchor, CatalogLayout.railTopPadding, 0, CatalogLayout.railBottomPadding),
+              itemCount: CatalogLayout.defaultPageSize,
+              itemBuilder: (_, _) => TvSkeletonBox(width: width, borderRadius: AppRadii.large),
+              separatorBuilder: (_, _) => SizedBox(width: gap),
             ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 }

@@ -18,6 +18,7 @@ final class AnistarAnimeDetailsDto {
   final bool? isFavorite;
   final double? rating;
   final String? director;
+  final String? author;
   final String? updateMessage;
   final String? publicationDate;
   final List<AnistarAnimePartDto> parts;
@@ -37,6 +38,7 @@ final class AnistarAnimeDetailsDto {
     this.isFavorite,
     this.rating,
     this.director,
+    this.author,
     this.updateMessage,
     this.publicationDate,
     List<AnistarAnimePartDto> parts = const [],

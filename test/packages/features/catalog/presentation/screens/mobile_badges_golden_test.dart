@@ -45,7 +45,7 @@ void main() {
         // Each pump observes the preceding navigation state.
         await tester.pumpAndSettle();
       }
-      expect(find.text('8,7'), findsNothing);
+      expect(find.text('8,7'), favorites ? findsNothing : findsOneWidget);
       expect(find.text('0,0'), findsNothing);
       expect(tester.takeException(), isNull);
       await expectLater(

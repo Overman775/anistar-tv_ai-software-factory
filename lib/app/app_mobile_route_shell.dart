@@ -1,11 +1,17 @@
 part of 'app_routes.dart';
 
 class _AppMobileRouteShell extends ConsumerWidget {
-  const _AppMobileRouteShell({required this.destination, required this.title, required this.content});
+  const _AppMobileRouteShell({
+    required this.destination,
+    required this.title,
+    required this.content,
+    this.showContextTitle = true,
+  });
 
   final HomeDestination destination;
   final String title;
   final Widget content;
+  final bool showContextTitle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => MobileHomeShell(
@@ -19,6 +25,7 @@ class _AppMobileRouteShell extends ConsumerWidget {
         : ref.read(authControllerProvider.notifier).requestSignIn,
     onOpenLogs: _logsAction(context),
     contextTitle: title,
+    showContextTitle: showContextTitle,
     onBack: () => context.pop(),
     content: content,
   );

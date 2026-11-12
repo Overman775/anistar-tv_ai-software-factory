@@ -5,6 +5,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_part.dart
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_watch_order.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,15 +16,16 @@ import '../../../../../support/test_app.dart';
 
 void main() {
   for (final mobile in [false, true]) {
-    for (final (numbers, watched, target, rewatch) in <(List<int>, Set<int>, int?, bool)>[
-      ([1, 2, 3], {}, 1, false),
-      ([1, 2, 3, 4, 5], {2, 3}, 4, false),
-      ([1, 3, 5], {3}, 5, false),
-      ([1, 2, 3], {1, 2, 3}, 1, true),
-      ([1, 3, 5], {5}, 1, true),
-      ([], {}, null, false),
+    for (final (numbers, watched, target) in <(List<int>, Set<int>, int)>[
+      ([1, 2, 3], {}, 1),
+      ([1, 2, 3, 4, 5], {2, 3}, 4),
+      ([1, 3, 5], {3}, 5),
+      ([1, 2, 3], {1, 2, 3}, 1),
+      ([1, 3, 5], {5}, 1),
     ]) {
-      testWidgets('${mobile ? 'mobile' : 'TV'} watch uses $numbers after $watched', (tester) async {
+      testWidgets('${mobile ? 'mobile' : 'TV'} selected episode $target opens independently of watched $watched', (
+        tester,
+      ) async {
         final opened = <int>[];
         final settle = tester.pumpAndSettle;
         final data = AnimeScreenData(
@@ -58,30 +60,14 @@ void main() {
           await pumpTvApp(tester, screen, wrapInScaffold: false, overrides: overrides);
         }
         await settle();
-        final label = switch (target) {
-          null => 'Нет доступных серий',
-          _ when rewatch => 'Посмотреть снова',
-          _ => 'Смотреть серию $target',
-        };
-        final action = find.byWidgetPredicate((widget) => widget is AppButton && widget.label == label);
-        if (target == null) {
-          if (mobile) {
-            expect(action, findsNothing);
-            final explanation = find.textContaining('Серии не найдены');
-            await tester.scrollUntilVisible(explanation, 250, scrollable: find.byType(Scrollable).first);
-            expect(explanation, findsOneWidget);
-          } else {
-            expect(action, findsOneWidget);
-            expect(tester.widget<AppButton>(action).enabled, isFalse);
-          }
-          expect(opened, isEmpty);
-        } else {
-          expect(action, findsOneWidget);
-          await tester.ensureVisible(action);
-          await settle();
-          await tester.tap(action);
-          expect(opened, [target]);
-        }
+        final action = find.byWidgetPredicate((widget) => widget is EpisodeCard && widget.episode.number == target);
+        await tester.ensureVisible(action);
+        await settle();
+        await tester.tap(action);
+        expect(opened, [target]);
+        final card = tester.widget<EpisodeCard>(action);
+        expect(card.episode.isWatched, watched.contains(target));
+        expect(find.widgetWithText(AppButton, 'Смотреть серию $target'), findsNothing);
         expect(tester.takeException(), isNull);
       });
     }

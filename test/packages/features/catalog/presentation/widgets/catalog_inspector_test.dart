@@ -37,7 +37,7 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('inspector dwell does not rebuild the grid or issue another catalog query', (tester) async {
+  testWidgets('inspector dwell and fade do not rebuild the poster rail or query again', (tester) async {
     var requests = 0;
     await pumpTvApp(
       tester,
@@ -56,25 +56,27 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    var gridBuilds = 0;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    var railBuilds = 0;
     final previous = debugOnRebuildDirtyWidget;
     debugOnRebuildDirtyWidget = (element, builtOnce) {
       previous?.call(element, builtOnce);
-      if (element.widget is SliverGrid) {
-        gridBuilds++;
+      if (element.widget.key == const ValueKey('tv-catalog-poster-rail')) {
+        railBuilds++;
       }
     };
     addTearDown(() => debugOnRebuildDirtyWidget = previous);
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump(const Duration(milliseconds: 150));
-    await tester.pump(const Duration(milliseconds: 280));
-    debugOnRebuildDirtyWidget = previous;
+    await tester.pump(const Duration(milliseconds: 110));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CatalogInspectorCopy>(find.byType(CatalogInspectorCopy)).anime.id, 2);
     expect(requests, 1);
-    expect(gridBuilds, 0);
+    expect(railBuilds, 0);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('natural inspector copy changes do not animate the grid height', (tester) async {
+  testWidgets('natural inspector copy changes do not interpolate the following content position', (tester) async {
     const rich = AnimeSummary(
       id: 4,
       slug: '4-rich',
@@ -86,7 +88,7 @@ void main() {
     );
     final selected = ValueNotifier(_first);
     addTearDown(selected.dispose);
-    const anchorKey = ValueKey('inspector-grid-anchor');
+    const anchorKey = ValueKey('inspector-content-anchor');
     await pumpTvApp(
       tester,
       Align(
@@ -109,11 +111,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final initialHeight = tester.getSize(find.byType(CatalogInspector)).height;
-    expect(
-      initialHeight,
-      lessThan(CatalogLayout.inspectorHeight(wideTvSize.height, 1)),
-      reason: 'short content must not reserve a viewport-sized blank band',
-    );
+    expect(initialHeight, lessThanOrEqualTo(CatalogLayout.inspectorHeight(wideTvSize.height, 1)));
     final anchor = find.byKey(anchorKey);
     double anchorTop() => tester.getTopLeft(anchor).dy;
     final initialTop = anchorTop();
@@ -128,7 +126,7 @@ void main() {
     expect(
       samples.every((top) => (top - initialTop).abs() < 0.01 || (top - finalTop).abs() < 0.01),
       isTrue,
-      reason: 'copy crossfades may change natural height discretely, but grid height must not animate: $samples',
+      reason: 'copy fades may change natural height discretely, but the following content must not animate: $samples',
     );
     selected.value = _first;
     await tester.pump();
@@ -141,12 +139,12 @@ void main() {
     expect(
       reverseSamples.every((top) => (top - initialTop).abs() < 0.01 || (top - finalTop).abs() < 0.01),
       isTrue,
-      reason: 'reverse crossfade also avoids interpolated grid heights: $reverseSamples',
+      reason: 'reverse fade also avoids interpolated positions: $reverseSamples',
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('150ms dwell cancels obsolete targets and keeps two sequential text buffers', (tester) async {
+  testWidgets('150ms dwell cancels obsolete targets and shows one copy', (tester) async {
     final semantics = tester.ensureSemantics();
     final selected = ValueNotifier(_first);
     addTearDown(selected.dispose);
@@ -173,15 +171,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 149));
     expect(find.text(_second.title), findsNothing);
     await tester.pump(const Duration(milliseconds: 1));
-    final crossFade = tester.widget<AnimatedCrossFade>(find.byType(AnimatedCrossFade));
-    expect(
-      (crossFade.duration, crossFade.reverseDuration),
-      (const Duration(milliseconds: 280), const Duration(milliseconds: 280)),
-    );
-    expect(crossFade.firstCurve.transform(0.75), 1);
-    expect(crossFade.secondCurve.transform(0.25), 0);
-    expect(find.byType(CatalogInspectorCopy), findsNWidgets(2));
-    await tester.pump(const Duration(milliseconds: 280));
+    expect(find.byType(CatalogInspectorCopy), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 110));
+    await tester.pump(const Duration(milliseconds: 220));
+    await tester.pumpAndSettle();
     final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);
     expect(labels, contains(_last.title));
     expect(labels, isNot(contains(_first.title)));
@@ -227,7 +220,7 @@ void main() {
           )
           .toList();
       expect(opacities.where((opacity) => opacity > 0.001), hasLength(lessThanOrEqualTo(1)));
-      expect(find.byType(CatalogInspectorCopy), findsNWidgets(2));
+      expect(find.byType(CatalogInspectorCopy), findsOneWidget);
     }
     await settle();
     final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);

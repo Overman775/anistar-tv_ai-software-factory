@@ -1,6 +1,7 @@
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/mobile/mobile_anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -91,12 +92,46 @@ void main() {
     await tester.pumpAndSettle();
     final poster = find.byType(TvPosterHero);
     await tester.tap(poster);
-    await tester.longPress(poster);
+    final hold = await tester.startGesture(tester.getCenter(poster));
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(opens, 1);
+    expect(actions, 1);
+    await hold.up();
+    await tester.pump();
     expect(opens, 1);
     expect(actions, 1);
     expect(find.byType(MediaCardBookmark), findsOneWidget);
     expect(find.byType(TvFocusTile), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile semantic tap opens the complete poster', (tester) async {
+    final semantics = tester.ensureSemantics();
+    var opens = 0;
+    var actions = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 220,
+            height: 330,
+            child: MobileAnimeCard(
+              anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime'),
+              onTap: () => opens++,
+              onActions: () => actions++,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final node = tester.getSemantics(find.bySemanticsLabel('Anime'));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner?.performAction(node.id, SemanticsAction.tap);
+    await tester.pump();
+    expect(opens, 1);
+    expect(actions, 0);
+    semantics.dispose();
   });
 
   testWidgets('renders catalog metadata and opens the selected anime', (tester) async {

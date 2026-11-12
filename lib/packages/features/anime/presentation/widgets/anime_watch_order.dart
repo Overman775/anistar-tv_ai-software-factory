@@ -11,16 +11,10 @@ class AnimeWatchOrder extends StatelessWidget {
   final List<AnimePart> parts;
   final int currentId;
   final ValueChanged<AnimePart>? onSelected;
-  final Map<int, FocusNode>? focusNodes;
-
-  void _open(AnimePart part) {
-    if (part.id != currentId) {
-      onSelected?.call(part);
-    }
-  }
+  final Map<AnimePart, FocusNode>? focusNodes;
 
   void _reveal(BuildContext context, bool focused) {
-    if (focused) {
+    if (focused && ModalRoute.isCurrentOf(context) != false) {
       unawaited(
         Scrollable.ensureVisible(context, alignment: 0.5, duration: AppMotion.durationOf(context, AppMotion.standard)),
       );
@@ -29,36 +23,59 @@ class AnimeWatchOrder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    spacing: AppSpacing.lg,
     children: [
-      AppSectionHeader(title: 'Порядок просмотра', titleStyle: AppContentTypography.sectionTitleOf(context)),
-      const SizedBox(height: AppSpacing.md),
-      for (final (index, part) in parts.indexed)
-        Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: Builder(
-            builder: (partContext) {
-              final current = part.id != null && part.id == currentId;
-              final label = '${part.label}${current ? ', Открыто' : ''}';
-              if (!part.canOpen || onSelected == null) {
-                return Padding(padding: const EdgeInsets.all(AppSpacing.md), child: Text(label));
-              }
+      AppSectionHeader(title: 'Смотреть также', titleStyle: AppContentTypography.sectionTitleOf(context)),
+      Wrap(
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
+        children: [
+          for (final part in parts)
+            if (part.label.trim().isNotEmpty)
+              Builder(
+                builder: (partContext) {
+                  final id = part.id;
+                  final current = id == currentId;
+                  final label = '${part.label}${current ? ', Открыто' : ''}';
+                  final open = onSelected;
+                  final style = Theme.of(partContext).textTheme.bodyLarge?.copyWith(fontSize: 16);
+                  if (id == null || !part.canOpen || open == null) return Text(label, style: style);
 
-              return TvFocusTile(
-                variant: TvFocusTileVariant.row,
-                semanticLabel: label,
-                focusNode: focusNodes?.putIfAbsent(index, () => FocusNode(debugLabel: part.label)),
-                selected: current,
-                onPressed: () => _open(part),
-                onFocusChanged: (focused) => _reveal(partContext, focused),
-                builder: (context, focused) => Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Text(label, style: Theme.of(context).textTheme.bodyLarge),
-                ),
-              );
-            },
-          ),
-        ),
+                  return TvFocusable(
+                    semanticLabel: label,
+                    focusNode: focusNodes?.putIfAbsent(part, () => FocusNode(debugLabel: part.label)),
+                    selected: current,
+                    onPressed: () {
+                      if (!current) open(part);
+                    },
+                    onFocusChanged: (focused) => _reveal(partContext, focused),
+                    builder: (context, focused) => AppFocusBorder(
+                      focused: focused,
+                      child: DecoratedBox(
+                        decoration: const BoxDecoration(
+                          color: AppPalette.surfaceElevated,
+                          borderRadius: AppRadii.medium,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: AppSizes.touchControl),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: 1,
+                            heightFactor: 1,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                              child: ExcludeSemantics(child: Text(label, style: style)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+        ],
+      ),
     ],
   );
 }

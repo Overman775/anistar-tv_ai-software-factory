@@ -12,7 +12,7 @@ class AppFocusBorder extends StatelessWidget {
     this.radius = AppRadii.medium,
     this.color = AppPalette.focusOutline,
     this.restingColor = Colors.transparent,
-    this.width = 2,
+    this.width = AppSizes.focusStroke,
     super.key,
   });
 

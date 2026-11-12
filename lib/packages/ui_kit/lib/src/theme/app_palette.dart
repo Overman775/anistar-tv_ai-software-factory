@@ -28,9 +28,9 @@ abstract final class AppPalette {
   static const outline = Color(0xFF394045);
   static const media = Color(0xFF080C0D);
   static const mediaCaptionShade = Color(0xE6080C0D);
-  static const badge = Color(0xEE101214);
+  static const badge = Color(0xA3101214);
   static const inspector = Color(0xE6101214);
-  static const favoriteRibbon = Color(0xA3101214);
+  static const favoriteRibbon = badge;
   static const shadowStrong = Color(0x88000000);
   static const shadowSoft = Color(0x55000000);
   static const scrim = Color(0x99000000);

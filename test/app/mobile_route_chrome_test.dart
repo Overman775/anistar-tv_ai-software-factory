@@ -57,9 +57,9 @@ void main() {
       isTrue,
       reason: 'mobile title belongs over the shared poster surface',
     );
-    final contextAction = find.byKey(const ValueKey('anime-actions-1'));
-    expect(posterRect.contains(tester.getCenter(contextAction)), isTrue);
-    expect(tester.getSize(contextAction).shortestSide, greaterThanOrEqualTo(48));
+    expect(find.byKey(const ValueKey('anime-actions-1')), findsNothing);
+    expect(tester.getSize(firstCard).shortestSide, greaterThanOrEqualTo(48));
+    expect(firstCard.hitTestable(), findsOneWidget);
     final sourceScroll = find.descendant(of: find.byType(CatalogScreen), matching: find.byType(Scrollable)).first;
     await tester.drag(sourceScroll, const Offset(0, -350));
     await settle();

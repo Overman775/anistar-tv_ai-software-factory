@@ -17,7 +17,7 @@ import 'package:ui_kit/ui_kit.dart';
 | `AppTheme`, `AppTypography`, `AppContentTypography` | Темы Manrope и общие/контентные типографические роли TV/mobile |
 | `AppPalette`, `AppSpacing`, `AppRadii`, `AppSizes` | Семантические цвета, отступы, радиусы и общие размеры |
 | `AppMotion` | Отдельные длительности, кривые и учёт системного уменьшения движения |
-| `AppIcon`, `AppIconType` | Типизированные Lucide-иконки из локальных SVG |
+| `AppIcon`, `AppIconType` | Типизированные Lucide-иконки из общего шрифта `lucide_icons_flutter` |
 | `AppButton`, `MediaCard`, `MediaCardBookmark` | Общие действия, карточки постера/широкого изображения/серии и метка подтверждённого избранного |
 | `AppAvatar` | Изображение аккаунта с инициалами при отсутствии URI, загрузке или ошибке |
 | `AppFocusBorder` | Общая цветовая анимация рамки фокуса с неизменной шириной и геометрией |
@@ -40,9 +40,9 @@ AppButton(
 )
 ```
 
-`AppButton` сохраняет focus во время `busy` и отклоняет повторную активацию. `AppIcon.fromMaterial` остаётся совместимым входом для имеющихся Material `IconData`. `AppIconType` включает 37 локальных Lucide SVG, в том числе стрелки сортировки и `share`.
+`AppButton` сохраняет focus во время `busy` и отклоняет повторную активацию. `AppIcon.fromMaterial` остаётся совместимым входом для имеющихся Material `IconData`. `AppIconType` использует глифы общего шрифта Lucide, в том числе стрелки сортировки и `share`.
 
-`AppFocusBorder` доступен из публичного `package:ui_kit/ui_kit.dart`. Он рисует перед дочерним содержимым рамку постоянной толщины, анимируя только её цвет. `focusBorderEnter` задаёт 280 мс с `easeOutCubic`; `focusBorderExit` — 200 мс с `easeInCubic`. Рамка не задерживает перенос focus и не меняет размеры layout. `durationOf` превращает длительность в ноль при `disableAnimations` или `accessibleNavigation`; карточный scale остаётся отдельным состоянием.
+`AppFocusBorder` доступен из публичного `package:ui_kit/ui_kit.dart`. Он рисует перед дочерним содержимым рамку постоянной толщины, анимируя только её цвет. `focusBorderEnter` задаёт 280 мс с `easeOutCubic`; `focusBorderExit` — 180 мс с `easeInCubic`. Рамка не задерживает перенос focus и не меняет размеры layout. `durationOf` превращает длительность в ноль при `disableAnimations` или `accessibleNavigation`; карточный scale остаётся отдельным состоянием.
 
 ## 2. Общие компоненты
 
@@ -56,7 +56,7 @@ AppButton(
 | `TvFocusTile` | Общая рамка и геометрия для карточки или строки выбора; принимает состояния selected, enabled и busy |
 | `TvChoiceTile` | Строка выбора с Semantics selected и размером, учитывающим системный масштаб текста |
 | `AppActionSheet`, `TvSideSheet` | Общая панель; TV-панель удерживает focus, `closeOnLeft` управляет закрытием, `expandChild` растягивает дочернее содержимое |
-| `TvPosterHero` | Общий переход исходного постера с clip, fallback и reduced motion |
+| `TvPosterHero` | Доступный компонент перехода постера; переход из списка в полную карточку его не использует |
 | `TvSkeleton`, `TvSkeletonBox` | Скелетоны без focus и содержательной Semantics |
 | `TvStateView`, `TvProgressView` | Состояния empty/error/retry и progress; действие может быть busy или disabled через `actionBusy` и `actionEnabled`, а внешний `actionKey` сохраняет стабильную цель автоматизации |
 | `TvBackdrop`, `TvHeaderSurface`, `TvSectionHeader` | Общие фоны и заголовки |
@@ -75,7 +75,7 @@ MediaCard(
 )
 ```
 
-`MediaCard` предоставляет общий вид и focus-state. Feature управляет сеткой, порядком, данными, маршрутом и действием. `showCaption: false` скрывает текстовую подпись, не скрывая изображение и доступное имя. `showBookmark: true` показывает декоративную закладку с сердцем для подтверждённого избранного; UI Kit не определяет статус аккаунта. Вариант `episode` по умолчанию не показывает Play и активирует всю карточку. `episodeHeight` задаёт базовую высоту, которая может увеличиваться по тексту. `AppNetworkImage` может выполнять сетевую загрузку переданного URI; UI Kit не интерпретирует его как данные AniStar. UI Kit не импортирует features, domain-модели или repositories.
+`MediaCard` предоставляет общий вид и focus-state. Feature управляет лентой или сеткой, порядком, данными, маршрутом и действием. `showCaption: false` скрывает текстовую подпись, не скрывая изображение и доступное имя. `showBookmark: true` показывает декоративную закладку с сердцем для подтверждённого избранного; UI Kit не определяет статус аккаунта. Вариант `episode` по умолчанию не показывает Play и активирует всю карточку. `episodeHeight` задаёт базовую высоту, которая может увеличиваться по тексту. `AppNetworkImage` может выполнять сетевую загрузку переданного URI; UI Kit не интерпретирует его как данные AniStar. UI Kit не импортирует features, domain-модели или repositories.
 
 `AppAvatar` получает имя и необязательный `imageUrl`. Caller передаёт URI только после проверки владельца и состояния данных. При отсутствии URI, загрузке или ошибке картинки компонент показывает инициалы. Компонент не загружает метаданные профиля и не выбирает источник изображения.
 
@@ -103,7 +103,7 @@ MediaCard(
 fvm flutter test test/packages/ui_kit
 ```
 
-Проверяем typography, image fallback, skeleton, состояния и клавиатурный focus. TV viewport: 960×540 и 1280×720 logical pixels.
+Проверяем typography, image fallback, skeleton, состояния и клавиатурный focus. Размеры компонентных снимков задаёт их сцена. Экранная TV golden-матрица: 960×540, 1280×720 и 1920×1080 logical pixels при DPR 1; 640×360 используется дополнительно для адаптации и overflow.
 
 ---
 

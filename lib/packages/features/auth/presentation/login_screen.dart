@@ -43,7 +43,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _revealFocus() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+      // EditableText manages touch scrolling as the keyboard changes the viewport.
+      if (!mounted || !AppLayoutScope.isTvOf(context)) {
         return;
       }
       final target = [

@@ -24,7 +24,12 @@ void main() {
     ),
   );
 
-  Future<void> pumpChoices(WidgetTester tester, {required double textScale, bool reducedMotion = false}) async {
+  Future<void> pumpChoices(
+    WidgetTester tester, {
+    required double textScale,
+    bool reducedMotion = false,
+    Size size = compactTvSize,
+  }) async {
     final settle = tester.pumpAndSettle;
     tester.platformDispatcher.textScaleFactorTestValue = textScale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -45,6 +50,7 @@ void main() {
           child: const Text('Серии'),
         ),
       ),
+      size: size,
     );
     await settle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -76,9 +82,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final (name, scale) in [('compact', 1.0), ('compact_scaled', 2.0)]) {
+  for (final (name, scale, size) in [
+    ('compact', 1.0, compactTvSize),
+    ('compact_scaled', 2.0, compactTvSize),
+    ('1280x720', 1.0, wideTvSize),
+    ('1920x1080', 1.0, const Size(1920, 1080)),
+  ]) {
     testWidgets('episode choices golden at $name', (tester) async {
-      await pumpChoices(tester, textScale: scale);
+      await pumpChoices(tester, textScale: scale, size: size);
       expectSelectedCard(tester);
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_episode_choices_$name.png'));
     }, tags: ['golden']);

@@ -16,6 +16,7 @@ void main() {
     ('wide', wideTvSize, 1.0),
     ('compact_scaled', compactTvSize, 2.0),
     ('wide_scaled', wideTvSize, 2.0),
+    ('1920x1080', const Size(1920, 1080), 1.0),
   ]) {
     testWidgets('quality choices at $name', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = scale;

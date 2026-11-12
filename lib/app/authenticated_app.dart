@@ -20,7 +20,7 @@ class AuthenticatedApp extends ConsumerStatefulWidget {
 class _AuthenticatedAppState extends ConsumerState<AuthenticatedApp> {
   late final AppRouter _appRouter;
   AppDeviceProfile? _appliedProfile;
-  bool _loginOpen = false;
+  Route<void>? _loginRoute;
 
   @override
   void initState() {
@@ -28,31 +28,32 @@ class _AuthenticatedAppState extends ConsumerState<AuthenticatedApp> {
     _appRouter = AppRouter(ref.read(loggerProvider));
   }
 
-  void _syncLogin(bool requested) {
-    if (requested == _loginOpen) {
-      return;
-    }
+  void _syncLogin() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       final navigator = _appRouter.rootNavigatorKey.currentState;
-      if (navigator == null) {
-        return;
-      }
-      if (requested && !_loginOpen) {
-        _loginOpen = true;
+      if (navigator == null) return;
+      final requested = ref.read(authControllerProvider).value?.loginRequested == true;
+      final current = _loginRoute;
+      if (requested && current == null) {
+        final route = MaterialPageRoute<void>(builder: (_) => const LoginScreen(canCancel: true));
+        _loginRoute = route;
         unawaited(
-          navigator.push<void>(MaterialPageRoute<void>(builder: (_) => const LoginScreen(canCancel: true))).then((_) {
-            _loginOpen = false;
-            if (mounted && ref.read(authControllerProvider).value?.loginRequested == true) {
+          navigator.push<void>(route).then((_) {
+            if (!mounted || !identical(_loginRoute, route)) return;
+            _loginRoute = null;
+            if (ref.read(authControllerProvider).value?.loginRequested == true) {
               unawaited(ref.read(authControllerProvider.notifier).cancelSignIn());
             }
           }),
         );
-      } else if (!requested && _loginOpen) {
-        _loginOpen = false;
-        navigator.pop();
+      } else if (!requested && current != null) {
+        _loginRoute = null;
+        if (current.isCurrent) {
+          navigator.pop();
+        } else if (current.isActive) {
+          navigator.removeRoute(current);
+        }
       }
     });
   }
@@ -81,7 +82,9 @@ class _AuthenticatedAppState extends ConsumerState<AuthenticatedApp> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(authControllerProvider, (_, next) => _syncLogin(next.value?.loginRequested ?? false));
+    ref.listen(authControllerProvider, (previous, next) {
+      if (previous?.value?.loginRequested != next.value?.loginRequested) _syncLogin();
+    });
 
     return MaterialApp.router(
       title: 'Anistar TV',

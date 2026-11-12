@@ -1042,6 +1042,35 @@ void main() {
     await settle(tester);
   });
 
+  testWidgets('episode panel keeps current, focus and pending watch confirmation distinct', (tester) async {
+    final gate = Completer<void>();
+    final storage = FakeWatchedEpisodesRepository()..writeGate = gate;
+    await pumpTvApp(
+      tester,
+      const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме'),
+      overrides: [
+        playbackRepositoryProvider.overrideWithValue(repository),
+        watchedEpisodesRepositoryProvider.overrideWithValue(storage),
+        watchHistoryAccountProvider.overrideWithValue('tester'),
+      ],
+      wrapInScaffold: false,
+    );
+    await settle(tester);
+    expect(storage.writes, 1);
+    await openMenu(tester, episodes: true);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 1, Episode 1, текущая');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 2, Episode 2');
+    expect(find.bySemanticsLabel('Серия 1, Episode 1, текущая, просмотрена'), findsNothing);
+    gate.complete();
+    await settle(tester);
+    expect(find.bySemanticsLabel('Серия 1, Episode 1, текущая, просмотрена'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Серия 2, Episode 2');
+    expect(storage.writes, 1);
+    await unmount(tester);
+  });
+
   testWidgets('failed native initialization never persists a watched mark', (tester) async {
     final storage = FakeWatchedEpisodesRepository();
     video.failInitialization = true;

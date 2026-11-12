@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../../support/decoded_fixture_image.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
@@ -120,33 +121,44 @@ void main() {
     expect(target?.inSeconds, closeTo(12, 1));
   });
 
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
+  for (final (name, size) in [
+    ('compact', compactTvSize),
+    ('wide', wideTvSize),
+    ('1920x1080', const Size(1920, 1080)),
+  ]) {
     testWidgets('player controls and timeline at $name viewport', (tester) async {
+      final frame = await cacheDecodedFixtureImage(tester, filePath: 'prototype/assets/frieren.jpg');
       final play = FocusNode();
       addTearDown(play.dispose);
       await pumpTvApp(
         tester,
         Scaffold(
           backgroundColor: Colors.black,
-          body: PlayerOverlay(
-            title: 'Тестовое аниме с длинным названием',
-            episodeNumber: 2,
-            session: _session,
-            value: VideoPlayerValue(
-              duration: const Duration(minutes: 24),
-              position: const Duration(minutes: 10),
-              buffered: [DurationRange(Duration.zero, const Duration(minutes: 16))],
-              isInitialized: true,
-              isPlaying: true,
-            ),
-            playFocusNode: play,
-            onPlayPause: () => fail('Unexpected activation'),
-            onSeek: (_) => fail('Unexpected seek'),
-            onBack: () => fail('Unexpected activation'),
-            onSelectEpisode: () => fail('Unexpected activation'),
-            onPreviousEpisode: () => fail('Unexpected activation'),
-            onNextEpisode: () => fail('Unexpected activation'),
-            onSelectQuality: () => fail('Unexpected activation'),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              RawImage(image: frame, fit: BoxFit.cover),
+              PlayerOverlay(
+                title: 'Тестовое аниме с длинным названием',
+                episodeNumber: 2,
+                session: _session,
+                value: VideoPlayerValue(
+                  duration: const Duration(minutes: 24),
+                  position: const Duration(minutes: 10),
+                  buffered: [DurationRange(Duration.zero, const Duration(minutes: 16))],
+                  isInitialized: true,
+                  isPlaying: true,
+                ),
+                playFocusNode: play,
+                onPlayPause: () => fail('Unexpected activation'),
+                onSeek: (_) => fail('Unexpected seek'),
+                onBack: () => fail('Unexpected activation'),
+                onSelectEpisode: () => fail('Unexpected activation'),
+                onPreviousEpisode: () => fail('Unexpected activation'),
+                onNextEpisode: () => fail('Unexpected activation'),
+                onSelectQuality: () => fail('Unexpected activation'),
+              ),
+            ],
           ),
         ),
         size: size,

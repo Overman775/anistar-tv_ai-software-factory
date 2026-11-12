@@ -7,5 +7,8 @@ final class FavoritesState {
   final int revision;
   final int? updatingAnimeId;
 
+  bool? confirmedStatus(int animeId, {bool? reported, bool listed = false}) =>
+      known[animeId] ?? reported ?? (listed ? true : null);
+
   const FavoritesState({this.known = const {}, this.revision = 0, this.updatingAnimeId});
 }

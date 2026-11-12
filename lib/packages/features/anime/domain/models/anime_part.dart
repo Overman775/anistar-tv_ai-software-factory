@@ -1,7 +1,7 @@
 /// A site-provided part in document order. Missing identity remains plain text.
 final class AnimePart {
   final String label;
-  final Uri uri;
+  final Uri? uri;
   final int? id;
   final String? slug;
 

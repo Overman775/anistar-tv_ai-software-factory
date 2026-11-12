@@ -118,25 +118,20 @@ void main() {
           ],
         );
         await tester.pumpAndSettle();
-        final loadingScroll = tester.state<ScrollableState>(find.byType(Scrollable).first).position;
-        final loadingEnd = loadingScroll.maxScrollExtent;
-        loadingScroll.jumpTo(loadingEnd);
-        await tester.pumpAndSettle();
-        final loading = tester.widget<SliverGrid>(find.byType(SliverGrid)).gridDelegate;
-        expect(loading, isA<SliverGridDelegateWithFixedCrossAxisCount>());
-        final loadingGrid = loading as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(loadingGrid.crossAxisCount, 3);
+        expect(find.text('Аниме'), findsOneWidget);
+        expect(find.byType(TvSkeleton), findsOneWidget);
+        final placeholders = find.byType(TvSkeletonBox);
+        expect(placeholders, findsNWidgets(3));
+        final loadingRects = List.generate(3, (index) => tester.getRect(placeholders.at(index)));
         expect(find.byType(EpisodeCard), findsNothing);
         pending.complete(Result.success(_data(8)));
         await tester.pumpAndSettle();
-        await _key(tester, LogicalKeyboardKey.arrowDown);
         final readyGrid = tester.widget<SliverGrid>(find.byType(SliverGrid)).gridDelegate;
         expect(readyGrid, isA<SliverGridDelegateWithFixedCrossAxisCount>());
         final ready = readyGrid as SliverGridDelegateWithFixedCrossAxisCount;
-        expect(
-          (ready.crossAxisCount, ready.mainAxisExtent, ready.crossAxisSpacing),
-          (3, loadingGrid.mainAxisExtent, loadingGrid.crossAxisSpacing),
-        );
+        expect(ready.crossAxisCount, 3);
+        expect(ready.mainAxisExtent, closeTo(loadingRects.first.height, 0.001));
+        expect(ready.crossAxisSpacing, closeTo(loadingRects[1].left - loadingRects[0].right, 0.001));
         final cards = find.byType(EpisodeCard);
         final first = _card(8);
         final second = _card(7);
@@ -164,6 +159,50 @@ void main() {
     }
   }
 
+  testWidgets('gapped episodes enter at maximum and return to the selected episode', (tester) async {
+    final opened = <int>[];
+    final data = AnimeScreenData(
+      details: AnimeDetails(id: 1, slug: 'test', title: 'Полное название', genres: const [], isOngoing: false),
+      episodes: const [
+        AnimeEpisode(number: 3, title: 'Серия 3', isWatched: true),
+        AnimeEpisode(number: 9, title: 'Серия 9'),
+        AnimeEpisode(number: 1, title: 'Серия 1'),
+      ],
+    );
+    await pumpTvApp(
+      tester,
+      Builder(
+        builder: (context) => AnimeScreen(
+          animeId: 1,
+          slug: 'test',
+          fallbackTitle: 'Аниме',
+          onEpisodeTap: (episode) {
+            opened.add(episode.number);
+            unawaited(Navigator.of(context).push<void>(MaterialPageRoute(builder: (_) => const Text('Player'))));
+          },
+        ),
+      ),
+      wrapInScaffold: false,
+      overrides: [
+        animeRepositoryProvider.overrideWithValue(
+          FakeAnimeScreenRepository(load: (_, _) async => Result.success(data)),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Полное название'), findsOneWidget);
+    expect(tester.widgetList<EpisodeCard>(find.byType(EpisodeCard)).map((card) => card.episode.number), [9, 3, 1]);
+    expect(_focusedNumber(), 9);
+    await _key(tester, LogicalKeyboardKey.arrowRight);
+    expect(_focusedNumber(), 3);
+    await _key(tester, LogicalKeyboardKey.select);
+    expect(opened, [3]);
+    Navigator.of(tester.element(find.text('Player'))).pop();
+    await tester.pumpAndSettle();
+    expect(_focusedNumber(), 3);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('remote follows row edges, partial last row, lazy rows and restores a route return', (tester) async {
     final opened = <int>[];
     await pumpTvApp(
@@ -189,7 +228,6 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    await _key(tester, LogicalKeyboardKey.arrowDown);
     final transitions = [
       (LogicalKeyboardKey.arrowLeft, 32),
       (LogicalKeyboardKey.arrowRight, 31),
@@ -239,19 +277,19 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(_focusedNumber(), isNull);
+    expect(_focusedNumber(), 8);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(_focusedNumber(), 8);
+    expect(_focusedNumber(), 5);
     await tester.sendKeyRepeatEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(_focusedNumber(), 5);
+    expect(_focusedNumber(), 2);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(_focusedNumber(), 5);
+    expect(_focusedNumber(), 2);
   });
 
-  testWidgets('a removed focused episode leaves an available action and an empty list can reload', (tester) async {
+  testWidgets('a removed focused episode leaves a retry action for an unusable playlist', (tester) async {
     final repository = FakeAnimeScreenRepository(
       load: (_, slug) async => Result.success(_data(slug == 'full' ? 8 : 0)),
     );
@@ -260,14 +298,13 @@ void main() {
         AnimeScreen(animeId: 1, slug: slug, fallbackTitle: 'Аниме', onEpisodeTap: _unexpected);
     await pumpTvApp(tester, screen('full'), overrides: overrides, wrapInScaffold: false);
     await tester.pumpAndSettle();
-    await _key(tester, LogicalKeyboardKey.arrowDown);
     expect(_focusedNumber(), 8);
     await pumpTvApp(tester, screen('empty'), overrides: overrides, wrapInScaffold: false);
     await tester.pumpAndSettle();
-    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Обновить серии');
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
     expect(find.byType(EpisodeCard), findsNothing);
     await _key(tester, LogicalKeyboardKey.arrowDown);
-    expect(find.widgetWithText(AppButton, 'Обновить серии').hitTestable(), findsOneWidget);
+    expect(find.widgetWithText(AppButton, 'Повторить').hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -298,7 +335,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final content = find.byType(MobileAnimeContent);
-    final state = tester.state(content);
+    final state = tester.state(find.byType(AnimeScreen));
     final row = find.byKey(const ValueKey('mobile-episode-20'));
     final list = find.descendant(of: content, matching: find.byType(Scrollable));
     expect(list, findsOneWidget);
@@ -308,7 +345,7 @@ void main() {
     final offset = controller.offset;
     tester.view.physicalSize = const Size(844, 390);
     await tester.pumpAndSettle();
-    expect(tester.state(content), same(state));
+    expect(tester.state(find.byType(AnimeScreen)), same(state));
     expect(controller.offset, offset);
     expect(loads, 1);
     expect(AppLayoutScope.isTvOf(tester.element(content)), isFalse);
@@ -351,6 +388,7 @@ void main() {
           lefts.add(rect.left);
           expect(rect.width, greaterThan(size.width * 0.8));
           if (number == 8) {
+            expect(tester.getTopLeft(_card(7)).dy - rect.bottom, closeTo(16, 0.001));
             final title = find.descendant(of: row, matching: find.text(_longTitle));
             expect(tester.widget<Text>(title).style?.fontSize, 14);
             final caption = find.descendant(of: row, matching: find.text('Серия 8'));

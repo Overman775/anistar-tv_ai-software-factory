@@ -14,7 +14,7 @@ AnimeSummary mapAnimeSummary(AnistarAnimeSummaryDto item, {bool favoriteList = f
   }
   final rating = item.rating;
 
-  return AnimeSummary(
+  return AnimeSummary.withGenreFilters(
     id: item.id,
     slug: item.slug,
     title: item.title,
@@ -23,6 +23,9 @@ AnimeSummary mapAnimeSummary(AnistarAnimeSummaryDto item, {bool favoriteList = f
     rating: rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null,
     isFavorite: favoriteList ? true : item.isFavorite,
     genreText: item.genreText,
+    genreFilters: item.genreFilters.map(mapCatalogFilter).toList(growable: false),
+    seriesInfo: item.seriesInfo,
+    voiceover: item.voiceover,
     description: item.description,
     updateMessage: item.updateMessage,
     publicationDate: item.publicationDate,
@@ -37,6 +40,7 @@ AnimePage mapCatalogPage(AnistarCatalogPageDto result, int page, {bool favoriteL
   return AnimePage(
     page: result.page,
     hasNext: result.hasNext,
+    nextPageSize: result.nextPageSize,
     items: result.items.map((item) => mapAnimeSummary(item, favoriteList: favoriteList)).toList(),
   );
 }

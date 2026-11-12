@@ -17,6 +17,11 @@ import 'parsed_episode.dart';
 import 'playlist_literal.dart';
 
 final class AnistarHtmlParser {
+  static final _linkedPathPattern = RegExp(r'^(?:(?:https?:)?//([^/?#]+))?([^?#]+)$', caseSensitive: false);
+  static final _titlePathPattern = RegExp(r'^/(\d+-[^/\\?#]*)\.html$');
+  static final _encodedTitleSeparators = RegExp('%(?:2f|5c|2e|25)', caseSensitive: false);
+  static final _detailMetadataFilter = RegExp('^/filter/(author|director|year)/');
+
   final Uri baseUri;
 
   const AnistarHtmlParser(this.baseUri);
@@ -67,11 +72,7 @@ final class AnistarHtmlParser {
         .querySelectorAll(filterPath == null ? 'a[href]' : '.pages a[href], .navigation a[href]')
         .any((link) {
           final uri = _uri(link.attributes['href']);
-          final pageNumber = favorites
-              ? _favoritePage(uri)
-              : RegExp(filterPath == null ? r'^/anime/page/(\d+)/?$' : r'^/.+/page/(\d+)/?$')
-                    .firstMatch(uri?.path ?? '')
-                    ?.group(1);
+          final pageNumber = favorites ? _favoritePage(uri) : _catalogPage(uri, filterPath);
           final number = int.tryParse(pageNumber ?? '');
 
           return uri?.origin == baseUri.origin && number != null && number > page;
@@ -114,6 +115,7 @@ final class AnistarHtmlParser {
       isOngoing: category.contains('новинки') || category.contains('онгоинг'),
       rating: rating == null ? null : _rating(rating),
       director: _metadata(head, 'Режиссёр') ?? _metadata(head, 'Режиссер'),
+      author: _metadata(head, 'Автор'),
       updateMessage: _text(document.querySelector('.reason')),
       publicationDate: _text(document.querySelector('.date-icon')),
       parts: _parts(document),
@@ -169,31 +171,29 @@ final class AnistarHtmlParser {
 
   List<AnistarCatalogFilterDto> _filters(List<Element> links, {bool detail = false}) {
     final paths = <String>{};
-    final labels = <String>{};
+    final labels = <(String?, String)>{};
     final result = <AnistarCatalogFilterDto>[];
     for (final link in links) {
-      final uri = _catalogUri(link.attributes['href']);
+      final href = link.attributes['href'];
+      final uri = _uri(href);
+      final path = uri?.scheme == 'https' ? _linkedPath(href, uri) : null;
       final label = link.text.trim();
-      if (uri == null ||
-          uri.origin != baseUri.origin ||
-          uri.hasQuery ||
-          uri.hasFragment ||
-          label.isEmpty ||
-          !HtmlCatalogParameters.isValidPath(uri.path)) {
+      if (path == null || label.isEmpty || !HtmlCatalogParameters.isValidPath(path)) {
         continue;
       }
       if (detail &&
-          uri.path != '/new/' &&
-          uri.path != '/anime/' &&
-          !uri.path.startsWith('/anime/') &&
-          !uri.path.startsWith('/filter/')) {
+          path != '/new/' &&
+          path != '/anime/' &&
+          !path.startsWith('/anime/') &&
+          !path.startsWith('/filter/')) {
         continue;
       }
-      if (paths.add(uri.path) && labels.add(label.toLowerCase())) {
+      final metadataField = detail ? _detailMetadataFilter.firstMatch(path)?.group(1) : null;
+      if (paths.add(Uri.parse(path).path) && labels.add((metadataField, label.toLowerCase()))) {
         result.add(
           AnistarCatalogFilterDto(
             label: label,
-            path: uri.path,
+            path: path,
             imageUri: _uri(link.querySelector('img')?.attributes['src']),
           ),
         );
@@ -207,12 +207,24 @@ final class AnistarHtmlParser {
       ? uri?.queryParameters['cstart']
       : RegExp(r'^/favorites/page/(\d+)/?$').firstMatch(uri?.path ?? '')?.group(1);
 
+  String? _catalogPage(Uri? uri, String? filterPath) {
+    if (uri == null || uri.hasQuery || uri.hasFragment || uri.userInfo.isNotEmpty) return null;
+    final match = RegExp(r'^(/.+/)page/(\d+)/?$').firstMatch(uri.path);
+    final path = match?.group(1);
+    final expected = Uri.tryParse(filterPath ?? '/anime/')?.path;
+    if (path == null || expected == null) return null;
+    if (path == expected) return match?.group(2);
+    if (expected == '/anime/' || expected.startsWith('/filter/')) return null;
+    final alias = expected.startsWith('/anime/') ? expected.substring('/anime'.length) : '/anime$expected';
+
+    return path == alias ? match?.group(2) : null;
+  }
+
   AnistarAnimeSummaryDto? _card(Element card) {
     final link = card.querySelector('.title_left a') ?? card.querySelector('a[href]');
-    final uri = _uri(link?.attributes['href']);
-    final match = RegExp(r'^/(\d+)-[^/]+\.html$').firstMatch(uri?.path ?? '');
-    final id = int.tryParse(match?.group(1) ?? '');
-    if (id == null || uri == null || uri.host != baseUri.host) {
+    final href = link?.attributes['href'];
+    final (id, slug) = _titleIdentity(_linkedPath(href, _uri(href)));
+    if (id == null || slug == null) {
       return null;
     }
     final title = (card.querySelector('.title-top')?.text ?? link?.text ?? '').trim();
@@ -220,16 +232,20 @@ final class AnistarHtmlParser {
       return null;
     }
     final head = card.querySelector('ul.head');
+    final genreLinks = _metadataRow(head, 'Жанр')?.querySelectorAll('a[href]') ?? const <Element>[];
 
-    return AnistarAnimeSummaryDto(
+    return AnistarAnimeSummaryDto.withGenreFilters(
       id: id,
       isFavorite: AnistarFavoritesHtml.status(card, id),
       rating: _rating(card),
-      slug: uri.pathSegments.last.replaceFirst(RegExp(r'\.html$'), ''),
+      slug: slug,
       title: title,
       posterUri: _uri(card.querySelector('img[itemprop="image"], .poster img, .news_avatar img')?.attributes['src']),
-      year: head == null ? null : _metadata(head, 'Год выпуска'),
-      genreText: head == null ? null : _metadata(head, 'Жанр'),
+      year: _metadata(head, 'Год выпуска'),
+      genreText: _metadata(head, 'Жанр'),
+      genreFilters: _filters(genreLinks),
+      seriesInfo: _metadata(head, 'Серии'),
+      voiceover: _metadata(head, 'Озвучка'),
       description: _description(card.querySelector('.news_text .descripts, .descripts')),
       updateMessage: _text(card.querySelector('.reason')),
       publicationDate: _text(card.querySelector('.date-icon')),
@@ -269,7 +285,9 @@ final class AnistarHtmlParser {
     final result = <AnistarAnimePartDto>[];
     for (final title in document.querySelectorAll('.news_text .title_spoiler')) {
       final heading = title.text.trim().toLowerCase();
-      if (!heading.contains('в каком порядке') && !heading.contains('серия состоит из')) {
+      if (!heading.startsWith('порядок просмотра') &&
+          !heading.contains('в каком порядке') &&
+          !heading.contains('серия состоит из')) {
         continue;
       }
       final content = title.nextElementSibling;
@@ -278,44 +296,41 @@ final class AnistarHtmlParser {
       }
       for (final link in content.querySelectorAll('a[href]')) {
         final label = _text(link);
-        final uri = _uri(link.attributes['href']);
-        if (label == null || uri == null) {
+        if (label == null) {
           continue;
         }
-        final safe =
-            uri.scheme == 'https' &&
-            uri.origin == baseUri.origin &&
-            uri.userInfo.isEmpty &&
-            !uri.hasQuery &&
-            !uri.hasFragment &&
-            !RegExp('%(?:2f|5c|2e|25)', caseSensitive: false).hasMatch(uri.path);
-        final match = safe ? RegExp(r'^/(\d+)-[^/]*\.html$').firstMatch(uri.path) : null;
-        final id = int.tryParse(match?.group(1) ?? '');
-        result.add(
-          AnistarAnimePartDto(
-            label: label,
-            uri: uri,
-            id: id != null && id > 0 ? id : null,
-            slug: id != null && id > 0 ? uri.path.substring(1, uri.path.length - 5) : null,
-          ),
-        );
+        final href = link.attributes['href'];
+        final uri = _uri(href);
+        final (id, slug) = _titleIdentity(_linkedPath(href, uri));
+        result.add(AnistarAnimePartDto(label: label, uri: uri, id: id, slug: slug));
       }
     }
 
     return List.unmodifiable(result);
   }
 
-  Uri? _catalogUri(String? value) {
-    final raw = Uri.tryParse(value?.trim() ?? '');
-    if (raw == null || raw.path.split('/').any((segment) => segment == '.' || segment == '..')) {
+  (int?, String?) _titleIdentity(String? path) {
+    if (path == null || _encodedTitleSeparators.hasMatch(path)) {
+      return (null, null);
+    }
+    final slug = _titlePathPattern.firstMatch(path)?.group(1);
+    final id = int.tryParse(slug?.split('-').first ?? '');
+
+    return id == null || id <= 0 ? (null, null) : (id, slug);
+  }
+
+  String? _linkedPath(String? href, Uri? uri) {
+    if (uri == null || uri.host.isEmpty || uri.origin != baseUri.origin || uri.hasQuery || uri.hasFragment) {
       return null;
     }
-    final uri = _uri(value);
-    if (uri == null || uri.scheme != 'https' || uri.userInfo.isNotEmpty || uri.origin != baseUri.origin) {
+    // Uri normalizes escapes, so retain the path spelling from the HTML.
+    final match = _linkedPathPattern.firstMatch(href?.trim() ?? '');
+    final path = match?.group(2);
+    if (path == null || match?.group(1)?.contains('@') == true) {
       return null;
     }
 
-    return uri;
+    return path.startsWith('/') ? path : '/$path';
   }
 
   void _checkChallenge(String source) {
@@ -386,17 +401,20 @@ final class AnistarHtmlParser {
         : DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
   }
 
-  String? _metadata(Element head, String name) {
-    for (final line in head.querySelectorAll('li')) {
-      final text = line.text.trim();
-      if (text.startsWith('$name:')) {
-        final value = text.substring(name.length + 1).trim();
-
-        return value.isEmpty ? null : value;
+  Element? _metadataRow(Element? head, String name) {
+    for (final line in head?.querySelectorAll('li') ?? const <Element>[]) {
+      if (line.text.trimLeft().startsWith('$name:')) {
+        return line;
       }
     }
 
     return null;
+  }
+
+  String? _metadata(Element? head, String name) {
+    final value = _metadataRow(head, name)?.text.trimLeft().substring(name.length + 1).trim();
+
+    return value == null || value.isEmpty ? null : value;
   }
 
   Uri? _uri(String? value) {

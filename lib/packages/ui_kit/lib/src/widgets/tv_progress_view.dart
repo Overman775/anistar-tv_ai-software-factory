@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/app_palette.dart';
+import 'app_icon.dart';
 
 class TvProgressView extends StatelessWidget {
   const TvProgressView({super.key, this.label = 'Загрузка…'});
@@ -22,7 +23,12 @@ class TvProgressView extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const SizedBox.square(dimension: 42, child: CircularProgressIndicator(strokeWidth: 3)),
+                  SizedBox.square(
+                    dimension: 42,
+                    child: AppMotion.reducedOf(context)
+                        ? const AppIcon(AppIconType.loaderCircle, color: AppPalette.primary)
+                        : const CircularProgressIndicator(strokeWidth: 3),
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   Text(
                     label,

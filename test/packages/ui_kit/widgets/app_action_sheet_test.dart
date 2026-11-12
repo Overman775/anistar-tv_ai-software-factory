@@ -87,10 +87,48 @@ void main() {
     await settle();
     expect(find.byType(TvSideSheet), findsNothing);
     expect(bottomSheet, findsOneWidget);
+    final route = ModalRoute.of(tester.element(bottomSheet));
+    expect(route?.transitionDuration, Duration.zero);
+    expect(route?.reverseTransitionDuration, Duration.zero);
     await tester.tap(find.byTooltip('Закрыть'));
-    await settle();
+    await tester.pump();
+    await tester.pump();
     expect(bottomSheet, findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('mobile sheet follows the shared curves through opening and closing', (tester) async {
+    final sheet = find.byType(BottomSheet);
+    await pumpMobileApp(
+      tester,
+      Builder(
+        builder: (context) => AppButton(
+          label: 'Открыть',
+          onPressed: () => unawaited(
+            showAppActionSheet<void>(
+              context: context,
+              builder: (_) => const AppActionSheet(title: 'Действия', child: Text('Содержание')),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Открыть'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    final entering = tester.getRect(sheet);
+    await tester.pumpAndSettle();
+    final open = tester.getRect(sheet);
+    const enter = Cubic(0.215, 0.61, 0.355, 1);
+    expect(entering.top, closeTo(open.bottom - open.height * enter.transform(0.5), 0.5));
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 78));
+    const exit = Cubic(0.55, 0.055, 0.675, 0.19);
+    expect(tester.getTopLeft(sheet).dy, closeTo(open.top + open.height * exit.transform(0.5), 0.5));
+    await tester.pumpAndSettle();
+    expect(sheet, findsNothing);
   });
 
   for (final expandChild in [false, true]) {

@@ -40,7 +40,7 @@ Referer — URL player page текущего origin с animeId. Заголово
 
 Pause/play выполняет native команду; ошибка следует общему recovery. Отдельные mediaPlay / mediaPause устанавливают playing/paused state без переключения при повторе команды. Native pause или завершение серии показывают controls и не скрывают их, пока видео остановлено. Seek ограничивает позицию диапазоном 0…duration.
 
-Back, logout или смена origin закрывают экран и освобождают controller/listener/timer/focus. При уходе системный UI возвращается к режиму, ожидаемому приложением.
+Back без открытой панели, logout или смена origin закрывают экран и освобождают controller/listener/timer/focus. При уходе системный UI возвращается к режиму, ожидаемому приложением.
 
 ## Перемотка и controls
 

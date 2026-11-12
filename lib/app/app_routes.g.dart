@@ -89,7 +89,7 @@ mixin $AnimeRoute on GoRouteData {
     destination:
         _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
         HomeDestination.home,
-    $extra: state.extra as AnimeSummary?,
+    $extra: state.extra as Object?,
   );
 
   AnimeRoute get _self => this as AnimeRoute;
@@ -127,7 +127,7 @@ mixin $PlayerRoute on GoRouteData {
     destination:
         _$convertMapValue('destination', state.uri.queryParameters, _$HomeDestinationEnumMap._$fromName) ??
         HomeDestination.home,
-    $extra: state.extra as AnimeSummary?,
+    $extra: state.extra as Object?,
   );
 
   PlayerRoute get _self => this as PlayerRoute;

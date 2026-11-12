@@ -1,7 +1,5 @@
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
-
-import '../../assets.dart';
 
 /// Decorative by default; an informative standalone icon receives a label.
 class AppIcon extends StatelessWidget {
@@ -23,64 +21,55 @@ class AppIcon extends StatelessWidget {
       _ => throw StateError('Unsupported icon source.'),
     };
     final extent = size ?? theme.size ?? 28;
-    final tint = color ?? theme.color ?? Theme.of(context).colorScheme.onSurface;
-
-    return SvgPicture.asset(
-      'assets/icons/${icon.assetName}.svg',
-      package: Assets.package,
-      width: extent,
-      height: extent,
-      colorFilter: ColorFilter.mode(tint.withValues(alpha: tint.a * (theme.opacity ?? 1)), BlendMode.srcIn),
-      semanticsLabel: semanticLabel,
-      excludeFromSemantics: semanticLabel == null,
-    );
+    return Icon(icon.glyph, size: extent, color: color, semanticLabel: semanticLabel);
   }
 }
 
-/// The local Lucide source used by every functional application icon.
+/// The Lucide font glyph used by every functional application icon.
 enum AppIconType {
-  arrowDown('arrow-down'),
-  arrowLeft('arrow-left'),
-  arrowUp('arrow-up'),
-  check('check'),
-  chevronRight('chevron-right'),
-  circleAlert('circle-alert'),
-  eye('eye'),
-  eyeOff('eye-off'),
-  fastForward('fast-forward'),
-  funnel('funnel'),
-  heart('heart'),
-  heartMinus('heart-minus'),
-  heartOff('heart-off'),
-  heartPlus('heart-plus'),
-  home('house'),
-  info('info'),
-  layoutGrid('layout-grid'),
-  list('list'),
-  listFilter('list-filter'),
-  listVideo('list-video'),
-  loaderCircle('loader-circle'),
-  logOut('log-out'),
-  logIn('log-in'),
-  pause('pause'),
-  play('play'),
-  refresh('refresh-cw'),
-  rewind('rewind'),
-  rotateCcw('rotate-ccw'),
-  rotateCw('rotate-cw'),
-  rotateSquare('rotate-cw-square'),
-  search('search'),
-  share('share-2'),
-  skipBack('skip-back'),
-  skipForward('skip-forward'),
-  smartphone('smartphone'),
-  star('star'),
-  user('user'),
-  x('x');
+  arrowDown('arrow-down', LucideIcons.arrowDown),
+  arrowLeft('arrow-left', LucideIcons.arrowLeft),
+  arrowUp('arrow-up', LucideIcons.arrowUp),
+  check('check', LucideIcons.check),
+  chevronRight('chevron-right', LucideIcons.chevronRight),
+  circleAlert('circle-alert', LucideIcons.circleExclamationPoint),
+  eye('eye', LucideIcons.eye),
+  eyeOff('eye-off', LucideIcons.eyeOff),
+  fastForward('fast-forward', LucideIcons.fastForward),
+  funnel('funnel', LucideIcons.funnel),
+  heart('heart', LucideIcons.heart),
+  heartMinus('heart-minus', LucideIcons.heartMinus),
+  heartOff('heart-off', LucideIcons.heartOff),
+  heartPlus('heart-plus', LucideIcons.heartPlus),
+  home('house', LucideIcons.house),
+  info('info', LucideIcons.info),
+  layoutGrid('layout-grid', LucideIcons.layoutGrid),
+  list('list', LucideIcons.list),
+  listFilter('list-filter', LucideIcons.listFilter),
+  listVideo('list-video', LucideIcons.listVideo),
+  loaderCircle('loader-circle', LucideIcons.loaderCircle),
+  logOut('log-out', LucideIcons.logOut),
+  logIn('log-in', LucideIcons.logIn),
+  pause('pause', LucideIcons.pause),
+  play('play', LucideIcons.play),
+  refresh('refresh-cw', LucideIcons.refreshCw),
+  rewind('rewind', LucideIcons.rewind),
+  rotateCcw('rotate-ccw', LucideIcons.rotateCcw),
+  rotateCw('rotate-cw', LucideIcons.rotateCw),
+  rotateSquare('rotate-cw-square', LucideIcons.rotateCwSquare),
+  search('search', LucideIcons.search),
+  share('share-2', LucideIcons.share2),
+  skipBack('skip-back', LucideIcons.skipBack),
+  skipForward('skip-forward', LucideIcons.skipForward),
+  smartphone('smartphone', LucideIcons.smartphone),
+  star('star', LucideIcons.star),
+  user('user', LucideIcons.user),
+  x('x', LucideIcons.x);
 
-  const AppIconType(this.assetName);
+  const AppIconType(this.assetName, this.glyph);
 
   final String assetName;
+  final IconData glyph;
 
   /// Preserves older public IconData inputs while their consumers migrate.
   static AppIconType fromMaterial(IconData icon) => switch (icon) {

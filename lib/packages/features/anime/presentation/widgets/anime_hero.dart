@@ -1,145 +1,140 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-import '../../../common/presentation/rating_presentation.dart';
-import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
 import 'anime_description.dart';
+import 'anime_detail_filter_actions.dart';
+import 'mobile_anime_poster_header.dart';
 
 class AnimeHero extends StatelessWidget {
-  const AnimeHero({
-    required this.data,
-    super.key,
-    this.onPlayFirstEpisode,
-    this.playEpisode,
-    this.favoriteAction,
-    this.fallbackPosterUri,
-    this.playFocusNode,
-    this.filterActions,
-    this.yearAction,
-    this.rewatch = false,
-  });
+  const AnimeHero({required this.data, required this.metadata, this.fallbackPosterUri, this.watchOrder, super.key});
 
   final AnimeScreenData data;
-  final AnimeEpisode? playEpisode;
-  final Widget? filterActions;
-  final Widget? yearAction;
-  final FocusNode? playFocusNode;
-  final Widget? favoriteAction;
+  final AnimeDetailFilterActions metadata;
+  final Widget? watchOrder;
   final Uri? fallbackPosterUri;
-  final VoidCallback? onPlayFirstEpisode;
-  final bool rewatch;
 
   @override
   Widget build(BuildContext context) {
+    if (!AppLayoutScope.isTvOf(context)) return _content(context);
+
+    final posterWidth = (MediaQuery.sizeOf(context).width * 0.22).clamp(140.0, 240.0);
+    final requiredWidth = posterWidth + AppSpacing.xl + metadata.minimumWidthOf(context);
+    final enlargedText = MediaQuery.textScalerOf(context).scale(16) > 16;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        var inset = AppSpacing.xxl;
+        if (enlargedText &&
+            available < requiredWidth + AppSpacing.xxl * 2 &&
+            available >= requiredWidth + AppSpacing.xl * 2) {
+          inset = AppSpacing.xl;
+        }
+        return _content(
+          context,
+          inset: inset,
+          tvPosterAndMetadata: _tvPosterAndMetadata(posterWidth, sideBySide: available >= requiredWidth + inset * 2),
+        );
+      },
+    );
+  }
+
+  Widget _content(BuildContext context, {double inset = 0, Widget? tvPosterAndMetadata}) {
     final details = data.details;
     final theme = Theme.of(context).textTheme;
-    final posterUri = details.posterUri ?? fallbackPosterUri;
-    final episode = playEpisode;
-    final watchLabel = episode == null ? 'Нет доступных серий' : 'Смотреть серию ${episode.number}';
+    final description = details.description?.trim();
+    final publication = [details.updateMessage, details.publicationDate, details.seriesInfo, details.voiceover];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
+      padding: EdgeInsets.only(top: AppSpacing.lg, left: inset, right: inset),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.xl,
         children: [
-          Semantics(header: true, child: Text(details.title, style: AppContentTypography.detailTitleOf(context))),
-          const SizedBox(height: AppSpacing.lg),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: (MediaQuery.sizeOf(context).width * 0.22).clamp(140.0, 240.0),
-                child: AspectRatio(
-                  aspectRatio: AppSizes.posterRatio,
-                  child: TvPosterHero(
-                    tag: 'anime-poster-${details.id}',
-                    imageUrl: posterUri?.toString(),
-                    fallbackImageUrl: fallbackPosterUri?.toString(),
-                    semanticLabel: details.title,
-                  ),
-                ),
+          tvPosterAndMetadata ??
+              MobileAnimePosterHeader(
+                title: details.title,
+                posterUri: details.posterUri,
+                fallbackPosterUri: fallbackPosterUri,
+                metadata: metadata,
               ),
-              const SizedBox(width: AppSpacing.xl),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (details.rating != null || details.year != null) ...[
-                      Wrap(
-                        spacing: AppSpacing.md,
-                        runSpacing: AppSpacing.sm,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (RatingPresentation.from(details.rating) case final rating?)
-                            Semantics(
-                              label: rating.semanticLabel,
-                              child: ExcludeSemantics(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const AppIcon(AppIconType.star, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text(rating.label, style: theme.titleMedium),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          if (yearAction case final action?)
-                            action
-                          else if (details.year case final year?)
-                            Text(year, style: theme.bodyLarge),
-                        ],
+          if (description != null && description.isNotEmpty)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.lg,
+              children: [
+                AppSectionHeader(title: 'Сюжет', titleStyle: AppContentTypography.sectionTitleOf(context)),
+                AnimeDescription(description: description),
+              ],
+            ),
+          if (publication.any((value) => value != null && value.trim().isNotEmpty))
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.sm,
+              children: [
+                for (final (index, field) in publication.indexed)
+                  if (field case final text? when text.trim().isNotEmpty)
+                    Text(
+                      text,
+                      style: theme.bodyLarge?.copyWith(
+                        fontSize: index == 1 ? 14 : 16,
+                        color: index == 1 ? AppPalette.textSecondary : null,
                       ),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-                    if (details.isOngoing) Text('Онгоинг', style: theme.labelLarge),
-                    if (filterActions case final filters?) ...[const SizedBox(height: AppSpacing.lg), filters],
-                    const SizedBox(height: AppSpacing.lg),
-                    Wrap(
-                      spacing: AppSpacing.md,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        AppButton(
-                          focusNode: playFocusNode,
-                          autofocus: episode != null,
-                          enabled: episode != null,
-                          onPressed: () => onPlayFirstEpisode?.call(),
-                          icon: const AppIcon(AppIconType.play),
-                          label: rewatch ? 'Посмотреть снова' : watchLabel,
-                        ),
-                        ?favoriteAction,
-                      ],
                     ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xl),
-          if (details.description case final description?) ...[
-            AppSectionHeader(title: 'Сюжет', titleStyle: AppContentTypography.sectionTitleOf(context)),
-            const SizedBox(height: AppSpacing.md),
-            AnimeDescription(description: description),
-          ],
-          if (details.updateMessage case final message?) ...[
-            const SizedBox(height: AppSpacing.lg),
-            Text(message, style: theme.bodyLarge),
-          ],
-          if (details.publicationDate case final date?) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(date, style: theme.bodyMedium?.copyWith(color: AppPalette.textSecondary)),
-          ],
-          if (details.seriesInfo case final series?) ...[
-            const SizedBox(height: AppSpacing.lg),
-            Text(series, style: theme.bodyMedium),
-          ],
-          if (details.voiceover case final voiceover?) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(voiceover, style: theme.bodyMedium),
-          ],
+              ],
+            ),
+          ?watchOrder,
         ],
       ),
     );
   }
+
+  Widget _tvPosterAndMetadata(double posterWidth, {required bool sideBySide}) => Flex(
+    direction: sideBySide ? Axis.horizontal : Axis.vertical,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    spacing: AppSpacing.xl,
+    children: [
+      AnimeDetailsPoster(
+        title: data.details.title,
+        posterUri: data.details.posterUri,
+        fallbackPosterUri: fallbackPosterUri,
+        maxWidth: posterWidth,
+      ),
+      Flexible(flex: sideBySide ? 1 : 0, child: metadata),
+    ],
+  );
+}
+
+/// The same transition controls measured layout, opacity, and hit testing.
+class AnimeDisclosure extends StatelessWidget {
+  const AnimeDisclosure({required this.progress, required this.expanded, required this.child, super.key});
+
+  final Animation<double> progress;
+  final bool expanded;
+  final AnimeHero child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: progress,
+    child: child,
+    builder: (context, panel) {
+      if (!expanded && progress.isDismissed) return const SizedBox.shrink();
+
+      return ExcludeFocus(
+        excluding: !expanded,
+        child: ExcludeSemantics(
+          excluding: !expanded,
+          child: IgnorePointer(
+            ignoring: !expanded,
+            child: SizeTransition(
+              sizeFactor: progress,
+              alignment: Alignment.topCenter,
+              child: FadeTransition(opacity: progress, child: panel),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

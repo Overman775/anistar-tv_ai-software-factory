@@ -37,14 +37,19 @@ void main() {
           '/filter/janrs/%EA%EE%EC%E5%E4%E8%FF/',
           '/filter/year/2023/',
           '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/',
+          '/filter/author/%f1%e8%ed%ee%f5%e0%f0%e0+%f2%e8%fd/',
         ]) {
           final html = _html(sort);
-          final adapter = HtmlFixtureAdapter({path: html, '${path}page/2/': html});
+          final adapter = HtmlFixtureAdapter({Uri.parse(path).path: html, Uri.parse('${path}page/2/').path: html});
           dio.httpClientAdapter = adapter;
           final source = createTestAnistarClient(dio);
           await source.catalog(1, filterPath: path, sort: sort);
           await source.catalog(2, filterPath: path, sort: sort);
-          expect(adapter.requests.map((request) => request.uri.path), [path, '${path}page/2/']);
+          expect(adapter.requests.map((request) => request.path), [path.substring(1), '${path.substring(1)}page/2/']);
+          expect(adapter.requests.map((request) => request.uri.path), [
+            Uri.parse(path).path,
+            Uri.parse('${path}page/2/').path,
+          ]);
           final suffix = path.startsWith('/filter/') ? 'xfsearch' : 'cat';
           for (final request in adapter.requests) {
             expect(request.method, 'GET');
@@ -93,7 +98,11 @@ void main() {
     expect(adapter.requests.last.headers['Cookie'], before);
   });
 
-  for (final path in ['/filter/year/2023/', '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/']) {
+  for (final path in [
+    '/filter/year/2023/',
+    '/filter/director/%C8%F1%E8%F5%E8%F0%E0+%D1%E8%ED%E4%E7%E8/',
+    '/filter/author/%f1%e8%ed%ee%f5%e0%f0%e0+%f2%e8%fd/',
+  ]) {
     test('xfsearch $path rejects unconfirmed order without issuing a fallback request', () async {
       final dio = Dio(BaseOptions(baseUrl: 'https://v30.astar.bz/'));
       addTearDown(() => dio.close(force: true));
@@ -103,7 +112,7 @@ void main() {
         _html(const AnistarCatalogSort(AnistarSortCriterion.date)),
         _html(const AnistarCatalogSort(AnistarSortCriterion.title)),
       ]) {
-        final adapter = HtmlFixtureAdapter({path: html});
+        final adapter = HtmlFixtureAdapter({Uri.parse(path).path: html});
         dio.httpClientAdapter = adapter;
         await expectLater(
           createTestAnistarClient(dio).catalog(1, filterPath: path, sort: sort),
@@ -128,7 +137,7 @@ void main() {
       dio.interceptors.add(
         InterceptorsWrapper(
           onRequest: (options, handler) {
-            if (options.uri.path == path) {
+            if (options.uri.path == Uri.parse(path).path) {
               arrived.complete();
               unawaited(gate.future.then((_) => handler.next(options)));
             } else {
@@ -139,7 +148,7 @@ void main() {
       );
       const sort = AnistarCatalogSort(AnistarSortCriterion.title, ascending: true);
       final adapter = HtmlFixtureAdapter(
-        {path: _html(sort), '/anime/': catalogHtml},
+        {Uri.parse(path).path: _html(sort), '/anime/': catalogHtml},
         responseHeaders: {
           'set-cookie': ['dle_user_id=42; Path=/', 'dle_sort_xfsearch=title; Path=/'],
         },

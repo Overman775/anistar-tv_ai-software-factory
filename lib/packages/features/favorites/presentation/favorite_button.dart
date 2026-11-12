@@ -14,6 +14,7 @@ class FavoriteButton extends ConsumerStatefulWidget {
     this.initialFavorite,
     this.focusNode,
     this.autofocus = false,
+    this.minHeight,
     super.key,
   });
 
@@ -21,6 +22,7 @@ class FavoriteButton extends ConsumerStatefulWidget {
   final FocusNode? focusNode;
   final bool autofocus;
   final bool? initialFavorite;
+  final double? minHeight;
   final String slug;
 
   @override
@@ -35,25 +37,27 @@ class _FavoriteButtonState extends ConsumerState<FavoriteButton> {
     if (_reading || ref.read(favoritesControllerProvider).updatingAnimeId != null) {
       return;
     }
+    final account = ref.read(favoritesAccountProvider);
+    if (account == null) return;
     final id = widget.animeId;
     final controller = ref.read(favoritesControllerProvider.notifier);
     if (favorite == null) {
       final generation = ++_readGeneration;
       setState(() => _reading = true);
-      final result = await ref.read(favoritesRepositoryProvider).getStatus(animeId: id, slug: widget.slug);
+      final result = await controller.readStatus(animeId: id, slug: widget.slug);
       if (!mounted || widget.animeId != id || generation != _readGeneration) {
         return;
       }
       setState(() => _reading = false);
-      result.when(
-        success: (confirmed) => controller.observe(id, confirmed),
-        failure: (failure) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message))),
-      );
+      final failure = result.failureOrNull;
+      if (failure != null && ref.read(favoritesAccountProvider) == account) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
+      }
 
       return;
     }
     final failure = await controller.setFavorite(animeId: id, slug: widget.slug, favorite: !favorite);
-    if (failure != null && mounted && widget.animeId == id) {
+    if (failure != null && mounted && widget.animeId == id && ref.read(favoritesAccountProvider) == account) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(failure.message)));
     }
   }
@@ -75,6 +79,7 @@ class _FavoriteButtonState extends ConsumerState<FavoriteButton> {
         key: ValueKey('favorite-login-${widget.animeId}'),
         focusNode: widget.focusNode,
         autofocus: widget.autofocus,
+        minHeight: widget.minHeight,
         variant: AppButtonVariant.neutral,
         label: 'Войти, чтобы добавить в избранное',
         icon: const AppIcon(AppIconType.logIn),
@@ -82,13 +87,14 @@ class _FavoriteButtonState extends ConsumerState<FavoriteButton> {
       );
     }
     final state = ref.watch(favoritesControllerProvider);
-    final favorite = state.known[widget.animeId] ?? widget.initialFavorite;
+    final favorite = state.confirmedStatus(widget.animeId, reported: widget.initialFavorite);
     final busy = _reading || state.updatingAnimeId == widget.animeId;
 
     return AppButton(
       key: ValueKey('favorite-button-${widget.animeId}'),
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
+      minHeight: widget.minHeight,
       busy: busy,
       enabled: state.updatingAnimeId == null || state.updatingAnimeId == widget.animeId,
       onPressed: () => unawaited(_change(favorite)),

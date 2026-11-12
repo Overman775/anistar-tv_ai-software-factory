@@ -15,6 +15,7 @@ import 'tv_route_shell.dart';
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     required this.onAnimeTap,
+    this.onWatchAnime,
     this.onOpenLogs,
     this.onOpenGenres,
     this.onGenreSelected,
@@ -32,6 +33,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   final String? accountName;
   final String? accountImageUrl;
   final ValueChanged<AnimeSummary> onAnimeTap;
+  final ValueChanged<AnimeSummary>? onWatchAnime;
   final VoidCallback? onOpenLogs;
   final VoidCallback? onOpenGenres;
   final VoidCallback? onSignOut;
@@ -84,10 +86,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       HomeDestination.home || HomeDestination.favorites => CatalogScreen(
                         key: destination == HomeDestination.home ? _home : _favorites,
                         favoritesOnly: destination == HomeDestination.favorites,
+                        active: destination == _destination,
                         onTabSelected: (favorite) =>
                             _select(favorite ? HomeDestination.favorites : HomeDestination.home),
                         onOpenNavigation: onNavigation,
                         onAnimeTap: widget.onAnimeTap,
+                        onWatchAnime: widget.onWatchAnime,
+                        onFilterSelected: widget.onGenreSelected,
                       ),
                       HomeDestination.genres => GenresScreen(
                         key: _genres,
@@ -100,6 +105,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         active: destination == _destination,
                         onOpenNavigation: onNavigation,
                         onAnimeTap: widget.onAnimeTap,
+                        onWatchAnime: widget.onWatchAnime,
+                        onFilterSelected: widget.onGenreSelected,
                       ),
                     },
             ),
@@ -195,6 +202,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           onSignIn: widget.onSignIn,
           onRootBack: widget.onRootBack,
           root: true,
+          showContextTitle: _destination != HomeDestination.genres,
           content: Builder(builder: (_) => _sections(null)),
         )
       : Scaffold(

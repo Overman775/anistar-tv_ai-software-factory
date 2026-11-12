@@ -6,6 +6,7 @@ import 'anistar_failure.dart';
 import 'anistar_favorites_html.dart';
 import 'anistar_html_parser.dart';
 import 'anistar_search_source.dart';
+import 'anistar_session_interceptor.dart';
 import 'contract/anistar_anime_details_dto.dart';
 import 'contract/anistar_catalog_filter_dto.dart';
 import 'contract/anistar_catalog_page_dto.dart';
@@ -19,10 +20,12 @@ final class AnistarSource {
   final Uri baseUri;
   final Dio _dio;
   final AnistarSearchSource _search;
+  final int Function()? _accessGeneration;
 
   AnistarSource(this._dio, {int Function()? accessGeneration})
     : baseUri = Uri.parse(_dio.options.baseUrl),
-      _search = AnistarSearchSource(_dio, accessGeneration);
+      _search = AnistarSearchSource(_dio, accessGeneration),
+      _accessGeneration = accessGeneration;
 
   Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation}) =>
       _search.search(query, page: page, cancellation: cancellation);
@@ -34,7 +37,11 @@ final class AnistarSource {
     if (filterPath != null && !HtmlCatalogParameters.isValidPath(filterPath)) {
       throw const AnistarFailure(message: 'Некорректный адрес фильтра.');
     }
-    final parameters = sort == null ? null : HtmlCatalogParameters(sort);
+    final defaultAuthorSort = filterPath?.startsWith('/filter/author/') == true
+        ? const AnistarCatalogSort(AnistarSortCriterion.date)
+        : null;
+    final requestedSort = sort ?? defaultAuthorSort;
+    final parameters = requestedSort == null ? null : HtmlCatalogParameters(requestedSort);
     final path = (filterPath ?? '/anime/').substring(1);
     final source = await _html(
       page == 1 ? path : '${path}page/$page/',
@@ -47,11 +54,13 @@ final class AnistarSource {
 
   Future<List<AnistarCatalogFilterDto>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
 
-  Future<AnistarAnimeDetailsDto> details(String slug) async {
+  Future<AnistarAnimeDetailsDto> details(String slug) => _details(slug);
+
+  Future<AnistarAnimeDetailsDto> _details(String slug, {int? expectedAccess}) async {
     if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug)) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
-    final source = await _html('$slug.html');
+    final source = await _html('$slug.html', expectedAccess: expectedAccess);
 
     return AnistarHtmlParser(baseUri).details(source, slug);
   }
@@ -65,8 +74,12 @@ final class AnistarSource {
     return AnistarHtmlParser(baseUri).catalog(source, page, favorites: true);
   }
 
-  Future<bool> favoriteStatus({required int animeId, required String slug}) async {
-    final detail = await details(slug);
+  Future<bool> favoriteStatus({required int animeId, required String slug}) =>
+      _favoriteStatus(animeId, slug, _accessGeneration?.call());
+
+  Future<bool> _favoriteStatus(int animeId, String slug, int? expectedAccess) async {
+    final detail = await _details(slug, expectedAccess: expectedAccess);
+    _verifyAccess(expectedAccess);
     final status = detail.isFavorite;
     if (detail.id != animeId || status == null) {
       throw const AnistarFailure(message: 'Не удалось определить избранное на сайте. Обновите страницу.');
@@ -79,7 +92,9 @@ final class AnistarSource {
     if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug) || int.tryParse(slug.split('-').first) != animeId) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
-    final page = await _html('$slug.html');
+    final expectedAccess = _accessGeneration?.call();
+    final page = await _html('$slug.html', expectedAccess: expectedAccess);
+    _verifyAccess(expectedAccess);
     final current = AnistarFavoritesHtml.fragmentStatus(page, animeId);
     if (current == null) {
       throw const AnistarFailure(message: 'Не удалось определить избранное на сайте. Обновите страницу.');
@@ -98,6 +113,7 @@ final class AnistarSource {
       options: DioClient.withoutRetry(
         Options(
           responseType: ResponseType.bytes,
+          extra: {AnistarSessionInterceptor.expectedAccessKey: ?expectedAccess},
           headers: {
             'Accept': 'text/html',
             'User-Agent': 'AniStarTV/1.0',
@@ -108,11 +124,13 @@ final class AnistarSource {
         ),
       ),
     );
+    _verifyAccess(expectedAccess);
     final fragment = HtmlDecoder.decode(response.data ?? const [], response.headers.value('content-type'));
     if (AnistarFavoritesHtml.fragmentStatus(fragment, animeId) != favorite) {
       throw const AnistarFailure(message: 'AniStar не подтвердил изменение избранного. Обновите статус.');
     }
-    final confirmed = await favoriteStatus(animeId: animeId, slug: slug);
+    final confirmed = await _favoriteStatus(animeId, slug, expectedAccess);
+    _verifyAccess(expectedAccess);
     if (confirmed != favorite) {
       throw const AnistarFailure(message: 'Избранное на сайте не изменилось. Повторите проверку.');
     }
@@ -174,14 +192,21 @@ final class AnistarSource {
     return AnistarHtmlParser(baseUri).parsedEpisodes(source, httpHeaders: {'Referer': playerUri(animeId).toString()});
   }
 
-  Future<String> _html(String path, {Map<String, String>? sortCookies}) async {
+  void _verifyAccess(int? expectedAccess) {
+    if (expectedAccess != null && expectedAccess != _accessGeneration?.call()) {
+      throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
+    }
+  }
+
+  Future<String> _html(String path, {Map<String, String>? sortCookies, int? expectedAccess}) async {
+    _verifyAccess(expectedAccess);
     final Response<List<int>> response;
     try {
       response = await _dio.get<List<int>>(
         path,
         options: Options(
           responseType: ResponseType.bytes,
-          extra: {'anistarSortCookies': ?sortCookies},
+          extra: {'anistarSortCookies': ?sortCookies, AnistarSessionInterceptor.expectedAccessKey: ?expectedAccess},
           headers: {
             'Accept': 'text/html',
             'User-Agent': 'AniStarTV/1.0',
@@ -206,6 +231,7 @@ final class AnistarSource {
         stackTrace,
       );
     }
+    _verifyAccess(expectedAccess);
     if (response.headers.value('cf-mitigated') == 'challenge') {
       throw const AnistarFailure(message: 'AniStar запросил проверку браузера. Попробуйте другое зеркало.');
     }

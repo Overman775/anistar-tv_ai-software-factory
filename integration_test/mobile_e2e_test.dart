@@ -2,6 +2,7 @@
 
 import 'package:anistar_tv/app/app_device_profile_resolver.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/intro_screen.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
@@ -58,8 +59,7 @@ void main() {
       () => find.byType(AnimeScreen).evaluate().isNotEmpty && find.byType(MobileAnimeContent).evaluate().isNotEmpty,
       'guest detail',
     );
-    await MobileControls.revealAnimeAction(tester, 'Смотреть серию 1');
-    await MobileControls.openVideo(tester);
+    await _openVideo(tester);
     await E2eHarness.waitFor(
       tester,
       () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,
@@ -205,7 +205,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'mobile genres');
     await MobileControls.tap(tester, find.text('Комедия'), 'comedy genre');
     await _waitFilter(tester);
-    await MobileControls.tap(tester, find.widgetWithText(TextButton, 'По дате · Сначала новые'), 'touch sort');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('catalog-sort')), 'touch sort');
     expect(find.byType(BottomSheet), findsOneWidget);
     await MobileControls.tap(tester, find.text('По алфавиту'), 'alphabetical criterion');
     await MobileControls.tap(tester, find.text('Я → А'), 'descending titles');
@@ -213,7 +213,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => MobileControls.card(10961).evaluate().isNotEmpty, 'sorted mobile catalog');
     final sorted = _events(await fixture.state()).where((event) => event['path'] == '/anime/comedy/').last;
     expect(sorted['sort'], {'dle_sort_cat': 'title', 'dle_direction_cat': 'desc'});
-    await MobileControls.tap(tester, find.widgetWithText(TextButton, 'По алфавиту · Я → А'), 'reopen sort');
+    await MobileControls.tap(tester, find.byKey(const ValueKey('catalog-sort')), 'reopen sort');
     await MobileControls.tap(tester, find.text('По дате'), 'draft date sort');
     await tester.binding.handlePopRoute();
     await E2eHarness.waitFor(tester, () => find.byType(BottomSheet).evaluate().isEmpty, 'cancel draft with Back');
@@ -279,7 +279,7 @@ void main() {
       'pull removes externally deleted last favorite',
     );
     await MobileControls.tab(tester, 'Главная');
-    await MobileControls.openAnime(tester);
+    await _openAnime(tester);
     final animeScroll = find.descendant(of: find.byType(AnimeScreen), matching: find.byType(ListView));
     final detailController = tester.widget<ListView>(animeScroll).controller;
     if (detailController == null) {
@@ -312,7 +312,10 @@ void main() {
   _mobileTest('mobile favorite failure, explicit recovery, removal and empty-state return', (tester) async {
     await fixture.configure(favoriteError: true, favorites: '');
     await launch(tester);
-    await MobileControls.tap(tester, find.byKey(const ValueKey('anime-actions-10938')), 'favorite actions');
+    final card = find.byWidgetPredicate((widget) => widget is MobileAnimeCard && widget.anime.id == 10938);
+    await E2eHarness.waitFor(tester, () => card.hitTestable().evaluate().isNotEmpty, 'favorite card');
+    await tester.longPress(card);
+    await E2eHarness.waitFor(tester, () => find.byType(BottomSheet).evaluate().isNotEmpty, 'favorite actions');
     await MobileControls.tap(tester, find.text('Добавить в избранное'), 'rejected favorite');
     await E2eHarness.waitFor(tester, () => find.text('Обновить статус').evaluate().isNotEmpty, 'favorite failure');
     expect((await fixture.state())['favorites'], isEmpty);
@@ -322,7 +325,7 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.byType(BottomSheet).evaluate().isEmpty, 'favorite confirmed');
     expect((await fixture.state())['favorites'], [10938]);
     await MobileControls.tab(tester, 'Избранное');
-    await MobileControls.openAnime(tester);
+    await _openAnime(tester);
     await MobileControls.revealAnimeAction(tester, 'В избранном');
     await MobileControls.tap(tester, find.text('В избранном'), 'detail favorite removal');
     await E2eHarness.waitFor(tester, () => find.text('В избранное').evaluate().isNotEmpty, 'removal confirmed');
@@ -339,10 +342,10 @@ void main() {
   _mobileTest('mobile native player seek, quality, real rotation, lifecycle, episode and Back', (tester) async {
     await fixture.configure();
     await launch(tester);
-    await MobileControls.openAnime(tester);
+    await _openAnime(tester);
     expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.byKey(const ValueKey('mobile-header')), findsOneWidget);
-    await MobileControls.openVideo(tester);
+    await _openVideo(tester);
     expect(find.descendant(of: find.byType(PlayerScreen), matching: find.byType(RefreshIndicator)), findsNothing);
     var player = E2eHarness.requirePlayer(tester);
     expect(player.formatHint, VideoFormat.hls);
@@ -429,7 +432,8 @@ void main() {
       'mobile resume continues native playback',
     );
     await E2eHarness.expectScreenAwake(tester, true);
-    await MobileControls.playerAction(tester, 'player-next-episode');
+    await MobileControls.playerAction(tester, 'player-episodes');
+    await MobileControls.tap(tester, find.text('Серия 2'), 'choose next mobile episode');
     final first = player;
     await _waitReplacement(tester, first, 'next mobile episode');
     player = E2eHarness.requirePlayer(tester);
@@ -440,6 +444,9 @@ void main() {
     await E2eHarness.waitFor(tester, () => find.byType(PlayerScreen).evaluate().isEmpty, 'Back closes native player');
     await E2eHarness.expectScreenAwake(tester, false);
     expect(find.byType(AnimeScreen), findsOneWidget);
+    final returnedEpisode = find.byKey(const ValueKey('mobile-episode-2'));
+    await E2eHarness.waitFor(tester, () => returnedEpisode.evaluate().isNotEmpty, 'returned selected episode');
+    expect(tester.widget<EpisodeCard>(returnedEpisode).selected, isTrue);
     final stoppedPosition = player.value.position;
     await tester.pump(const Duration(milliseconds: 700));
     expect(player.value.position, stoppedPosition, reason: 'disposed video stops advancing');
@@ -474,8 +481,9 @@ void main() {
   _mobileTest('mobile persistent video error stops automatic retries and touch retry recovers', (tester) async {
     await fixture.configure(videoMode: 'always_expired');
     await launch(tester);
-    await MobileControls.openAnime(tester);
-    await MobileControls.tap(tester, find.text('Смотреть серию 1'), 'start failing video');
+    await _openAnime(tester);
+    await _revealEpisode(tester, 1);
+    await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-episode-1')), 'start failing video');
     await E2eHarness.waitFor(
       tester,
       () => find.text('Видео не запустилось').evaluate().isNotEmpty,
@@ -526,6 +534,45 @@ Future<void> _waitFilter(WidgetTester tester) => E2eHarness.waitFor(
       .isNotEmpty,
   'mobile comedy filter',
 );
+
+Future<void> _openAnime(WidgetTester tester) async {
+  await MobileControls.tap(tester, MobileControls.card(10938), 'touch anime card');
+  await E2eHarness.waitFor(
+    tester,
+    () => find.byType(AnimeScreen).evaluate().isNotEmpty && find.byType(MobileAnimeContent).evaluate().isNotEmpty,
+    'mobile details',
+  );
+}
+
+Future<void> _openVideo(WidgetTester tester) async {
+  await _revealEpisode(tester, 1);
+  await MobileControls.tap(tester, find.byKey(const ValueKey('mobile-episode-1')), 'touch first episode');
+  await E2eHarness.waitFor(
+    tester,
+    () => find.byType(PlayerScreen).evaluate().isNotEmpty || find.text('На главную').evaluate().isNotEmpty,
+    'episode opens player',
+  );
+  expect(find.byType(PlayerScreen), findsOneWidget, reason: 'episode entry must not open the route error screen');
+  await E2eHarness.waitFor(
+    tester,
+    () => E2eHarness.player(tester)?.value.isInitialized == true,
+    'native mobile HLS initialized',
+  );
+  expect(find.byKey(const ValueKey('mobile-navigation')), findsNothing);
+  expect(find.byKey(const ValueKey('mobile-header')), findsNothing);
+  await E2eHarness.waitFor(
+    tester,
+    () => (E2eHarness.player(tester)?.value.position.inMilliseconds ?? 0) > 500,
+    'native mobile HLS advancing',
+  );
+}
+
+Future<void> _revealEpisode(WidgetTester tester, int number) async {
+  final episode = find.byKey(ValueKey('mobile-episode-$number'));
+  final scroll = find.descendant(of: find.byType(MobileAnimeContent), matching: find.byType(Scrollable)).first;
+  await tester.scrollUntilVisible(episode, 200, scrollable: scroll);
+  await tester.pump(const Duration(milliseconds: 300));
+}
 
 Future<void> _waitReplacement(WidgetTester tester, VideoPlayerController previous, String step) => E2eHarness.waitFor(
   tester,

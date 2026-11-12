@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_page.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_layout.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
+import 'package:anistar_tv/packages/features/search/presentation/search_loading.dart';
 import 'package:anistar_tv/packages/features/search/presentation/search_screen.dart';
 import 'package:anistar_tv/packages/features/search/search_providers.dart';
 import 'package:core/data.dart';
-import 'package:flutter/semantics.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../mocks/features/search/fake_search_repository.dart';
 import '../../../../support/test_app.dart';
@@ -19,6 +24,7 @@ void main() {
   for (final (mobile, size) in [
     (false, compactTvSize),
     (false, wideTvSize),
+    (false, const Size(1920, 1080)),
     (true, const Size(320, 640)),
     (true, const Size(390, 844)),
     (true, const Size(844, 390)),
@@ -116,13 +122,71 @@ void main() {
               }
             }
             if (scene == 'pagination_retry') {
-              final scroll = tester
-                  .widget<SingleChildScrollView>(find.byKey(const PageStorageKey('search-results')))
-                  .controller;
-              scroll?.jumpTo(scroll.position.maxScrollExtent);
-              await settle();
-              await tester.ensureVisible(find.byKey(const ValueKey('search-pagination-retry')));
-              await settle();
+              if (mobile) {
+                final scroll = tester
+                    .widget<SingleChildScrollView>(find.byKey(const PageStorageKey('search-results')))
+                    .controller;
+                scroll?.jumpTo(scroll.position.maxScrollExtent);
+                await settle();
+                await tester.ensureVisible(find.byKey(const ValueKey('search-pagination-retry')));
+                await settle();
+              } else {
+                await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+                await settle();
+                for (var index = 0; index < 24; index++) {
+                  await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+                  await tester.pump(const Duration(milliseconds: 300));
+                }
+                expect(repository.requests.map((request) => request.page), [1, 2]);
+                expect(find.byKey(const ValueKey('search-pagination-retry')).hitTestable(), findsOneWidget);
+              }
+            }
+            if (!mobile && scene == 'loading') {
+              final skeleton = find.byType(CatalogSkeleton);
+              final row = find.descendant(of: skeleton, matching: find.byType(ListView));
+              expect(tester.widget<ListView>(row).scrollDirection, Axis.horizontal);
+              final placeholders = find.descendant(of: row, matching: find.byType(TvSkeletonBox));
+              final first = placeholders.first;
+              expect(tester.getSize(first).width, closeTo(CatalogLayout.posterWidth(size.height), 0.01));
+              expect(
+                tester.getBottomLeft(first).dy,
+                closeTo(tester.getBottomLeft(find.byType(SearchLoading)).dy - CatalogLayout.railBottomPadding, 0.01),
+              );
+            }
+            if (!mobile && scene == 'pagination_retry' && textScale == 2 && size != const Size(1920, 1080)) {
+              for (final label in ['Сбой', 'Ещё раз']) {
+                final text = find.descendant(
+                  of: find.byKey(const ValueKey('search-pagination-retry')),
+                  matching: find.text(label),
+                );
+                expect(text, findsOneWidget);
+                expect(
+                  tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+                  isFalse,
+                  reason: '$label must stay legible',
+                );
+              }
+            }
+            if (mobile && size == const Size(320, 640) && textScale == 2) {
+              final label = switch (scene) {
+                'history' => 'Последние запросы',
+                'error' => 'Поиск недоступен',
+                _ => null,
+              };
+              if (label != null) {
+                final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+                var start = 0;
+                for (final word in label.split(' ')) {
+                  expect(
+                    paragraph
+                        .getBoxesForSelection(TextSelection(baseOffset: start, extentOffset: start + word.length))
+                        .length,
+                    1,
+                    reason: '$word must not split across lines',
+                  );
+                  start += word.length + 1;
+                }
+              }
             }
             final layoutException = takeException();
             expect(layoutException, isNull);

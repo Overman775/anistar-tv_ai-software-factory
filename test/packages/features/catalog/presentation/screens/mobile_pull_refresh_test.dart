@@ -181,7 +181,7 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, 350));
+    await tester.drag(find.byKey(const ValueKey('tv-catalog-poster-rail')), const Offset(0, 350));
     await tester.pumpAndSettle();
     expect(requests, [1]);
     expect(find.byType(RefreshIndicator), findsNothing);

@@ -24,8 +24,8 @@ abstract final class AppFocusStyle {
             _ => restingColor,
           },
     borderRadius: radius,
-    border: Border.all(color: focused ? AppPalette.focusOutline : Colors.transparent, width: 2),
-    boxShadow: focused ? const [BoxShadow(color: AppPalette.focusGlow, blurRadius: 12)] : const [],
+    border: Border.all(color: focused ? AppPalette.focusOutline : Colors.transparent, width: AppSizes.focusStroke),
+    boxShadow: focused ? const [BoxShadow(color: AppPalette.focusGlow, blurRadius: AppSizes.focusBlur)] : const [],
   );
 
   static ButtonStyle button({bool selected = false, BorderRadius radius = AppRadii.medium}) =>
@@ -47,7 +47,7 @@ abstract final class AppFocusStyle {
               selected: selected,
               pressed: states.contains(WidgetState.pressed),
               radius: radius,
-            ).copyWith(border: const Border()),
+            ).copyWith(border: const Border(), boxShadow: const []),
             child: child,
           ),
         ),

@@ -23,6 +23,9 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
       if (id <= 0) {
         throw const RequestFailure(message: 'Некорректный номер аниме.');
       }
+      if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug)) {
+        throw const RequestFailure(message: 'Некорректный адрес аниме.');
+      }
       // Future.wait preserves the first original failure for the repository
       // boundary; record.wait would wrap it in ParallelWaitError.
       final results = await Future.wait<Object>([_client.details(slug), _client.episodes(id)]);
@@ -30,6 +33,9 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
       final episodes = results[1] as List<AnistarEpisodeDto>;
       if (detail.id != id || detail.slug.isEmpty || detail.title.trim().isEmpty) {
         throw const RequestFailure(message: 'Адрес карточки не соответствует выбранному аниме.');
+      }
+      if (episodes.isEmpty) {
+        throw const RequestFailure(message: 'У этого аниме пока нет доступных серий.');
       }
 
       final numbers = <int>{};
@@ -55,6 +61,7 @@ final class AnistarAnimeRepository extends BaseRepository implements AnimeReposi
           year: detail.year,
           rating: rating != null && rating.isFinite && rating >= 0 && rating <= 10 ? rating : null,
           director: detail.director,
+          author: detail.author,
           updateMessage: detail.updateMessage,
           publicationDate: detail.publicationDate,
           parts: detail.parts

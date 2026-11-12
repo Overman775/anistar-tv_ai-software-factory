@@ -28,9 +28,10 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
   int _columns = 1;
   List<CatalogFilter> _items = [];
   bool _focusedInitial = false;
+  String? _lastPath;
 
   void focusFirst() {
-    final first = _items.firstOrNull;
+    final first = _items.where((item) => item.path == _lastPath).firstOrNull ?? _items.firstOrNull;
     if (first != null) {
       _nodes[first.path]?.requestFocus();
     } else if (_retry.context != null) {
@@ -132,8 +133,9 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
     }
   }
 
-  void _onTileFocus(BuildContext context, bool focused) {
-    if (focused) {
+  void _onTileFocus(BuildContext context, String path, bool focused) {
+    if (focused && _lastPath != path) {
+      _lastPath = path;
       unawaited(
         Scrollable.ensureVisible(context, alignment: 0.5, duration: AppMotion.durationOf(context, AppMotion.fast)),
       );
@@ -171,7 +173,11 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
                   _items = items;
                   if (_shouldFocusContent && AppLayoutScope.isTvOf(context) && !_focusedInitial && items.isNotEmpty) {
                     _focusedInitial = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _focusReadyTarget(_nodes[items.first.path]));
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _focusReadyTarget(
+                        _nodes[items.where((item) => item.path == _lastPath).firstOrNull?.path ?? items.first.path],
+                      ),
+                    );
                   }
                   if (items.isEmpty) {
                     return _stateView('Жанры не найдены', 'Обновите список жанров.');
@@ -193,35 +199,49 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
                       final lineHeight =
                           MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 19) * (style?.height ?? 1.5);
 
+                      final tv = AppLayoutScope.isTvOf(context);
                       final content = SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(24),
-                        child: Wrap(
-                          spacing: 16,
-                          runSpacing: 16,
+                        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + (tv ? 0 : MediaQuery.paddingOf(context).bottom)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            for (final item in items)
-                              SizedBox(
-                                width: width,
-                                height: math.max(width / AppSizes.landscapeRatio, lineHeight * 2 + 64),
-                                child: Builder(
-                                  builder: (tileContext) => MediaCard(
-                                    variant: MediaCardVariant.landscape,
-                                    label: item.label,
-                                    imageUrl: item.imageUri?.toString(),
-                                    focusNode: _nodes.putIfAbsent(item.path, () => FocusNode(debugLabel: item.label)),
-                                    onPressed: () => widget.onSelected(item),
-                                    onFocusChanged: (focused) => _onTileFocus(tileContext, focused),
-                                  ),
-                                ),
+                            if (!tv) ...[
+                              Semantics(
+                                header: true,
+                                child: Text('Жанры', style: AppContentTypography.detailTitleOf(context)),
                               ),
+                              const SizedBox(height: AppSpacing.lg),
+                            ],
+                            Wrap(
+                              spacing: 16,
+                              runSpacing: 16,
+                              children: [
+                                for (final item in items)
+                                  SizedBox(
+                                    width: width,
+                                    height: math.max(width / AppSizes.landscapeRatio, lineHeight * 2 + 64),
+                                    child: Builder(
+                                      builder: (tileContext) => MediaCard(
+                                        variant: MediaCardVariant.landscape,
+                                        label: item.label,
+                                        imageUrl: item.imageUri?.toString(),
+                                        focusNode: _nodes.putIfAbsent(
+                                          item.path,
+                                          () => FocusNode(debugLabel: item.label),
+                                        ),
+                                        onPressed: () => widget.onSelected(item),
+                                        onFocusChanged: (focused) => _onTileFocus(tileContext, item.path, focused),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
                       );
 
-                      return AppLayoutScope.isTvOf(context)
-                          ? content
-                          : RefreshIndicator(onRefresh: _refreshMobile, child: content);
+                      return tv ? content : RefreshIndicator(onRefresh: _refreshMobile, child: content);
                     },
                   );
                 },

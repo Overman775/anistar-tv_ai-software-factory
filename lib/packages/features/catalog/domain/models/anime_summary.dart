@@ -1,3 +1,5 @@
+import 'catalog_filter.dart';
+
 final class AnimeSummary {
   final double? rating;
   final int id;
@@ -10,6 +12,9 @@ final class AnimeSummary {
   final String? description;
   final String? updateMessage;
   final String? publicationDate;
+  final String? seriesInfo;
+  final String? voiceover;
+  final List<CatalogFilter> genreFilters;
 
   List<String> get genres => List.unmodifiable(
     genreText?.split(',').map((genre) => genre.trim()).where((genre) => genre.isNotEmpty) ?? const <String>[],
@@ -27,5 +32,24 @@ final class AnimeSummary {
     this.description,
     this.updateMessage,
     this.publicationDate,
-  });
+    this.seriesInfo,
+    this.voiceover,
+  }) : genreFilters = const [];
+
+  AnimeSummary.withGenreFilters({
+    required this.id,
+    required this.slug,
+    required this.title,
+    required List<CatalogFilter> genreFilters,
+    this.posterUri,
+    this.rating,
+    this.year,
+    this.isFavorite,
+    this.genreText,
+    this.description,
+    this.updateMessage,
+    this.publicationDate,
+    this.seriesInfo,
+    this.voiceover,
+  }) : genreFilters = List.unmodifiable(genreFilters);
 }

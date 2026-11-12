@@ -26,11 +26,18 @@ import '../widgets/player_retry_view.dart';
 import '../widgets/player_view.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
-  const PlayerScreen({required this.animeId, required this.episodeNumber, required this.title, super.key});
+  const PlayerScreen({
+    required this.animeId,
+    required this.episodeNumber,
+    required this.title,
+    this.onEpisodeChanged,
+    super.key,
+  });
 
   final int animeId;
   final int episodeNumber;
   final String title;
+  final ValueChanged<int>? onEpisodeChanged;
 
   @override
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
@@ -61,12 +68,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   bool _disposed = false;
   bool _isTv = true;
   bool _scrubbing = false;
+  bool _panelOpen = false;
   int _initializationId = 0;
   late int _episodeNumber;
   PlaybackQuality _quality = PlaybackQuality.high;
   PlaybackSession? _session;
   final PlaybackRefreshBudget _refreshBudget = PlaybackRefreshBudget();
   final Set<int> _markedEpisodes = {};
+  late final String? _historyAccount;
   Duration _resumePosition = Duration.zero;
   bool _resumePlaying = true;
 
@@ -83,6 +92,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     unawaited(_screenAwake.setEnabled(false));
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky));
     _episodeNumber = widget.episodeNumber;
+    _historyAccount = ref.read(watchHistoryAccountProvider);
     _future = _initialize(++_initializationId);
     _focusNode.requestFocus();
   }
@@ -157,6 +167,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (_panelOpen) return KeyEventResult.ignored;
     if (_focusNode.hasPrimaryFocus && _controller != null && _handleSeekKey(event)) {
       return KeyEventResult.handled;
     }
@@ -197,7 +208,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   bool _observeKey(KeyEvent event) {
-    if (_disposed || !_appResumed || !_routeActive || !(_route?.isCurrent ?? true) || !_focusNode.hasFocus) {
+    if (_disposed ||
+        _panelOpen ||
+        !_appResumed ||
+        !_routeActive ||
+        !(_route?.isCurrent ?? true) ||
+        !_focusNode.hasFocus) {
       return false;
     }
     if (event is KeyUpEvent) {
@@ -215,6 +231,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   bool _handleSeekKey(KeyEvent event) {
     final player = _controller;
     if (!_isTv ||
+        _panelOpen ||
         !_appResumed ||
         !_routeActive ||
         !(_route?.isCurrent ?? true) ||
@@ -384,18 +401,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _markStarted(VideoPlayerController player) {
-    if (!player.value.isPlaying || !_markedEpisodes.add(_episodeNumber)) {
-      return;
-    }
+    if (!identical(_controller, player) || !player.value.isPlaying || player.value.hasError) return;
     final account = ref.read(watchHistoryAccountProvider);
-    if (account == null) {
+    final episode = _episodeNumber;
+    final anime = widget.animeId;
+    if (account == null ||
+        account != _historyAccount ||
+        !_markedEpisodes.add(episode) ||
+        _session?.watchedEpisodes.contains(episode) == true) {
       return;
     }
-    final history = ref.read(watchedEpisodesProvider(widget.animeId).notifier);
-    final initializationId = _initializationId;
+    final history = ref.read(watchedEpisodesProvider(anime).notifier);
     unawaited(
-      history.markStarted(_episodeNumber).then((saved) {
-        if (!saved && mounted && _isCurrent(initializationId)) {
+      history.markStarted(episode).then((saved) {
+        if (!saved &&
+            mounted &&
+            !_disposed &&
+            anime == widget.animeId &&
+            episode == _episodeNumber &&
+            ref.read(watchHistoryAccountProvider) == account) {
           ScaffoldMessenger.of(context)
               .showSnackBar(const SnackBar(content: Text('Не удалось сохранить отметку просмотра.')));
         }
@@ -437,10 +461,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     _seekHold.stop();
     _pendingSeek = null;
     _seekTarget = null;
-    if (resetBudget) {
-      _refreshBudget.reset();
-      _markedEpisodes.clear();
-    }
+    if (resetBudget) _refreshBudget.reset();
     final player = _controller;
     if (preservePosition && player != null && !player.value.hasError) {
       _resumePosition = player.value.position;
@@ -468,10 +489,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     if (session == null) {
       return;
     }
-    _seekHold.stop();
-    final choice = await showAppActionSheet<PlaybackQuality>(
-      context: context,
-      builder: (context) => PlayerChoicesDialog<PlaybackQuality>(
+    if (_panelOpen) return;
+    final choice = await _showPanel<PlaybackQuality>(
+      (context) => PlayerChoicesDialog<PlaybackQuality>(
         title: 'Качество видео',
         choices: session.availableQualities,
         selected: session.selectedQuality,
@@ -497,6 +517,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       return;
     }
     _episodeNumber = number;
+    widget.onEpisodeChanged?.call(number);
     _reload(resetBudget: true, preservePosition: false);
   }
 
@@ -508,14 +529,24 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     if (session == null) {
       return;
     }
-    final watched = ref.read(watchedEpisodesProvider(widget.animeId)).value ?? const <int>{};
-    _seekHold.stop();
-    final choice = await showAppActionSheet<int>(
-      context: context,
-      builder: (context) => PlayerEpisodeChoicesDialog(
-        episodes: session.episodes,
-        selected: _episodeNumber,
-        watchedEpisodeNumbers: {...watched, ...session.watchedEpisodes},
+    if (_panelOpen) return;
+    final anime = widget.animeId;
+    final selected = _episodeNumber;
+    final choice = await _showPanel<int>(
+      (_) => Consumer(
+        builder: (context, sheetRef, _) {
+          final account = sheetRef.watch(watchHistoryAccountProvider);
+          final canWatch = account != null && account == _historyAccount;
+          final history = canWatch ? sheetRef.watch(watchedEpisodesProvider(anime)) : null;
+          final confirmed = history != null && !history.isLoading ? history.asData?.value : null;
+
+          return PlayerEpisodeChoicesDialog(
+            episodes: session.episodes,
+            selected: selected,
+            watchedEpisodeNumbers: confirmed ?? const <int>{},
+            showWatched: canWatch,
+          );
+        },
       ),
     );
     if (_isCurrent(initializationId)) {
@@ -527,9 +558,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     _switchEpisode(choice);
   }
 
+  Future<T?> _showPanel<T>(WidgetBuilder builder) async {
+    _panelOpen = true;
+    _seekHold.stop();
+    _controlsTimer?.cancel();
+    try {
+      return await showAppActionSheet<T>(context: context, builder: builder);
+    } finally {
+      _panelOpen = false;
+    }
+  }
+
   void _scheduleControlsHide() {
     _controlsTimer?.cancel();
-    if (_seekHold.isActive) {
+    if (_panelOpen || _seekHold.isActive) {
       return;
     }
     _controlsTimer = Timer(const Duration(seconds: 4), _onControlsTimer);

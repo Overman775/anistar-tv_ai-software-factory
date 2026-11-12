@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -6,12 +5,11 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../support/test_app.dart';
 
 void main() {
-  test('all public Lucide symbols resolve to bundled SVG data', () async {
-    for (final symbol in AppIconType.values) {
-      final source = await rootBundle.loadString('packages/${Assets.package}/assets/icons/${symbol.assetName}.svg');
-      expect(source, contains('<svg'), reason: symbol.name);
-      expect(source, contains('viewBox="0 0 24 24"'), reason: symbol.name);
-    }
+  test('all public symbols map to distinct glyphs in the bundled Lucide font', () {
+    final glyphs = AppIconType.values.map((symbol) => symbol.glyph).toSet();
+    expect(glyphs, hasLength(AppIconType.values.length));
+    expect(glyphs.map((glyph) => glyph.fontFamily).toSet(), {'Lucide'});
+    expect(glyphs.map((glyph) => glyph.fontPackage).toSet(), {'lucide_icons_flutter'});
   });
 
   testWidgets('informative icons expose a label and decorative icons stay silent', (tester) async {
@@ -27,6 +25,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<Icon>(find.byWidgetPredicate((widget) => widget is Icon && widget.semanticLabel == 'Воспроизвести'))
+          .icon,
+      AppIconType.play.glyph,
+    );
     expect(find.bySemanticsLabel('Воспроизвести'), findsOneWidget);
     expect(find.bySemanticsLabel('check'), findsNothing);
     expect(tester.takeException(), isNull);

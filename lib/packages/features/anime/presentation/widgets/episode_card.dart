@@ -10,6 +10,7 @@ class EpisodeCard extends StatelessWidget {
     this.autofocus = false,
     this.focusNode,
     this.isWatched = false,
+    this.selected = false,
     this.episodeHeight,
     this.onFocusChanged,
     super.key,
@@ -17,6 +18,7 @@ class EpisodeCard extends StatelessWidget {
 
   final AnimeEpisode episode;
   final bool isWatched;
+  final bool selected;
   final double? episodeHeight;
   final VoidCallback onTap;
   final bool autofocus;
@@ -32,14 +34,14 @@ class EpisodeCard extends StatelessWidget {
       variant: MediaCardVariant.episode,
       label: caption.numberLabel,
       caption: caption.descriptiveTitle,
-      semanticLabel: caption.semanticLabel(isWatched: watched),
       imageUrl: episode.previewUri?.toString(),
       episodeHeight: episodeHeight,
       onPressed: onTap,
       autofocus: autofocus,
       focusNode: focusNode,
       onFocusChanged: onFocusChanged,
-      badges: [if (watched) const AppIcon(AppIconType.check, size: 20, color: AppPalette.success)],
+      selected: selected,
+      isWatched: watched,
     );
   }
 }

@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 // This regression inspects the UI kit's cached image implementation.
 // ignore: depend_on_referenced_packages
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -13,6 +14,71 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../support/test_app.dart';
 
 void main() {
+  for (final profile in AppDeviceProfile.values) {
+    testWidgets('$profile poster texture remains visible through both card badges', (tester) async {
+      const url = 'https://fixture.test/texture.png';
+      const width = 180;
+      const height = 270;
+      const light = Color(0xFFECBA80);
+      const dark = Color(0xFF608CC8);
+      const frame = ValueKey('textured-card');
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      for (var x = 0; x < width; x += 5) {
+        canvas.drawRect(
+          Rect.fromLTWH(x.toDouble(), 0, 5, height.toDouble()),
+          Paint()..color = x % 10 == 0 ? light : dark,
+        );
+      }
+      final picture = recorder.endRecording();
+      final texture = picture.toImageSync(width, height);
+      picture.dispose();
+      final cache = PaintingBinding.instance.imageCache;
+      const provider = CachedNetworkImageProvider(url);
+      cache.putIfAbsent(provider, () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: texture))));
+      addTearDown(() => cache.evict(provider));
+
+      final content = Center(
+        child: RepaintBoundary(
+          key: frame,
+          child: SizedBox(
+            width: width.toDouble(),
+            child: MediaCard(
+              label: 'Аниме',
+              imageUrl: url,
+              heroTag: frame,
+              ratingLabel: '9,2',
+              showBookmark: true,
+              onPressed: () => fail('Unexpected activation'),
+            ),
+          ),
+        ),
+      );
+      if (profile == AppDeviceProfile.tv) {
+        await pumpTvApp(tester, content, disableAnimations: true);
+      } else {
+        await pumpMobileApp(tester, content, disableAnimations: true);
+      }
+      await tester.pumpAndSettle();
+
+      final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(frame));
+      final snapshot = boundary.toImageSync();
+      final data = await tester.runAsync(() => snapshot.toByteData(format: ui.ImageByteFormat.rawStraightRgba));
+      snapshot.dispose();
+      final pixels = data ?? (throw StateError('No captured card pixels'));
+      const overlay = Color(0xA3101214);
+      for (final (x, y, source) in [(12, 13, light), (17, 13, dark), (132, 5, light), (137, 5, dark)]) {
+        final index = (y * width + x) * 4;
+        final expected = Color.alphaBlend(overlay, source);
+        final expectedRgb = expected.toARGB32();
+        expect(pixels.getUint8(index), closeTo((expectedRgb >> 16) & 0xFF, 2));
+        expect(pixels.getUint8(index + 1), closeTo((expectedRgb >> 8) & 0xFF, 2));
+        expect(pixels.getUint8(index + 2), closeTo(expectedRgb & 0xFF, 2));
+        expect(pixels.getUint8(index + 3), 255);
+      }
+    });
+  }
+
   for (final mode in ['success', 'error', 'reduced']) {
     testWidgets('retains decoded Hero poster while replacement loads: $mode', (tester) async {
       const sourceUrl = 'https://fixture.test/source.png';
@@ -153,6 +219,15 @@ void main() {
   });
 
   testWidgets('decode follows layout and DPR while retaining original disk cache for Hero', (tester) async {
+    const url = 'https://fixture.test/poster.jpg';
+    final cache = PaintingBinding.instance.imageCache;
+    for (final width in [400, 800]) {
+      final provider = ResizeImage(const CachedNetworkImageProvider(url), width: width);
+      final key = await provider.obtainKey(ImageConfiguration.empty);
+      final pending = Completer<ImageInfo>();
+      cache.putIfAbsent(key, () => OneFrameImageStreamCompleter(pending.future));
+      addTearDown(() => cache.evict(key));
+    }
     Future<void> mount(double width) => pumpTvApp(
       tester,
       MediaQuery(
@@ -161,7 +236,7 @@ void main() {
           child: SizedBox(
             width: width,
             height: 300,
-            child: const AppNetworkImage(imageUrl: 'https://fixture.test/poster.jpg'),
+            child: const AppNetworkImage(imageUrl: url),
           ),
         ),
       ),
