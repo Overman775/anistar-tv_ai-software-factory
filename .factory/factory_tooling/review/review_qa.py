@@ -7,32 +7,44 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from factory_tooling.review.review_contracts import SEVERITIES, VERDICTS, identity_errors
+from pydantic import TypeAdapter, ValidationError
+
+from factory_tooling.review.review_contracts import identity_errors
 from factory_tooling.review.review_evidence import validate_evidence
-from factory_tooling.review.review_lenses import (
-    validate_finding,
-)
+from factory_tooling.review.review_lenses import validate_finding
+from factory_tooling.review.review_shapes import QA, Dismissal, ManualMerge, SeverityOverride
+from factory_tooling.validation import validation_message
+
+QA_RESULT = TypeAdapter[QA](QA)
+DISMISSAL = TypeAdapter[Dismissal](Dismissal)
+MERGE = TypeAdapter[ManualMerge](ManualMerge)
+OVERRIDE = TypeAdapter[SeverityOverride](SeverityOverride)
 
 
 def apply_qa(
-    qa: dict[str, Any],
+    raw: object,
     findings: list[dict[str, Any]],
     manifest: dict[str, Any],
     diff: dict[str, Any],
     tool_commands: dict[str, int],
     registry: dict[str, list[str]],
 ) -> tuple[list[dict[str, Any]], str, list[str], list[str], str | None, list[dict[str, Any]]]:
-    errors = identity_errors(qa, manifest, "qa")
+    try:
+        qa = QA_RESULT.validate_python(raw)
+    except ValidationError as exc:
+        return (
+            findings,
+            "NEEDS_WORK",
+            [validation_message("Invalid qa", exc, QA_RESULT)],
+            [],
+            None,
+            [],
+        )
+    errors = identity_errors(dict(qa), manifest, "qa")
     if errors:
         return findings, "NEEDS_WORK", errors, [], None, []
-    verdict = qa.get("code_verdict")
-    if not isinstance(verdict, str) or verdict not in VERDICTS:
-        errors.append("qa: invalid code_verdict")
-        verdict = "NEEDS_WORK"
+    verdict = qa["code_verdict"]
     notes = qa.get("notes", [])
-    if not isinstance(notes, list) or any(not isinstance(note, str) for note in notes):
-        errors.append("qa: notes must be strings")
-        notes = []
     semantic_gap = qa.get("semantic_gap")
     if verdict == "RETHINK" and (not isinstance(semantic_gap, str) or not semantic_gap):
         errors.append("qa: RETHINK requires semantic_gap")
@@ -41,9 +53,6 @@ def apply_qa(
 
     gate_owners = {gate_id: lens for lens, gate_ids in registry.items() for gate_id in gate_ids}
     added_findings = qa.get("added_findings", [])
-    if not isinstance(added_findings, list):
-        errors.append("qa: added_findings must be list")
-        added_findings = []
     valid_added: list[dict[str, Any]] = []
     retained_ids = {item["finding_id"] for item in findings}
     for index, finding in enumerate(added_findings):
@@ -72,9 +81,6 @@ def apply_qa(
 
     by_id = {item["finding_id"]: item for item in findings}
     dismissals = qa.get("dismissals", [])
-    if not isinstance(dismissals, list):
-        errors.append("qa: dismissals must be list")
-        dismissals = []
     # Ambiguous or repeated decisions cannot erase a source finding.
     dismissal_counts = Counter(
         item["finding_id"]
@@ -83,21 +89,17 @@ def apply_qa(
     )
     dismissed: list[dict[str, Any]] = []
     dismissed_ids: set[str] = set()
-    for item in dismissals:
-        if not isinstance(item, dict) or not isinstance(item.get("finding_id"), str):
-            errors.append("qa: malformed dismissal")
+    for raw_item in dismissals:
+        try:
+            item = DISMISSAL.validate_python(raw_item)
+        except ValidationError as exc:
+            errors.append(validation_message("Invalid qa dismissal", exc, DISMISSAL))
             continue
         finding_id = item["finding_id"]
         target = by_id.get(finding_id)
-        reason, evidence = item.get("reason"), item.get("evidence")
+        reason, evidence = item["reason"], item["evidence"]
         if target is None or dismissal_counts[finding_id] != 1:
             errors.append("qa: dismissal target invalid or repeated")
-            continue
-        if not isinstance(reason, str) or not reason.strip():
-            errors.append("qa: dismissal requires reason")
-            continue
-        if not isinstance(evidence, list) or not evidence:
-            errors.append("qa: dismissal requires current evidence")
             continue
         evidence_errors = [
             error
@@ -126,57 +128,37 @@ def apply_qa(
     findings = [item for item in findings if item["finding_id"] not in dismissed_ids]
     by_id = {item["finding_id"]: item for item in findings}
     overrides = qa.get("severity_overrides", [])
-    if not isinstance(overrides, list):
-        errors.append("qa: severity_overrides must be list")
-        overrides = []
-    for item in overrides:
-        if not isinstance(item, dict):
-            errors.append("qa: malformed severity override")
+    for raw_item in overrides:
+        try:
+            override = OVERRIDE.validate_python(raw_item)
+        except ValidationError as exc:
+            errors.append(validation_message("Invalid qa severity override", exc, OVERRIDE))
             continue
-        finding_id, severity = item.get("finding_id"), item.get("severity")
-        target = by_id.get(finding_id) if isinstance(finding_id, str) else None
-        if target is None or not isinstance(severity, str) or severity not in SEVERITIES:
-            errors.append("qa: severity override target/value invalid")
+        target = by_id.get(override["finding_id"])
+        if target is None:
+            errors.append("qa: severity override target invalid")
             continue
-        if not isinstance(item.get("reason"), str) or not item["reason"]:
-            errors.append("qa: severity override requires reason")
-            continue
-        target["severity"] = item["severity"]
-        target["qa_severity_reason"] = item["reason"]
+        target["severity"] = override["severity"]
+        target["qa_severity_reason"] = override["reason"]
 
     merges = qa.get("manual_merges", [])
-    if not isinstance(merges, list):
-        errors.append("qa: manual_merges must be list")
-        merges = []
     consumed: set[str] = set()
     merged: list[dict[str, Any]] = []
     merge_ids: set[str] = set()
     severity_rank = {"medium": 0, "high": 1, "critical": 2}
-    for item in merges:
-        if not isinstance(item, dict):
-            errors.append("qa: malformed manual merge")
+    for raw_item in merges:
+        try:
+            merge = MERGE.validate_python(raw_item)
+        except ValidationError as exc:
+            errors.append(validation_message("Invalid qa manual merge", exc, MERGE))
             continue
-        source_ids, reason, candidate = (
-            item.get("source_ids"),
-            item.get("reason"),
-            item.get("finding"),
-        )
-        if (
-            not isinstance(source_ids, list)
-            or len(source_ids) < 2
-            or any(not isinstance(source_id, str) for source_id in source_ids)
-            or len(source_ids) != len(set(source_ids))
-            or any(source_id not in by_id or source_id in consumed for source_id in source_ids)
-            or (not isinstance(reason, str))
-            or (not reason)
-            or (not isinstance(candidate, dict))
+        source_ids, reason, candidate = merge["source_ids"], merge["reason"], merge["finding"]
+        if len(source_ids) != len(set(source_ids)) or any(
+            source_id not in by_id or source_id in consumed for source_id in source_ids
         ):
-            errors.append("qa: manual merge source_ids/reason/finding invalid")
+            errors.append("qa: manual merge source_ids invalid")
             continue
-        candidate_id = candidate.get("finding_id")
-        if not isinstance(candidate_id, str):
-            errors.append("qa: manual merge finding_id must be a string")
-            continue
+        candidate_id = candidate["finding_id"]
         if (
             candidate_id in merge_ids
             or candidate_id in dismissed_ids

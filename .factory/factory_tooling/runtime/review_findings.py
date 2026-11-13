@@ -5,15 +5,25 @@ from __future__ import annotations
 import re
 import time
 from copy import deepcopy
-from typing import Any
+from typing import cast
+
+from pydantic import TypeAdapter, ValidationError
 
 from factory_tooling.runtime.acceptance import ensure
 from factory_tooling.runtime.contracts import (
+    Finding,
+    FindingEvent,
+    FindingRecord,
+    FindingView,
     Node,
     Report,
     State,
     agent_key,
 )
+from factory_tooling.validation import validation_message
+
+RECORD = TypeAdapter[FindingRecord](FindingRecord)
+EVENT = TypeAdapter[FindingEvent](FindingEvent)
 
 ROLES = {"developer", "test-writer", "generalist", "doc-writer", "judge"}
 CLOSED = {"fixed", "dismissed"}
@@ -25,12 +35,26 @@ def review_tasks(state: State, task_id: str) -> list[str]:
     return [task_id, *task.get("depends_on", [])] if task["kind"] == "integration" else [task_id]
 
 
-def view(state: State, task_id: str, *, include_dependencies: bool = True) -> dict[str, Any]:
-    result = {}
+def view(
+    state: State, task_id: str, *, include_dependencies: bool = True
+) -> dict[str, FindingView]:
+    result: dict[str, FindingView] = {}
     integration = state["graph"]["tasks"][task_id]["kind"] == "integration"
     for tid in review_tasks(state, task_id) if include_dependencies else [task_id]:
         for fid, item in state.get("review_findings", {}).get(tid, {}).items():
-            value = {k: deepcopy(v) for k, v in item.items() if k != "history"}
+            value: FindingView = {
+                "id": item["id"],
+                "status": item["status"],
+                "blocking": item["blocking"],
+                "owner_role": item["owner_role"],
+                "owner_node_id": item["owner_node_id"],
+                "summary": item["summary"],
+                "evidence": item["evidence"],
+            }
+            if "reviewed" in item:
+                value["reviewed"] = deepcopy(item["reviewed"])
+            if "task_id" in item:
+                value["task_id"] = item["task_id"]
             if integration:
                 value.update({"task_id": tid, "id": fid})
             result[f"{tid}:{fid}" if integration else fid] = value
@@ -43,8 +67,6 @@ def consistent(report: Report, review: bool = False) -> None:
         report.get("stage_result", ""),
         report.get("verdict"),
     )
-    if not (isinstance(stage, str)):
-        raise ValueError("Invalid stage_result")
     if stage.startswith("FAIL") or stage == "NEEDS_WORK":
         ensure(outcome == "FAIL", "Contradictory stage_result/outcome")
     if stage.startswith("BLOCKED") or stage == "RETHINK":
@@ -62,7 +84,7 @@ def consistent(report: Report, review: bool = False) -> None:
             raise ValueError("Contradictory verdict/outcome")
 
 
-def _new_finding(state: State, node: Node, tid: str, update: dict[str, Any]) -> dict[str, Any]:
+def _new_finding(state: State, node: Node, tid: str, update: Finding) -> FindingRecord:
     """Resolve an unambiguous writer and create an independent registry entry."""
     writers = [
         n
@@ -87,9 +109,10 @@ def _new_finding(state: State, node: Node, tid: str, update: dict[str, Any]) -> 
     ensure(owner in {n["id"] for n in writers}, "Invalid finding owner_node_id")
     if not (isinstance(update.get("summary"), str) and update["summary"].strip()):
         raise ValueError("Missing finding summary")
-    item = deepcopy(update)
-    item.update({"owner_node_id": owner, "history": []})
-    return item
+    try:
+        return RECORD.validate_python({**update, "owner_node_id": owner, "history": []})
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid new finding", exc, RECORD)) from None
 
 
 def apply(state: State, node: Node, report: Report) -> None:
@@ -101,8 +124,6 @@ def apply(state: State, node: Node, report: Report) -> None:
     registry = deepcopy(state.get("review_findings", {}))
     allowed = review_tasks(state, node["task"]) if reviewer else [node["task"]]
     updates = report.get("finding_updates", [])
-    if not (isinstance(updates, list) and all(isinstance(u, dict) for u in updates)):
-        raise ValueError("Invalid finding_updates")
     incoming = report.get("findings", []) if reviewer else updates
     ensure(not reviewer or not updates, "Reviewer uses findings, not finding_updates")
     seen = set()
@@ -114,11 +135,7 @@ def apply(state: State, node: Node, report: Report) -> None:
         )
         if not (isinstance(tid, str) and tid in allowed):
             raise ValueError("Finding task must be this task or an integration predecessor")
-        if not (isinstance(status, str)):
-            raise ValueError("Invalid review finding status")
-        if not (
-            isinstance(fid, str) and re.fullmatch("REV-\\d+", fid) and ((tid, fid) not in seen)
-        ):
+        if not (fid and re.fullmatch("REV-\\d+", fid) and ((tid, fid) not in seen)):
             raise ValueError("Invalid/duplicate review finding ID")
         seen.add((tid, fid))
         items = registry.setdefault(tid, {})
@@ -127,6 +144,7 @@ def apply(state: State, node: Node, report: Report) -> None:
         if not (isinstance(evidence, str) and evidence.strip()):
             raise ValueError("Review finding needs evidence")
         if reviewer:
+            finding = cast(Finding, update)
             ensure(
                 review or status == "open",
                 "Verification may discover findings; closure requires review",
@@ -137,11 +155,11 @@ def apply(state: State, node: Node, report: Report) -> None:
                 ensure(
                     type(update.get("blocking")) is bool, "Review finding needs boolean blocking"
                 )
-                old = _new_finding(state, node, tid, update)
+                old = _new_finding(state, node, tid, finding)
                 items[fid] = old
             for key in ("blocking", "owner_role", "owner_node_id", "summary"):
                 ensure(
-                    key not in update or update[key] == old[key],
+                    key not in finding or dict(finding)[key] == dict(old)[key],
                     "Cannot rewrite finding identity or severity",
                 )
             if status == "fixed":
@@ -167,19 +185,22 @@ def apply(state: State, node: Node, report: Report) -> None:
         ensure(
             set(target["scope"]) <= set(report["files"]), "Review lacks finding task file evidence"
         )
-        old.update({"status": status, "evidence": evidence})
-        event = dict(
-            status=status,
-            evidence=evidence,
-            node_id=node["id"],
-            agent=node["agent"],
-            dispatch_id=state["nodes"][node["id"]]["dispatch_id"],
-            at=time.time(),
-            revision=state["revision"],
-            files={p: report["files"][p] for p in target["scope"]},
-            source_hash=state["graph"]["sources"][target["source"]]["hash"],
-            review_task_id=node["task"],
+        event = EVENT.validate_python(
+            dict(
+                status=status,
+                evidence=evidence,
+                node_id=node["id"],
+                agent=node["agent"],
+                dispatch_id=state["nodes"][node["id"]]["dispatch_id"],
+                at=time.time(),
+                revision=state["revision"],
+                files={p: report["files"][p] for p in target["scope"]},
+                source_hash=state["graph"]["sources"][target["source"]]["hash"],
+                review_task_id=node["task"],
+            )
         )
+        old["status"] = event["status"]
+        old["evidence"] = event["evidence"]
         old["history"].append(event)
         if reviewer:
             old["reviewed"] = event

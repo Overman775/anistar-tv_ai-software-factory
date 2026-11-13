@@ -12,13 +12,9 @@ from factory_tooling.planning.plan_document import (
     DECISION_REFERENCE_RE,
     EMPTY_VALUES,
     EXTERNAL_ID_RE,
-    HANDOFFS,
     NO_MATERIAL_DECISIONS,
-    PLAN_ID_RE,
-    PLAN_STATES,
     PREAUTHORIZED_CONTINUATIONS,
     REQUIRED_HEADINGS,
-    SOURCES,
     declared_capabilities,
     error,
     extract_section,
@@ -296,19 +292,9 @@ def validate_api_evidence(text: str) -> list[dict[str, str]]:
 
 def validate_metadata(metadata: dict[str, str], phase: str) -> list[dict[str, str]]:
     errors: list[dict[str, str]] = []
-    if not PLAN_ID_RE.fullmatch(metadata.get("plan_id", "")):
-        errors.append(error("PLAN_ID_INVALID", "plan_id must be stable kebab-case"))
     revision = parse_revision(metadata.get("revision", ""))
     if revision is None:
         errors.append(error("REVISION_INVALID", "revision must be integer >= 1"))
-    if metadata.get("plan_state") not in PLAN_STATES:
-        errors.append(error("PLAN_STATE_INVALID", "User-reviewable plan must use PLAN_READY"))
-    if metadata.get("source") not in SOURCES:
-        errors.append(error("SOURCE_INVALID", "source must be request|spec|local|mixed"))
-    if metadata.get("handoff_recommendation") not in HANDOFFS:
-        errors.append(
-            error("HANDOFF_INVALID", "handoff_recommendation must be direct|decompose|either")
-        )
 
     status = metadata.get("status")
     approved = metadata.get("approved_revision")
@@ -326,8 +312,6 @@ def validate_metadata(metadata: dict[str, str], phase: str) -> list[dict[str, st
                     "Approved plan needs PLAN_READY and matching revision",
                 )
             )
-    else:
-        errors.append(error("STATUS_INVALID", "status must be draft|approved"))
 
     if phase == "draft" and status != "draft":
         errors.append(error("PHASE_STATUS_MISMATCH", "Draft phase requires status: draft"))

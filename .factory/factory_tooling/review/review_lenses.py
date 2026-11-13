@@ -6,60 +6,46 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from factory_tooling.project.profile_io import validate_snapshot as validate_snapshot
 from factory_tooling.review.review_contracts import (
-    CONFIDENCES,
-    GATE_STATUSES,
-    LENSES,
-    SEVERITIES,
     UNIVERSAL_GATES,
     identity_errors,
 )
 from factory_tooling.review.review_evidence import validate_evidence
+from factory_tooling.review.review_shapes import Finding, LensGate, LensResult
+from factory_tooling.validation import validation_message
+
+FINDING = TypeAdapter[Finding](Finding)
+LENS_GATE = TypeAdapter[LensGate](LensGate)
+LENS_RESULT = TypeAdapter[LensResult](LensResult)
 
 
 def validate_finding(
-    finding: Any,
+    raw: object,
     lens: str,
     owned_gates: set[str],
     manifest: dict[str, Any],
     diff: dict[str, Any],
     tool_commands: dict[str, int],
 ) -> tuple[dict[str, Any] | None, str | None]:
-    if not isinstance(finding, dict):
-        return None, "finding must be object"
-    required_text = ("finding_id", "rule", "description", "fix")
-    if any(
-        not isinstance(finding.get(field), str) or not finding[field] for field in required_text
-    ):
-        return None, "finding required text missing"
+    try:
+        finding = FINDING.validate_python(raw)
+    except ValidationError as exc:
+        return None, validation_message("Invalid finding", exc, FINDING)
     gate_id = finding.get("gate_id")
-    if gate_id is not None and (not isinstance(gate_id, str) or gate_id not in owned_gates):
+    if gate_id is not None and gate_id not in owned_gates:
         return None, "finding gate not owned by lens"
     missing = finding.get("kind") == "missing-requirement"
     if not missing and finding.get("path") not in manifest.get("scope_files", []):
         return None, "finding path outside scope"
-    severity, confidence = finding.get("severity"), finding.get("confidence")
-    if (
-        not isinstance(severity, str)
-        or severity not in SEVERITIES
-        or not isinstance(confidence, str)
-        or confidence not in CONFIDENCES
-    ):
-        return None, "finding severity/confidence invalid"
-    if "rule_id" in finding:
-        return None, "rule_id removed; use criterion or a free finding"
     if missing:
         if finding.get("path") is not None or finding.get("line") is not None:
             return None, "missing requirement must not fabricate a source location"
-        if (
-            not isinstance(finding.get("investigation"), str)
-            or not finding["investigation"].strip()
-        ):
+        if "investigation" not in finding:
             return None, "missing requirement needs investigation explanation"
-    evidence = finding.get("evidence")
-    if not isinstance(evidence, list) or not evidence:
-        return None, "finding evidence missing"
+    evidence = finding["evidence"]
     for item in evidence:
         ok, reason = validate_evidence(item, manifest, diff, tool_commands)
         if not ok:
@@ -84,9 +70,10 @@ def validate_finding(
         and item.get("path") == finding["path"]
         for item in evidence
     )
-    requirement = any(e.get("kind") == "requirement" for e in evidence)
+    requirement = any(isinstance(e, dict) and e.get("kind") == "requirement" for e in evidence)
     inspection = any(
-        e.get("kind") in {"inspection", "source", "tool", "file_operation"} for e in evidence
+        isinstance(e, dict) and e.get("kind") in {"inspection", "source", "tool", "file_operation"}
+        for e in evidence
     )
     if missing and not (requirement and inspection):
         return None, "missing requirement needs requirement and investigation evidence"
@@ -95,7 +82,7 @@ def validate_finding(
         or (line is None and (matching_binary or matching_operation))
     ):
         return None, "finding path/line lacks matching source, binary, or file operation evidence"
-    normalized = deepcopy(finding)
+    normalized = dict(deepcopy(finding))
     normalized.setdefault("gate_id", None)
     normalized["found_by"] = [lens]
     normalized["source_ids"] = [finding["finding_id"]]
@@ -109,44 +96,31 @@ def validate_lens(
     tool_commands: dict[str, int],
     registry: dict[str, list[str]],
 ) -> tuple[str | None, list[dict[str, Any]], list[str], list[str]]:
-    if not isinstance(value, dict):
-        return None, [], ["reviewer result must be object"], []
-    lens = value.get("lens")
-    errors = identity_errors(value, manifest, f"lens {lens}")
-    if not isinstance(lens, str) or lens not in LENSES:
-        return None, [], [*errors, "lens: unknown lens"], []
+    try:
+        result = LENS_RESULT.validate_python(value)
+    except ValidationError as exc:
+        return None, [], [validation_message("Invalid lens result", exc, LENS_RESULT)], []
+    lens = result["lens"]
+    errors = identity_errors(dict(result), manifest, f"lens {lens}")
     identity_valid = not errors
-    if value.get("done_signal") != "COMPLETE":
-        errors.append(f"lens {lens}: done_signal must be COMPLETE")
-    gates = value.get("gates")
-    findings = value.get("findings")
-    if not isinstance(gates, list):
-        errors.append(f"lens {lens}: gates must be list")
-        gates = []
-    if not isinstance(findings, list):
-        errors.append(f"lens {lens}: findings must be list")
-        findings = []
+    gates = []
+    for raw_gate in result["gates"]:
+        try:
+            gates.append(LENS_GATE.validate_python(raw_gate))
+        except ValidationError as exc:
+            errors.append(validation_message(f"Invalid lens {lens} gate", exc, LENS_GATE))
+    findings = result["findings"]
     expected = set(registry[lens])
     universal = set(UNIVERSAL_GATES[lens])
     gate_status: dict[str, str] = {}
-    gate_ids = [
-        gate["gate_id"]
-        for gate in gates
-        if isinstance(gate, dict) and isinstance(gate.get("gate_id"), str)
-    ]
+    gate_ids = [gate["gate_id"] for gate in gates]
     duplicates = {gate_id for gate_id, count in Counter(gate_ids).items() if count > 1}
     if duplicates:
         errors.append(f"lens {lens}: duplicate gates {sorted(str(item) for item in duplicates)}")
     for gate in gates:
-        if not isinstance(gate, dict):
-            errors.append(f"lens {lens}: malformed gate")
-            continue
-        gate_id, status = gate.get("gate_id"), gate.get("status")
-        if not isinstance(gate_id, str) or gate_id not in expected:
+        gate_id, status = gate["gate_id"], gate["status"]
+        if gate_id not in expected:
             errors.append(f"lens {lens}: foreign gate {gate_id}")
-            continue
-        if not isinstance(status, str) or status not in GATE_STATUSES:
-            errors.append(f"lens {lens}: gate {gate_id} invalid status")
             continue
         gate_status[gate_id] = status
         if (
@@ -158,7 +132,7 @@ def validate_lens(
                 "AcceptanceReviewer: no grounded requirements; SYS-INTENT must be NOT_RUN"
             )
         if status in {"NOT_APPLICABLE", "NOT_RUN"}:
-            if not isinstance(gate.get("reason"), str) or not gate["reason"]:
+            if "reason" not in gate:
                 errors.append(f"lens {lens}: gate {gate_id} requires reason")
             if status == "NOT_APPLICABLE" and gate_id in universal:
                 errors.append(f"lens {lens}: universal gate {gate_id} cannot be NOT_APPLICABLE")
@@ -166,7 +140,7 @@ def validate_lens(
                 errors.append(f"lens {lens}: gate {gate_id} NOT_RUN")
             continue
         evidence = gate.get("evidence")
-        if not isinstance(evidence, list) or not evidence:
+        if not evidence:
             errors.append(f"lens {lens}: gate {gate_id} requires evidence")
             continue
         for item in evidence:
@@ -194,7 +168,9 @@ def validate_lens(
                 )
                 continue
             valid_findings.append(normalized)
-    for gate_id, status in gate_status.items():
-        if status == "FINDING" and not any(item["gate_id"] == gate_id for item in valid_findings):
+    for gate_id, recorded_status in gate_status.items():
+        if recorded_status == "FINDING" and not any(
+            item["gate_id"] == gate_id for item in valid_findings
+        ):
             errors.append(f"lens {lens}: gate {gate_id} FINDING has no valid finding")
     return lens, valid_findings, errors, gate_ids

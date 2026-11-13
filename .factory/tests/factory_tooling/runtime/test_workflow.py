@@ -18,7 +18,7 @@ from factory_tooling.adapters.acpx_adapter import (
     run_operation,
 )
 from factory_tooling.runtime import report_history
-from factory_tooling.runtime.contracts import State, agent_key
+from factory_tooling.runtime.contracts import FindingRecord, State, agent_key
 from factory_tooling.runtime.memory import read_task, resolve_evidence
 from factory_tooling.runtime.workflow import Ledger
 from factory_tooling.runtime.workflow_config import load_config
@@ -303,14 +303,14 @@ class WorkflowTests(unittest.TestCase):
                 runner="native"
             )
         )
-        with self.assertRaisesRegex(Invalid, "Unknown profile variant fields"):
+        with self.assertRaisesRegex(Invalid, r"profiles.*variants.*extra field"):
             load_config(p)
 
     def test_malformed_capabilities_rejected(self) -> None:
         p = self.config_file(
             lambda c: c["profiles"]["developer"]["capabilities"].update(edit="false")
         )
-        with self.assertRaisesRegex(Invalid, "boolean capabilities"):
+        with self.assertRaisesRegex(Invalid, r"capabilities.edit: .*boolean"):
             load_config(p)
 
     def test_strict_enforcement_blocks_before_dispatch(self) -> None:
@@ -372,7 +372,7 @@ class WorkflowTests(unittest.TestCase):
 
                 shutil.rmtree(self.root / "bundle", ignore_errors=True)
                 path = self.config_file(mutate)
-                with self.assertRaisesRegex(Invalid, "Missing router policy"):
+                with self.assertRaisesRegex(Invalid, "router"):
                     load_config(path)
 
     def test_configured_router_reaches_dispatch_and_drift_blocks_it(self) -> None:
@@ -561,8 +561,21 @@ class WorkflowTests(unittest.TestCase):
         self.start("write-label")
         self.ledger.finish("write-label", self.report("write-label", summary="New run"))
         state = self.ledger.read()
+        finding: FindingRecord = {
+            "id": "REV-1",
+            "status": "open",
+            "blocking": True,
+            "owner_role": "generalist",
+            "owner_node_id": "write-label",
+            "summary": "Current run finding",
+            "evidence": "Inspected change",
+            "history": [],
+        }
         state["review_findings"] = {
-            "label": {"F-1": {"status": "open"}, "F-2": {"status": "fixed"}}
+            "label": {
+                "REV-1": {**finding, "id": "REV-1", "status": "open"},
+                "REV-2": {**finding, "id": "REV-2", "status": "fixed"},
+            }
         }
         self.ledger.save(state, "fixture_findings")
         active_bytes = self.ledger.path.read_bytes()
@@ -571,7 +584,8 @@ class WorkflowTests(unittest.TestCase):
         archived = read_task(self.root, "label", run_id=archived_id)
         self.assertEqual(active["run_id"], active_id)
         self.assertEqual(active["steps"]["write-label"]["report"]["summary"], "New run")
-        self.assertEqual(active["open_findings"], {"F-1": {"status": "open"}})
+        self.assertEqual(list(active["open_findings"]), ["REV-1"])
+        self.assertEqual(active["open_findings"]["REV-1"]["status"], "open")
         self.assertEqual(archived["run_id"], archived_id)
         self.assertEqual(archived["run_status"], "completed")
         self.assertEqual(archived, before_next_run)
@@ -590,20 +604,20 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "Symlink"):
             self.ledger.read()
 
-    def test_legacy_memory_evidence_resolution_is_safe(self) -> None:
+    def test_memory_evidence_resolution_is_safe(self) -> None:
         evidence = self.root / ".factory/memory/history/run-example/evidence.txt"
         evidence.parent.mkdir(parents=True)
         evidence.write_text("saved evidence", encoding="utf-8")
-        legacy = ".ai-pipeline/history/run-example/evidence.txt"
-        self.assertEqual(resolve_evidence(self.root, legacy).read_text(), "saved evidence")
+        reference = ".factory/memory/history/run-example/evidence.txt"
+        self.assertEqual(resolve_evidence(self.root, reference).read_text(), "saved evidence")
         with self.assertRaises(Invalid):
-            resolve_evidence(self.root, ".ai-pipeline/../outside")
+            resolve_evidence(self.root, ".factory/memory/../outside")
         with self.assertRaises(Invalid):
-            resolve_evidence(self.root, ".ai-pipeline/history/missing")
+            resolve_evidence(self.root, ".factory/memory/history/missing")
         evidence.unlink()
         evidence.symlink_to(self.root / "lib/example.dart")
         with self.assertRaises(Invalid):
-            resolve_evidence(self.root, legacy)
+            resolve_evidence(self.root, reference)
 
     def test_memory_distinguishes_missing_run_task_and_invalid_state(self) -> None:
         with self.assertRaisesRegex(Invalid, "Run not found"):
@@ -816,7 +830,7 @@ class WorkflowTests(unittest.TestCase):
             path = self.config_file(mutate)
             with (
                 self.subTest(field=field),
-                self.assertRaisesRegex(Invalid, "Unsupported connection field"),
+                self.assertRaisesRegex(Invalid, r"acpx.connections.\*.*extra field"),
             ):
                 load_config(path)
             import shutil
@@ -827,7 +841,7 @@ class WorkflowTests(unittest.TestCase):
         path = self.config_file(
             lambda c: c["acpx"]["connections"]["zcode"].update(args="server --option")
         )
-        with self.assertRaisesRegex(Invalid, "argv list"):
+        with self.assertRaisesRegex(Invalid, r"args: .*list"):
             load_config(path)
 
     def test_acp_command_preserves_provider_qualified_model_id(self) -> None:
@@ -1158,6 +1172,7 @@ class WorkflowTests(unittest.TestCase):
                     "kind": "approved_plan",
                     "execution_mode": "single_task",
                     "selected_scope": "all",
+                    "acceptance": self.g["sources"]["request"]["acceptance"],
                 },
             )
 
@@ -1269,7 +1284,7 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "BLOCKED_NO_APPROVED_PLAN"):
             lock_source(self.root, source)
         source["approval_evidence"] = "invented"
-        with self.assertRaisesRegex(Invalid, "unknown approval"):
+        with self.assertRaisesRegex(Invalid, "approval_evidence"):
             lock_source(self.root, source)
 
     def test_terminal_run_cannot_mutate_or_break_cleanup(self) -> None:
@@ -1350,7 +1365,9 @@ class WorkflowTests(unittest.TestCase):
     def test_commands_cannot_run_in_unreserved_write_stage(self) -> None:
         self.init()
         self.start("write-label")
-        commands = [{"kind": "tests", "cwd": ".", "command": "flutter test", "exit_code": 0}]
+        commands = [
+            {"id": "test", "kind": "tests", "cwd": ".", "command": "flutter test", "exit_code": 0}
+        ]
         with self.assertRaisesRegex(Invalid, "without project-checks"):
             self.ledger.finish("write-label", self.report("write-label", checks=commands))
 

@@ -3,16 +3,33 @@
 from __future__ import annotations
 
 import re
+from typing import Annotated, Literal
 
-REQUIRED_METADATA = (
-    "plan_id",
-    "revision",
-    "plan_state",
-    "status",
-    "approved_revision",
-    "source",
-    "handoff_recommendation",
-)
+from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class PlanMetadata(TypedDict):
+    plan_id: Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
+    revision: str
+    plan_state: Literal["PLAN_READY"]
+    status: Literal["draft", "approved"]
+    approved_revision: str
+    source: Literal["request", "spec", "local", "mixed"]
+    handoff_recommendation: Literal["direct", "decompose", "either"]
+
+
+METADATA = TypeAdapter[PlanMetadata](PlanMetadata)
+REQUIRED_METADATA = tuple(PlanMetadata.__annotations__)
+
+METADATA_ERRORS = {
+    "plan_id": "PLAN_ID_INVALID",
+    "plan_state": "PLAN_STATE_INVALID",
+    "status": "STATUS_INVALID",
+    "source": "SOURCE_INVALID",
+    "handoff_recommendation": "HANDOFF_INVALID",
+}
 
 
 def parse_revision(value: str) -> int | None:
@@ -120,13 +137,20 @@ def parse_metadata(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
             errors.append(error("METADATA_DUPLICATE", f"Duplicate metadata: {key}"))
         metadata[key] = value
 
-    for key in REQUIRED_METADATA:
-        if key not in metadata:
-            errors.append(error("METADATA_MISSING", f"Missing metadata: {key}"))
-    for key in metadata:
-        if key not in REQUIRED_METADATA:
-            code = "FORBIDDEN_METADATA" if key in FORBIDDEN_METADATA else "METADATA_EXTRA"
-            errors.append(error(code, f"Metadata is not canonical: {key}"))
+    try:
+        METADATA.validate_python(metadata)
+    except ValidationError as exc:
+        for issue in exc.errors(include_input=False, include_context=False, include_url=False):
+            key = str(issue["loc"][0])
+            if issue["type"] == "missing":
+                errors.append(error("METADATA_MISSING", f"Missing metadata: {key}"))
+            elif issue["type"] == "extra_forbidden":
+                code = "FORBIDDEN_METADATA" if key in FORBIDDEN_METADATA else "METADATA_EXTRA"
+                errors.append(error(code, f"Metadata is not canonical: {key}"))
+            else:
+                errors.append(
+                    error(METADATA_ERRORS.get(key, "METADATA_INVALID"), f"{key}: {issue['msg']}")
+                )
     return metadata, errors
 
 

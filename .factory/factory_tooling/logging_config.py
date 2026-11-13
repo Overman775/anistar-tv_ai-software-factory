@@ -14,7 +14,10 @@ import uuid
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Annotated, Any, Literal, NotRequired, Protocol
+
+from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 MAX_RECORDS = 500
 MAX_RECORD_BYTES = 1024
@@ -298,45 +301,46 @@ def finish(handler: Journal | None, *, failed: bool = False) -> None:
         handler.close()
 
 
-def valid_record(record: object) -> bool:
-    if not isinstance(record, dict):
-        return False
-    mandatory = {"time", "event", "operation", "level", "invocation_id"}
-    if not mandatory <= record.keys() or not record.keys() <= mandatory | FIELDS:
-        return False
-    if any(
-        not isinstance(record.get(k), str) or not IDENTIFIER.fullmatch(record[k])
-        for k in mandatory - {"time", "level"}
-    ):
-        return False
-    if any(
-        not isinstance(record[k], str) or not IDENTIFIER.fullmatch(record[k])
-        for k in FIELDS
-        if k in record
-    ):
+JournalId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.:-]{1,96}$")]
+InvocationId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+RunId = Annotated[str, StringConstraints(pattern=r"^run-[0-9a-f]{12}$")]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class JournalRecord(TypedDict):
+    time: str
+    event: JournalId
+    operation: JournalId
+    level: Literal["INFO", "ERROR"]
+    invocation_id: InvocationId
+    run_id: NotRequired[RunId]
+    task_id: NotRequired[JournalId]
+    node_id: NotRequired[JournalId]
+    dispatch_id: NotRequired[InvocationId]
+    execution_id: NotRequired[InvocationId]
+    outcome: NotRequired[JournalId]
+    error_code: NotRequired[JournalId]
+    transport_operation: NotRequired[JournalId]
+
+
+JOURNAL_RECORD = TypeAdapter[JournalRecord](JournalRecord)
+
+
+def valid_record(raw: object) -> bool:
+    try:
+        record = JOURNAL_RECORD.validate_python(raw)
+    except ValidationError:
         return False
     if record["event"] not in EVENTS or record["operation"] not in OPERATIONS:
         return False
-    if not isinstance(record["level"], str) or record["level"] not in {"INFO", "ERROR"}:
-        return False
-    for key, choices in (
-        ("outcome", OUTCOMES),
-        ("error_code", ERRORS),
-        ("transport_operation", TRANSPORT_OPERATIONS),
+    for value, choices in (
+        (record.get("outcome"), OUTCOMES),
+        (record.get("error_code"), ERRORS),
+        (record.get("transport_operation"), TRANSPORT_OPERATIONS),
     ):
-        if key in record and record[key] not in choices:
-            return False
-    for key, pattern in (
-        ("run_id", r"run-[0-9a-f]{12}"),
-        ("invocation_id", r"[0-9a-f]{32}"),
-        ("dispatch_id", r"[0-9a-f]{32}"),
-        ("execution_id", r"[0-9a-f]{32}"),
-    ):
-        if key in record and not re.fullmatch(pattern, record[key]):
+        if value is not None and value not in choices:
             return False
     try:
-        if not isinstance(record["time"], str):
-            return False
         datetime.fromisoformat(record["time"])
     except ValueError:
         return False

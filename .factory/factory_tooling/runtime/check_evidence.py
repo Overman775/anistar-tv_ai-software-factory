@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from factory_tooling.runtime.contracts import Check, ExecutionReceipt, State
+from factory_tooling.runtime.contracts import CheckResult, ExecutionReceipt, State
 from factory_tooling.runtime.workflow_core import Invalid, digest, relative, require, snapshot
 
 
@@ -10,7 +10,7 @@ def check_receipts(
     root: Path,
     state: State,
     node_id: str,
-    checks: list[Check],
+    checks: list[CheckResult],
     *,
     complete: bool = True,
     require_pass: bool = True,
@@ -106,7 +106,7 @@ def check_output(root: Path, record: ExecutionReceipt) -> None:
     )
 
 
-def check_generated(root: Path, state: State, node_id: str, checks: list[Check]) -> None:
+def check_generated(root: Path, state: State, node_id: str, checks: list[CheckResult]) -> None:
     """An author receipt remains current on explicit generator inputs and outputs."""
     dispatch = state["nodes"][node_id]
     for check in checks:

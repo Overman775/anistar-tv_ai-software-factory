@@ -56,10 +56,9 @@ class EscalationTests(unittest.TestCase):
         if start:
             state = f.ledger.read()
             agent = next(agent_key(n) for n in state["graph"]["nodes"] if n["id"] == "write-label")
+            session = state["sessions"].get(agent)
             handle = (
-                state["sessions"]
-                .get(agent, {})
-                .get("handle", "writer-" + str(len(state.get("corrections", []))))
+                session["handle"] if session else "writer-" + str(len(state.get("corrections", [])))
             )
             f.start("write-label", handle)
             f.ledger.finish("write-label", f.report("write-label"))
@@ -265,7 +264,7 @@ class EscalationTests(unittest.TestCase):
         f = self.f
         f.init()
         request = self.fail_verification("BLOCKED", "BLOCKED")
-        with self.assertRaisesRegex(Invalid, "Unknown diagnosis"):
+        with self.assertRaisesRegex(Invalid, "kind: Input should be"):
             f.ledger.correct("write-label", {**request, "kind": "complexity"})
         self.assertEqual({}, f.ledger.read()["counters"])
 

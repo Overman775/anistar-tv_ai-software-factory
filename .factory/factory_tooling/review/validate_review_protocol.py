@@ -9,6 +9,8 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from pydantic import TypeAdapter
+
 from factory_tooling.gates.catalog import core_result
 from factory_tooling.gates.gate_contract import digest, evidence
 from factory_tooling.review.render_review_report import render_report
@@ -36,6 +38,9 @@ from factory_tooling.review.review_lenses import (
 from factory_tooling.review.review_qa import (
     apply_qa,
 )
+from factory_tooling.review.review_shapes import ProtocolResult
+
+PROTOCOL_RESULT = TypeAdapter[ProtocolResult](ProtocolResult)
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,7 +61,15 @@ def validate_protocol(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         manifest = {}
         errors.append(f"manifest: {exc}")
-    errors.extend(validate_manifest(manifest))
+    from factory_tooling.review.review_contracts import parse_manifest
+
+    try:
+        manifest = parse_manifest(manifest)
+    except ValueError as exc:
+        manifest = {}
+        errors.append(str(exc))
+    if manifest:
+        errors.extend(validate_manifest(manifest))
     diff, diff_errors = load_diff_context(manifest)
     errors.extend(diff_errors)
     tools, tool_commands, tool_errors, tool_failures = validate_tool_results(
@@ -187,7 +200,7 @@ def validate_protocol(args: argparse.Namespace) -> tuple[dict[str, Any], int]:
             )
         ],
     )
-    return result, 2 if errors else 0
+    return dict(PROTOCOL_RESULT.validate_python(result)), 2 if errors else 0
 
 
 def main() -> int:

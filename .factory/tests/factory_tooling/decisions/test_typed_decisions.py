@@ -7,6 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from factory_tooling.decisions.decision_contract import (
+    DEFINITION,
     preserve_obligations,
     validate_answer,
     validate_answers,
@@ -148,7 +149,7 @@ class TypedDecisionTests(unittest.TestCase):
 
     def test_all_supplied_answers_checked_even_when_unused(self) -> None:
         p = policy()
-        p["decisions"] = [definition("choice", 0.6)]
+        p["decisions"] = [DEFINITION.validate_python(definition("choice", 0.6))]
         task: dict[str, Any] = dict(
             scope=["src/a.py"],
             policy_decisions={
@@ -166,14 +167,14 @@ class TypedDecisionTests(unittest.TestCase):
     def test_check_references_reject_choice_and_score(self) -> None:
         for kind in ("choice", "score"):
             p = policy()
-            p["decisions"] = [definition(kind)]
+            p["decisions"] = [DEFINITION.validate_python(definition(kind))]
             p["gates"][0]["checks"][0]["decision"] = "d"
             with self.assertRaisesRegex(ValueError, "must be predicate"):
                 validate(p)
 
     def test_predicate_controls_checks_after_threshold_validation(self) -> None:
         p = policy()
-        p["decisions"] = [definition("predicate")]
+        p["decisions"] = [DEFINITION.validate_python(definition("predicate"))]
         p["gates"][0]["checks"][0]["decision"] = "d"
         validate(p)
         for probability, count in [(0.1, 0), (0.9, 1)]:

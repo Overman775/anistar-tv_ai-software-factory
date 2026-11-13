@@ -4,19 +4,85 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired
+
+from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 from factory_tooling.context import context
-from factory_tooling.runtime import escalation, finish_requirements, report_history, review_findings
+from factory_tooling.runtime import (
+    escalation,
+    finish_requirements,
+    report_history,
+    review_findings,
+)
 from factory_tooling.runtime.contracts import (
+    FindingView,
+    LockedSource,
     Node,
+    ReportRef,
+    ReportSummary,
     State,
     Task,
     agent_key,
 )
+from factory_tooling.validation import validation_message
 
 
-def dependency_results(state: State, node: Node) -> dict[str, Any]:
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class DependencyResult(TypedDict):
+    status: str
+    task_id: str
+    report: NotRequired[ReportSummary]
+    report_ref: NotRequired[ReportRef]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class IntegrationOwner(TypedDict):
+    task_id: str
+    role: str
+    owns: list[str]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ImplementPacket(context.ContextPacket):
+    run_id: str
+    node_id: str
+    dispatch_id: str
+    task_id: str
+    slice_id: str
+    task: Task
+    node: Node
+    source: LockedSource
+    finish_requirements: finish_requirements.FinishRequirements
+    assignment_sha256: str
+    source_hash: str
+    dependency_results: dict[str, DependencyResult]
+    acceptance_sources: dict[str, LockedSource]
+    integration_tasks: dict[str, Task]
+    integration_owners: dict[str, IntegrationOwner]
+    review_findings: dict[str, FindingView]
+    correction: escalation.WorkerCorrection
+    report_path: NotRequired[str]
+
+
+IMPLEMENT_PACKET = TypeAdapter[ImplementPacket](ImplementPacket)
+REPORT_SUMMARY = TypeAdapter[ReportSummary](ReportSummary)
+
+
+def validate_packet(value: object) -> ImplementPacket:
+    try:
+        packet = IMPLEMENT_PACKET.validate_python(value)
+        if packet["process"] != "implement":
+            raise ValueError("Invalid Implement packet process")
+        return packet
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid Implement packet", exc, IMPLEMENT_PACKET)
+        ) from None
+
+
+def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
     """Carry relevant predecessors across acceptance without importing the whole run."""
     nodes = {item["id"]: item for item in state["graph"]["nodes"]}
     task = state["graph"]["tasks"][node["task"]]
@@ -31,18 +97,18 @@ def dependency_results(state: State, node: Node) -> dict[str, Any]:
         selected.add(key)
         pending.extend(nodes[key]["depends_on"])
 
-    results: dict[str, Any] = {}
+    results: dict[str, DependencyResult] = {}
     for key in sorted(selected):
         saved = state["nodes"][key]
-        item: dict[str, Any] = {
+        item: DependencyResult = {
             "status": saved["status"],
             "task_id": nodes[key]["task"],
         }
         if "report" in saved:
-            report = deepcopy(saved["report"])
             # Prose and finding details stay inline. The immutable original carries hash maps.
-            report.pop("files", None)
-            item["report"] = report
+            item["report"] = REPORT_SUMMARY.validate_python(
+                {key: deepcopy(value) for key, value in saved["report"].items() if key != "files"}
+            )
             if "report_ref" in saved:
                 item["report_ref"] = saved["report_ref"]
         results[key] = item
@@ -139,4 +205,4 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         envelope,
     )
     packet["task"] = projected_task(task, node, obligations)
-    return packet
+    return dict(validate_packet(packet))

@@ -18,12 +18,12 @@ from factory_tooling.review.run_tool_checks import EXCERPT_BYTES, collect_result
 class ReviewBoundaryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = dict(
-            schema_version="3",
+            schema_version="4",
             review_id="r",
             mode="branch",
-            base_sha="base",
-            head_sha="head",
-            scope_hash="scope",
+            base_sha="a" * 40,
+            head_sha="b" * 40,
+            scope_hash="c" * 64,
             checks=[{"id": "tests", "execution": {"argv": ["check"], "cwd": "."}}],
         )
 
@@ -34,7 +34,7 @@ class ReviewBoundaryTests(unittest.TestCase):
             calls.append(args)
             return {}
 
-        with self.assertRaisesRegex(ValueError, "execution argv"):
+        with self.assertRaisesRegex(ValueError, "argv"):
             collect_results(
                 self.manifest,
                 "tests",
@@ -46,12 +46,18 @@ class ReviewBoundaryTests(unittest.TestCase):
     def test_injected_runner_failure_cannot_be_reported_as_pass(self) -> None:
         def run(argv: list[str], cwd: Any, timeout_seconds: int) -> Any:
             return dict(
-                argv=argv, cwd=cwd, exit_code=3, stdout_excerpt="", stderr_excerpt="failure"
+                argv=argv,
+                cwd=cwd,
+                exit_code=3,
+                stdout_excerpt="",
+                stderr_excerpt="failure",
+                stdout_truncated=False,
+                stderr_truncated=False,
             )
 
         result = collect_results(self.manifest, "tests", ['{"argv": ["check"]}'], run=run)
         self.assertEqual("FAIL", result["status"])
-        self.assertEqual("scope", result["scope_hash"])
+        self.assertEqual(self.manifest["scope_hash"], result["scope_hash"])
         self.assertEqual(3, result["commands"][0]["exit_code"])
 
     def test_not_applicable_never_invokes_runner(self) -> None:

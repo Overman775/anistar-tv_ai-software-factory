@@ -10,7 +10,7 @@ Vendor global defaults are not authorization for global installation.
 
 | Component | Needed when | Source / verification |
 | --- | --- | --- |
-| Python 3.11+ and PyYAML | Own factory tools | [Python](https://www.python.org/downloads/), [venv](https://docs.python.org/3/library/venv.html); [requirements](../../../tools/requirements.txt), [tool usage](../../../tools/README.md); run dry run with that interpreter |
+| Python 3.11+, PyYAML and Pydantic v2 | Own factory tools | [Python](https://www.python.org/downloads/), [venv](https://docs.python.org/3/library/venv.html); [requirements](../../../tools/requirements.txt), [tool usage](../../../tools/README.md); run dry run with that interpreter |
 | uv | Only if chosen to manage Python/tools | [Installation](https://docs.astral.sh/uv/getting-started/installation/); not mandatory when a working isolated interpreter exists |
 | Git | Repository operations | [Installation](https://git-scm.com/downloads); inspect path/version, no repository mutations for diagnosis |
 | ripgrep | Standard factory dependency for source discovery and debt-marker search | [Installation](https://github.com/BurntSushi/ripgrep#installation); preserve working `rg`, install if absent, verify path/version and a local search from the agent environment |

@@ -27,8 +27,11 @@ class DoctorTests(unittest.TestCase):
                 "acpx": {
                     "command": sys.executable,
                     "connections": {
-                        "working": {"command": sys.executable},
-                        "missing": {"command": str(Path(directory) / "absent")},
+                        "working": {"command": sys.executable, "max_parallel_agents": 1},
+                        "missing": {
+                            "command": str(Path(directory) / "absent"),
+                            "max_parallel_agents": 1,
+                        },
                     },
                 },
             }
@@ -58,7 +61,7 @@ class DoctorTests(unittest.TestCase):
             "_path": "/unused/factory.yaml",
             "acpx": {
                 "command": "/missing/acpx",
-                "connections": {"working": {"command": sys.executable}},
+                "connections": {"working": {"command": sys.executable, "max_parallel_agents": 1}},
             },
         }
         self.assertIn("acpx", doctor(config, "working")["errors"])
@@ -77,9 +80,9 @@ class DoctorTests(unittest.TestCase):
                 "acpx": {
                     "command": relative,
                     "connections": {
-                        "local": {"command": relative},
-                        "home": {"command": "~/" + relative},
-                        "missing": {"command": "bin/absent"},
+                        "local": {"command": relative, "max_parallel_agents": 1},
+                        "home": {"command": "~/" + relative, "max_parallel_agents": 1},
+                        "missing": {"command": "bin/absent", "max_parallel_agents": 1},
                     },
                 },
             }

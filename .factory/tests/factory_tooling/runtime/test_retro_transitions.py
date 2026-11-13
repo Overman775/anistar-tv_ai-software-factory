@@ -133,6 +133,20 @@ class RetroTransitionsTests(TestCase):
         self.assertFalse((f.root / ref["path"]).exists())
         self.assertEqual(historical, report_history.read(f.root, ref))
 
+    def test_report_history_checks_raw_bytes_before_parsing_shape(self) -> None:
+        f = self.f
+        f.init()
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        ref = f.ledger.read()["nodes"]["write-label"]["report_ref"]
+        path = f.root / ref["path"]
+        original = path.read_bytes()
+        path.write_bytes(original + b" ")
+        with self.assertRaisesRegex(Invalid, "digest mismatch"):
+            report_history.read(f.root, ref)
+        path.write_bytes(original)
+        self.assertEqual("PASS", report_history.read(f.root, ref)["report"]["outcome"])
+
     def ready_check(self, command: str, timeout: int = 10) -> None:
         f = self.f
         f.g["tasks"]["label"]["required_checks"][0]["execution"].update(
@@ -172,6 +186,7 @@ class RetroTransitionsTests(TestCase):
             time.sleep(0.02)
             result = f.ledger.reconcile_check(result["execution_id"])
         self.assertEqual("BLOCKED", result["result"])
+        assert result["result"] != "RUNNING"
         self.assertIsNone(result["exit_code"])
         self.assertFalse(marker.exists())
 
@@ -225,6 +240,7 @@ class RetroTransitionsTests(TestCase):
             time.sleep(0.03)
             result = f.ledger.reconcile_check(rid)
         self.assertEqual("BLOCKED", result["result"])
+        assert result["result"] != "RUNNING"
         self.assertIsNone(result["exit_code"])
 
     @staticmethod
@@ -248,6 +264,7 @@ class RetroTransitionsTests(TestCase):
         state["nodes"]["verify-label"]["dispatch_id"] = "replacement"
         atomic_json(f.ledger.path, state)
         result = Ledger(f.root).reconcile_check(rid)
+        assert result["result"] != "RUNNING"
         self.assertEqual(("BLOCKED", 0), (result["result"], result["exit_code"]))
         self.assertEqual(old, f.ledger.read()["executions"][rid]["dispatch_id"])
         self.assertEqual("replacement", f.ledger.read()["nodes"]["verify-label"]["dispatch_id"])
@@ -324,6 +341,7 @@ class RetroTransitionsTests(TestCase):
     def test_composite_rejects_filtered_stage_even_with_zero_exit(self) -> None:
         self.composite_policy('{"mode":"filtered","selected":3,"completed":3}')
         result = self.f.ledger.run_check("verify-label", "aggregate")
+        assert result["result"] != "RUNNING"
         self.assertEqual(("BLOCKED", 0), (result["result"], result["exit_code"]))
         _, child = self.f.ledger.check_results(result["execution_id"])
         self.assertEqual("BLOCKED", child["result"])
@@ -385,6 +403,7 @@ class RetroTransitionsTests(TestCase):
     def test_codegen_rejects_change_to_another_declared_input(self) -> None:
         self.generator_setup(True)
         result = self.f.ledger.run_check("write-label", "generate")
+        assert result["result"] != "RUNNING"
         self.assertEqual(("BLOCKED", 0), (result["result"], result["exit_code"]))
 
     def test_projected_integration_writer_preserves_handoff_and_full_report_scope(self) -> None:

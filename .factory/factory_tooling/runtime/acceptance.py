@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 import re
-from typing import Any, cast
+from typing import Annotated
 
-from factory_tooling.runtime.command_contract import validate_execution
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
+
 from factory_tooling.runtime.contracts import (
-    Check,
+    CheckResult,
+    CheckSpec,
     Criterion,
+    Nonblank,
     Task,
+)
+from factory_tooling.validation import validation_message
+
+IDS = TypeAdapter[list[str]](list[Nonblank], config=ConfigDict(strict=True))
+CRITERIA = TypeAdapter[list[Criterion]](
+    Annotated[list[Criterion], Field(min_length=1)], config=ConfigDict(strict=True)
 )
 
 
@@ -19,29 +28,27 @@ def ensure(condition: object, message: str) -> None:
 
 
 def ids(value: object, label: str, *, empty: bool = False) -> set[str]:
-    if not isinstance(value, list) or (not empty and not value):
-        raise ValueError(f"Missing {label}")
-    if not (all(isinstance(x, str) and x.strip() for x in value)):
-        raise ValueError(f"Invalid {label}")
-    ensure(len(set(value)) == len(value), f"Duplicate {label}")
-    return cast(set[str], set(value))
+    try:
+        values = IDS.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError(validation_message(f"Missing or invalid {label}", exc, IDS)) from None
+    ensure(empty or values, f"Missing {label}")
+    ensure(len(set(values)) == len(values), f"Duplicate {label}")
+    return set(values)
 
 
-def criteria_map(criteria: Any) -> dict[str, Criterion]:
-    if not (isinstance(criteria, list) and criteria):
-        raise ValueError("Missing acceptance criteria")
+def criteria_map(criteria: object) -> dict[str, Criterion]:
+    try:
+        entries = CRITERIA.validate_python(criteria)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Missing or invalid acceptance criteria", exc, CRITERIA)
+        ) from None
     result: dict[str, Criterion] = {}
-    for c in criteria:
-        if not (isinstance(c, dict)):
-            raise ValueError("Invalid acceptance criterion")
-        cid = c.get("id")
-        if not (isinstance(cid, str) and re.fullmatch("AC-\\d{2,}", cid)):
-            raise ValueError("Invalid AC identity")
+    for criterion in entries:
+        cid = criterion["id"]
         ensure(cid not in result, "Duplicate AC identity")
-        for field in ("applies_to", "requirement", "verification"):
-            if not (isinstance(c.get(field), str) and c[field].strip()):
-                raise ValueError(f"Missing AC {field}")
-        result[cid] = cast(Criterion, c)
+        result[cid] = criterion
     return result
 
 
@@ -74,7 +81,7 @@ def plan_criteria(text: str) -> list[Criterion]:
     return criteria
 
 
-def check_plan(task: Task, available: dict[str, Criterion]) -> dict[str, Check]:
+def check_plan(task: Task, available: dict[str, Criterion]) -> None:
     selected = ids(task.get("acceptance_ids"), "task acceptance_ids", empty=True)
     contributions = ids(
         task.get("contributes_to_acceptance_ids", []), "contributes_to_acceptance_ids", empty=True
@@ -84,8 +91,6 @@ def check_plan(task: Task, available: dict[str, Criterion]) -> dict[str, Check]:
         "Unknown task acceptance criterion",
     )
     local = task.get("local_acceptance_criteria", [])
-    if not (isinstance(local, list)):
-        raise ValueError("Invalid local_acceptance_criteria")
     local_ids = {"local:" + cid for cid in criteria_map(local)} if local else set()
     ensure(
         selected or (contributions and local_ids),
@@ -95,35 +100,23 @@ def check_plan(task: Task, available: dict[str, Criterion]) -> dict[str, Check]:
         if not (isinstance(task.get("parent_plan_ref"), str) and task["parent_plan_ref"].strip()):
             raise ValueError("Contribution needs parent plan provenance")
     selected |= local_ids
-    checks = task.get("required_checks")
-    if not (isinstance(checks, list) and checks):
-        raise ValueError("Missing required_checks")
-    known, covered = {}, set()
+    checks = task["required_checks"]
+    ensure(checks, "Missing required checks")
+    known: set[str] = set()
+    covered: set[str] = set()
     for c in checks:
-        if not (isinstance(c, dict)):
-            raise ValueError("Invalid required check")
-        cid = c.get("id")
-        if not (isinstance(cid, str) and re.fullmatch("[A-Za-z0-9][A-Za-z0-9_-]*", cid)):
-            raise ValueError("Invalid check ID")
+        cid = c["id"]
         ensure(cid not in known, "Duplicate check ID")
-        ensure(c.get("category") in {"acceptance", "project"}, "Invalid required check category")
-        ensure(
-            c.get("kind") in {"tests", "static", "docs", "build", "codegen", "observation"},
-            "Invalid required check kind",
-        )
-        refs = ids(c.get("criteria"), "check criteria", empty=c["category"] == "project")
+        refs = set(c["criteria"])
+        ensure(refs or c["category"] == "project", "Missing check criteria")
+        ensure(len(refs) == len(c["criteria"]), "Duplicate check criteria")
         ensure(refs <= selected, "Check references unknown task criterion")
-        if not (isinstance(c.get("method"), str) and c["method"].strip()):
-            raise ValueError("Missing check method")
-        if c["kind"] != "observation":
-            validate_execution(c.get("execution"))
-        known[cid] = c
+        known.add(cid)
         covered |= refs
     ensure(covered == selected, "Acceptance criterion has no required check")
-    return known
 
 
-def successful(check: Check) -> bool:
+def successful(check: CheckResult) -> bool:
     if check.get("kind") == "observation":
         return check.get("result") == "PASS" and bool(check.get("evidence"))
     return (
@@ -135,7 +128,7 @@ def successful(check: Check) -> bool:
     )
 
 
-def resolved_extra(check: Check) -> bool:
+def resolved_extra(check: CheckResult) -> bool:
     """A non-required check may be inconclusive, but never silently ignored."""
     resolution = check.get("resolution")
     if isinstance(resolution, dict) and resolution.get("disposition") == "not_run":
@@ -150,17 +143,12 @@ def resolved_extra(check: Check) -> bool:
     )
 
 
-def verify_results(task: Task, checks: list[Check]) -> None:
-    if not (isinstance(checks, list)):
-        raise ValueError("Invalid checks")
-    expected = {c["id"]: c for c in task["required_checks"]}
+def verify_results(specifications: list[CheckSpec], checks: list[CheckResult]) -> None:
+    expected = {c["id"]: c for c in specifications}
     actual = {}
     for check in checks:
-        if not (isinstance(check, dict)):
-            raise ValueError("Invalid check result")
-        cid = check.get("id")
-        if not (isinstance(cid, str) and cid and (cid not in actual)):
-            raise ValueError("Missing/duplicate result check ID")
+        cid = check["id"]
+        ensure(cid not in actual, "Duplicate result check ID")
         actual[cid] = check
         if cid in expected:
             spec = expected[cid]

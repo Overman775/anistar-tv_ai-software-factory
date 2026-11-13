@@ -42,7 +42,7 @@ class YamlTests(unittest.TestCase):
     def test_duplicate_keys_and_unknown_fields_fail(self) -> None:
         for data, message in (
             ("id: fixture\nid: duplicate\n", "duplicate"),
-            ("id: fixture\nrulse: {}\n", "unknown profile fields"),
+            ("id: fixture\nrulse: {}\n", "Extra inputs are not permitted"),
             ("id: [", "invalid YAML"),
         ):
             with self.subTest(data=data):
@@ -79,7 +79,7 @@ class YamlTests(unittest.TestCase):
         gate.write_text(GATE.replace("system-design", "invented-lens"), encoding="utf-8")
         code, output = self.check()
         self.assertNotEqual(0, code)
-        self.assertIn("unknown review lens", output)
+        self.assertIn(".lens: Input should be", output)
 
     def test_configured_commands_are_validated_without_execution(self) -> None:
         data = {

@@ -12,7 +12,7 @@ import yaml
 from factory_tooling.project.contracts import ProjectCheck, ProjectData
 from factory_tooling.project.profile_io import load_profile
 from factory_tooling.project.profile_rules import required_checks, validate
-from factory_tooling.runtime.contracts import Node, Task
+from factory_tooling.runtime.contracts import ContextNode, TaskSelection
 from factory_tooling.runtime.transition_gates import evaluate
 from factory_tooling.runtime.workflow_core import Invalid
 from factory_tooling.runtime.workflow_graph import validate_graph
@@ -214,8 +214,8 @@ class GateTests(unittest.TestCase):
                 }
             ],
         }
-        node: Node = {"id": "review-task", "stage": "review"}
-        task: Task = {"scope": ["api.py"]}
+        node: ContextNode = {"id": "review-task", "stage": "review"}
+        task: TaskSelection = {"scope": ["api.py"]}
         for records in [
             [],
             [{"id": "API", "result": "NOT_APPLICABLE", "evidence": "outside"}],

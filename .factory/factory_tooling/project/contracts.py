@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import Annotated, Literal, NotRequired, Required
 
-from factory_tooling.runtime.command_contract import Execution
+from pydantic import ConfigDict, Field, StringConstraints, with_config
+from typing_extensions import TypedDict
+
+from factory_tooling.decisions.decision_contract import DefinitionData
+from factory_tooling.runtime.command_contract import CommandExecution, CommandKind
+
+Nonblank = Annotated[str, StringConstraints(pattern=r"\S")]
+Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")]
+Hash = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Selector(TypedDict, total=False):
     processes: list[str]
     roles: list[str]
@@ -18,56 +27,84 @@ class Selector(TypedDict, total=False):
 Rule = TypedDict(
     "Rule",
     {
-        "id": str,
+        "id": Required[Identifier],
         "for": Selector,
         "file": str,
         "project_file": str,
         "documents": list[str],
-        "usage": str,
+        "usage": Literal["policy", "reference"],
     },
     total=False,
 )
-ProjectCheck = TypedDict(
-    "ProjectCheck",
+with_config(ConfigDict(strict=True, extra="forbid"))(Rule)
+ProjectCheckFields = TypedDict(
+    "ProjectCheckFields",
     {
-        "id": str,
+        "id": Required[Identifier],
         "for": Selector,
-        "level": str,
-        "decision": str,
-        "kind": str,
-        "method": str,
-        "execution": Execution,
+        "level": Required[Literal["slice", "final"]],
+        "decision": Identifier,
+        "method": Required[Nonblank],
         "after": list[str],
-        "approval_action": str,
-        "approval_path_regex": str,
+        "approval_action": Nonblank,
+        "approval_path_regex": Nonblank,
     },
     total=False,
 )
+with_config(ConfigDict(strict=True, extra="forbid"))(ProjectCheckFields)
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProjectObservation(ProjectCheckFields):
+    kind: Literal["observation"]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProjectCommand(ProjectCheckFields):
+    kind: CommandKind
+    execution: CommandExecution
+
+
+ProjectCheck = Annotated[ProjectObservation | ProjectCommand, Field(discriminator="kind")]
+
+
 ReviewCriterion = TypedDict(
-    "ReviewCriterion", {"id": str, "lens": str, "for": Selector, "question": str}, total=False
+    "ReviewCriterion",
+    {
+        "id": Required[Identifier],
+        "lens": Required[Literal["system-design", "runtime-safety", "verification-quality"]],
+        "for": Selector,
+        "question": Required[Nonblank],
+    },
+    total=False,
 )
+with_config(ConfigDict(strict=True, extra="forbid"))(ReviewCriterion)
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Document(TypedDict):
     path: str
-    category: NotRequired[str]
+    category: NotRequired[Nonblank]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Gate(TypedDict):
-    id: str
+    id: Identifier
     at: list[str]
-    checks: NotRequired[list[ProjectCheck]]
-    criteria: NotRequired[list[ReviewCriterion]]
+    checks: NotRequired[Annotated[list[ProjectCheck], Field(min_length=1)]]
+    criteria: NotRequired[Annotated[list[ReviewCriterion], Field(min_length=1)]]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class ProjectData(TypedDict):
-    id: str
-    documents: NotRequired[dict[str, Document]]
-    rules: NotRequired[dict[str, list[Rule]]]
+    id: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]*$")]
+    documents: NotRequired[dict[Annotated[str, Field(min_length=1)], Document]]
+    rules: NotRequired[dict[Literal["coordinator", "worker"], list[Rule]]]
     gates: NotRequired[list[Gate]]
-    decisions: NotRequired[list[dict[str, object]]]
+    decisions: NotRequired[list[DefinitionData]]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Policy(TypedDict):
     data: ProjectData
     path: str
@@ -77,6 +114,7 @@ class Policy(TypedDict):
     hash: str
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Selection(TypedDict):
     process: str
     audience: str
@@ -85,22 +123,25 @@ class Selection(TypedDict):
     scope: NotRequired[list[str] | None]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class AcceptedDocument(TypedDict):
     content: str
-    sha256: str
+    sha256: Hash
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Snapshot(TypedDict):
     profile: ProjectData
     profile_root: str
     manifest: str
-    source: str
-    files: dict[str, str]
+    source: Nonblank
+    files: Annotated[dict[str, Hash], Field(min_length=1)]
     contents: dict[str, str]
     documents: dict[str, AcceptedDocument]
-    sha256: str
+    sha256: Hash
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class MaterialEntry(TypedDict):
     path: str
     content: str
@@ -110,6 +151,7 @@ class MaterialEntry(TypedDict):
     rules: NotRequired[list[Rule]]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class BoundaryGate(TypedDict):
     id: str
     at: str

@@ -14,6 +14,16 @@ A check result applies only to its tested source state and environment.
   serialization needs. Use Literal/Enum for finite states when appropriate.
 - Accept external data as object or an explicit JSON type, validate at the boundary,
   then pass typed records internally. An annotation or cast does not validate data.
+- Use Pydantic v2 at structured input, publication and persistence boundaries.
+  Reuse owned TypedDict contracts with TypeAdapter when mutable dictionaries suit
+  consumers. Use typing_extensions.TypedDict on the Python 3.11 baseline.
+  Validate before serializing and hashing new evidence. Check persisted byte
+  digests before reading evidence into its typed form.
+- Closed factory records use strict types and forbid extra keys in nested records.
+  Specify defaults, missing versus null, and any open external projection explicitly.
+  Report field and reason without printing raw inputs or exception context.
+- Keep authority, workflow and evidence checks with their owners. Keep Markdown/diff
+  parsing, duplicate YAML detection, path safety, locks and atomic writes.
 - Keep justified Any at dynamic boundaries. No blanket ignore_missing_imports,
   ignore_errors or test exclusions. Ignores name a code and reason; remove stale ones.
 - Negative tests do not label invalid fixtures as valid domain values. A deliberate

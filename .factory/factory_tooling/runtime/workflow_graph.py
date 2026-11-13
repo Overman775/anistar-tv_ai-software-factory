@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+
+from pydantic import TypeAdapter, ValidationError
 
 from factory_tooling.project.profile_rules import (
     check_task,
@@ -15,6 +18,7 @@ from factory_tooling.runtime import acceptance, finish_requirements
 from factory_tooling.runtime.contracts import (
     Config,
     Graph,
+    GraphTopology,
     Node,
     State,
     agent_key,
@@ -25,6 +29,16 @@ from factory_tooling.runtime.workflow_core import (
     relative,
     require,
 )
+from factory_tooling.validation import validation_message
+
+GRAPH = TypeAdapter[Graph](Graph)
+
+
+def parse_graph(raw: object) -> Graph:
+    try:
+        return GRAPH.validate_python(raw)
+    except ValidationError as exc:
+        raise Invalid(validation_message("Invalid workflow graph", exc, GRAPH)) from None
 
 
 def ancestors(nodes: dict[str, Node], node_id: str) -> set[str]:
@@ -40,10 +54,11 @@ def ancestors(nodes: dict[str, Node], node_id: str) -> set[str]:
     return seen
 
 
-def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) -> dict[str, Node]:
+def validate_graph(
+    raw: object, config: Config, workspace: str | Path | None = None
+) -> dict[str, Node]:
     workspace = Path(workspace).resolve() if workspace is not None else Path.cwd()
-    if not (isinstance(g, dict)):
-        raise Invalid("Graph must be a mapping")
+    g = parse_graph(raw)
     require(g.get("tasks") and g.get("sources") and g.get("nodes"), "Empty workflow")
     agents, tasks = g["agents"], g["tasks"]
     nodes = {n["id"]: n for n in g["nodes"]}
@@ -76,10 +91,6 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
                 cid: c for cid, c in source_criteria[key].items() if cid in selected
             }
     for t in tasks.values():
-        require(
-            t.get("outcome") and t.get("slice") and t.get("reason"),
-            "Task needs outcome, slice, reason",
-        )
         require(t["source"] in g["sources"], "Missing source")
         available = dict(source_criteria[t["source"]])
         if t.get("kind") == "integration":
@@ -112,22 +123,14 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
                 not execution.get("outputs") or check["kind"] == "codegen",
                 "Only code generation can declare outputs",
             )
-        require(t["risk"] in {"low", "moderate", "high"}, "Invalid task risk")
-        require(type(t["independent_review"]) is bool, "Explicit review decision required")
         require(
             t["risk"] == "low" or t["independent_review"],
             "Non-low task requires review",
         )
-        if not (isinstance(t["scope"], list) and t["scope"]):
-            raise Invalid("Exact file scope required")
         require(
             len({unicodedata.normalize("NFC", p).casefold() for p in t["scope"]})
             == len(t["scope"]),
             "Duplicate/case-alias file scope",
-        )
-        require(
-            t.get("kind") in {"feature", "task", "refactor", "fix", "docs", "integration"},
-            "Invalid task kind",
         )
         for p in t["scope"]:
             relative(workspace, p)
@@ -143,12 +146,7 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
         require(assigned == set(criteria), "Unassigned source acceptance criteria")
     for n in nodes.values():
         require(n["task"] in tasks, "Unknown task")
-        require(
-            n["stage"] in {"explore", "work", "docs", "verify", "review", "accept"},
-            "Unknown stage",
-        )
-        if not (isinstance(n.get("depends_on"), list) and set(n["depends_on"]).issubset(nodes)):
-            raise Invalid("Unknown node dependency")
+        require(set(n["depends_on"]).issubset(nodes), "Unknown node dependency")
         require(n["id"] not in n["depends_on"], "Self dependency")
         if n["stage"] == "accept":
             if n.get("agent") is not None:
@@ -207,7 +205,9 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
             "Verification must follow all writers",
         )
         for check in task["required_checks"]:
-            outputs = check.get("execution", {}).get("outputs", [])
+            if check["kind"] == "observation":
+                continue
+            outputs = check["execution"].get("outputs", [])
             if not outputs:
                 continue
             producers = [
@@ -228,9 +228,10 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
             require(
                 all(
                     any(
-                        output in final_check.get("execution", {}).get("inputs", [])
-                        and not final_check.get("execution", {}).get("outputs")
-                        and final_check.get("execution", {}).get("mode", "full") == "full"
+                        final_check["kind"] != "observation"
+                        and output in final_check["execution"].get("inputs", [])
+                        and not final_check["execution"].get("outputs")
+                        and final_check["execution"].get("mode", "full") == "full"
                         for final_check in task["required_checks"]
                     )
                     for output in outputs
@@ -251,13 +252,13 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
             }:
                 require(
                     any(
-                        agents[nodes[v]["agent"]]["role"] == "judge"
+                        agents[agent_key(nodes[v])]["role"] == "judge"
                         and writers <= ancestors(nodes, v)
                         for v in full_verify
                     ),
                     "Final project checks require independent Judge verification",
                 )
-        authors = {n["agent"] for n in own.values() if n.get("owns")}
+        authors = {agent_key(n) for n in own.values() if n.get("owns")}
         if not task["independent_review"]:
             require(
                 len(authors) == 1 and agents[next(iter(authors))]["role"] == "generalist",
@@ -323,11 +324,11 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
             final["independent_review"],
             "Integration requires independent review",
         )
-    return cast(dict[str, Node], nodes)
+    return nodes
 
 
 def validate_assignment_lineage(
-    graph: Graph, config: Config, corrections: list[dict[str, Any]] | None = None
+    graph: GraphTopology, config: Config, corrections: Sequence[Mapping[str, Any]] | None = None
 ) -> None:
     """Every specialist starts at its group default; only registered corrections advance it."""
     for node in graph["nodes"]:
@@ -419,7 +420,8 @@ def diagram(state: State) -> str:
         for i, n in enumerate(ready):
             if i and len(ready) > 1:
                 lines.append("    and Ready branch")
-            status = state.get("nodes", {}).get(n["id"], {}).get("status", "planned")
+            dispatch = state["nodes"].get(n["id"])
+            status = dispatch["status"] if dispatch else "planned"
             if n["stage"] == "accept":
                 lines.append(f"        O->>O: {label(n['task'])} acceptance · {status}")
             else:

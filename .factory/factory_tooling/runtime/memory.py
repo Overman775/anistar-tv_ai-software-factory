@@ -2,26 +2,31 @@
 
 import json
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from factory_tooling.runtime import run_archive
-from factory_tooling.runtime.contracts import Dispatch
+from factory_tooling.runtime.contracts import FindingView, Report
 from factory_tooling.runtime.review_findings import view
 from factory_tooling.runtime.state_io import parse_state
 from factory_tooling.runtime.workflow_core import Invalid, read_json, relative, require
 
 
+class MemoryStep(TypedDict):
+    status: str
+    attempt: NotRequired[int]
+    dispatch_id: NotRequired[str]
+    report: NotRequired[Report]
+
+
 class TaskMemory(TypedDict):
     run_id: str
-    run_status: str
+    run_status: Literal["active", "completed", "cancelled"]
     task_id: str
-    steps: dict[str, Dispatch]
-    open_findings: dict[str, Any]
+    steps: dict[str, MemoryStep]
+    open_findings: dict[str, FindingView]
 
 
 def _evidence_path(path: str) -> str:
-    if path.startswith(".ai-pipeline/"):
-        path = ".factory/memory/" + path[len(".ai-pipeline/") :]
     require(path.startswith(".factory/memory/"), "Expected a memory evidence path")
     return path
 
@@ -50,9 +55,7 @@ def read_evidence(workspace: str | Path, path: str, *, run_id: str | None = None
 def read_task(workspace: str | Path, task_id: str, *, run_id: str | None) -> TaskMemory:
     """Read one file. None selects the active ledger; a run ID selects its archive."""
     root = Path(workspace).resolve()
-    if run_id is None:
-        record_path = ".factory/memory/state/workflow.json"
-    else:
+    if run_id is not None:
         require(
             bool(run_id)
             and "\0" not in run_id
@@ -60,15 +63,15 @@ def read_task(workspace: str | Path, task_id: str, *, run_id: str | None) -> Tas
             and run_id not in {".", ".."},
             "Expected a single run ID",
         )
-        record_path = f".factory/memory/history/{run_id}/run.json"
-
+    record_path = ".factory/memory/state/workflow.json" if run_id is None else run_id
     try:
-        archive = run_archive.find_archive(root, run_id) if run_id is not None else None
-        record = (
-            json.loads(run_archive.read_member(archive, "run.json"))
-            if archive is not None
-            else read_json(relative(root, record_path))
-        )
+        if run_id is None:
+            record = read_json(relative(root, record_path))
+        else:
+            archive = run_archive.find_archive(root, run_id)
+            if archive is None:
+                raise FileNotFoundError(run_id)
+            record = json.loads(run_archive.read_member(archive, "run.json"))
         state = parse_state(record)
     except FileNotFoundError as exc:
         raise Invalid(f"Run not found: {record_path}") from exc
@@ -82,14 +85,14 @@ def read_task(workspace: str | Path, task_id: str, *, run_id: str | None) -> Tas
         require(state["status"] in {"completed", "cancelled"}, "Archive is not terminal")
     require(task_id in state["graph"]["tasks"], f"Unknown task: {task_id}")
 
-    steps: dict[str, Dispatch] = {}
+    steps: dict[str, MemoryStep] = {}
     for node in state["graph"]["nodes"]:
         if node["task"] != task_id:
             continue
         record = state["nodes"].get(node["id"])
         if record is None or "status" not in record:
             raise Invalid(f"Missing step state: {node['id']}")
-        step: Dispatch = {"status": record["status"]}
+        step: MemoryStep = {"status": record["status"]}
         if "attempt" in record:
             step["attempt"] = record["attempt"]
         if "dispatch_id" in record:

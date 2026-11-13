@@ -8,8 +8,13 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Annotated, Literal
+
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 from factory_tooling.gates.catalog import core_result as core_result
+from factory_tooling.gates.gate_contract import EvidenceText, GateResult
 from factory_tooling.gates.gate_contract import digest as digest
 from factory_tooling.gates.gate_contract import evidence as evidence
 from factory_tooling.planning.plan_document import API_EVIDENCE_TYPES as API_EVIDENCE_TYPES
@@ -54,6 +59,35 @@ from factory_tooling.planning.plan_rules import validate_metadata as validate_me
 from factory_tooling.planning.plan_rules import validate_pseudocode as validate_pseudocode
 from factory_tooling.planning.plan_rules import validate_structure as validate_structure
 from factory_tooling.runtime.acceptance import plan_criteria as plan_criteria
+from factory_tooling.validation import validation_message
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class CompletionReview(TypedDict):
+    plan_hash: str
+    policy_hash: str
+    coordinator_id: EvidenceText
+    verdict: Literal["APPROVE", "NEEDS_WORK", "BLOCKED"]
+    evidence: Annotated[list[EvidenceText], Field(min_length=1)]
+    approval_evidence: Annotated[list[EvidenceText], Field(min_length=1)]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class PlanIssue(TypedDict):
+    code: str
+    message: str
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class PlanResult(TypedDict):
+    ok: bool
+    errors: list[PlanIssue]
+    plan_hash: str
+    gate_result: GateResult
+
+
+COMPLETION_REVIEW = TypeAdapter[CompletionReview](CompletionReview)
+PLAN_RESULT = TypeAdapter[PlanResult](PlanResult)
 
 
 def validate_acceptance(text: str) -> list[dict[str, str]]:
@@ -141,24 +175,9 @@ def main() -> int:
     ]
     if args.completion_review:
         try:
-            review = json.loads(args.completion_review.read_text())
-            if (
-                set(review)
-                != {
-                    "plan_hash",
-                    "policy_hash",
-                    "coordinator_id",
-                    "verdict",
-                    "evidence",
-                    "approval_evidence",
-                }
-                or review["plan_hash"] != digest(text)
-                or review["policy_hash"] != policy_hash
-                or not isinstance(review["coordinator_id"], str)
-                or not review["coordinator_id"].strip()
-                or review["verdict"] not in {"APPROVE", "NEEDS_WORK", "BLOCKED"}
-            ):
-                raise ValueError("Invalid/stale coordinator review")
+            review = COMPLETION_REVIEW.validate_json(args.completion_review.read_bytes())
+            if review["plan_hash"] != digest(text) or review["policy_hash"] != policy_hash:
+                raise ValueError("Stale coordinator review")
             records.append(
                 evidence(
                     "plan-review",
@@ -177,6 +196,15 @@ def main() -> int:
                     review["approval_evidence"],
                 )
             )
+        except ValidationError as exc:
+            records.append(
+                evidence(
+                    "plan-review",
+                    "BLOCKED",
+                    validation_message("Invalid coordinator review", exc, COMPLETION_REVIEW),
+                    [str(args.completion_review)],
+                )
+            )
         except (ValueError, TypeError, KeyError, OSError) as exc:
             records.append(
                 evidence("plan-review", "BLOCKED", str(exc), [str(args.completion_review)])
@@ -190,7 +218,9 @@ def main() -> int:
     )
     print(
         json.dumps(
-            {"ok": not errors, "errors": errors, "plan_hash": digest(text), "gate_result": gate},
+            PLAN_RESULT.validate_python(
+                {"ok": not errors, "errors": errors, "plan_hash": digest(text), "gate_result": gate}
+            ),
             ensure_ascii=False,
             indent=2,
         )

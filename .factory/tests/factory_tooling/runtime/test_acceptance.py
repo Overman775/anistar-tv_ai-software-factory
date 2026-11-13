@@ -308,7 +308,9 @@ class AcceptanceTests(unittest.TestCase):
             f.ledger.revise(g, "Drop gate")
 
     def test_observation_can_confirm_criterion_without_fake_shell_command(self) -> None:
-        self.fixture.g["tasks"]["label"]["required_checks"][0]["kind"] = "observation"
+        spec = self.fixture.g["tasks"]["label"]["required_checks"][0]
+        spec["kind"] = "observation"
+        del spec["execution"]
         f, report = self.verifying()
         command = report["checks"][0]
         report["checks"] = [
@@ -334,7 +336,9 @@ class AcceptanceTests(unittest.TestCase):
         f.ledger.accept("accept-label")
 
     def test_required_observation_without_evidence_cannot_finish_verify(self) -> None:
-        self.fixture.g["tasks"]["label"]["required_checks"][0]["kind"] = "observation"
+        spec = self.fixture.g["tasks"]["label"]["required_checks"][0]
+        spec["kind"] = "observation"
+        del spec["execution"]
         f, report = self.verifying()
         report["checks"][0].update(kind="observation", result="PASS", evidence="")
         with self.assertRaisesRegex(Invalid, "Failed/incomplete command evidence"):

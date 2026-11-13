@@ -7,17 +7,20 @@ from copy import deepcopy
 from pathlib import PurePosixPath
 from typing import Any, cast
 
+from pydantic import ConfigDict, TypeAdapter, ValidationError
+
 from factory_tooling.decisions.decision_contract import validate_answers, validate_definition
 from factory_tooling.project.contracts import (
     BoundaryGate,
+    Nonblank,
     ProjectCheck,
     ProjectData,
     ReviewCriterion,
     Rule,
     Selector,
 )
-from factory_tooling.runtime.command_contract import validate_execution
-from factory_tooling.runtime.contracts import Check, Task
+from factory_tooling.runtime.contracts import CheckSpec, Task, TaskSelection
+from factory_tooling.validation import validation_message
 
 PROCESSES = {
     "planning",
@@ -52,18 +55,19 @@ def require(condition: object, message: str) -> None:
         raise ValueError("Project policy: " + message)
 
 
-def fields(value: Any, allowed: set[str], label: str) -> None:
-    if not (isinstance(value, dict)):
-        raise ValueError("Project policy: " + f"{label} must be a mapping")
-    require(set(value) <= set(allowed), f"unknown {label} fields: {set(value) - set(allowed)}")
+PROJECT = TypeAdapter[ProjectData](ProjectData)
+CHECK_SPEC = TypeAdapter[CheckSpec](CheckSpec)
+STRINGS = TypeAdapter[list[str]](list[Nonblank], config=ConfigDict(strict=True))
 
 
-def strings(value: Any, label: str, *, empty: bool = False) -> None:
-    if not (isinstance(value, list) and (empty or value)):
-        raise ValueError("Project policy: " + f"{label} must be a nonempty list")
-    if not (all(isinstance(x, str) and x.strip() for x in value)):
-        raise ValueError("Project policy: " + f"invalid {label}")
-    require(len(set(value)) == len(value), f"duplicate {label}")
+def strings(value: object, label: str, *, empty: bool = False) -> list[str]:
+    try:
+        entries = STRINGS.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError(validation_message(f"Project policy: {label}", exc, STRINGS)) from None
+    require(empty or entries, f"{label} must be a nonempty list")
+    require(len(set(entries)) == len(entries), f"duplicate {label}")
+    return entries
 
 
 def relative(value: Any, *, glob: bool = False) -> str:
@@ -99,19 +103,22 @@ def glob_pattern(pattern: str) -> str:
     return "".join(parts)
 
 
-def validate_selector(selector: Any) -> None:
-    fields(selector, {"processes", "roles", "stages", "paths_any", "path_regex"}, "selector")
-    for name, allowed in [("processes", PROCESSES), ("roles", ROLES), ("stages", STAGES)]:
-        if name in selector:
-            strings(selector[name], name)
-            require(set(selector[name]) <= allowed, f"unknown {name}")
+def validate_selector(selector: Selector) -> None:
+    for name, entries, allowed in [
+        ("processes", selector.get("processes"), PROCESSES),
+        ("roles", selector.get("roles"), ROLES),
+        ("stages", selector.get("stages"), STAGES),
+    ]:
+        if entries is not None:
+            strings(entries, name)
+            require(set(entries) <= allowed, f"unknown {name}")
     require(not ("paths_any" in selector and "path_regex" in selector), "choose glob or regex")
     if "paths_any" in selector:
         strings(selector["paths_any"], "paths_any")
         for pattern in selector["paths_any"]:
             glob_pattern(pattern)
     if "path_regex" in selector:
-        if not (isinstance(selector["path_regex"], str) and selector["path_regex"]):
+        if not selector["path_regex"]:
             raise ValueError("Project policy: " + "invalid path_regex")
         try:
             re.compile(selector["path_regex"])
@@ -146,39 +153,17 @@ def matches(
 
 def rule_groups(profile: ProjectData) -> dict[str, list[Rule]]:
     """Explicit recipients; no audience inference or legacy list conversion."""
-    groups = profile.get("rules", {})
-    fields(groups, {"coordinator", "worker"}, "rules")
-    for audience, entries in groups.items():
-        if not (isinstance(entries, list)):
-            raise ValueError("Project policy: " + f"rules.{audience} must be list")
-    return groups
+    return {audience: entries for audience, entries in profile.get("rules", {}).items()}
 
 
-def validate(profile: Any) -> ProjectData:
-    fields(
-        profile,
-        {
-            "id",
-            "documents",
-            "rules",
-            "gates",
-            "decisions",
-        },
-        "profile",
-    )
-    if not (isinstance(profile.get("id"), str) and re.fullmatch("[a-z][a-z0-9-]*", profile["id"])):
-        raise ValueError("Project policy: " + "invalid id")
+def validate(raw: object) -> ProjectData:
+    try:
+        profile = PROJECT.validate_python(raw)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Project policy", exc, PROJECT)) from None
     documents = profile.get("documents", {})
-    if not (isinstance(documents, dict)):
-        raise ValueError("Project policy: " + "documents must be mapping")
-    for key, value in documents.items():
-        if not (isinstance(key, str) and key):
-            raise ValueError("Project policy: " + "invalid document name")
-        fields(value, {"path", "category"}, "document")
-        relative(value.get("path"))
-        if "category" in value:
-            if not (isinstance(value["category"], str) and value["category"].strip()):
-                raise ValueError("Project policy: " + "invalid document category")
+    for value in documents.values():
+        relative(value["path"])
     validate_gate_containers(profile)
     groups = rule_groups(profile)
     all_rules = [item for entries in groups.values() for item in entries]
@@ -188,127 +173,90 @@ def validate(profile: Any) -> ProjectData:
         ("checks", project_checks(profile)),
         ("review criteria", review_criteria(profile)),
     ]:
-        if not (isinstance(entries, list)):
-            raise ValueError("Project policy: " + f"{group} must be list")
         seen = set()
-        for item in entries:
-            if not (
-                isinstance(item, dict)
-                and isinstance(item.get("id"), str)
-                and re.fullmatch("[A-Za-z0-9][A-Za-z0-9_-]*", item["id"])
-            ):
-                raise ValueError("Project policy: " + f"invalid {group} id")
-            require(item["id"] not in seen, f"duplicate {group} id: {item['id']}")
-            seen.add(item["id"])
-            validate_selector(item.get("for", {}))
+        for entry in cast(list[dict[str, Any]], entries):
+            require(entry["id"] not in seen, f"duplicate {group} id: {entry['id']}")
+            seen.add(entry["id"])
+            if group != "decisions":
+                validate_selector(cast(Selector, entry.get("for", {})))
     decisions = {x["id"] for x in profile.get("decisions", [])}
-    for item in profile.get("decisions", []):
-        validate_definition(item)
+    for definition in profile.get("decisions", []):
+        validate_definition(definition)
     for audience, entries in groups.items():
-        for item in entries:
-            fields(item, {"id", "for", "file", "project_file", "documents", "usage"}, "rule")
+        for rule in entries:
             require(
-                not (audience == "coordinator" and "roles" in item.get("for", {})),
+                not (audience == "coordinator" and "roles" in rule.get("for", {})),
                 "coordinator rules cannot require a worker role",
             )
-            choices = set(item) & {"file", "project_file", "documents"}
+            choices = set(rule) & {"file", "project_file", "documents"}
             require(len(choices) == 1, "rule needs exactly one file/project_file/documents")
             if "documents" in choices:
-                strings(item["documents"], "rule documents")
-                require(set(item["documents"]) <= set(documents), "unknown document ID")
+                strings(rule["documents"], "rule documents")
+                require(set(rule["documents"]) <= set(documents), "unknown document ID")
             else:
-                relative(item["file"] if "file" in item else item["project_file"])
-            require(item.get("usage", "policy") in {"policy", "reference"}, "unknown rule usage")
+                relative(rule["file"] if "file" in rule else rule["project_file"])
     checks = {x["id"] for x in project_checks(profile)}
-    for item in project_checks(profile):
-        fields(
-            item,
-            {
-                "id",
-                "for",
-                "level",
-                "decision",
-                "kind",
-                "method",
-                "execution",
-                "after",
-                "approval_action",
-                "approval_path_regex",
-            },
-            "check",
-        )
+    for check in project_checks(profile):
         require(
-            set(item.get("for", {})) <= {"paths_any", "path_regex"},
+            set(check.get("for", {})) <= {"paths_any", "path_regex"},
             "check selectors use paths only",
         )
-        require(item.get("level") in {"slice", "final"}, "check needs slice/final level")
-        if not (item.get("decision") is None or item["decision"] in decisions):
+        if not (check.get("decision") is None or check["decision"] in decisions):
             raise ValueError("Project policy: " + "unknown check decision")
-        if item.get("decision"):
-            definition = next(d for d in profile["decisions"] if d["id"] == item["decision"])
+        if check.get("decision"):
+            definition = next(d for d in profile["decisions"] if d["id"] == check["decision"])
             require(
                 definition.get("type", "predicate") == "predicate",
                 "check decision must be predicate",
             )
-        require(
-            item.get("kind") in {"tests", "static", "build", "docs", "codegen", "observation"},
-            "unknown check kind",
-        )
-        if not (isinstance(item.get("method"), str) and item["method"].strip()):
-            raise ValueError("Project policy: " + "check needs method")
-        if "approval_action" in item:
-            action = item["approval_action"]
+        if "approval_action" in check:
             require(
-                item["kind"] != "observation" and isinstance(action, str) and action.strip(),
+                check["kind"] != "observation",
                 "approval action needs a named command check",
             )
-        if "approval_path_regex" in item:
-            pattern = item["approval_path_regex"]
+        if "approval_path_regex" in check:
+            pattern = check["approval_path_regex"]
             require(
-                "approval_action" in item and isinstance(pattern, str) and pattern.strip(),
+                "approval_action" in check,
                 "approval paths require an action and a regular expression",
             )
             try:
                 re.compile(pattern)
             except re.error as exc:
                 raise ValueError("Project policy: invalid approval path expression") from exc
-        strings(item.get("after", []), "after", empty=True)
+        strings(check.get("after", []), "after", empty=True)
         require(
-            set(item.get("after", [])) <= checks and item["id"] not in item.get("after", []),
+            set(check.get("after", [])) <= checks and check["id"] not in check.get("after", []),
             "unknown/self check dependency",
         )
-        if item["kind"] != "observation":
-            execution = validate_execution(item.get("execution"))
+        if check["kind"] != "observation":
+            execution = check["execution"]
             relative(execution["cwd"])
             strings(execution.get("inputs", []), "inputs", empty=True)
             outputs = execution.get("outputs", [])
             require(
-                not outputs or item["kind"] == "codegen", "Only code generation can declare outputs"
+                not outputs or check["kind"] == "codegen",
+                "Only code generation can declare outputs",
             )
             for path in execution.get("inputs", []) + outputs:
                 relative(path)
-        else:
-            require("execution" not in item, "observation cannot execute commands")
     done: set[str] = set()
     while done != checks:
         ready = {x["id"] for x in project_checks(profile) if set(x.get("after", [])) <= done} - done
         require(ready, "check dependency cycle")
         done |= ready
-    for item in review_criteria(profile):
-        fields(item, {"id", "lens", "for", "question"}, "review gate")
-        require(item.get("lens") in LENSES, "unknown review lens")
+    for criterion in review_criteria(profile):
         from factory_tooling.project.review_definition import CORE_CRITERIA
 
         require(
-            item["id"] not in {x[0] for x in CORE_CRITERIA}, "cannot replace universal review gate"
+            criterion["id"] not in {x[0] for x in CORE_CRITERIA},
+            "cannot replace universal review gate",
         )
         require(
-            set(item.get("for", {})) <= {"paths_any", "path_regex"},
+            set(criterion.get("for", {})) <= {"paths_any", "path_regex"},
             "review gate selectors use paths only",
         )
-        if not (isinstance(item.get("question"), str) and item["question"].strip()):
-            raise ValueError("Project policy: " + "gate needs question")
-    return cast(ProjectData, profile)
+    return profile
 
 
 def select_rules(
@@ -339,8 +287,8 @@ def select_rules(
     ]
 
 
-def required_checks(profile: ProjectData, task: Any, *, final: bool = False) -> list[Check]:
-    result: list[Check] = []
+def required_checks(profile: ProjectData, task: Any, *, final: bool = False) -> list[CheckSpec]:
+    result: list[CheckSpec] = []
     if not (isinstance(task, dict)):
         raise ValueError("Project policy: " + "task must be mapping")
     strings(task.get("scope"), "known check scope")
@@ -359,13 +307,21 @@ def required_checks(profile: ProjectData, task: Any, *, final: bool = False) -> 
             require(decision["type"] == "predicate", "check decision must be predicate")
             if not decision["value"]:
                 continue
-        result.append(
-            cast(
-                Check,
-                {k: deepcopy(item[k]) for k in ("id", "kind", "method", "execution") if k in item}
-                | {"category": "project", "criteria": []},
-            )
-        )
+        try:
+            spec: dict[str, object] = {
+                "id": item["id"],
+                "kind": item["kind"],
+                "method": item["method"],
+                "category": "project",
+                "criteria": [],
+            }
+            if item["kind"] != "observation":
+                spec["execution"] = item["execution"]
+            result.append(CHECK_SPEC.validate_python(spec))
+        except ValidationError as exc:
+            raise ValueError(
+                validation_message("Invalid required project check", exc, CHECK_SPEC)
+            ) from None
     selected = {c["id"] for c in result}
     for item in project_checks(profile, all_processes=False):
         if item["id"] in selected:
@@ -378,7 +334,7 @@ def check_task(profile: ProjectData, task: Any, *, final: bool = False) -> None:
     for expected in required_checks(profile, task, final=final):
         candidate = deepcopy(actual.get(expected["id"]))
         message = f"missing/changed mandatory check: {expected['id']}"
-        if "execution" in expected and isinstance(candidate, dict):
+        if expected["kind"] != "observation" and isinstance(candidate, dict):
             execution = candidate.get("execution")
             if not (isinstance(execution, dict)):
                 raise ValueError("Project policy: " + message)
@@ -428,6 +384,8 @@ def local_policy_files(profile: ProjectData, profile_root: str = ".") -> list[st
     for gate in profile.get("gates", []):
         if "decompose.complete" in gate["at"]:
             for check in gate["checks"]:
+                if check["kind"] == "observation":
+                    raise ValueError("Project policy: decomposition check must be a command")
                 for path in check["execution"]["inputs"]:
                     try:
                         local = str(PurePosixPath(path).relative_to(profile_root))
@@ -449,28 +407,18 @@ def review_criteria(profile: ProjectData, boundary: str | None = None) -> list[R
     ]
 
 
-def validate_gate_containers(profile: Any) -> None:
+def validate_gate_containers(profile: ProjectData) -> None:
     gates = profile.get("gates", [])
-    if not (isinstance(gates, list)):
-        raise ValueError("Project policy: " + "gates must be list")
     seen = set()
     for gate in gates:
-        fields(gate, {"id", "at", "checks", "criteria"}, "gate")
-        gid = gate.get("id")
-        if not (
-            isinstance(gid, str)
-            and re.fullmatch("[A-Za-z0-9][A-Za-z0-9_-]*", gid)
-            and (gid not in seen)
-        ):
-            raise ValueError("Project policy: " + "invalid/duplicate gate id")
+        gid = gate["id"]
+        require(gid not in seen, "duplicate gate id")
         require(not gid.startswith("factory-"), "factory gate IDs are reserved")
         seen.add(gid)
         strings(gate.get("at"), "gate boundaries")
         choices = set(gate) & {"checks", "criteria"}
         require(len(choices) == 1, "gate needs exactly one checks/criteria collection")
         key = next(iter(choices))
-        if not (isinstance(gate[key], list) and gate[key]):
-            raise ValueError("Project policy: " + "empty gate requirements")
         allowed = CHECK_BOUNDARIES if key == "checks" else REVIEW_BOUNDARIES
         require(set(gate["at"]) <= allowed, "unsupported gate boundary/type")
         if "code-review.complete" in gate["at"] and key == "checks":
@@ -478,7 +426,10 @@ def validate_gate_containers(profile: Any) -> None:
                 gate["at"] == ["code-review.complete"], "review commands need their own boundary"
             )
             require(
-                all(c.get("kind") != "observation" and "decision" not in c for c in gate[key]),
+                all(
+                    c.get("kind") != "observation" and "decision" not in c
+                    for c in gate.get("checks", [])
+                ),
                 "review commands require execution; decision routing is not enabled",
             )
         if "decompose.complete" in gate["at"]:
@@ -490,21 +441,18 @@ def validate_gate_containers(profile: Any) -> None:
                     not any(k in check for k in ("decision", "for")),
                     "decomposition checks apply to the full artifact set",
                 )
-                execution = check.get("execution", {})
-                argv = execution.get("argv", [])
-                if not (
-                    check.get("kind") != "observation"
-                    and len(argv) >= 2
-                    and (argv[0] == "{python}")
-                    and (argv[1] in execution.get("inputs", []))
-                    and isinstance(execution.get("cwd"), str)
-                ):
-                    raise ValueError(
-                        "Project policy: "
-                        + "decomposition check needs {python}, pinned script input and workspace cwd"
-                    )
+                if check["kind"] == "observation":
+                    raise ValueError("Project policy: decomposition check must be a command")
+                execution = check["execution"]
+                argv = execution["argv"]
+                require(
+                    len(argv) >= 2
+                    and argv[0] == "{python}"
+                    and argv[1] in execution.get("inputs", []),
+                    "decomposition check needs {python}, pinned script input and workspace cwd",
+                )
         if key == "checks" and set(gate["at"]) - {"implement.verify"}:
-            if not (all(isinstance(c, dict) and c.get("level") == "slice" for c in gate[key])):
+            if not (all(c["level"] == "slice" for c in gate.get("checks", []))):
                 raise ValueError(
                     "Project policy: " + "final checks belong to verification boundary"
                 )
@@ -512,20 +460,16 @@ def validate_gate_containers(profile: Any) -> None:
     # dependent check must require its prerequisite there too.
     for boundary in CHECK_BOUNDARIES:
         checks = [c for g in gates if boundary in g["at"] for c in g.get("checks", [])]
-        ids = {c.get("id") for c in checks if isinstance(c, dict)}
-        if not (
-            all(
-                isinstance(c, dict)
-                and isinstance(c.get("after", []), list)
-                and all(isinstance(x, str) for x in c.get("after", []))
-                and (set(c.get("after", [])) <= ids)
-                for c in checks
-            )
-        ):
-            raise ValueError("Project policy: " + "check dependency missing at boundary")
+        ids = {c["id"] for c in checks}
+        require(
+            all(set(c.get("after", [])) <= ids for c in checks),
+            "check dependency missing at boundary",
+        )
 
 
-def boundary_gates(profile: ProjectData, boundary: str, task: Task) -> list[BoundaryGate]:
+def boundary_gates(
+    profile: ProjectData, boundary: str, task: Task | TaskSelection
+) -> list[BoundaryGate]:
     """Select exact evidence IDs from an already validated task/profile."""
     declared = {c["id"] for c in task.get("required_checks", [])}
     result: list[BoundaryGate] = []

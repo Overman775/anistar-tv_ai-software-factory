@@ -7,13 +7,12 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+
+from pydantic import TypeAdapter, ValidationError
 
 from factory_tooling.paths import FACTORY_ROOT
 from factory_tooling.runtime import acceptance
-from factory_tooling.runtime.contracts import (
-    Source,
-)
+from factory_tooling.runtime.contracts import LockedSource, Source
 from factory_tooling.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -21,10 +20,21 @@ from factory_tooling.runtime.workflow_core import (
     relative,
     require,
 )
+from factory_tooling.validation import validation_message
+
+SOURCE = TypeAdapter[Source](Source)
+LOCKED_SOURCE = TypeAdapter[LockedSource](LockedSource)
 
 
-def lock_source(root: str | Path, src: Any, check_expected: bool = True) -> Source:
-    src = dict(src)
+def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> LockedSource:
+    try:
+        src = SOURCE.validate_python(raw)
+    except ValidationError as exc:
+        label = "Invalid workflow source"
+        if isinstance(raw, dict) and raw.get("kind") == "approved_plan":
+            label = "BLOCKED_NO_APPROVED_PLAN"
+        raise Invalid(validation_message(label, exc, SOURCE)) from None
+    require(bool(src.get("path")) != bool(src.get("text")), "Source needs exactly one path or text")
     content = relative(root, src["path"]).read_bytes() if src.get("path") else src["text"].encode()
     src.setdefault("kind", "local_task" if src.get("path") else "direct")
     src.setdefault(
@@ -45,14 +55,10 @@ def lock_source(root: str | Path, src: Any, check_expected: bool = True) -> Sour
             "Approved plan needs path and selected_scope",
         )
         approval_kind = src.get("approval_evidence", "canonical_plan_metadata")
-        require(
-            approval_kind in {"canonical_plan_metadata", "explicit_external_hash_approval"},
-            "BLOCKED_NO_APPROVED_PLAN: unknown approval evidence",
-        )
         if approval_kind == "explicit_external_hash_approval":
             # Canonical sources must never bypass their revision/status validator.
             text = content.decode()
-            frontmatter = re.match(r"\A---\s*\n(.*?)\n---(?:\s|$)", text, re.S)
+            frontmatter = re.match(r"\A---\s*\n(.*?)\n---(?:\s|$)", text, re.DOTALL)
             canonical = Path(src["path"]).parts[:2] == ("docs", "plans") or (
                 frontmatter and re.search(r"(?m)^(?:plan_id|approved_revision)\s*:", frontmatter[1])
             )
@@ -61,7 +67,7 @@ def lock_source(root: str | Path, src: Any, check_expected: bool = True) -> Sour
                 "BLOCKED_NO_APPROVED_PLAN: canonical plan requires canonical validation",
             )
             approval = src.get("external_approval")
-            if not (isinstance(approval, dict)):
+            if approval is None:
                 raise Invalid("BLOCKED_NO_APPROVED_PLAN: missing external approval")
             require(
                 approval.get("state") == "approved"
@@ -70,9 +76,6 @@ def lock_source(root: str | Path, src: Any, check_expected: bool = True) -> Sour
                 and approval.get("selected_scope") == src["selected_scope"],
                 "BLOCKED_NO_APPROVED_PLAN: external approval does not match content/path/scope",
             )
-            for field in ("approved_by", "evidence_ref"):
-                if not (isinstance(approval.get(field), str) and approval[field].strip()):
-                    raise Invalid(f"BLOCKED_NO_APPROVED_PLAN: missing external approval {field}")
             # Provenance authenticity and semantic scope are checked by the parent,
             # like actual user authorization elsewhere in this ledger.
         else:
@@ -143,4 +146,4 @@ def lock_source(root: str | Path, src: Any, check_expected: bool = True) -> Sour
         )
     src["content_hash"], src["hash"] = content_hash, semantic_hash
     src["snapshot"] = content.decode()
-    return cast(Source, src)
+    return LOCKED_SOURCE.validate_python(src)

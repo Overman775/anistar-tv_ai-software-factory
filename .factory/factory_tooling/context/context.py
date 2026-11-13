@@ -14,9 +14,18 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, Literal, NotRequired, cast
 
-from factory_tooling.project.contracts import MaterialEntry, Rule
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+from factory_tooling.project.contracts import (
+    BoundaryGate,
+    MaterialEntry,
+    ReviewCriterion,
+    Rule,
+    Snapshot,
+)
 from factory_tooling.project.profile_io import (
     check_frozen,
     review_materials,
@@ -25,7 +34,18 @@ from factory_tooling.project.profile_io import (
 )
 from factory_tooling.project.profile_rules import boundary_gates, matches, review_criteria
 from factory_tooling.runtime.acceptance import ensure
-from factory_tooling.runtime.contracts import Config, Node, Profile
+from factory_tooling.runtime.contracts import (
+    Config,
+    ContextNode,
+    Model,
+    Node,
+    Nonblank,
+    Profile,
+    ProfileCommon,
+    Task,
+    TaskSelection,
+)
+from factory_tooling.validation import validation_message
 
 PROCESS_ROLES = {
     "implement": {
@@ -97,7 +117,7 @@ class MaterialRule:
     roles: frozenset[str] = frozenset()
     resource: str | None = None
 
-    def matches(self, process: str, role: str, node: Node) -> bool:
+    def matches(self, process: str, role: str, node: Node | ContextNode) -> bool:
         return (
             self.process == process
             and (not self.roles or role in self.roles)
@@ -121,6 +141,46 @@ STAGE_RULES = (
 )
 WORKER_PROFILE_FIELDS = ("role", "contract", "adapter", "capabilities", "enforcement", "mcp")
 IMPLEMENT_STAGES = {"work", "docs", "explore", "verify", "review"}
+
+
+@with_config(ConfigDict(strict=True, extra="allow"))
+class ContextInput(TypedDict):
+    # Each process owns its payload; this projection validates what context consumes.
+    source: Annotated[dict[str, object], Field(min_length=1)]
+    task: NotRequired[Task | TaskSelection]
+    node: NotRequired[Node | ContextNode]
+    read: NotRequired[list[Nonblank]]
+    scope_files: NotRequired[list[Nonblank]]
+    project_policy: NotRequired[Snapshot]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class WorkerProfile(ProfileCommon):
+    adapter: str
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class PolicyContext(TypedDict):
+    id: str
+    sha256: str
+    scope_status: Literal["known", "unknown"]
+    gates: list[BoundaryGate]
+    review_criteria: list[ReviewCriterion]
+
+
+@with_config(ConfigDict(strict=True, extra="allow"))
+class ContextPacket(TypedDict):
+    process: Literal["implement", "planning", "decompose", "code-review"]
+    role: Nonblank
+    workspace: Nonblank
+    profile: WorkerProfile
+    model: Model
+    instructions: list[MaterialEntry]
+    project_policy: PolicyContext
+
+
+CONTEXT_INPUT = TypeAdapter[ContextInput](ContextInput)
+CONTEXT_PACKET = TypeAdapter[ContextPacket](ContextPacket)
 
 
 def path(root: str | Path, rel: str) -> Path:
@@ -168,8 +228,8 @@ def factory_files(config: Config) -> list[str]:
 
 
 def _validate_assignment(
-    config: Config, profile_name: str, role: str, process: str, assignment: Any
-) -> tuple[Profile, Node, list[str]]:
+    config: Config, profile_name: str, role: str, process: str, assignment: ContextInput
+) -> tuple[Profile, Node | ContextNode, list[str]]:
     """Validate routing and capabilities before any material is read."""
     if not (
         isinstance(process, str)
@@ -180,38 +240,25 @@ def _validate_assignment(
         raise ValueError("Role not allowed in context process")
     if not (isinstance(profile_name, str) and profile_name in config["_roles"].get(role, [])):
         raise ValueError("Context profile not allowed for role")
-    if not (
-        isinstance(assignment, dict)
-        and isinstance(assignment.get("source"), dict)
-        and assignment["source"]
-    ):
-        raise ValueError("Context requires explicit source data")
     profile = config["profiles"][profile_name]
     ensure(
         profile["enforcement"] == "instructions",
         "BLOCKED_CAPABILITIES: generic adapter cannot enforce required tool isolation",
     )
-    node = assignment.get("node", {})
-    if not (isinstance(node, dict)):
-        raise ValueError("Invalid context node")
+    node: Node | ContextNode = assignment.get("node") or ContextNode()
     resources = node.get("resources", [])
-    if not (isinstance(resources, list) and all(isinstance(r, str) for r in resources)):
-        raise ValueError("Invalid context resources")
     ensure(not node.get("owns") or profile["capabilities"]["edit"], "Profile forbids edits")
     if process == "implement":
-        if not (isinstance(node.get("stage"), str) and node["stage"] in IMPLEMENT_STAGES):
+        if node.get("stage") not in IMPLEMENT_STAGES:
             raise ValueError("Invalid worker stage")
-        if not (isinstance(assignment.get("task"), dict) and assignment["task"].get("scope")):
+        if not (assignment.get("task") or TaskSelection()).get("scope"):
             raise ValueError("Missing task context")
         ensure(
             "project-checks" not in resources or profile["capabilities"]["commands"],
             "Context commands forbidden by profile",
         )
     reads = node.get("read", assignment.get("read", []))
-    if not (isinstance(reads, list)):
-        raise ValueError("Invalid project reading list")
-    ensure(all(isinstance(item, str) for item in reads), "Invalid project reading list")
-    return profile, cast(Node, node), cast(list[str], reads)
+    return profile, node, reads
 
 
 def _generalist_owns_unresolved_finding(node_id: object, findings: object) -> bool:
@@ -231,7 +278,7 @@ def _factory_materials(
     profile: Profile,
     role: str,
     process: str,
-    node: Node,
+    node: Node | ContextNode,
     assignment: dict[str, Any],
 ) -> list[tuple[str, str]]:
     """Select paths and reasons without reading files or changing the assignment."""
@@ -325,7 +372,7 @@ def build(
     profile_name: object,
     role: object,
     process: object,
-    assignment: Any,
+    assignment: object,
     *,
     read_bytes: Callable[[Path], bytes] = Path.read_bytes,
 ) -> dict[str, Any]:
@@ -339,7 +386,14 @@ def build(
         raise ValueError("Role not allowed in context process")
     if not isinstance(profile_name, str):
         raise ValueError("Context profile not allowed for role")
-    profile, node, reads = _validate_assignment(config, profile_name, role, process, assignment)
+    try:
+        data = CONTEXT_INPUT.validate_python(assignment)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid context assignment", exc, CONTEXT_INPUT)
+        ) from None
+    profile, node, reads = _validate_assignment(config, profile_name, role, process, data)
+    assignment = dict(data)
     root, workspace = Path(config["_path"]).parent.resolve(), Path(workspace).resolve()
     materials = [
         (path(root, rel), reason, "worker")
@@ -361,10 +415,13 @@ def build(
                 f"{file.relative_to(root)}. Check adapter worker_instructions or role configuration.",
             )
     policy = config["_project"]
-    scope = assignment.get("task", {}).get("scope", assignment.get("scope_files"))
+    task = data.get("task") or TaskSelection()
+    scope = task.get("scope", data.get("scope_files"))
     pinned = None
     if process == "code-review":
-        pinned = assignment.get("project_policy")
+        pinned = data.get("project_policy")
+        if pinned is None:
+            raise ValueError("Code review context requires pinned project_policy")
         policy = {
             **policy,
             "data": validate_snapshot(pinned),
@@ -429,7 +486,7 @@ def build(
                 "gates": boundary_gates(
                     policy["data"],
                     "implement." + str(node.get("stage")),
-                    assignment.get("task", {}),
+                    task,
                 )
                 if process == "implement"
                 else [],
@@ -452,7 +509,12 @@ def build(
             },
         }
     )
-    return packet
+    try:
+        return dict(CONTEXT_PACKET.validate_python(packet))
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid context packet", exc, CONTEXT_PACKET)
+        ) from None
 
 
 def main() -> None:

@@ -8,6 +8,9 @@ import os
 from collections.abc import Iterable
 from pathlib import Path
 
+from pydantic import ConfigDict, TypeAdapter, with_config
+from typing_extensions import TypedDict
+
 from factory_tooling.decompose.contracts import LoadedTask
 from factory_tooling.decompose.output_safety import atomic_write_text
 from factory_tooling.decompose.task_data import (
@@ -111,6 +114,18 @@ def _ensure_directory(path: str | Path) -> None:
         os.makedirs(path, exist_ok=True)
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class Violations(TypedDict):
+    cycles: list[str]
+    parent_task_cycles: list[str]
+    deferred_cycles: list[str]
+    mixed_relation_cycles: list[str]
+    violations: list[str]
+
+
+VIOLATIONS = TypeAdapter[Violations](Violations)
+
+
 def _write_violations_json(
     output_dir: str | Path,
     messages: list[str],
@@ -124,13 +139,15 @@ def _write_violations_json(
     atomic_write_text(
         violations_file,
         json.dumps(
-            {
-                "cycles": dependency_cycles or [],
-                "parent_task_cycles": parent_task_cycles or [],
-                "deferred_cycles": deferred_cycles or [],
-                "mixed_relation_cycles": mixed_relation_cycles or [],
-                "violations": messages,
-            },
+            VIOLATIONS.validate_python(
+                {
+                    "cycles": dependency_cycles or [],
+                    "parent_task_cycles": parent_task_cycles or [],
+                    "deferred_cycles": deferred_cycles or [],
+                    "mixed_relation_cycles": mixed_relation_cycles or [],
+                    "violations": messages,
+                }
+            ),
             indent=2,
             ensure_ascii=False,
         ),

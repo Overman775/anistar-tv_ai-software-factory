@@ -11,10 +11,25 @@ import subprocess
 from pathlib import Path
 from typing import Any, TypeGuard
 
-from factory_tooling.decompose.contracts import Envelope, LoadedTask, LoadResult
+from pydantic import TypeAdapter, ValidationError
+
+from factory_tooling.decompose.contracts import (
+    Envelope,
+    Estimate,
+    LoadedTask,
+    LoadResult,
+    RawTask,
+    SourceLock,
+    TaskEnvelope,
+)
 from factory_tooling.runtime.acceptance import criteria_map as criteria_map
-from factory_tooling.runtime.acceptance import ids as acceptance_ids
 from factory_tooling.runtime.acceptance import plan_criteria
+from factory_tooling.validation import validation_message
+
+TASK_ENVELOPE = TypeAdapter[TaskEnvelope](TaskEnvelope)
+TASK_RECORD = TypeAdapter[RawTask](RawTask)
+ESTIMATE = TypeAdapter[Estimate](Estimate)
+SOURCE_LOCK = TypeAdapter[SourceLock](SourceLock)
 
 PURPOSE_LABELS = {
     "functionality": "Functionality",
@@ -47,37 +62,6 @@ TASK_ID_SEQUENCE_RE = re.compile(r"-(\d{2})$")
 
 
 TASK_FILENAME_RE = re.compile(r"^(\d{2})-[a-z0-9][a-z0-9_-]*\.md$")
-
-
-REQUIRED_FIELDS = (
-    "acceptance_ids",
-    "filename",
-    "title",
-    "purpose",
-    "scope",
-    "outcome",
-    "contract_type",
-    "implemented",
-    "deferred",
-    "parent_task",
-    "depends_on",
-    "blocked_by",
-    "estimate",
-)
-
-
-RAW_TRACKED_FIELDS = (
-    "id",
-    "outcome",
-    "affected_layers",
-    "implemented",
-    "consumers",
-    "research_question",
-    "timebox_hours",
-    "expected_result",
-    "contributes_to_acceptance_ids",
-    "local_acceptance_criteria",
-)
 
 
 def capabilities_by_task(
@@ -114,15 +98,6 @@ def _graph_scope(task: LoadedTask) -> str:
     return scope.strip() if _is_nonempty_text(scope) else "unspecified"
 
 
-def _to_number(value: object) -> float | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        return float(str(value).replace(",", "."))
-    except (TypeError, ValueError):
-        return None
-
-
 def _format_hours(value: float | None) -> str:
     if value is None:
         return "0"
@@ -130,20 +105,11 @@ def _format_hours(value: float | None) -> str:
 
 
 def normalize_estimate(task: dict[str, object]) -> tuple[str, float, float]:
-    estimate = task.get("estimate")
-    min_hours = None
-    max_hours = None
-
-    if isinstance(estimate, dict):
-        min_hours = _to_number(estimate.get("min_hours"))
-        max_hours = _to_number(estimate.get("max_hours"))
-        if min_hours is None:
-            min_hours = max_hours
-        if max_hours is None:
-            max_hours = min_hours
-
-    min_hours = 0.0 if min_hours is None else min_hours
-    max_hours = min_hours if max_hours is None else max_hours
+    try:
+        estimate = ESTIMATE.validate_python(task.get("estimate"))
+        min_hours, max_hours = float(estimate["min_hours"]), float(estimate["max_hours"])
+    except ValidationError:
+        min_hours = max_hours = 0.0
     if min_hours == max_hours:
         label = f"{_format_hours(max_hours)} h"
     else:
@@ -180,11 +146,13 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
             if not isinstance(data, dict):
                 load_violations.append(f"🚨 File '{relative_file}': envelope must be an object.")
                 continue
-            if "schema_version" in data:
+            try:
+                TASK_ENVELOPE.validate_python(data)
+            except ValidationError as error:
                 load_violations.append(
-                    f"🚨 File '{relative_file}': version tag is unsupported; "
-                    "regenerate the current envelope without schema_version."
+                    validation_message(f"File '{relative_file}'", error, TASK_ENVELOPE)
                 )
+            # Keep partial identities and links to diagnose graph errors in the same run.
             tasks_list = data.get("tasks")
             if not isinstance(tasks_list, list):
                 load_violations.append(f"🚨 File '{relative_file}': field tasks must be a list.")
@@ -210,11 +178,6 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
                         "must be an object."
                     )
                     continue
-                if "schema_version" in task:
-                    load_violations.append(
-                        f"🚨 File '{relative_file}': task #{task_index + 1} has a version tag; "
-                        "regenerate the current task without schema_version."
-                    )
                 source_task_id = task.get("id")
                 if _is_nonempty_text(source_task_id):
                     task_id = source_task_id
@@ -239,17 +202,14 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
                 scope = task.get("scope")
                 parent_task = task.get("parent_task")
 
+                structural_errors = []
+                try:
+                    TASK_RECORD.validate_python(task)
+                except ValidationError as error:
+                    structural_errors.append(
+                        validation_message(f"Task '{task_id}'", error, TASK_RECORD)
+                    )
                 estimate_value = task.get("estimate")
-                estimate_confidence = (
-                    estimate_value.get("confidence") if isinstance(estimate_value, dict) else None
-                )
-                tracked_fields = set(REQUIRED_FIELDS) | set(RAW_TRACKED_FIELDS)
-                raw_presence = {field: field in task for field in tracked_fields}
-                raw_values = {field: task.get(field) for field in tracked_fields}
-                raw_presence["estimate.confidence"] = (
-                    isinstance(estimate_value, dict) and "confidence" in estimate_value
-                )
-                raw_values["estimate.confidence"] = estimate_confidence
                 all_tasks[task_id] = {
                     "id": task_id,
                     "source_id": source_task_id,
@@ -270,7 +230,7 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
                     "timebox_hours": task.get("timebox_hours"),
                     "expected_result": task.get("expected_result"),
                     "estimate_raw": estimate_value,
-                    "estimate_confidence": estimate_confidence,
+                    "structural_errors": structural_errors,
                     "estimate": estimate_label,
                     "estimate_min_hours": estimate_min,
                     "estimate_max_hours": estimate_max,
@@ -278,8 +238,6 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
                     "blocked_by": blocked_by,
                     "parent_task": parent_task,
                     "deferred": deferred,
-                    "raw_presence": raw_presence,
-                    "raw_values": raw_values,
                     "file": filepath,
                     "markdown_file": find_markdown_file(task, filepath),
                 }
@@ -353,40 +311,18 @@ def load_source_lock(path: str | Path) -> tuple[dict[str, Any] | None, list[str]
     try:
         with open(path, encoding="utf-8") as file:
             source_lock = json.load(file)
-    except Exception as error:
+    except (OSError, ValueError) as error:
         return None, [f"🚨 Source lock '{path}' cannot be read: {error}"]
 
-    if not isinstance(source_lock, dict):
-        return None, [f"🚨 Source lock '{path}' must be JSON object."]
-
-    for field in ("plan_id", "plan_hash", "plan_path"):
-        if not _is_nonempty_text(source_lock.get(field)):
-            messages.append(f"🚨 Source lock '{path}': field {field} must be a non-empty string.")
-    revision = source_lock.get("plan_revision")
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
-        messages.append(f"🚨 Source lock '{path}': plan_revision must be a positive integer.")
-
-    capability_ids = source_lock.get("capability_ids")
-    if not isinstance(capability_ids, list):
-        messages.append(f"🚨 Source lock '{path}': capability_ids must be a list.")
-    else:
-        if not capability_ids:
-            messages.append(f"🚨 Source lock '{path}': capability_ids must not be empty.")
-        invalid_ids = [
-            value
-            for value in capability_ids
-            if not isinstance(value, str) or CAPABILITY_ID_RE.fullmatch(value) is None
-        ]
-        if invalid_ids:
-            messages.append(f"🚨 Source lock '{path}': capability_ids contains invalid values.")
-        if len(capability_ids) != len(set(capability_ids)):
-            messages.append(f"🚨 Source lock '{path}': capability_ids contains duplicates.")
     try:
-        values = acceptance_ids(source_lock.get("acceptance_ids"), "source acceptance_ids")
-        if not all(re.fullmatch(r"AC-\d{2,}", value) for value in values):
-            raise ValueError("Invalid source acceptance_ids")
-    except ValueError as error:
-        messages.append(f"🚨 {error}")
+        source_lock = dict(SOURCE_LOCK.validate_python(source_lock))
+    except ValidationError as exc:
+        return None, [validation_message(f"Invalid source lock '{path}'", exc, SOURCE_LOCK)]
+
+    for field in ("capability_ids", "acceptance_ids"):
+        values = source_lock[field]
+        if len(values) != len(set(values)):
+            messages.append(f"🚨 Source lock '{path}': {field} contains duplicates.")
     try:
         plan_path = Path(source_lock["plan_path"])
         plan_bytes = plan_path.read_bytes()

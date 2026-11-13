@@ -36,7 +36,7 @@ from factory_tooling.project.profile_rules import (
     validate,
 )
 from factory_tooling.project.project import review_snapshot
-from factory_tooling.runtime.contracts import Task
+from factory_tooling.runtime.contracts import TaskSelection
 from factory_tooling.runtime.workflow_config import load_config
 from factory_tooling.runtime.workflow_core import Invalid
 from tests.factory_tooling.runtime import test_workflow
@@ -327,7 +327,7 @@ class ProjectTests(unittest.TestCase):
 
     def test_anistar_checks_cannot_be_omitted_changed_or_silently_inapplicable(self) -> None:
         profile = load_profile(ROOT / "project/project.yaml")["data"]
-        task: Task = {
+        task: TaskSelection = {
             "scope": ["lib/app.dart"],
             "policy_decisions": {
                 "dart-changes": {
@@ -349,7 +349,7 @@ class ProjectTests(unittest.TestCase):
         )
         self.assertEqual(
             ["check", "test:e2e", "build:android:prod:apk"],
-            [c["execution"]["argv"][-1] for c in final[3:]],
+            [c["execution"]["argv"][-1] for c in final[3:] if c["kind"] != "observation"],
         )
         task["required_checks"] = final
         check_task(profile, task, final=True)
@@ -357,7 +357,9 @@ class ProjectTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing/changed"):
             check_task(profile, task, final=True)
         task["required_checks"] = deepcopy(final)
-        task["required_checks"][0]["execution"]["argv"] = ["true"]
+        command = task["required_checks"][0]
+        assert command["kind"] != "observation"
+        command["execution"]["argv"] = ["true"]
         with self.assertRaisesRegex(ValueError, "missing/changed"):
             check_task(profile, task, final=True)
         del task["policy_decisions"]["dart-changes"]
@@ -367,7 +369,7 @@ class ProjectTests(unittest.TestCase):
     def test_task_inputs_can_strengthen_but_not_weaken_profile_checks(self) -> None:
         profile = load_profile(ROOT / "project/project.yaml")["data"]
         original = deepcopy(profile)
-        task: Task = {
+        task: TaskSelection = {
             "scope": ["lib/app.dart"],
             "policy_decisions": {
                 "dart-changes": {
@@ -378,7 +380,9 @@ class ProjectTests(unittest.TestCase):
             },
         }
         task["required_checks"] = required_checks(profile, task)
-        task["required_checks"][0]["execution"]["inputs"].append("tool/check.py")
+        command = task["required_checks"][0]
+        assert command["kind"] != "observation"
+        command["execution"]["inputs"].append("tool/check.py")
         check_task(profile, task)
         self.assertEqual(original, profile, "returned check data must not mutate policy")
         mutations_383: list[Callable[[Any], object]] = [
@@ -390,9 +394,11 @@ class ProjectTests(unittest.TestCase):
         ]
         for change in mutations_383:
             weakened = deepcopy(task)
-            change(weakened["required_checks"][0]["execution"])
+            command = weakened["required_checks"][0]
+            assert command["kind"] != "observation"
+            change(command["execution"])
             with (
-                self.subTest(execution=weakened["required_checks"][0]["execution"]),
+                self.subTest(execution=command["execution"]),
                 self.assertRaises(ValueError),
             ):
                 check_task(profile, weakened)

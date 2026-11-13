@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import platform
 import shlex
 import shutil
@@ -14,14 +13,15 @@ from copy import deepcopy
 
 # Direct CLI execution and import-by-path use the same tool modules.
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
+
+from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from factory_tooling.decisions.decision_contract import (
     preserve_obligations as preserve_obligations,
 )
 from factory_tooling.logging_config import event as log_event
 from factory_tooling.paths import FACTORY_ROOT as FACTORY_ROOT
-from factory_tooling.project.contracts import ProjectCheck
 from factory_tooling.project.profile_io import load_profile, parse_yaml
 from factory_tooling.project.profile_rules import boundary_gates as boundary_gates
 from factory_tooling.project.profile_rules import project_checks as project_checks
@@ -40,13 +40,21 @@ from factory_tooling.runtime.assignment import implement_packet as implement_pac
 from factory_tooling.runtime.assignment import worker_node
 from factory_tooling.runtime.check_evidence import check_generated, check_receipts
 from factory_tooling.runtime.check_process import execute_check as execute_check
-from factory_tooling.runtime.contracts import Check as Check
+from factory_tooling.runtime.contracts import (
+    CommandResult,
+    GraphTopology,
+    LedgerEvent,
+    LockedGraph,
+    Nonblank,
+    PacketRef,
+    PendingCheck,
+    Report,
+)
 from factory_tooling.runtime.contracts import Config as Config
 from factory_tooling.runtime.contracts import Dispatch as Dispatch
 from factory_tooling.runtime.contracts import ExecutionReceipt as ExecutionReceipt
 from factory_tooling.runtime.contracts import Graph as Graph
 from factory_tooling.runtime.contracts import Node as Node
-from factory_tooling.runtime.contracts import Report
 from factory_tooling.runtime.contracts import State as State
 from factory_tooling.runtime.contracts import Task as Task
 from factory_tooling.runtime.contracts import agent_key as agent_key
@@ -61,7 +69,11 @@ from factory_tooling.runtime.packet_io import (
     receipt_path,
     serve_chunk,
 )
-from factory_tooling.runtime.state_io import parse_state
+from factory_tooling.runtime.state_io import (
+    parse_report,
+    parse_report_draft,
+    parse_state,
+)
 from factory_tooling.runtime.workflow_config import (
     check_capabilities as check_capabilities,
 )
@@ -80,11 +92,19 @@ from factory_tooling.runtime.workflow_core import snapshot as snapshot
 from factory_tooling.runtime.workflow_graph import ancestors as ancestors
 from factory_tooling.runtime.workflow_graph import diagram as diagram
 from factory_tooling.runtime.workflow_graph import overlaps as overlaps
-from factory_tooling.runtime.workflow_graph import validate_assignment_lineage
+from factory_tooling.runtime.workflow_graph import (
+    parse_graph,
+    validate_assignment_lineage,
+)
 from factory_tooling.runtime.workflow_graph import validate_graph as validate_graph
 from factory_tooling.runtime.workflow_sources import lock_source as lock_source
+from factory_tooling.validation import validation_message
 
 # Compatibility exports: existing imports and command entry points stay valid.
+
+
+LEDGER_EVENT = TypeAdapter[LedgerEvent](LedgerEvent)
+TASK_HANDOFFS = TypeAdapter[dict[str, str]](dict[str, Nonblank], config=ConfigDict(strict=True))
 
 
 def has_prior_dispatch_evidence(state: State, node_id: str) -> bool:
@@ -98,7 +118,7 @@ def has_prior_dispatch_evidence(state: State, node_id: str) -> bool:
     )
 
 
-def validate_assignment_change(state: State, graph: Graph) -> None:
+def validate_assignment_change(state: State, graph: GraphTopology) -> None:
     validate_assignment_lineage(graph, state["config"], state.get("corrections", []))
     old = state["graph"]
     new_nodes = {n["id"]: n for n in graph["nodes"]}
@@ -174,31 +194,36 @@ class Ledger:
         return state
 
     def save(self, state: State, event: str, **details: object) -> None:
-        parse_state(state)
         require(
             state["status"] == "active",
             "Terminal run is immutable; start a new authorized run",
         )
-        state["events"].append({"at": time.time(), "event": event, **details})
+        try:
+            state["events"].append(
+                LEDGER_EVENT.validate_python({"at": time.time(), "event": event, **details})
+            )
+        except ValidationError as exc:
+            raise Invalid(validation_message("Invalid workflow event", exc, LEDGER_EVENT)) from None
+        parse_state(state)
         atomic_json(relative(self.root, ".factory/memory/state/workflow.json"), state)
         node_id = details.get("node")
         node = next((n for n in state["graph"]["nodes"] if n["id"] == node_id), None)
-        attempt = state["nodes"].get(node_id, {}) if isinstance(node_id, str) else {}
+        attempt = state["nodes"].get(node_id) if isinstance(node_id, str) else None
         event_fields: dict[str, object] = {"run_id": state["run_id"]}
         if node is not None:
             event_fields.update(node_id=node["id"], task_id=node["task"])
         elif isinstance(details.get("task"), str) and details["task"] in state["graph"]["tasks"]:
             event_fields["task_id"] = details["task"]
-        if attempt.get("dispatch_id"):
+        if attempt and attempt.get("dispatch_id"):
             event_fields["dispatch_id"] = attempt["dispatch_id"]
         elif event in {"retry", "correction_decided"}:
             for prior in reversed(state["events"][:-1]):
                 if prior.get("event") != "invalidated":
                     break
                 if prior.get("node") == node_id:
-                    previous = prior.get("previous", {})
-                    if isinstance(previous, dict) and previous.get("dispatch_id"):
-                        event_fields["dispatch_id"] = previous["dispatch_id"]
+                    previous = prior.get("previous")
+                    if previous is not None and (dispatch_id := previous.get("dispatch_id")):
+                        event_fields["dispatch_id"] = dispatch_id
                     break
         if isinstance(details.get("result"), str) and details["result"] in {
             "PASS",
@@ -260,19 +285,16 @@ class Ledger:
                 relative(self.root, p)
         with self.locked():
             require(not self.path.exists(), "Existing run: resume or archive/clean it first")
-            require(
-                not (self.dir / "pipeline.md").exists(),
-                "Legacy state exists; reconcile it first",
-            )
-            graph["sources"] = {
-                k: lock_source(self.root, src) for k, src in graph["sources"].items()
+            locked_graph: LockedGraph = {
+                **graph,
+                "sources": {k: lock_source(self.root, src) for k, src in graph["sources"].items()},
             }
             state: State = {
                 "run_id": "run-" + uuid.uuid4().hex[:12],
                 "revision": 1,
                 "status": "active",
                 "workspace": str(self.root),
-                "graph": graph,
+                "graph": locked_graph,
                 "config": config,
                 "events": [],
                 "counters": {},
@@ -281,7 +303,7 @@ class Ledger:
             }
             check_config(state)
             self.save(state, "created")
-            input_graph["sources"] = graph["sources"]
+            input_graph["sources"] = parse_graph(locked_graph)["sources"]
             return state
 
     def packet(self, node_id: str) -> dict[str, Any]:
@@ -340,7 +362,7 @@ class Ledger:
         self.check_sources(s, s["graph"]["tasks"][n["task"]])
         return n, v
 
-    def _packet_bootstrap(self, s: State, n: Node, meta: dict[str, str]) -> dict[str, Any]:
+    def _packet_bootstrap(self, s: State, n: Node, meta: PacketRef) -> dict[str, Any]:
         args = [
             ".factory/tools/workflow.py",
             "--workspace",
@@ -394,7 +416,7 @@ class Ledger:
         }
 
     def read_packet(
-        self, node_id: str, bootstrap: dict[str, str], chunk: int, received: str | None = None
+        self, node_id: str, bootstrap: object, chunk: int, received: str | None = None
     ) -> dict[str, Any]:
         """Serve one bounded chunk; only an acknowledged response advances delivery."""
         with self.locked():
@@ -419,7 +441,7 @@ class Ledger:
             }
 
     def confirm_packet(
-        self, node_id: str, bootstrap: dict[str, str], received: str = "", materials: str = ""
+        self, node_id: str, bootstrap: object, received: str = "", materials: str = ""
     ) -> None:
         with self.locked():
             s = self.read()
@@ -715,7 +737,7 @@ class Ledger:
         request_id: str | None = None,
         *,
         expected_dispatch: str | None = None,
-    ) -> Check:
+    ) -> CommandResult | PendingCheck:
         """Persist intent, run outside the ledger lock, then reconcile real process facts."""
         process = None
         with self.locked():
@@ -828,7 +850,7 @@ class Ledger:
                 ),
                 "Generator outputs must be exact owned task paths",
             )
-            for dependency in registrations.get(cid, ProjectCheck()).get("after", []):
+            for dependency in registrations[cid].get("after", []) if cid in registrations else []:
                 if dependency in included:
                     continue
                 prior = previous.get(dependency)
@@ -880,7 +902,7 @@ class Ledger:
         }
 
     @staticmethod
-    def _pending_check(rid: str, record: ExecutionReceipt) -> Check:
+    def _pending_check(rid: str, record: ExecutionReceipt) -> PendingCheck:
         return {"id": record["spec"]["id"], "execution_id": rid, "result": "RUNNING"}
 
     @staticmethod
@@ -891,7 +913,9 @@ class Ledger:
             if record["status"] == "RUNNING"
         }
 
-    def reconcile_check(self, rid: str, abandon_unstarted: bool = False) -> Check:
+    def reconcile_check(
+        self, rid: str, abandon_unstarted: bool = False
+    ) -> CommandResult | PendingCheck:
         with self.locked():
             state = self.read()
             record = state.get("executions", {}).get(rid)
@@ -949,7 +973,7 @@ class Ledger:
             )
             return parent
 
-    def check_results(self, rid: str) -> list[Check]:
+    def check_results(self, rid: str) -> list[CommandResult]:
         with self.locked():
             state = self.read()
             record = state.get("executions", {}).get(rid)
@@ -972,7 +996,7 @@ class Ledger:
         record: ExecutionReceipt,
         observed: dict[str, Any] | None,
         error: str | None,
-    ) -> Check:
+    ) -> CommandResult:
         spec = record["spec"]
         execution = spec["execution"]
         code = None
@@ -996,8 +1020,10 @@ class Ledger:
             error = error or observed["error"]
         if after != snapshot(self.root, record["input_scope"]):
             error = error or "Command output snapshot is stale"
-        status = "BLOCKED" if error else "PASS" if code == 0 else "FAIL"
-        result: Check = {
+        status: Literal["BLOCKED", "PASS", "FAIL"] = (
+            "BLOCKED" if error else "PASS" if code == 0 else "FAIL"
+        )
+        result: CommandResult = {
             **spec,
             "command": execution["argv"]
             or "registered stages: " + ", ".join(execution.get("stages", [])),
@@ -1032,18 +1058,18 @@ class Ledger:
             state["graph"]["agents"][agent_key(node)]["role"],
         )
 
-    def prepare_report(
-        self, node_id: str, report: dict[str, Any], receipt_ids: list[str]
-    ) -> dict[str, Any]:
+    def prepare_report(self, node_id: str, draft: object, receipt_ids: list[str]) -> Report:
         """Capture the author's evidence at handoff for its exact running dispatch."""
-        if not isinstance(report, dict):
-            raise Invalid("Report draft must be an object")
-        report = {key: value for key, value in report.items() if key != "observed_source_drift"}
         with self.locked():
             state = self.read()
             node = next((n for n in state["graph"]["nodes"] if n["id"] == node_id), None)
             if node is None or node_id not in state["nodes"]:
                 raise Invalid("Unknown report node")
+            if isinstance(draft, dict):
+                require("files" not in draft, "Existing evidence cannot be refreshed")
+            report = parse_report_draft(draft)
+            report.pop("observed_source_drift", None)
+            checks = report.get("checks", [])
             current = state["nodes"][node_id]
             task = state["graph"]["tasks"][node["task"]]
             require(
@@ -1059,16 +1085,8 @@ class Ledger:
                 and report.get("slice_id", task["slice"]) == task["slice"],
                 "Stale report identity",
             )
-            require("files" not in report, "Existing evidence cannot be refreshed")
-            checks = report.get("checks", [])
-            require(
-                isinstance(checks, list) and all(isinstance(check, dict) for check in checks),
-                "Invalid checks",
-            )
             require(len(set(receipt_ids)) == len(receipt_ids), "Duplicate receipt")
-            outcome = report.get("outcome")
-            if not isinstance(outcome, str) or outcome not in ("PASS", "FAIL", "BLOCKED"):
-                raise Invalid("Invalid outcome")
+            outcome = report["outcome"]
             require_pass = outcome == "PASS"
             for receipt_id in receipt_ids:
                 record = state.get("executions", {}).get(receipt_id)
@@ -1094,28 +1112,29 @@ class Ledger:
             )
             obligations = self.finish_requirements(state, node)
             acceptance_guard(finish_requirements.validate_selection, obligations, checks)
+            result = parse_report(
+                {
+                    **report,
+                    "task_id": node["task"],
+                    "slice_id": task["slice"],
+                    "checks": checks,
+                    "files": snapshot(self.root, task["scope"]),
+                }
+            )
             if require_pass:
-                acceptance_guard(
-                    finish_requirements.validate_pass,
-                    obligations,
-                    cast(Report, {**report, "checks": checks}),
-                )
+                acceptance_guard(finish_requirements.validate_pass, obligations, result)
             self.source_drifted(state, task, outcome)
-            return {
-                **report,
-                "task_id": node["task"],
-                "slice_id": task["slice"],
-                "checks": checks,
-                "files": snapshot(self.root, task["scope"]),
-            }
+            return result
 
-    def finish(self, node_id: str, report: Any) -> None:
-        # Runtime facts are derived, never accepted from an agent.
-        report = {
-            key: value
-            for key, value in report.items()
-            if key not in {"gate_results", "observed_source_drift"}
-        }
+    def finish(self, node_id: str, raw: object) -> None:
+        # Runtime facts are derived from current evidence.
+        if isinstance(raw, dict):
+            raw = {
+                key: value
+                for key, value in raw.items()
+                if key not in {"gate_results", "observed_source_drift"}
+            }
+        report = parse_report(raw)
         with self.locked():
             s = self.read()
             n = next(n for n in s["graph"]["nodes"] if n["id"] == node_id)
@@ -1136,12 +1155,7 @@ class Ledger:
                 "Stale report identity",
             )
             self.diagnostic_attempt = (node_id, v["dispatch_id"])
-            require(
-                report.get("terminal") is True and report.get("summary"),
-                "Need terminal result and summary",
-            )
-            outcome = report.get("outcome")
-            require(outcome in {"PASS", "FAIL", "BLOCKED"}, "Invalid outcome")
+            outcome = report["outcome"]
             if outcome == "PASS":
                 require(
                     "packet_receipt" not in v or v.get("packet_confirmed"),
@@ -1156,15 +1170,11 @@ class Ledger:
                 "Stale/incomplete file evidence",
             )
             checks = report.get("checks", [])
-            if not (isinstance(checks, list) and all(isinstance(c, dict) for c in checks)):
-                raise Invalid("Invalid checks")
             findings = report.get("findings", [])
-            if not (isinstance(findings, list) and all(isinstance(f, dict) for f in findings)):
-                raise Invalid("Invalid findings")
             if outcome == "PASS" and n["stage"] != "review":
                 for finding in findings:
                     require(
-                        type(finding.get("blocking")) is bool and finding.get("id"),
+                        "blocking" in finding,
                         "Untyped finding",
                     )
                     require(
@@ -1198,10 +1208,7 @@ class Ledger:
                     transition_gates.evaluate, s["config"]["_project"]["data"], n, task, report
                 )
             if report.get("stage_result") == "APPROVAL_REQUIRED" or "approval_request" in report:
-                require(
-                    isinstance(report.get("approval_request"), dict),
-                    "Invalid approval request",
-                )
+                require("approval_request" in report, "Invalid approval request: field required")
                 approval.bind_request(self.root, s, n, task, report)
                 validate_graph(approval.expanded_graph(s, n, report), s["config"], self.root)
             acceptance_guard(review_findings.apply, s, n, report)
@@ -1214,11 +1221,7 @@ class Ledger:
             unsuccessful = report.get("unsuccessful_attempt")
             if unsuccessful is not None:
                 require(
-                    outcome == "FAIL"
-                    and report.get("stage_result") in {"FAIL_CODE", "FAIL_TEST"}
-                    and isinstance(unsuccessful, dict)
-                    and set(unsuccessful) == {"attempted_work", "unmet_requirement", "evidence"}
-                    and all(isinstance(x, str) and x.strip() for x in unsuccessful.values()),
+                    outcome == "FAIL" and report.get("stage_result") in {"FAIL_CODE", "FAIL_TEST"},
                     "Unsuccessful attempt needs actual work, an unmet requirement and evidence",
                 )
             report_ref = report_history.store(self.root, s, v, report)
@@ -1251,10 +1254,8 @@ class Ledger:
                 v["status"] == "unknown" and evidence,
                 "Reconcile unknown work with actual runtime/file evidence",
             )
-            require(
-                status in {"reserved", "running", "blocked"},
-                "Invalid reconciliation state",
-            )
+            if status not in ("reserved", "running", "blocked"):
+                raise Invalid("Invalid reconciliation state")
             if status == "running":
                 require(v.get("handle"), "Bind actual handle before claiming running")
             if status == "reserved":
@@ -1262,7 +1263,7 @@ class Ledger:
                     not v.get("prompt_submitted") and not v.get("handle"),
                     "Cannot redispatch an already sent assignment",
                 )
-            v["status"] = status
+            v["status"] = cast(Literal["reserved", "running", "blocked"], status)
             self.save(s, "reconciled", node=node_id, status=status, evidence=evidence)
 
     def replace_session(
@@ -1286,17 +1287,19 @@ class Ledger:
                 handoffs = {next(iter(tasks)): handoff}
             else:
                 try:
-                    handoffs = json.loads(handoff)
-                except (TypeError, ValueError):
+                    handoffs = TASK_HANDOFFS.validate_json(handoff)
+                except ValidationError as exc:
                     raise Invalid(
-                        "Multi-task replacement needs a JSON task-to-handoff mapping"
+                        validation_message(
+                            "Multi-task replacement needs a JSON task-to-handoff mapping",
+                            exc,
+                            TASK_HANDOFFS,
+                        )
                     ) from None
-                if not (
-                    isinstance(handoffs, dict)
-                    and set(handoffs) == tasks
-                    and all(isinstance(v, str) and v.strip() for v in handoffs.values())
-                ):
-                    raise Invalid("Multi-task replacement needs one handoff per assigned task")
+                require(
+                    set(handoffs) == tasks,
+                    "Multi-task replacement needs one handoff per assigned task",
+                )
             previous = s["sessions"].pop(agent_id, None)
             epoch = s.get("epochs", {}).get(agent_id, 0)
             acp_name = f"{s['run_id']}-{agent_id}-e{epoch}"
@@ -1333,11 +1336,11 @@ class Ledger:
                     integration["scope"] = list(dict.fromkeys([*integration["scope"], *paths]))
             self._revise(state, graph, reason)
 
-    def revise(self, graph: Graph, reason: str) -> None:
+    def revise(self, graph: Graph | LockedGraph, reason: str) -> None:
         with self.locked():
             self._revise(self.read(), graph, reason)
 
-    def _revise(self, s: State, graph: Graph, reason: str) -> None:
+    def _revise(self, s: State, graph: Graph | LockedGraph, reason: str) -> None:
         require(not s.get("pause_reason"), "Run is paused by user")
         require(
             s["status"] == "active" and reason,
@@ -1409,7 +1412,7 @@ class Ledger:
                     "Replace physical session before changing role/profile",
                 )
         s["config"] = freeze_project(s["config"], graph, self.root)
-        s["graph"] = graph
+        s["graph"] = {**graph, "sources": old["sources"]}
         s["revision"] += 1
         for n in graph["nodes"]:
             s["nodes"].setdefault(n["id"], {"status": "pending", "attempt": 0})
@@ -1424,7 +1427,7 @@ class Ledger:
                     }
                 )
                 # A technical graph edit is not a free retry of failed work.
-                prior_task = old["tasks"].get(n["task"], {})
+                prior_task = old["tasks"][n["task"]]
                 current_task = graph["tasks"][n["task"]]
                 verify_changed = n["stage"] in {"verify", "review"} and any(
                     prior_task.get(field) != current_task.get(field)
@@ -1441,7 +1444,8 @@ class Ledger:
                     }
         self.save(s, "revised", reason=reason, previous_graph=old)
 
-    def reintake(self, graph: Graph, reason: str, authorization: str) -> None:
+    def reintake(self, graph: Graph | LockedGraph, reason: str, authorization: str) -> None:
+        graph = parse_graph(graph)
         with self.locked():
             s = self.read()
             require(not s.get("pause_reason"), "Run is paused by user")
@@ -1493,9 +1497,7 @@ class Ledger:
                 "Project document drift requires separate reconciliation",
             )
             s["config"] = freeze_project(new_config, graph, self.root)
-            checked_state = deepcopy(s)
-            checked_state["graph"] = graph
-            check_config(checked_state)
+            check_config(s, graph=graph)
             for tid, before in s["graph"]["tasks"].items():
                 after = graph["tasks"][tid]
                 try:
@@ -1513,8 +1515,8 @@ class Ledger:
                 k: lock_source(self.root, src, check_expected=False)
                 for k, src in graph["sources"].items()
             }
-            graph["sources"] = refreshed_sources
-            validate_graph(graph, s["config"], self.root)
+            locked_graph: LockedGraph = {**graph, "sources": refreshed_sources}
+            validate_graph(locked_graph, s["config"], self.root)
             validate_assignment_change(s, graph)
             for a in s["sessions"]:
                 require(
@@ -1522,14 +1524,16 @@ class Ledger:
                     "Replace session before role/profile change",
                 )
             previous, previous_nodes = s["graph"], s["nodes"]
-            s["graph"], s["revision"] = graph, s["revision"] + 1
+            s["graph"], s["revision"] = locked_graph, s["revision"] + 1
             s["nodes"] = {
                 n["id"]: (
                     previous_nodes[n["id"]]
-                    if previous_nodes.get(n["id"], {}).get("status") == "blocked"
+                    if n["id"] in previous_nodes and previous_nodes[n["id"]]["status"] == "blocked"
                     else {
                         "status": "pending",
-                        "attempt": previous_nodes.get(n["id"], {}).get("attempt", 0),
+                        "attempt": previous_nodes[n["id"]]["attempt"]
+                        if n["id"] in previous_nodes
+                        else 0,
                     }
                 )
                 for n in graph["nodes"]
@@ -1754,12 +1758,14 @@ class Ledger:
             predecessor = nodes[key]
             if predecessor["task"] != n["task"]:
                 continue
-            report = s["nodes"][key].get("report", {})
+            report = s["nodes"][key].get("report")
             if predecessor["stage"] in {"verify", "review"}:
+                if report is None:
+                    raise Invalid(f"Missing verification report: {key}")
                 self.check_current_verification(
                     s, predecessor, report, "Evidence invalidated by later write"
                 )
-            check_generated(self.root, s, key, report.get("checks", []))
+            check_generated(self.root, s, key, report["checks"] if report else [])
         acceptance_guard(
             review_findings.gate,
             s,
@@ -1831,10 +1837,8 @@ class Ledger:
     def archive(self, outcome: str, summary: str) -> str:
         with self.locked():
             s = self.read()
-            require(
-                outcome in {"completed", "cancelled"},
-                "Only terminal runs can be archived",
-            )
+            if outcome not in ("completed", "cancelled"):
+                raise Invalid("Only terminal runs can be archived")
             require(summary, "Final summary required")
             require(not self.active_commands(s), "Unresolved project commands")
             if s["status"] in {"completed", "cancelled"}:
@@ -1842,12 +1846,8 @@ class Ledger:
                     s["status"] == outcome and s["summary"] == summary,
                     "Terminal history is immutable",
                 )
-                if "archive_path" in s:
-                    run_archive.verified_cleanup_paths(self.root, s)
-                    return str(relative(self.root, s["archive_path"]))
-                hist = relative(self.root, f".factory/memory/history/{s['run_id']}/run.json")
-                require(read_json(hist) == s, "Terminal history is immutable")
-                return self._save_terminal_archive(s)
+                run_archive.verified_cleanup_paths(self.root, s)
+                return str(relative(self.root, s["archive_path"]))
             require(
                 not any(
                     v["status"] in {"reserved", "running", "unknown"} for v in s["nodes"].values()
@@ -1856,7 +1856,7 @@ class Ledger:
             )
             if outcome == "completed":
                 self.check_completion(s)
-            s["status"], s["summary"] = outcome, summary
+            s["status"], s["summary"] = cast(Literal["completed", "cancelled"], outcome), summary
             return self._save_terminal_archive(s)
 
     def _save_terminal_archive(self, state: State) -> str:
@@ -1869,7 +1869,7 @@ class Ledger:
         with self.locked():
             s = self.read()
             require(s["status"] in {"completed", "cancelled"}, "Keep resumable state")
-            require("archive_path" in s, "Archive legacy terminal run before cleanup")
+            require("archive_path" in s, "Archive required before cleanup")
             paths = run_archive.verified_cleanup_paths(self.root, s)
             for path in paths:
                 path.unlink(missing_ok=True)

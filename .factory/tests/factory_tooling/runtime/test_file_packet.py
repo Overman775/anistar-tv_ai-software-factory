@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from factory_tooling.runtime.contracts import PacketRef
 from factory_tooling.runtime.memory import read_evidence
-from factory_tooling.runtime.packet_io import delivery_state, receipt_path
+from factory_tooling.runtime.packet_io import PACKET_REFERENCE, delivery_state, receipt_path
 from factory_tooling.runtime.run_archive import read_member
 from factory_tooling.runtime.workflow import Ledger
 from factory_tooling.runtime.workflow_core import Invalid, atomic_json
@@ -27,19 +28,21 @@ class FilePacketTests(unittest.TestCase):
     def prepare(self) -> dict[str, Any]:
         return self.f.ledger.prepare_packet("write-label")
 
-    def meta(self, bootstrap: dict[str, Any]) -> dict[str, str]:
-        return {
-            key: bootstrap[key]
-            for key in (
-                "node_id",
-                "path",
-                "sha256",
-                "run_id",
-                "dispatch_id",
-                "source_hash",
-                "revision",
-            )
-        }
+    def meta(self, bootstrap: dict[str, Any]) -> PacketRef:
+        return PACKET_REFERENCE.validate_python(
+            {
+                key: bootstrap[key]
+                for key in (
+                    "node_id",
+                    "path",
+                    "sha256",
+                    "run_id",
+                    "dispatch_id",
+                    "source_hash",
+                    "revision",
+                )
+            }
+        )
 
     def test_complete_unicode_chunks_and_reserved_then_bound(self) -> None:
         # A large project instruction exercises chunking at non-ASCII boundaries.
@@ -72,7 +75,7 @@ class FilePacketTests(unittest.TestCase):
             self.f.ledger.read_packet("write-label", self.meta(b), len(parts) + 1)
         # Read-only bootstrap succeeds while reserved, but completion cannot.
         with self.assertRaisesRegex(Invalid, "unbound"):
-            self.f.ledger.finish("write-label", {})
+            self.f.ledger.finish("write-label", self.f.report("write-label"))
         with self.assertRaisesRegex(Invalid, "bound running"):
             self.f.ledger.run_check("write-label", "irrelevant")
         state = self.f.ledger.read()
@@ -132,7 +135,7 @@ class FilePacketTests(unittest.TestCase):
             ("path", "../foreign"),
             ("revision", "9"),
         ):
-            bad = self.meta(b)
+            bad = dict(self.meta(b))
             bad[key] = value
             with self.subTest(key=key), self.assertRaises(Invalid):
                 self.f.ledger.read_packet("write-label", bad, 1)
@@ -369,34 +372,6 @@ class PacketCleanupTests(unittest.TestCase):
         self.assertFalse(self.f.ledger.path.exists())
         self.assertEqual(unregistered.read_text(), "foreign")
         self.assertTrue((self.f.root / history).is_file())
-
-    def test_legacy_terminal_migrates_packets_and_log_before_cleanup(self) -> None:
-        self.blocked()
-        state = self.f.ledger.read()
-        state["status"] = "cancelled"
-        state["summary"] = "legacy terminal"
-        run_id = state["run_id"]
-        legacy = self.f.root / ".factory/memory/history" / run_id / "run.json"
-        atomic_json(legacy, state)
-        atomic_json(self.f.ledger.path, state)
-        log = legacy.parent / "checks" / "legacy.log"
-        log.parent.mkdir()
-        log.write_text("legacy output")
-        packet = self.f.root / self.first["path"]
-        before = packet.read_bytes()
-        with self.assertRaisesRegex(Invalid, "Archive legacy terminal"):
-            self.f.ledger.clean()
-        self.assertTrue(packet.exists())
-        archive = Path(self.f.ledger.archive("cancelled", "legacy terminal"))
-        self.assertEqual(archive, Path(self.f.ledger.archive("cancelled", "legacy terminal")))
-        self.f.ledger.clean()
-        self.assertFalse(packet.exists())
-        self.assertFalse(log.exists())
-        self.assertEqual(before, read_evidence(self.f.root, self.first["path"], run_id=run_id))
-        self.assertEqual(
-            b"legacy output",
-            read_evidence(self.f.root, log.relative_to(self.f.root).as_posix(), run_id=run_id),
-        )
 
     def test_foreign_registered_path_rejected_before_any_deletion(self) -> None:
         second, _history = self.archived_with_retry()

@@ -1,23 +1,10 @@
 """Compute and apply the same evidence obligations at dispatch and handoff."""
 
-from typing import TypedDict
-
-from factory_tooling.project.contracts import BoundaryGate, ProjectData
+from factory_tooling.project.contracts import ProjectData
 from factory_tooling.project.profile_rules import boundary_gates, project_checks
 from factory_tooling.runtime import acceptance
-from factory_tooling.runtime.contracts import Check, Node, Report, Task
-
-
-class FinishRequirements(TypedDict):
-    allowed_checks: list[Check]
-    required_checks: list[Check]
-    gates: list[BoundaryGate]
-    evidence_kinds: list[str]
-    not_applicable_allowed: list[str]
-    require_test_receipt: bool
-    require_approval: bool
-    require_writes_ready: bool
-    require_evidence: bool
+from factory_tooling.runtime.contracts import CheckResult, Node, Report, Task
+from factory_tooling.runtime.contracts import FinishRequirements as FinishRequirements
 
 
 def requirements(
@@ -31,7 +18,9 @@ def requirements(
     selected = node.get("required_check_ids")
     full = stage == "verify" and selected is None
     verification_ids = {
-        check["id"] for check in all_checks if not check.get("execution", {}).get("outputs")
+        check["id"]
+        for check in all_checks
+        if check["kind"] == "observation" or not check["execution"].get("outputs")
     }
     required = gated | (verification_ids if full else set(selected or []))
     commands = "project-checks" in node.get("resources", [])
@@ -43,8 +32,12 @@ def requirements(
         check
         for check in all_checks
         if (selected is None or check["id"] in required)
-        and (check["kind"] == "observation" or commands)
-        and set(check.get("execution", {}).get("outputs", [])) <= set(node.get("owns", []))
+        and (
+            check["kind"] == "observation"
+            or (
+                commands and set(check["execution"].get("outputs", [])) <= set(node.get("owns", []))
+            )
+        )
     ]
     available = {check["id"] for check in allowed}
     acceptance.ensure(
@@ -58,7 +51,9 @@ def requirements(
                 "Missing registered prerequisites for check " + registered_check["id"],
             )
     for check in allowed:
-        stages = check.get("execution", {}).get("stages", [])
+        if check["kind"] == "observation":
+            continue
+        stages = check["execution"].get("stages", [])
         if stages:
             registered = {entry["id"] for entry in project_checks(profile)}
             acceptance.ensure(
@@ -66,10 +61,11 @@ def requirements(
                 and set(stages) <= available
                 and check["id"] not in stages
                 and all(
-                    not by_id[cid]["execution"].get("stages")
-                    and by_id[cid]["execution"].get("mode") == "full"
-                    and not by_id[cid]["execution"].get("outputs")
-                    for cid in stages
+                    stage_check["kind"] != "observation"
+                    and not stage_check["execution"].get("stages")
+                    and stage_check["execution"].get("mode") == "full"
+                    and not stage_check["execution"].get("outputs")
+                    for stage_check in (by_id[cid] for cid in stages)
                 ),
                 "Composite requires registered, assigned direct read-only stages declared full",
             )
@@ -98,7 +94,7 @@ def requirements(
     }
 
 
-def validate_selection(obligations: FinishRequirements, checks: list[Check]) -> None:
+def validate_selection(obligations: FinishRequirements, checks: list[CheckResult]) -> None:
     allowed = {check["id"] for check in obligations["allowed_checks"]}
     for check in checks:
         acceptance.ensure(
@@ -113,7 +109,7 @@ def validate_pass(obligations: FinishRequirements, report: Report) -> None:
     required = obligations["required_checks"]
     required_ids = {check["id"] for check in required}
     acceptance.verify_results(
-        {"required_checks": required},
+        required,
         [check for check in checks if check.get("id") in required_ids],
     )
     kinds = {c.get("kind") for c in checks if acceptance.successful(c)}

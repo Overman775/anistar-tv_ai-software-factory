@@ -12,9 +12,13 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-from factory_tooling.review.review_contracts import IDENTITY_FIELDS, SCHEMA_VERSION
+from pydantic import TypeAdapter, ValidationError
+
+from factory_tooling.review.review_contracts import IDENTITY_FIELDS
+from factory_tooling.review.review_evidence import TOOL_RESULT
+from factory_tooling.review.review_shapes import ReviewCommand
 from factory_tooling.runtime.check_process import run_process
-from factory_tooling.runtime.command_contract import validate_execution
+from factory_tooling.validation import validation_message
 
 EXCERPT_BYTES = 24 * 1024
 
@@ -36,17 +40,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError("manifest must be a JSON object")
-    if value.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError(f"manifest schema_version must be {SCHEMA_VERSION}")
-    for field in IDENTITY_FIELDS:
-        if field not in value:
-            raise ValueError(f"manifest missing {field}")
     from factory_tooling.project.profile_io import validate_snapshot
+    from factory_tooling.review.review_contracts import parse_manifest
 
-    validate_snapshot(value.get("project_policy"))
+    value = parse_manifest(json.loads(path.read_text(encoding="utf-8")))
+    validate_snapshot(value["project_policy"])
     return value
 
 
@@ -54,15 +52,17 @@ def identity(manifest: dict[str, Any]) -> dict[str, Any]:
     return {field: manifest[field] for field in IDENTITY_FIELDS}
 
 
+REVIEW_COMMAND = TypeAdapter[ReviewCommand](ReviewCommand)
+
+
 def parse_command(raw: str) -> tuple[list[str], str, int]:
-    value = json.loads(raw)
-    if not isinstance(value, dict):
-        raise ValueError("command must be a JSON object")
-    if set(value) - {"argv", "cwd", "timeout_seconds"}:
-        raise ValueError("unknown review command field")
-    execution = {"cwd": ".", "timeout_seconds": 600, **value}
-    validate_execution(execution)
-    return execution["argv"], execution["cwd"], execution["timeout_seconds"]
+    try:
+        value = REVIEW_COMMAND.validate_json(raw)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid review command", exc, REVIEW_COMMAND)
+        ) from None
+    return value["argv"], value.get("cwd", "."), value.get("timeout_seconds", 600)
 
 
 def excerpt(value: bytes) -> tuple[str, bool]:
@@ -155,7 +155,12 @@ def collect_results(
             "reason": None,
             "commands": commands,
         }
-    return result
+    try:
+        return dict(TOOL_RESULT.validate_python(result))
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid review tool result", exc, TOOL_RESULT)
+        ) from None
 
 
 def main() -> int:

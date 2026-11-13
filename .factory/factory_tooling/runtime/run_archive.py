@@ -10,11 +10,14 @@ import tempfile
 from datetime import UTC, datetime
 from hashlib import file_digest, sha256
 from pathlib import Path
-from typing import IO, BinaryIO
+from typing import IO, Annotated, BinaryIO
+
+from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError
 
 from factory_tooling.runtime.contracts import State
 from factory_tooling.runtime.state_io import parse_state
 from factory_tooling.runtime.workflow_core import Invalid, digest, relative, require
+from factory_tooling.validation import validation_message
 
 HISTORY = ".factory/memory/history"
 
@@ -68,16 +71,19 @@ def _manifest(tar: tarfile.TarFile) -> dict[str, str]:
         return _decode_manifest(json.load(f))
 
 
+MANIFEST = TypeAdapter[dict[str, str]](
+    dict[str, Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]],
+    config=ConfigDict(strict=True),
+)
+
+
 def _decode_manifest(raw: object) -> dict[str, str]:
-    require(
-        isinstance(raw, dict)
-        and "run.json" in raw
-        and all(isinstance(k, str) and isinstance(v, str) for k, v in raw.items()),
-        "Invalid archive manifest",
-    )
-    if not isinstance(raw, dict):
-        raise Invalid("Invalid archive manifest")
-    return dict(raw)
+    try:
+        value = MANIFEST.validate_python(raw)
+    except ValidationError as exc:
+        raise Invalid(validation_message("Invalid archive manifest", exc, MANIFEST)) from None
+    require("run.json" in value, "Archive manifest missing run.json")
+    return value
 
 
 def read_member(path: Path, name: str) -> bytes:
@@ -100,6 +106,7 @@ def _verified_manifest(path: Path, state: State) -> dict[str, str]:
             tarfile.open(fileobj=compressed, mode="r|") as tar,
         ):
             observed = {}
+            run_body = None
             hashes = None
             for item in tar:
                 require(item.isfile() and item.name not in observed, "Invalid archive inventory")
@@ -110,11 +117,8 @@ def _verified_manifest(path: Path, state: State) -> dict[str, str]:
                     if item.name == "manifest.json":
                         hashes = _decode_manifest(json.load(data))
                     elif item.name == "run.json":
-                        body = data.read()
-                        require(
-                            parse_state(json.loads(body)) == state, "Terminal history is immutable"
-                        )
-                        observed[item.name] = digest(body)
+                        run_body = data.read()
+                        observed[item.name] = digest(run_body)
                     else:
                         hashed = sha256()
                         while block := data.read(256 * 1024):
@@ -124,6 +128,9 @@ def _verified_manifest(path: Path, state: State) -> dict[str, str]:
                     observed[item.name] = ""
             del observed["manifest.json"]
             require(hashes == observed, "Archive inventory or digest mismatch")
+            require(run_body is not None, "Archive missing run.json")
+            assert run_body is not None
+            require(parse_state(json.loads(run_body)) == state, "Terminal history is immutable")
             # Consume the gzip footer to detect truncation even after the tar end marker.
             while compressed.read(256 * 1024):
                 pass
@@ -139,6 +146,7 @@ def pack_run(root: Path, state: State) -> Path:
     date = datetime.now(UTC).date().isoformat()
     path = existing or relative(root, f"{HISTORY}/archive/{date}_{run_id}.tar.gz")
     state["archive_path"] = path.relative_to(root).as_posix()
+    parse_state(state)
     if existing is not None:
         verified_cleanup_paths(root, state)
         return path
@@ -189,7 +197,7 @@ def pack_run(root: Path, state: State) -> Path:
                         f.seek(0)
                         _add(tar, name, f, source.stat().st_size)
                     hashes[name] = observed
-                _add_json(tar, "manifest.json", hashes)
+                _add_json(tar, "manifest.json", _decode_manifest(hashes))
             output.flush()
             os.fsync(output.fileno())
         _verified_manifest(temp, state)

@@ -13,8 +13,6 @@ from factory_tooling.decompose.output_safety import (
     protected_inputs,
 )
 from factory_tooling.decompose.task_data import CAPABILITY_ID_RE as CAPABILITY_ID_RE
-from factory_tooling.decompose.task_data import RAW_TRACKED_FIELDS as RAW_TRACKED_FIELDS
-from factory_tooling.decompose.task_data import REQUIRED_FIELDS as REQUIRED_FIELDS
 from factory_tooling.decompose.task_data import SCOPE_RE as SCOPE_RE
 from factory_tooling.decompose.task_data import TASK_FILENAME_RE as TASK_FILENAME_RE
 from factory_tooling.decompose.task_data import TASK_ID_SEQUENCE_RE as TASK_ID_SEQUENCE_RE
@@ -29,7 +27,6 @@ from factory_tooling.decompose.task_data import _graph_scope as _graph_scope
 from factory_tooling.decompose.task_data import _is_nonempty_text as _is_nonempty_text
 from factory_tooling.decompose.task_data import _is_number as _is_number
 from factory_tooling.decompose.task_data import _relation_ids as _relation_ids
-from factory_tooling.decompose.task_data import _to_number as _to_number
 from factory_tooling.decompose.task_data import find_markdown_file as find_markdown_file
 from factory_tooling.decompose.task_data import load_source_lock as load_source_lock
 from factory_tooling.decompose.task_data import load_tasks as load_tasks

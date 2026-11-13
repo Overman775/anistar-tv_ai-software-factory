@@ -91,7 +91,7 @@ class CheckRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "duplicates a draft check"):
             f.ledger.prepare_report("verify-label", draft, [result["execution_id"]])
         draft["checks"] = [None]
-        with self.assertRaisesRegex(Invalid, "Invalid checks"):
+        with self.assertRaisesRegex(Invalid, r"checks\.0"):
             f.ledger.prepare_report("verify-label", draft, [])
         with self.assertRaisesRegex(Invalid, "Unknown report node"):
             f.ledger.prepare_report("missing", {}, [])
@@ -118,7 +118,7 @@ class CheckRunnerTests(unittest.TestCase):
         self.assertEqual([result], json.loads(run.stdout)["result"]["checks"])
         run = subprocess.run(command, input="[]", capture_output=True, text=True)
         self.assertNotEqual(0, run.returncode)
-        self.assertIn("BLOCKED: Report draft must be an object", run.stderr)
+        self.assertIn("BLOCKED: Invalid workflow report draft: (root)", run.stderr)
 
     def test_failed_receipt_is_evidence_for_nonpassing_handoff_only(self) -> None:
         f = self.ready("raise SystemExit(7)")
@@ -171,6 +171,7 @@ class CheckRunnerTests(unittest.TestCase):
     def test_actual_output_is_preserved_through_archive_and_cleanup(self) -> None:
         f = self.ready()
         result = f.ledger.run_check("verify-label", "behavior")
+        assert result["result"] != "RUNNING"
         self.assertEqual("real output\n", (f.root / result["evidence"]).read_text())
         f.ledger.finish("verify-label", self.report(result))
         f.ledger.accept("accept-label")
@@ -471,6 +472,7 @@ class CheckRunnerTests(unittest.TestCase):
     def test_real_nonzero_cannot_be_relabelled_green(self) -> None:
         f = self.ready("print('failure'); raise SystemExit(7)")
         result = f.ledger.run_check("verify-label", "behavior")
+        assert result["result"] != "RUNNING"
         self.assertEqual(("FAIL", 7), (result["result"], result["exit_code"]))
         forged = dict(result, result="PASS", exit_code=0)
         with self.assertRaisesRegex(Invalid, "not passed"):
@@ -482,6 +484,7 @@ class CheckRunnerTests(unittest.TestCase):
         )
         result = f.ledger.run_check("verify-label", "behavior")
         self.assertEqual("BLOCKED", result["result"])
+        assert result["result"] != "RUNNING"
         self.assertIsNone(result["exit_code"])
         self.assertIn("started", (f.root / result["evidence"]).read_text())
         with f.ledger.locked():
@@ -498,6 +501,7 @@ class CheckRunnerTests(unittest.TestCase):
         f.start("verify-label")
         result = f.ledger.run_check("verify-label", "behavior")
         self.assertEqual("BLOCKED", result["result"])
+        assert result["result"] != "RUNNING"
         self.assertIsNone(result["exit_code"])
 
     def test_modified_result_or_log_rejected(self) -> None:
@@ -506,6 +510,7 @@ class CheckRunnerTests(unittest.TestCase):
         for key, value in [("command", ["true"]), ("cwd", "lib"), ("evidence", "other.log")]:
             with self.subTest(key=key), self.assertRaises(Invalid):
                 f.ledger.finish("verify-label", self.report(dict(result, **{key: value})))
+        assert result["result"] != "RUNNING"
         (f.root / result["evidence"]).write_text("rewritten")
         with self.assertRaisesRegex(Invalid, "output missing or changed"):
             f.ledger.finish("verify-label", self.report(result))
@@ -514,6 +519,7 @@ class CheckRunnerTests(unittest.TestCase):
         f = self.ready()
         result = f.ledger.run_check("verify-label", "behavior")
         f.ledger.finish("verify-label", self.report(result))
+        assert result["result"] != "RUNNING"
         (f.root / result["evidence"]).unlink()
         with self.assertRaisesRegex(Invalid, "output missing or changed"):
             f.ledger.accept("accept-label")
@@ -533,6 +539,7 @@ class CheckRunnerTests(unittest.TestCase):
         f = self.ready("from pathlib import Path; Path('lib/example.dart').write_text('changed')")
         result = f.ledger.run_check("verify-label", "behavior")
         self.assertEqual("BLOCKED", result["result"])
+        assert result["result"] != "RUNNING"
         self.assertEqual(0, result["exit_code"])
 
     def test_additional_input_drift_invalidates_result(self) -> None:
@@ -555,6 +562,7 @@ class CheckRunnerTests(unittest.TestCase):
         result = f.ledger.run_check("verify-label", "behavior")
         s = f.ledger.read()
         s["executions"][result["execution_id"]]["status"] = "RUNNING"
+        assert result["result"] != "RUNNING"
         (f.root / (result["evidence"] + ".owner.json")).unlink()
         atomic_json(f.ledger.path, s)
         self.assertEqual("RUNNING", f.ledger.run_check("verify-label", "behavior")["result"])
@@ -596,11 +604,13 @@ class CheckRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "Unresolved project commands"):
             f.ledger.archive("cancelled", "test")
         result = f.ledger.run_check("verify-label", "behavior", "interrupted")
+        assert result["result"] != "RUNNING"
         self.assertEqual(("PASS", 0), (result["result"], result["exit_code"]))
         self.assertEqual(result, f.ledger.run_check("verify-label", "behavior", "interrupted"))
 
     def test_source_change_during_command_is_blocked(self) -> None:
         (self.f.root / "request.md").write_text("original request")
+        self.f.g["sources"]["request"].pop("text")
         self.f.g["sources"]["request"]["path"] = "request.md"
         f = self.ready("from pathlib import Path; Path('request.md').write_text('changed')")
         result = f.ledger.run_check("verify-label", "behavior")

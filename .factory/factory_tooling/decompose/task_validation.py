@@ -9,13 +9,9 @@ from factory_tooling.decompose.contracts import Envelope, LoadedTask
 from factory_tooling.decompose.task_data import (
     CAPABILITY_ID_RE,
     PURPOSE_LABELS,
-    REQUIRED_FIELDS,
-    SCOPE_RE,
     TASK_FILENAME_RE,
     TASK_ID_SEQUENCE_RE,
-    VALID_CONTRACT_TYPES,
     VALID_COVERAGE,
-    VALID_PURPOSES,
     _format_hours,
     _is_nonempty_text,
     _is_number,
@@ -27,33 +23,7 @@ from factory_tooling.runtime.acceptance import ids as acceptance_ids
 
 
 def _validate_task(task_id: str, task: LoadedTask, tasks: dict[str, LoadedTask]) -> list[str]:
-    messages = []
-    presence = task.get("raw_presence", {})
-    for field in REQUIRED_FIELDS:
-        if not presence.get(field, False):
-            if field == "purpose":
-                messages.append(
-                    f"🚨 Task '{task_id}': purpose not specified; missing required field 'purpose'."
-                )
-            elif field == "scope":
-                messages.append(
-                    f"🚨 Task '{task_id}': unspecified scope; missing required field 'scope'."
-                )
-            else:
-                messages.append(f"🚨 Task '{task_id}': missing required field '{field}'.")
-
-    for field in ("filename", "title", "scope", "outcome", "contract_type"):
-        if presence.get(field) and not _is_nonempty_text(task.get(field)):
-            messages.append(f"🚨 Task '{task_id}': field {field} must be a non-empty string.")
-
-    scope = task.get("scope")
-    if _is_nonempty_text(scope) and SCOPE_RE.fullmatch(scope) is None:
-        messages.append(f"🚨 Task '{task_id}': scope must match [a-z0-9][a-z0-9_-]*.")
-
-    contract_type = task.get("contract_type")
-    if _is_nonempty_text(contract_type) and contract_type not in VALID_CONTRACT_TYPES:
-        messages.append(f"🚨 Task '{task_id}': unknown contract_type '{contract_type}'.")
-
+    messages = list(task.get("structural_errors", []))
     sequence = TASK_ID_SEQUENCE_RE.search(task_id)
     filename = task.get("filename")
     filename_match = TASK_FILENAME_RE.fullmatch(filename) if isinstance(filename, str) else None
@@ -64,54 +34,11 @@ def _validate_task(task_id: str, task: LoadedTask, tasks: dict[str, LoadedTask])
             f"🚨 Task '{task_id}': filename must use format '{sequence.group(1)}-slug.md'."
         )
 
-    for field in (
-        "affected_layers",
-        "implemented",
-        "deferred",
-        "depends_on",
-        "blocked_by",
-    ):
-        if presence.get(field) and not isinstance(task.get(field), list):
-            messages.append(f"🚨 Task '{task_id}': field {field} must be a list.")
-
-    for field in ("affected_layers", "implemented", "depends_on", "blocked_by"):
-        value = task.get(field)
-        if presence.get(field) and isinstance(value, list):
-            for item in value:
-                if not _is_nonempty_text(item):
-                    messages.append(
-                        f"🚨 Task '{task_id}': items in field {field} must be non-empty strings."
-                    )
-                    break
-
-    implemented = task.get("implemented")
-    if isinstance(implemented, list) and not implemented:
-        messages.append(f"🚨 Task '{task_id}': implemented must not be empty.")
-
-    parent_task = task.get("parent_task")
-    if presence.get("parent_task") and not (parent_task is None or _is_nonempty_text(parent_task)):
-        messages.append(
-            f"🚨 Task '{task_id}': field parent_task must be null or a non-empty string."
-        )
-
     estimate = task.get("estimate_raw")
-    if presence.get("estimate"):
-        if not isinstance(estimate, dict):
-            messages.append(f"🚨 Task '{task_id}': field estimate must be an object.")
-        else:
-            min_hours = estimate.get("min_hours")
-            max_hours = estimate.get("max_hours")
-            if not _is_number(min_hours) or not _is_number(max_hours):
-                messages.append(
-                    f"🚨 Task '{task_id}': estimate.min_hours and max_hours must be numbers."
-                )
-            else:
-                if min_hours < 0:
-                    messages.append(f"🚨 Task '{task_id}': estimate.min_hours cannot be negative.")
-                if min_hours > max_hours:
-                    messages.append(
-                        f"🚨 Task '{task_id}': estimate.min_hours cannot exceed max_hours."
-                    )
+    if isinstance(estimate, dict):
+        min_hours, max_hours = estimate.get("min_hours"), estimate.get("max_hours")
+        if _is_number(min_hours) and _is_number(max_hours) and min_hours > max_hours:
+            messages.append(f"🚨 Task '{task_id}': estimate.min_hours cannot exceed max_hours.")
 
     purpose = task.get("purpose")
     if purpose == "technical_preparation":
@@ -131,9 +58,8 @@ def _validate_task(task_id: str, task: LoadedTask, tasks: dict[str, LoadedTask])
     if purpose == "research":
         if not _is_nonempty_text(task.get("research_question")):
             messages.append(f"🚨 Task '{task_id}': research_question must be a non-empty string.")
-        timebox_hours = task.get("timebox_hours")
-        if not _is_number(timebox_hours) or timebox_hours <= 0:
-            messages.append(f"🚨 Task '{task_id}': timebox_hours must be a positive number.")
+        if "timebox_hours" not in task or task["timebox_hours"] is None:
+            messages.append(f"🚨 Task '{task_id}': timebox_hours is required for research.")
         if not _is_nonempty_text(task.get("expected_result")):
             messages.append(f"🚨 Task '{task_id}': expected_result must be a non-empty string.")
 
@@ -156,21 +82,7 @@ def validate_dependencies(tasks: dict[str, LoadedTask]) -> list[str]:
             else:
                 filename_owners[filename] = task_id
 
-        raw_id = task.get("raw_values", {}).get("id")
-        if not _is_nonempty_text(raw_id):
-            if not task.get("raw_presence", {}).get("id"):
-                messages.append(f"🚨 Task '{task_id}': missing required field 'id'.")
-            else:
-                messages.append(f"🚨 Task '{task_id}': field id must be a non-empty string.")
         messages.extend(_validate_task(task_id, task, tasks))
-
-        purpose = task.get("purpose")
-        purpose_missing = not task.get("raw_presence", {}).get("purpose")
-        if (not isinstance(purpose, str) or purpose not in VALID_PURPOSES) and not purpose_missing:
-            messages.append(
-                f"🚨 Task '{task_id}': unknown purpose '{purpose}'. "
-                "Allowed values: functionality, technical_preparation and research."
-            )
 
         for dependency_id in _relation_ids(task.get("depends_on")):
             if dependency_id not in tasks:
@@ -192,15 +104,6 @@ def validate_dependencies(tasks: dict[str, LoadedTask]) -> list[str]:
                 continue
             completed_by = item.get("completed_by")
             behavior = item.get("behavior")
-            temporary_behavior = item.get("temporary_behavior")
-            if not _is_nonempty_text(behavior):
-                messages.append(
-                    f"🚨 Task '{task_id}': deferred.behavior must be a non-empty string."
-                )
-            if not _is_nonempty_text(temporary_behavior):
-                messages.append(
-                    f"🚨 Task '{task_id}': deferred.temporary_behavior must be a non-empty string."
-                )
             if not _is_nonempty_text(completed_by) or completed_by not in tasks:
                 messages.append(
                     f"🚨 Task '{task_id}': deferred behavior "

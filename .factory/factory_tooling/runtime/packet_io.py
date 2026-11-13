@@ -5,15 +5,19 @@ import os
 import tempfile
 from pathlib import Path
 
+from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
 from factory_tooling.context.context import WORKER_PROFILE_FIELDS
 from factory_tooling.runtime import finish_requirements, report_history
 from factory_tooling.runtime.assignment import (
     dependency_results,
     implement_packet,
     projected_task,
+    validate_packet,
     worker_node,
 )
-from factory_tooling.runtime.contracts import Dispatch, Node, State, agent_key
+from factory_tooling.runtime.contracts import Dispatch, Node, PacketRef, State, agent_key
 from factory_tooling.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -23,9 +27,21 @@ from factory_tooling.runtime.workflow_core import (
     relative,
     require,
 )
+from factory_tooling.validation import validation_message
 
 
-def freeze_packet(root: Path, directory: Path, s: State, n: Node, v: Dispatch) -> dict[str, str]:
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class DeliveryReceipt(TypedDict):
+    packet: PacketRef
+    acknowledged: int
+    served: int
+
+
+PACKET_REFERENCE = TypeAdapter[PacketRef](PacketRef)
+DELIVERY_RECEIPT = TypeAdapter[DeliveryReceipt](DeliveryReceipt)
+
+
+def freeze_packet(root: Path, directory: Path, s: State, n: Node, v: Dispatch) -> PacketRef:
     """Freeze a validated dispatch under the caller's ledger lock."""
     node_id = n["id"]
     task = s["graph"]["tasks"][n["task"]]
@@ -39,15 +55,17 @@ def freeze_packet(root: Path, directory: Path, s: State, n: Node, v: Dispatch) -
     packet = acceptance_guard(implement_packet, s, node_id)
     # acpx trims surrounding whitespace when reading prompt text from a file.
     data = json.dumps(packet, ensure_ascii=False, indent=2).encode("utf-8")
-    meta = {
-        "path": rel,
-        "sha256": digest(data),
-        "run_id": s["run_id"],
-        "node_id": node_id,
-        "dispatch_id": v["dispatch_id"],
-        "source_hash": s["graph"]["sources"][task["source"]]["hash"],
-        "revision": str(s["revision"]),
-    }
+    meta = PACKET_REFERENCE.validate_python(
+        {
+            "path": rel,
+            "sha256": digest(data),
+            "run_id": s["run_id"],
+            "node_id": node_id,
+            "dispatch_id": v["dispatch_id"],
+            "source_hash": s["graph"]["sources"][task["source"]]["hash"],
+            "revision": str(s["revision"]),
+        }
+    )
     fd, temp = tempfile.mkstemp(prefix=".packet-", dir=directory)
     try:
         with os.fdopen(fd, "wb") as out:
@@ -79,7 +97,7 @@ def packet_chunks(data: bytes) -> list[str]:
 
 
 def packet_diagnostics(data: bytes) -> dict[str, object]:
-    packet = json.loads(data)
+    packet = acceptance_guard(validate_packet, json.loads(data))
 
     def size(value: object) -> int:
         return len(json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
@@ -95,9 +113,15 @@ def packet_diagnostics(data: bytes) -> dict[str, object]:
 
 
 def read_packet_bytes(
-    root: Path, s: State, n: Node, expected: dict[str, str], supplied: dict[str, str]
+    root: Path, s: State, n: Node, expected: PacketRef, supplied: object
 ) -> bytes:
     v = s["nodes"][n["id"]]
+    try:
+        supplied = PACKET_REFERENCE.validate_python(supplied)
+    except ValidationError as exc:
+        raise Invalid(
+            validation_message("Invalid packet bootstrap", exc, PACKET_REFERENCE)
+        ) from None
     require(expected == supplied, "Packet bootstrap mismatch")
     require(
         expected["run_id"] == s["run_id"]
@@ -123,7 +147,7 @@ def read_packet_bytes(
         require(os.fstat(source.fileno()).st_nlink == 1, "Hardlinked packet")
         data = source.read()
     require(digest(data) == expected["sha256"], "Packet digest mismatch")
-    packet = json.loads(data)
+    packet = acceptance_guard(validate_packet, json.loads(data))
     agent = s["graph"]["agents"][agent_key(n)]
     profile = s["config"]["profiles"][agent["profile"]]
     worker_profile = {k: value for k, value in profile.items() if k in WORKER_PROFILE_FIELDS}
@@ -131,8 +155,7 @@ def read_packet_bytes(
         s["config"]["_project"]["data"], n, task, agent["role"]
     )
     require(
-        isinstance(packet, dict)
-        and packet.get("workspace") == str(root)
+        packet["workspace"] == str(root)
         and packet.get("run_id") == s["run_id"]
         and packet.get("node_id") == n["id"]
         and packet.get("dispatch_id") == v["dispatch_id"]
@@ -166,20 +189,22 @@ def read_packet_bytes(
     return data
 
 
-def receipt_path(root: Path, meta: dict[str, str]) -> Path:
+def receipt_path(root: Path, meta: PacketRef) -> Path:
     return relative(root, f"{meta['path']}.{meta['sha256']}.delivery.json")
 
 
-def delivery_state(root: Path, meta: dict[str, str], total: int) -> dict[str, int]:
+def delivery_state(root: Path, meta: PacketRef, total: int) -> dict[str, int]:
     path = receipt_path(root, meta)
     if not path.exists():
         return {"acknowledged": 0, "served": 0}
-    record = read_json(path)
+    try:
+        record = DELIVERY_RECEIPT.validate_python(read_json(path))
+    except ValidationError as exc:
+        raise Invalid(
+            validation_message("Invalid packet delivery receipt", exc, DELIVERY_RECEIPT)
+        ) from None
     require(
-        isinstance(record, dict)
-        and record.get("packet") == meta
-        and type(record.get("acknowledged")) is int
-        and type(record.get("served")) is int
+        record["packet"] == meta
         and 0 <= record["acknowledged"] <= record["served"] <= total
         and record["served"] - record["acknowledged"] <= 1,
         "Invalid packet delivery receipt",
@@ -192,7 +217,7 @@ def acknowledgement(chunks: list[str], ordinal: int) -> str:
 
 
 def serve_chunk(
-    root: Path, meta: dict[str, str], chunks: list[str], ordinal: int, received: str | None
+    root: Path, meta: PacketRef, chunks: list[str], ordinal: int, received: str | None
 ) -> None:
     require(type(ordinal) is int and 1 <= ordinal <= len(chunks), "Invalid packet chunk")
     expected = acknowledgement(chunks, ordinal - 1) if ordinal > 1 else None
@@ -207,11 +232,13 @@ def serve_chunk(
         "acknowledged": max(ordinal - 1, progress["acknowledged"]),
     }
     if updated != progress:
-        atomic_json(receipt_path(root, meta), {"packet": meta, **updated})
+        atomic_json(
+            receipt_path(root, meta), DELIVERY_RECEIPT.validate_python({"packet": meta, **updated})
+        )
 
 
 def material_digest(data: bytes) -> str:
-    packet = json.loads(data)
+    packet = acceptance_guard(validate_packet, json.loads(data))
     return report_history.identity(
         {
             "instructions": [(entry["path"], entry["sha256"]) for entry in packet["instructions"]],
@@ -225,7 +252,7 @@ def material_digest(data: bytes) -> str:
 
 
 def confirm_delivery(
-    root: Path, meta: dict[str, str], data: bytes, received: str, materials: str
+    root: Path, meta: PacketRef, data: bytes, received: str, materials: str
 ) -> None:
     chunks = packet_chunks(data)
     final = len(chunks)
@@ -240,5 +267,8 @@ def confirm_delivery(
     )
     if progress["acknowledged"] != final:
         atomic_json(
-            receipt_path(root, meta), {"packet": meta, "served": final, "acknowledged": final}
+            receipt_path(root, meta),
+            DELIVERY_RECEIPT.validate_python(
+                {"packet": meta, "served": final, "acknowledged": final}
+            ),
         )

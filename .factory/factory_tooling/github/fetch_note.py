@@ -12,18 +12,27 @@ import json
 import subprocess
 import sys
 from collections.abc import Callable
-from typing import NotRequired, TypedDict, cast
+from typing import Annotated, NotRequired
+
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+from factory_tooling.validation import validation_message
+
+Positive = Annotated[int, Field(gt=0)]
 
 
+@with_config(ConfigDict(strict=True, extra="ignore"))
 class CommentUser(TypedDict):
     login: str
 
 
+@with_config(ConfigDict(strict=True, extra="ignore"))
 class Comment(TypedDict):
-    id: int
+    id: Positive
     user: NotRequired[CommentUser]
     created_at: NotRequired[str]
-    body: NotRequired[object]
+    body: NotRequired[str | None]
     path: NotRequired[str]
     line: NotRequired[int | None]
     side: NotRequired[str]
@@ -32,6 +41,10 @@ class Comment(TypedDict):
     original_commit_id: NotRequired[str]
     in_reply_to_id: NotRequired[int | None]
     html_url: NotRequired[str]
+
+
+COMMENTS = TypeAdapter[list[Comment]](list[Comment], config=ConfigDict(strict=True))
+PAGES = TypeAdapter[list[list[Comment]]](list[list[Comment]], config=ConfigDict(strict=True))
 
 
 def positive_id(value: str) -> int:
@@ -71,39 +84,20 @@ def fetch_comments(
     result = run(command, capture_output=True, text=True, check=False)
     if result.returncode:
         raise RuntimeError(f"GitHub API failed ({result.returncode}): {result.stderr.strip()}")
-    pages = json.loads(result.stdout)
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
-        raise ValueError("expected paginated comment arrays")
-    comments = [comment for page in pages for comment in page]
-    return validate_comments(comments)
+    try:
+        pages = PAGES.validate_json(result.stdout)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid paginated GitHub comments", exc, PAGES)
+        ) from None
+    return [comment for page in pages for comment in page]
 
 
 def validate_comments(comments: object) -> list[Comment]:
-    if not isinstance(comments, list) or any(
-        not isinstance(comment, dict) or not isinstance(comment.get("id"), int)
-        for comment in comments
-    ):
-        raise ValueError("expected comment objects with numeric id")
-
-    if not isinstance(comments, list):
-        raise ValueError("expected comment array")
-    for comment in comments:
-        for field in ("created_at", "path", "side", "commit_id", "original_commit_id", "html_url"):
-            if field in comment and not isinstance(comment[field], str):
-                raise ValueError(f"invalid comment {field}")
-        for field in ("line", "original_line", "in_reply_to_id"):
-            if (
-                field in comment
-                and comment[field] is not None
-                and not isinstance(comment[field], int)
-            ):
-                raise ValueError(f"invalid comment {field}")
-        if "user" in comment and (
-            not isinstance(comment["user"], dict)
-            or not isinstance(comment["user"].get("login"), str)
-        ):
-            raise ValueError("invalid comment user")
-    return cast(list[Comment], comments)
+    try:
+        return COMMENTS.validate_python(comments)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid GitHub comments", exc, COMMENTS)) from None
 
 
 def find_context(comments: object, note_id: int | str, kind: str) -> tuple[Comment, list[Comment]]:

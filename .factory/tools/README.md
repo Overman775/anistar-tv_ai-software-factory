@@ -44,7 +44,7 @@ only the factory's own Python environment, not a layout imposed on vendor tools.
 
    These are bootstrap examples: substitute the verified Python executable when
    `python3`/`py -3` selects an older or unavailable interpreter. Setup creates venv,
-   installs the hash-locked requirements.txt, checks dependencies, and records readiness. Existing
+   installs PyYAML, Pydantic v2 and their dependencies from the hash-locked requirements.txt, checks dependencies, and records readiness. Existing
    compatible venv is reused; a non-venv directory or active workflow blocks setup.
 3. For ALL subsequent factory Python commands use:
 
@@ -184,7 +184,7 @@ The normal `unittest discover -s .factory/tests/factory_tooling -t .factory/tool
 automatically includes `tests/diagnostics/test_dry_run.py`. These tests execute
 the same driver, checking repeatability, unchanged bundle files, temporary
 cleanup, no external processes/network, CLI execution from another directory,
-and failure on a missing role or PyYAML. No separate test runner is needed.
+and failure on a missing role or runtime dependency. No separate test runner is needed.
 
 From the consumer project root, after setup:
 

@@ -7,14 +7,35 @@ import sys
 import uuid
 from pathlib import Path
 
+from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
 from factory_tooling.decompose.contracts import Envelope, LoadedTask
-from factory_tooling.gates.gate_contract import GateCheck, GateResult, conclude, evidence
+from factory_tooling.gates.gate_contract import (
+    EvidenceText,
+    GateCheck,
+    GateResult,
+    GateStatus,
+    conclude,
+    evidence,
+)
 from factory_tooling.project.contracts import (
     Policy,
 )
 from factory_tooling.project.profile_io import check_frozen, fingerprint, safe_path, sha
 from factory_tooling.runtime.check_process import run_process
 from factory_tooling.runtime.workflow_core import atomic_json
+from factory_tooling.validation import validation_message
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class SkillCheckResult(TypedDict):
+    status: GateStatus
+    message: EvidenceText
+    evidence: list[EvidenceText]
+
+
+SKILL_CHECK_RESULT = TypeAdapter[SkillCheckResult](SkillCheckResult)
 
 
 def artifact_hash(staging: str | Path, source_lock: str | Path) -> str:
@@ -67,6 +88,8 @@ def check_decomposition_gates(
                 check_frozen(policy["files"])
                 if artifact_hash(staging, source_lock) != before:
                     raise ValueError("Decomposition artifacts changed during checks")
+                if check["kind"] == "observation":
+                    raise ValueError("Decomposition check must be a command")
                 execution = check["execution"]
                 argv = [
                     sys.executable,
@@ -101,17 +124,19 @@ def check_decomposition_gates(
                 check_frozen(policy["files"])
                 if artifact_hash(staging, source_lock) != before:
                     raise ValueError("Decomposition artifacts changed during project checks")
-                answer = json.loads(stdout.read_text(encoding="utf-8", errors="replace"))
-                if not isinstance(answer, dict) or set(answer) != {"status", "message", "evidence"}:
-                    raise ValueError("Missing structured check result")
+                answer = SKILL_CHECK_RESULT.validate_json(stdout.read_bytes())
                 status = answer["status"]
-                if (
-                    status not in {"PASS", "FAIL", "BLOCKED"}
-                    or result["exit_code"] != {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[status]
-                ):
+                if result["exit_code"] != {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[status]:
                     raise ValueError("Check status/exit code mismatch")
                 records[cid] = evidence(
                     cid, status, answer["message"], answer["evidence"] + references
+                )
+            except ValidationError as exc:
+                records[cid] = evidence(
+                    cid,
+                    "BLOCKED",
+                    validation_message("Invalid skill gate result", exc, SKILL_CHECK_RESULT),
+                    references,
                 )
             except (ValueError, TypeError, OSError) as exc:
                 records[cid] = evidence(cid, "BLOCKED", str(exc), references)

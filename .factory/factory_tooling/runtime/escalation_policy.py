@@ -3,23 +3,37 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+
+from pydantic import TypeAdapter, ValidationError
 
 from factory_tooling.runtime.acceptance import ensure
 from factory_tooling.runtime.contracts import (
+    Config,
+    Profile,
     State,
 )
+from factory_tooling.validation import validation_message
 
 CAUSES = {"static", "tests", "docs", "review"}
 
 
-def configure(config: Any) -> None:
-    ensure(
-        "roles" not in config and "tier" not in config,
-        "Use profile role paths, not roles/tier catalogues",
-    )
+CONFIG = TypeAdapter[Config](Config)
+
+
+def configure(config: object) -> None:
+    """Validate a composed runtime configuration and its routing policy."""
+    try:
+        value = CONFIG.validate_python(config)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid runtime configuration", exc, CONFIG)) from None
+    routing(value["profiles"], value["routing"]["defaults"])
+
+
+def routing(
+    profiles: dict[str, Profile], defaults: dict[str, str]
+) -> tuple[dict[str, list[str]], dict[str, str]]:
     roles: dict[str, list[str]] = {}
-    for name, profile in config["profiles"].items():
+    for name, profile in profiles.items():
         if not (re.fullmatch("[a-z][a-z0-9-]*", name) and name != "human"):
             raise ValueError("Invalid profile name")
         match = re.fullmatch(r"roles/([a-z][a-z0-9-]*)\.md", profile["role"])
@@ -30,7 +44,6 @@ def configure(config: Any) -> None:
             profile["contract"] == f"contracts/{role}.md",
             "Role and contract must identify the same specialty",
         )
-        ensure("tier" not in profile, "Separate tiers are unsupported")
         roles.setdefault(role, []).append(name)
         policy = profile.get("escalation")
         if policy is not None:
@@ -38,22 +51,13 @@ def configure(config: Any) -> None:
                 role in {"developer", "test-writer"},
                 "Escalation supports Developer/TestWriter in Implement",
             )
-            if not (isinstance(policy, dict) and set(policy) == {"to", "after_failed_attempts"}):
-                raise ValueError("Invalid escalation policy")
-            if not (isinstance(policy["to"], str) and policy["to"]):
-                raise ValueError("Escalation target must be a profile or human")
-            ensure(
-                type(policy["after_failed_attempts"]) is int
-                and policy["after_failed_attempts"] > 0,
-                "Positive failure threshold required",
-            )
-    for name, profile in config["profiles"].items():
+    for name, profile in profiles.items():
         seen, cursor = set(), name
         while cursor != "human":
             ensure(cursor not in seen, "Escalation cycle")
             seen.add(cursor)
-            ensure(cursor in config["profiles"], "Unknown escalation target")
-            current = config["profiles"][cursor]
+            ensure(cursor in profiles, "Unknown escalation target")
+            current = profiles[cursor]
             for key in ("role", "contract", "capabilities", "enforcement"):
                 ensure(
                     current[key] == profile[key],
@@ -63,39 +67,18 @@ def configure(config: Any) -> None:
                 set(current["mcp"]) == set(profile["mcp"]),
                 "Escalation must preserve required tools",
             )
-            if not current.get("escalation"):
+            policy = current.get("escalation")
+            if policy is None:
                 ensure(cursor == name, "Escalation chain must end at human")
                 break
-            cursor = current["escalation"]["to"]
-    routing = config.get("routing", {})
-    if not (isinstance(routing, dict) and set(routing) <= {"defaults"}):
-        raise ValueError("Invalid routing configuration")
-    defaults = routing.get("defaults", {})
-    if not (isinstance(defaults, dict)):
-        raise ValueError("Invalid defaults")
+            cursor = policy["to"]
     ensure(set(defaults) <= {f"roles/{role}.md" for role in roles}, "Unknown default role")
-    config["_roles"], config["_defaults"] = roles, {}
+    runtime_defaults = {}
     for role, names in roles.items():
-        default = defaults.get(f"roles/{role}.md", names[0] if len(names) == 1 else None)
+        default = defaults.get(f"roles/{role}.md", names[0] if len(names) == 1 else "")
         ensure(default in names, "Multiple profiles require an explicit valid default")
-        config["_defaults"][role] = default
-    execution = config.get("execution")
-    if not (
-        isinstance(execution, dict) and set(execution) == {"retry_budgets", "on_budget_exhausted"}
-    ):
-        raise ValueError("Explicit execution budgets required")
-    ensure(execution["on_budget_exhausted"] == "human", "Budget exhaustion requires human handoff")
-    budgets = execution["retry_budgets"]
-    if not (isinstance(budgets, dict) and set(budgets) == CAUSES | {"recovery"}):
-        raise ValueError("Invalid retry budget causes")
-    if not (isinstance(budgets["review"], dict) and set(budgets["review"]) == {"feature", "other"}):
-        raise ValueError("Invalid review budgets")
-    values = [budgets[k] for k in ("static", "tests", "docs", "recovery")] + list(
-        budgets["review"].values()
-    )
-    ensure(
-        all(type(v) is int and v >= 0 for v in values), "Retry budgets must be nonnegative integers"
-    )
+        runtime_defaults[role] = default
+    return roles, runtime_defaults
 
 
 def limits(state: State, task_id: str) -> dict[str, int]:
@@ -105,7 +88,12 @@ def limits(state: State, task_id: str) -> dict[str, int]:
         and any(t["kind"] == "feature" for t in state["graph"]["tasks"].values())
     )
     budgets = state["config"]["execution"]["retry_budgets"]
-    result = {key: budgets[key] for key in ("static", "tests", "docs", "recovery")}
+    result = {
+        "static": budgets["static"],
+        "tests": budgets["tests"],
+        "docs": budgets["docs"],
+        "recovery": budgets["recovery"],
+    }
     result["review"] = budgets["review"]["feature" if feature else "other"]
     return result
 

@@ -17,6 +17,7 @@ from factory_tooling.decompose.contracts import LoadedTask
 from factory_tooling.decompose.output_safety import reject_symlink_ancestors
 from factory_tooling.decompose.task_data import (
     PURPOSE_LABELS,
+    TASK_ENVELOPE,
     _relation_ids,
     capabilities_by_task,
     load_source_lock,
@@ -133,7 +134,7 @@ def project(staging: Path, source_lock: Path) -> Projection:
         original = json.loads(Path(envelope["file"]).read_text(encoding="utf-8"))
         original["total_min_hours"] = sum(task["estimate_min_hours"] for task in owned)
         original["total_max_hours"] = sum(task["estimate_max_hours"] for task in owned)
-        rendered_envelopes[envelope["file"]] = original
+        rendered_envelopes[envelope["file"]] = dict(TASK_ENVELOPE.validate_python(original))
         for task in owned:
             caps = sorted(task_capabilities[task["id"]])
             path = task.get("markdown_file")

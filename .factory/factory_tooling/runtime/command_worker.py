@@ -11,11 +11,14 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, NotRequired
+
+from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 from factory_tooling.runtime import windows_job
 from factory_tooling.runtime.check_process import run_process
-from factory_tooling.runtime.contracts import ExecutionReceipt
+from factory_tooling.runtime.contracts import ExecutionReceipt, Nonblank, Positive, TestSelection
 from factory_tooling.runtime.workflow_config import check_config
 from factory_tooling.runtime.workflow_core import (
     Invalid,
@@ -25,9 +28,40 @@ from factory_tooling.runtime.workflow_core import (
     require,
     snapshot,
 )
+from factory_tooling.validation import validation_message
 
 if TYPE_CHECKING:
     from factory_tooling.runtime.workflow import Ledger
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProcessOwner(TypedDict):
+    execution_id: Nonblank
+    process_group: Positive
+    platform: Literal["posix", "nt"]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class StageFacts(TypedDict):
+    input_scope: list[str]
+    files: dict[str, str]
+    after_files: dict[str, str]
+    exit_code: int | None
+    error: str | None
+    mode: NotRequired[Literal["full", "filtered", "update"] | None]
+    selection: NotRequired[TestSelection | None]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProcessFacts(TypedDict):
+    execution_id: Nonblank
+    process_group: Positive
+    stages: dict[str, StageFacts]
+
+
+PROCESS_OWNER = TypeAdapter[ProcessOwner](ProcessOwner)
+PROCESS_FACTS = TypeAdapter[ProcessFacts](ProcessFacts)
+TEST_SELECTION = TypeAdapter[TestSelection](TestSelection)
 
 
 @contextmanager
@@ -108,11 +142,13 @@ def own(ledger: Ledger, execution_id: str) -> ExecutionReceipt:
                     require(os.getpgrp() == os.getpid(), "Supervisor must lead its process group")
                 atomic_json(
                     path,
-                    {
-                        "execution_id": execution_id,
-                        "process_group": os.getpid(),
-                        "platform": os.name,
-                    },
+                    PROCESS_OWNER.validate_python(
+                        {
+                            "execution_id": execution_id,
+                            "process_group": os.getpid(),
+                            "platform": os.name,
+                        }
+                    ),
                 )
                 return record
         except Invalid as exc:
@@ -122,7 +158,7 @@ def own(ledger: Ledger, execution_id: str) -> ExecutionReceipt:
     raise AssertionError("unreachable")
 
 
-def test_selection(log: Path) -> dict[str, int | str] | None:
+def test_selection(log: Path) -> TestSelection | None:
     """Read the selected/completed counts emitted by a registered full test stage."""
     reports = []
     with log.open("rb") as stream:
@@ -134,17 +170,11 @@ def test_selection(log: Path) -> dict[str, int | str] | None:
                     return None
     if len(reports) != 1:
         return None
-    report = reports[0]
-    if not (
-        isinstance(report, dict)
-        and set(report) == {"mode", "selected", "completed"}
-        and report["mode"] == "full"
-        and type(report["selected"]) is int
-        and type(report["completed"]) is int
-        and 0 < report["selected"] == report["completed"]
-    ):
+    try:
+        report = TEST_SELECTION.validate_python(reports[0])
+    except ValidationError:
         return None
-    return {"mode": "full", "selected": report["selected"], "completed": report["completed"]}
+    return report if report["selected"] == report["completed"] else None
 
 
 def supervise(ledger: Ledger, execution_id: str) -> None:
@@ -205,7 +235,9 @@ def supervise(ledger: Ledger, execution_id: str) -> None:
             }
         atomic_json(
             artifact(ledger.root, record, ".result.json"),
-            {"execution_id": execution_id, "process_group": os.getpid(), "stages": results},
+            PROCESS_FACTS.validate_python(
+                {"execution_id": execution_id, "process_group": os.getpid(), "stages": results}
+            ),
         )
     finally:
         # Reap surviving descendants before anyone may release the command resource.
@@ -217,22 +249,26 @@ def facts(root: Path, execution_id: str, record: ExecutionReceipt) -> dict[str, 
     owner = artifact(root, record, ".owner.json")
     if not owner.exists():
         return None
-    identity = read_json(owner)
-    pid = identity.get("process_group")
-    require(
-        identity.get("execution_id") == execution_id and type(pid) is int and pid > 1,
-        "Invalid command process identity",
-    )
-    if windows_job.live(execution_id) if identity.get("platform") == "nt" else group_live(pid):
-        return None
-    path = artifact(root, record, ".result.json")
-    if not path.exists():
-        return {"stages": {}, "process_group": pid}
-    result = read_json(path)
-    require(
-        result.get("execution_id") == execution_id
-        and result.get("process_group") == pid
-        and isinstance(result.get("stages"), dict),
-        "Invalid supervisor result",
-    )
-    return dict(result)
+    try:
+        identity = PROCESS_OWNER.validate_python(read_json(owner))
+    except ValidationError as exc:
+        raise Invalid(validation_message("Invalid command owner", exc, PROCESS_OWNER)) from None
+    try:
+        pid = identity["process_group"]
+        require(
+            identity["execution_id"] == execution_id and pid > 1,
+            "Invalid command process identity",
+        )
+        if windows_job.live(execution_id) if identity["platform"] == "nt" else group_live(pid):
+            return None
+        path = artifact(root, record, ".result.json")
+        if not path.exists():
+            return {"stages": {}, "process_group": pid}
+        result = PROCESS_FACTS.validate_python(read_json(path))
+        require(
+            result["execution_id"] == execution_id and result["process_group"] == pid,
+            "Invalid supervisor result identity",
+        )
+        return dict(result)
+    except ValidationError as exc:
+        raise Invalid(validation_message("Invalid command evidence", exc, PROCESS_FACTS)) from None

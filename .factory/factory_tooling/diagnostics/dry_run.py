@@ -9,10 +9,12 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from factory_tooling.paths import TOOLS
-from factory_tooling.runtime.contracts import Graph
+
+if TYPE_CHECKING:
+    from factory_tooling.runtime.contracts import Graph
 
 
 def configuration() -> dict[str, Any]:

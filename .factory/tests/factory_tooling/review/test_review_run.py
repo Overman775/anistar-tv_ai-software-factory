@@ -43,6 +43,43 @@ class ReviewRunTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "assignments"):
             validate_plan(f.manifest)
 
+    def test_run_assignment_is_accepted_by_context_entry_point(self) -> None:
+        from factory_tooling.context.context import build
+        from factory_tooling.project.profile_io import sha
+        from factory_tooling.project.profile_rules import document_paths, select_rules
+        from factory_tooling.runtime.workflow_config import load_config
+        from tests.fixture_bundle import ROOT as fixture
+
+        f = self.fixture()
+        policy = load_profile(fixture / "project/project.yaml")
+        paths = {"AGENTS.md"}
+        for rule in select_rules(
+            policy["data"], process="code-review", audience="worker", role="reviewer"
+        ):
+            if "file" not in rule:
+                paths.update(document_paths(policy["data"], rule))
+        content = "Accepted baseline documentation."
+        f.manifest["project_policy"] = snapshot(
+            policy,
+            source="fixture baseline",
+            documents={
+                path: {"content": content, "sha256": sha(content.encode())} for path in paths
+            },
+        )
+        f.rebind()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        created = self.call(f, "init", "--input", request, "--run", run)
+        self.assertEqual(0, created.returncode, created.stderr)
+        response = self.call(f, "assignment", "--id", "system-design", "--run", run)
+        self.assertEqual(0, response.returncode, response.stderr)
+        config = load_config(fixture / "factory.yaml")
+        packet = build(
+            config, f.root, "reviewer", "reviewer", "code-review", json.loads(response.stdout)
+        )
+        self.assertEqual(f.manifest["target"], packet["source"]["target"])
+        self.assertEqual("system-design", packet["lens"])
+
     def test_project_commands_and_criteria_extend_without_orchestrator_changes(self) -> None:
         f = self.fixture()
         profile = f.root / "project.yaml"

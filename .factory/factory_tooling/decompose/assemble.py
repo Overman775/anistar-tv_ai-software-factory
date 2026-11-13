@@ -12,9 +12,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from factory_tooling.decompose.contracts import LoadedTask
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+from factory_tooling.decompose.contracts import LoadedTask, Text
 from factory_tooling.decompose.output_safety import (
     atomic_write_text,
     factory_inputs,
@@ -38,6 +41,7 @@ from factory_tooling.project.profile_io import (
 )
 from factory_tooling.project.project import configured_profile
 from factory_tooling.project.skill_gates import artifact_hash, check_decomposition_gates
+from factory_tooling.validation import validation_message
 
 REVIEW_CRITERIA = ["plan-coverage", "task-cohesion", "architecture", "verification"]
 
@@ -189,87 +193,86 @@ def inspect(
     return policy, artifacts, policy_hash, tasks, [source_record, graph_record, project_record]
 
 
-def validate_request(request: Any) -> None:
-    fields = {
-        "run_id",
-        "assignment_id",
-        "author_id",
-        "reviewer_id",
-        "role",
-        "artifact_hash",
-        "policy_hash",
-        "task_ids",
-        "criteria",
-    }
-    if not isinstance(request, dict) or set(request) != fields:
-        raise ValueError("Invalid review request")
-    if not all(
-        isinstance(request[k], str) and request[k].strip()
-        for k in fields - {"task_ids", "criteria"}
-    ):
-        raise ValueError("Review request needs identities and hashes")
-    if request["role"] != "task-reviewer" or request["author_id"] == request["reviewer_id"]:
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ReviewIdentity(TypedDict):
+    run_id: Text
+    assignment_id: Text
+    reviewer_id: Text
+    role: Literal["task-reviewer"]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ReviewRequest(ReviewIdentity):
+    author_id: Text
+    artifact_hash: Text
+    policy_hash: Text
+    task_ids: Annotated[list[Text], Field(min_length=1)]
+    criteria: list[Text]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ReviewFinding(TypedDict):
+    id: Text
+    blocking: bool
+    message: Text
+    evidence: Annotated[list[Text], Field(min_length=1)]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ReviewReport(ReviewIdentity):
+    request_hash: Text
+    verdict: Literal["APPROVE", "NEEDS_WORK", "BLOCKED"]
+    criteria: list[GateCheck]
+    findings: list[ReviewFinding]
+
+
+REVIEW_REQUEST = TypeAdapter[ReviewRequest](ReviewRequest)
+REVIEW_REPORT = TypeAdapter[ReviewReport](ReviewReport)
+
+
+def validate_request(raw: object) -> ReviewRequest:
+    try:
+        request = REVIEW_REQUEST.validate_python(raw)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid review request", exc, REVIEW_REQUEST)
+        ) from None
+    if request["author_id"] == request["reviewer_id"]:
         raise ValueError("TaskReviewer must be independent of the author")
-    if (
-        request["criteria"] != REVIEW_CRITERIA
-        or not request["task_ids"]
-        or len(set(request["task_ids"])) != len(request["task_ids"])
+    if request["criteria"] != REVIEW_CRITERIA or len(set(request["task_ids"])) != len(
+        request["task_ids"]
     ):
         raise ValueError("Invalid review coverage")
+    return request
 
 
 def review_record(
-    request: Any,
-    report: Any,
+    raw_request: object,
+    raw_report: object,
     artifacts: str,
     policy_hash: str,
     task_ids: dict[str, LoadedTask],
     reference: str | Path,
 ) -> GateCheck:
     try:
-        validate_request(request)
+        request = validate_request(raw_request)
         if (request["artifact_hash"], request["policy_hash"], request["task_ids"]) != (
             artifacts,
             policy_hash,
             sorted(task_ids),
         ):
             raise ValueError("Review request is stale: rebind current tasks and repeat review")
-        expected = {
-            "request_hash",
-            "run_id",
-            "assignment_id",
-            "reviewer_id",
-            "role",
-            "verdict",
-            "criteria",
-            "findings",
-        }
-        if not isinstance(report, dict) or set(report) != expected:
-            raise ValueError("Missing/invalid TaskReviewer report")
-        if report["request_hash"] != digest(request) or any(
+        report = REVIEW_REPORT.validate_python(raw_report)
+        if report["request_hash"] != digest(raw_request) or any(
             report[k] != request[k] for k in ("run_id", "assignment_id", "reviewer_id", "role")
         ):
             raise ValueError("TaskReviewer identity or request mismatch")
-        if report["verdict"] not in ("APPROVE", "NEEDS_WORK", "BLOCKED"):
-            raise ValueError("Invalid review verdict")
-        criteria = report["criteria"]
-        if not isinstance(criteria, list) or len(criteria) != len(REVIEW_CRITERIA):
-            raise ValueError("Incomplete review criteria")
-        if {c.get("id") for c in criteria if isinstance(c, dict)} != set(REVIEW_CRITERIA):
-            raise ValueError("Unknown/duplicate/missing review criteria")
-        records = [evidence(c["id"], c["status"], c["message"], c["evidence"]) for c in criteria]
-        findings = report["findings"]
-        if not isinstance(findings, list) or any(
-            not isinstance(f, dict)
-            or set(f) != {"id", "blocking", "message", "evidence"}
-            or not isinstance(f["blocking"], bool)
-            or any(not isinstance(f[k], str) or not f[k].strip() for k in ("id", "message"))
-            or not isinstance(f["evidence"], list)
-            or not f["evidence"]
-            or any(not isinstance(e, str) or not e.strip() for e in f["evidence"])
-            for f in findings
+        records = report["criteria"]
+        if len(records) != len(REVIEW_CRITERIA) or {c["id"] for c in records} != set(
+            REVIEW_CRITERIA
         ):
-            raise ValueError("Invalid review findings")
+            raise ValueError("Unknown/duplicate/missing review criteria")
+        findings = report["findings"]
         if len({f["id"] for f in findings}) != len(findings):
             raise ValueError("Duplicate review findings")
         failed = (
@@ -285,6 +288,13 @@ def review_record(
             "task-review",
             state,
             "TaskReviewer: " + report["verdict"] + "; " + "; ".join(details),
+            [str(reference)],
+        )
+    except ValidationError as exc:
+        return evidence(
+            "task-review",
+            "BLOCKED",
+            validation_message("Invalid TaskReviewer report", exc, REVIEW_REPORT),
             [str(reference)],
         )
     except (ValueError, KeyError, TypeError) as exc:
@@ -309,7 +319,7 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         "task_ids": sorted(tasks),
         "criteria": REVIEW_CRITERIA,
     }
-    validate_request(request)
+    request = dict(validate_request(request))
     guard_output(
         args.request, protected_inputs(args.config, args.staging_dir, args.source_lock, policy)
     )
@@ -420,7 +430,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-if __name__ == "__main__":
+def main() -> int:
     try:
         args = parse_args()
         result = prepare(args) if args.action == "review-request" else assemble(args)
@@ -430,4 +440,9 @@ if __name__ == "__main__":
     except (ValueError, OSError, KeyError, TypeError) as exc:
         status = "FAIL" if str(exc).startswith("Gate FAIL:") else "BLOCKED"
         print(status + ": " + str(exc), file=sys.stderr)
-        sys.exit(1 if status == "FAIL" else 2)
+        return 1 if status == "FAIL" else 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

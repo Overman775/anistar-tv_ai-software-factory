@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterator
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, NotRequired
 
 import yaml
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 
 # Direct CLI execution and import-by-path use the same tool modules.
 from factory_tooling.context import context
 from factory_tooling.project.contracts import Selection
-from factory_tooling.project.profile_io import freeze_materials, load_profile, safe_path
+from factory_tooling.project.profile_io import (
+    freeze_materials,
+    load_profile,
+    parse_yaml,
+    safe_path,
+)
 from factory_tooling.runtime import escalation
 from factory_tooling.runtime.contracts import (
+    Alias,
     Config,
-    Graph,
+    GraphTopology,
     Node,
     Profile,
+    ProfileCommon,
+    ProfileVariant,
+    Settings,
     State,
     agent_key,
 )
@@ -30,258 +39,153 @@ from factory_tooling.runtime.workflow_core import (
     relative,
     require,
 )
+from factory_tooling.validation import validation_message
 
 
-def fields(value: Any, allowed: set[str], label: str) -> None:
-    if not (isinstance(value, dict)):
-        raise Invalid(f"{label} must be a mapping")
-    require(
-        not (set(value) - set(allowed)),
-        f"Unknown {label} fields: {set(value) - set(allowed)}",
-    )
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProfileGroup(ProfileCommon):
+    default: NotRequired[Alias]
+    variants: Annotated[dict[Alias, ProfileVariant], Field(min_length=1)]
 
 
-def expand_profiles(groups: Any) -> tuple[dict[str, Profile], dict[str, str]]:
-    """One explicit group per specialty; emit the existing flat runtime contract."""
-    if not (isinstance(groups, dict) and groups):
-        raise Invalid("Missing profile groups")
-    common_fields = ("role", "contract", "capabilities", "enforcement", "mcp")
-    profiles, defaults = {}, {}
+ProfileGroups = Annotated[dict[Alias, ProfileGroup], Field(min_length=1)]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class FactoryConfig(Settings):
+    profiles: ProfileGroups
+
+
+FACTORY_CONFIG = TypeAdapter[FactoryConfig](FactoryConfig)
+PROFILE_GROUPS = TypeAdapter[ProfileGroups](ProfileGroups, config=ConfigDict(strict=True))
+RUNTIME_CONFIG = TypeAdapter[Config](Config)
+
+
+def expand_profiles(groups: object) -> tuple[dict[str, Profile], dict[str, str]]:
+    try:
+        return _expand_profiles(PROFILE_GROUPS.validate_python(groups))
+    except ValidationError as exc:
+        raise Invalid(validation_message("Invalid profile groups", exc, PROFILE_GROUPS)) from None
+
+
+def _expand_profiles(groups: ProfileGroups) -> tuple[dict[str, Profile], dict[str, str]]:
+    """One explicit group per specialty; emit the flat runtime contract."""
+    profiles: dict[str, Profile] = {}
+    defaults: dict[str, str] = {}
     for role, group in groups.items():
-        if not (isinstance(role, str) and re.fullmatch("[a-z][a-z0-9-]*", role)):
-            raise Invalid("Invalid profile group")
-        fields(
-            group,
-            set(common_fields) | {"default", "variants"},
-            "profile group",
-        )
-        require(
-            set(common_fields) <= set(group),
-            "Profile group needs explicit common fields",
-        )
         require(
             group["role"] == f"roles/{role}.md" and group["contract"] == f"contracts/{role}.md",
             "Profile group and role/contract must identify the same specialty",
         )
-        variants = group.get("variants")
-        if not (isinstance(variants, dict) and variants):
-            raise Invalid("Profile group needs variants")
-        default = group.get("default", next(iter(variants)) if len(variants) == 1 else None)
-        if not (isinstance(default, str) and default in variants):
-            raise Invalid("Multiple profiles require an explicit valid default")
+        variants = group["variants"]
+        default = group.get("default", next(iter(variants)) if len(variants) == 1 else "")
+        require(default in variants, "Multiple profiles require an explicit valid default")
         if "default" in group:
             defaults[group["role"]] = default
         for name, variant in variants.items():
-            if not (
-                isinstance(name, str)
-                and re.fullmatch("[a-z][a-z0-9-]*", name)
-                and (name != "human")
-            ):
-                raise Invalid("Invalid profile name")
-            require(name not in profiles, f"Duplicate profile name: {name}")
-            fields(variant, {"model", "adapter", "escalation"}, "profile variant")
-            if not (
-                isinstance(variant.get("model"), str) and isinstance(variant.get("adapter"), str)
-            ):
-                raise Invalid("Profile variant needs model and adapter")
-            profiles[name] = deepcopy({k: group[k] for k in common_fields} | variant)
+            require(
+                name != "human" and name not in profiles,
+                f"Invalid or duplicate profile name: {name}",
+            )
+            profiles[name] = {
+                "role": group["role"],
+                "contract": group["contract"],
+                "capabilities": group["capabilities"].copy(),
+                "enforcement": group["enforcement"],
+                "mcp": list(group["mcp"]),
+                "model": variant["model"],
+                "adapter": variant["adapter"],
+            }
+            if "escalation" in variant:
+                profiles[name]["escalation"] = deepcopy(variant["escalation"])
     return profiles, defaults
 
 
 def load_config(path: str | Path) -> Config:
-    if not (yaml is not None):
+    if yaml is None:
         raise Invalid("Install .factory/tools/requirements.txt in a virtualenv")
     path = Path(path).resolve()
-
-    # Reject duplicate keys: silently overriding a model or limit is unsafe.
-    class UniqueLoader(yaml.SafeLoader):
-        pass
-
-    def mapping(
-        loader: yaml.SafeLoader, node: yaml.MappingNode, deep: bool = False
-    ) -> dict[str, Any]:
-        result = {}
-        for key_node, value_node in node.value:
-            key = loader.construct_object(key_node, deep=deep)
-            require(key not in result, f"Duplicate YAML key: {key}")
-            result[key] = loader.construct_object(value_node, deep=deep)
-        return result
-
-    UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
     raw = path.read_bytes()
-    c = yaml.load(raw, Loader=UniqueLoader)  # noqa: S506  # SafeLoader with duplicate-key rejection.
-    fields(
-        c,
-        {
-            "project",
-            "router",
-            "orchestration",
-            "orchestrator",
-            "execution",
-            "profiles",
-            "models",
-            "adapters",
-            "native",
-            "acpx",
-        },
-        "configuration",
-    )
-    c["profiles"], defaults = expand_profiles(c.get("profiles"))
-    c["routing"] = {"defaults": defaults}
-    fields(c.get("native"), {"max_parallel_agents"}, "native")
-    require("max_parallel_agents" in c["native"], "Missing native limit")
-    models = c.get("models")
-    if not (isinstance(models, dict) and models):
-        raise Invalid("Missing models")
-    for name, model in models.items():
-        if not (isinstance(name, str) and re.fullmatch("[a-z][a-z0-9-]*", name)):
-            raise Invalid("Invalid model alias")
-        fields(model, {"id", "effort"}, "model")
-        if not (
-            "id" in model
-            and (model["id"] is None or (isinstance(model["id"], str) and model["id"].strip()))
-        ):
-            raise Invalid("Model needs explicit id or null")
-        if not (
-            "effort" not in model or (isinstance(model["effort"], str) and model["effort"].strip())
-        ):
-            raise Invalid("Invalid model effort")
-    if "orchestrator" in c:
-        fields(c["orchestrator"], {"model"}, "orchestrator")
-        alias = c["orchestrator"].get("model")
-        require(isinstance(alias, str) and alias in models, "Unknown orchestrator model alias")
-    require("project" in c, "Missing project profile; select it explicitly")
-    require(
-        not any(k in c for k in ("extensions", "runtime")),
-        "External runtime/packs are not supported in this profile version",
-    )
-    c["_project"] = acceptance_guard(
-        load_profile, acceptance_guard(safe_path, path.parent, c["project"])
-    )
-    require(
-        relative(path.parent, c["orchestration"]).is_file(),
-        "Missing orchestration policy",
-    )
-    require(
-        c.get("router") and relative(path.parent, c["router"]).is_file(),
-        "Missing router policy",
-    )
-    limits = {"native": c["native"]["max_parallel_agents"]}
-    endpoints = set()
-    acpx = c.get("acpx", {})
-    if not (isinstance(acpx, dict) and set(acpx) <= {"command", "connections"}):
+    try:
+        settings = FACTORY_CONFIG.validate_python(parse_yaml(raw))
+    except ValidationError as exc:
         raise Invalid(
-            "Unsupported acpx field; MCP servers and credentials belong in the harness configuration"
-        )
-    for name, conn in c.get("acpx", {}).get("connections", {}).items():
-        if not (re.fullmatch("[a-z][a-z0-9-]*", name)):
-            raise Invalid("Invalid connection alias")
-        if not (
-            isinstance(conn, dict)
-            and set(conn) <= {"command", "args", "max_parallel_agents", "permissions"}
-        ):
-            raise Invalid(
-                "Unsupported connection field; env/MCP injection is not implemented; configure the harness"
-            )
-        if not (isinstance(conn.get("args", []), list)):
-            raise Invalid("Connection args must be an argv list")
-        argv = [conn["command"], *conn.get("args", [])]
-        if not (all(isinstance(x, str) and x for x in argv)):
-            raise Invalid("Invalid connection argv")
-        endpoint = tuple(argv)
-        require(
-            endpoint not in endpoints,
-            "Duplicate backend alias; use one shared connection pool",
-        )
-        endpoints.add(endpoint)
-        require(
-            conn.get("permissions", "approve-reads")
-            in {"approve-reads", "approve-all", "deny-all"},
-            "Invalid permission mode",
-        )
-        limits[f"acpx:{name}"] = conn["max_parallel_agents"]
-    require(
-        all(type(v) is int and v > 0 for v in limits.values()),
-        "Limits must be positive integers",
+            validation_message("Invalid factory configuration", exc, FACTORY_CONFIG)
+        ) from None
+    except ValueError as exc:
+        raise Invalid(f"Invalid factory configuration: {exc}") from exc
+    profiles, defaults = _expand_profiles(settings["profiles"])
+    models = settings["models"]
+    if "orchestrator" in settings:
+        require(settings["orchestrator"]["model"] in models, "Unknown orchestrator model alias")
+    policy = acceptance_guard(
+        load_profile, acceptance_guard(safe_path, path.parent, settings["project"])
     )
-    files = {str(path): digest(raw)}
-    files.update(c["_project"]["files"])
-    if not (isinstance(c.get("adapters"), dict) and c["adapters"]):
-        raise Invalid("Missing adapters")
-    for name, adapter in c["adapters"].items():
-        if not (isinstance(name, str) and re.fullmatch("[a-z][a-z0-9-]*", name)):
-            raise Invalid("Invalid adapter alias")
-        fields(
-            adapter,
-            {"instructions", "worker_instructions", "harness", "runner", "connection"},
-            "adapter",
-        )
-        if not (
-            isinstance(adapter, dict)
-            and isinstance(adapter.get("harness"), str)
-            and re.fullmatch("[a-z][a-z0-9-]*", adapter["harness"])
-        ):
-            raise Invalid("Unknown adapter harness")
-        require(adapter.get("runner") in {"native", "acpx"}, "Unknown adapter runner")
-        require(
-            (adapter["runner"] == "native" and adapter["harness"] in {"codex", "claude"})
-            or adapter["runner"] == "acpx",
-            "Unsupported runner/harness mapping",
-        )
+    require(relative(path.parent, settings["router"]).is_file(), "Missing router policy")
+    require(
+        relative(path.parent, settings["orchestration"]).is_file(), "Missing orchestration policy"
+    )
+    limits = {"native": settings["native"]["max_parallel_agents"]}
+    endpoints = set()
+    if "acpx" in settings:
+        for name, conn in settings["acpx"]["connections"].items():
+            endpoint = (conn["command"], *conn.get("args", []))
+            require(
+                endpoint not in endpoints,
+                "Duplicate backend alias; use one shared connection pool",
+            )
+            endpoints.add(endpoint)
+            limits[f"acpx:{name}"] = conn["max_parallel_agents"]
+
+    files = {str(path): digest(raw), **policy["files"]}
+    adapters = settings["adapters"]
+    for adapter in adapters.values():
         if adapter["runner"] == "acpx":
             require(f"acpx:{adapter.get('connection')}" in limits, "Unknown connection")
         else:
+            require(adapter["harness"] in {"codex", "claude"}, "Unsupported runner/harness mapping")
             require("connection" not in adapter, "Native adapter cannot have ACP connection")
-        for field in ("instructions", "worker_instructions"):
-            value = adapter.get(field)
-            if not isinstance(value, str):
-                raise Invalid(f"Missing adapter {field}")
-            f = relative(path.parent, value)
-            require(f.is_file(), f"Missing adapter {field}")
+        for name in (adapter["instructions"], adapter["worker_instructions"]):
+            f = relative(path.parent, name)
+            require(f.is_file(), f"Missing adapter instruction: {name}")
             files[str(f)] = digest(f.read_bytes())
-    for p in c["profiles"].values():
-        require("instructions" not in p, "Profile instructions renamed to role")
-        require(
-            not any(k in p for k in ("runner", "harness", "connection")),
-            "Transport belongs in adapters, not profiles",
-        )
-        require(
-            p.get("role") and p.get("adapter") in c["adapters"],
-            "Profile needs role and known adapter",
-        )
-        require(p["model"] in c["models"], "Unknown model alias")
-        caps = p.get("capabilities")
-        if not (
-            isinstance(caps, dict)
-            and set(caps) == {"read", "edit", "commands", "web"}
-            and all(type(v) is bool for v in caps.values())
-        ):
-            raise Invalid("Explicit boolean capabilities required")
-        require(caps["read"], "Profiles must read assigned instructions")
-        require(
-            p.get("enforcement") in {"instructions", "required"},
-            "Explicit enforcement required",
-        )
-        if not (
-            isinstance(p.get("mcp"), list)
-            and all(
-                isinstance(x, str) and re.fullmatch("[a-z][a-z0-9-]*\\.[A-Za-z0-9_-]+", x)
-                for x in p["mcp"]
-            )
-        ):
-            raise Invalid("Invalid MCP capability list")
-        require(p.get("contract"), "Profile needs role interface contract")
-        for key in ("role", "contract"):
-            if key in p:
-                f = relative(path.parent, p[key])
-                require(f.is_file(), f"Missing {key}: {f}")
-                files[str(f)] = digest(f.read_bytes())
-        # Derived transport fields are frozen in run state; YAML stays single-source.
-        p.update({k: v for k, v in c["adapters"][p["adapter"]].items() if k != "instructions"})
-    for key in ("orchestration", "router"):
-        policy = relative(path.parent, c[key])
-        files[str(policy)] = digest(policy.read_bytes())
-    acceptance_guard(escalation.configure, c)
+    for p in profiles.values():
+        require(p["adapter"] in adapters, "Profile needs known adapter")
+        require(p["model"] in models, "Unknown model alias")
+        require(p["capabilities"]["read"], "Profiles must read assigned instructions")
+        for name in (p["role"], p["contract"]):
+            f = relative(path.parent, name)
+            require(f.is_file(), f"Missing role/contract: {name}")
+            files[str(f)] = digest(f.read_bytes())
+        adapter = adapters[p["adapter"]]
+        p["worker_instructions"] = adapter["worker_instructions"]
+        p["harness"] = adapter["harness"]
+        p["runner"] = adapter["runner"]
+        if "connection" in adapter:
+            p["connection"] = adapter["connection"]
+    for name in (settings["orchestration"], settings["router"]):
+        file = relative(path.parent, name)
+        files[str(file)] = digest(file.read_bytes())
+
+    roles, runtime_defaults = acceptance_guard(escalation.routing, profiles, defaults)
+    result = {
+        **settings,
+        "profiles": profiles,
+        "routing": {"defaults": defaults},
+        "_roles": roles,
+        "_defaults": runtime_defaults,
+        "_project": policy,
+        "_path": str(path),
+        "_files": files,
+        "_limits": limits,
+    }
+    try:
+        c = RUNTIME_CONFIG.validate_python(result)
+    except ValidationError as exc:
+        raise Invalid(
+            validation_message("Invalid runtime configuration", exc, RUNTIME_CONFIG)
+        ) from None
+    files = c["_files"]
     dependencies: set[Path] = set()
     for relative_path in (
         "skills/factory-implement/SKILL.md",
@@ -340,8 +244,7 @@ def load_config(path: str | Path) -> Config:
     for dependency in dependencies:
         if str(dependency) not in files:
             files[str(dependency)] = digest(dependency.read_bytes())
-    c["_path"], c["_files"], c["_limits"] = str(path), files, limits
-    return cast(Config, c)
+    return c
 
 
 def check_capabilities(profile: Profile, node: Node | None = None) -> None:
@@ -361,7 +264,7 @@ def check_capabilities(profile: Profile, node: Node | None = None) -> None:
         )
 
 
-def check_config(state: State) -> None:
+def check_config(state: State, *, graph: GraphTopology | None = None) -> None:
     for path, expected in state["config"]["_files"].items():
         require(
             Path(path).is_file() and digest(Path(path).read_bytes()) == expected,
@@ -371,7 +274,7 @@ def check_config(state: State) -> None:
         freeze_materials,
         state["config"]["_project"],
         state["workspace"],
-        graph_selections(state["graph"]),
+        graph_selections(graph if graph is not None else state["graph"]),
     )
     require(
         actual == state["config"].get("_project_documents", {}),
@@ -379,7 +282,7 @@ def check_config(state: State) -> None:
     )
 
 
-def graph_selections(graph: Graph) -> Iterator[Selection]:
+def graph_selections(graph: GraphTopology) -> Iterator[Selection]:
     scope = sorted({p for t in graph["tasks"].values() for p in t["scope"]})
     yield dict(process="implement", audience="coordinator", scope=scope)
     for node in graph["nodes"]:
@@ -393,7 +296,7 @@ def graph_selections(graph: Graph) -> Iterator[Selection]:
             )
 
 
-def freeze_project(config: Config, graph: Graph, workspace: str | Path) -> Config:
+def freeze_project(config: Config, graph: GraphTopology, workspace: str | Path) -> Config:
     from copy import deepcopy
 
     result = deepcopy(config)

@@ -109,7 +109,7 @@ class ReviewFindingTests(unittest.TestCase):
         f = self.f
         f.ledger.retry("write-label", "review", "fix", "stopped")
         f.start("write-label")
-        with self.assertRaisesRegex(Invalid, "cannot close"):
+        with self.assertRaisesRegex(Invalid, r"finding_updates.*status"):
             f.ledger.finish(
                 "write-label",
                 f.report(
@@ -268,7 +268,9 @@ class ReviewFindingTests(unittest.TestCase):
         other.init()
         state = other.ledger.read()
         state["review_findings"] = deepcopy(self.f.ledger.read()["review_findings"])
-        state["review_findings"]["unrelated-task"] = {"REV-99": {"secret": "not needed"}}
+        state["review_findings"]["unrelated-task"] = {
+            "REV-99": deepcopy(state["review_findings"]["label"]["REV-1"])
+        }
         atomic_json(other.ledger.path, state)
         other.ledger.claim("write-label")
         prompt = Path(prepare_prompt(other.ledger, "write-label")["prompt"]).read_text()
@@ -341,9 +343,9 @@ class IntegrationFindingTests(unittest.TestCase):
         f = self.f
         state = f.ledger.read()
         node = next(n for n in state["graph"]["nodes"] if n["id"] == "write-label")
-        return (
-            state["sessions"].get(agent_key(node), {}).get("handle", agent_key(node) + "-session")
-        )
+        key = agent_key(node)
+        session = state["sessions"].get(key)
+        return session["handle"] if session else key + "-session"
 
     def second(self, content: str = "Final authorized outcome") -> None:
         f = self.f

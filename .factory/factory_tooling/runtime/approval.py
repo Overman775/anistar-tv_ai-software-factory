@@ -7,7 +7,14 @@ from pathlib import Path
 
 from factory_tooling.project.profile_rules import project_checks
 from factory_tooling.runtime.check_evidence import check_receipts
-from factory_tooling.runtime.contracts import Graph, Node, Report, State, Task
+from factory_tooling.runtime.contracts import (
+    ApprovalRequest,
+    LockedGraph,
+    Node,
+    Report,
+    State,
+    Task,
+)
 from factory_tooling.runtime.workflow_core import Invalid, digest, require, snapshot
 
 
@@ -20,29 +27,11 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
         and not report.get("observed_source_drift"),
         "Approval requires a current blocked verification",
     )
-    action = request.get("action")
-    evidence = request.get("evidence")
-    files = request.get("files")
+    action, evidence, files = request["action"], request["evidence"], request["files"]
     require(
-        isinstance(action, str)
-        and action.strip()
-        and isinstance(evidence, str)
-        and evidence.strip(),
-        "Approval request needs action and evidence",
+        not ({"revision", "added_preimages", "id"} & request.keys()),
+        "Approval request runtime identity is assigned by the ledger",
     )
-    require(
-        isinstance(files, dict)
-        and files
-        and all(
-            isinstance(path, str)
-            and isinstance(value, str)
-            and re.fullmatch(r"[0-9a-f]{64}", value)
-            for path, value in files.items()
-        ),
-        "Approval request needs exact candidate hashes",
-    )
-    if not isinstance(files, dict):
-        raise Invalid("Invalid approval files")
     before = report["files"]
     latest = {
         receipt["spec"]["id"]: receipt
@@ -112,7 +101,7 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
                 raise Invalid(f"Missing runner result before approval: {check_id}")
             checks.append(current)
     check_receipts(root, state, node["id"], checks, complete=False, require_pass=False)
-    bound = {
+    bound: ApprovalRequest = {
         "action": action,
         "evidence": evidence,
         "files": files,
@@ -128,13 +117,11 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
         before,
         bound,
     ]
-    report["approval_request"] = {
-        **bound,
-        "id": digest(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8")),
-    }
+    bound["id"] = digest(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    report["approval_request"] = bound
 
 
-def expanded_graph(state: State, node: Node, report: Report) -> Graph:
+def expanded_graph(state: State, node: Node, report: Report) -> LockedGraph:
     added = report["approval_request"].get("added_preimages", {})
     if not added:
         return state["graph"]

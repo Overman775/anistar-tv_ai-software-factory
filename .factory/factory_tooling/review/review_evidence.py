@@ -2,76 +2,60 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from factory_tooling.review.review_contracts import (
-    TOOL_STATUSES,
     identity_errors,
 )
 from factory_tooling.review.review_io import load_object
+from factory_tooling.review.review_shapes import Evidence, ToolResult
+from factory_tooling.validation import validation_message
+
+EVIDENCE = TypeAdapter[Evidence](Evidence)
+TOOL_RESULT = TypeAdapter[ToolResult](ToolResult)
 
 
 def validate_evidence(
-    evidence: Any,
+    raw: object,
     manifest: dict[str, Any],
     diff: dict[str, Any],
     tool_commands: dict[str, int],
 ) -> tuple[bool, str]:
-    if not isinstance(evidence, dict):
-        return False, "evidence must be object"
-    kind = evidence.get("kind")
-    if kind == "requirement":
+    try:
+        evidence = EVIDENCE.validate_python(raw)
+    except ValidationError as exc:
+        return False, validation_message("Invalid evidence", exc, EVIDENCE)
+    if evidence["kind"] == "requirement":
         known = {r["id"] for r in manifest.get("context", {}).get("requirements", [])}
         requirement_id = evidence.get("requirement_id")
-        return (
-            (True, "")
-            if isinstance(requirement_id, str) and requirement_id in known
-            else (False, "unknown requirement evidence")
-        )
-    if kind == "inspection":
-        path = evidence.get("path")
-        record = manifest.get("source_evidence", {}).get(path) if isinstance(path, str) else None
-        line = evidence.get("line")
-        if (
-            not isinstance(record, dict)
-            or type(line) is not int
-            or not 0 < line <= len(record["content"].splitlines())
-        ):
+        return (True, "") if requirement_id in known else (False, "unknown requirement evidence")
+    if evidence["kind"] == "inspection":
+        path = evidence["path"]
+        record = manifest.get("source_evidence", {}).get(path)
+        if record is None or evidence["line"] > len(record["content"].splitlines()):
             return False, "inspection outside pinned source evidence"
         return True, ""
-    if kind == "tool":
-        tool_id = evidence.get("tool_id")
-        index = evidence.get("command_index")
-        if (
-            not isinstance(tool_id, str)
-            or tool_id not in tool_commands
-            or type(index) is not int
-            or not 0 <= index < tool_commands[tool_id]
-        ):
+    if evidence["kind"] == "tool":
+        tool_id = evidence["tool_id"]
+        if tool_id not in tool_commands or evidence["command_index"] >= tool_commands[tool_id]:
             return False, "tool evidence points outside validated parent results"
         return True, ""
-    path = evidence.get("path")
-    if not isinstance(path, str) or path not in manifest.get("scope_files", []):
+    path = evidence["path"]
+    if path not in manifest.get("scope_files", []):
         return False, "evidence path outside scope"
     if manifest.get("mode") == "feature" and not diff.get("feature_sources_valid", False):
         return False, "feature evidence invalid after source drift"
-    if kind == "file_operation":
+    if evidence["kind"] == "file_operation":
         if manifest.get("mode") == "feature":
             return False, "file operation evidence requires authoritative branch/PR diff"
-        operation = evidence.get("operation")
-        fields = {"mode": ("old_mode", "new_mode"), "rename": ("old_path", "new_path")}
-        if not isinstance(operation, str) or operation not in fields:
-            return False, "unsupported file operation"
-        record = {
-            "operation": operation,
-            **{field: evidence.get(field) for field in fields[operation]},
-        }
+        record = {key: value for key, value in evidence.items() if key not in {"path", "kind"}}
         if record not in diff.get("file_operations", {}).get(path, []):
             return False, "file operation evidence does not match authoritative diff metadata"
         return True, ""
-    if kind == "binary":
+    if evidence["kind"] == "binary":
         if manifest.get("mode") == "feature":
             try:
                 content = Path(path).read_bytes()
@@ -87,17 +71,7 @@ def validate_evidence(
         if manifest.get("mode") != "feature" and path not in diff["binary"]:
             return False, "binary evidence has no matching diff section"
         return True, ""
-    if kind != "source":
-        return False, "unsupported evidence kind"
-    line = evidence.get("line")
-    side = evidence.get("side")
-    if (
-        type(line) is not int
-        or line <= 0
-        or not isinstance(side, str)
-        or side not in {"new", "old"}
-    ):
-        return False, "source evidence requires positive line and side new|old"
+    line, side = evidence["line"], evidence["side"]
     if manifest.get("mode") == "feature":
         try:
             source = Path(path)
@@ -122,11 +96,14 @@ def validate_tool_results(
     failures: list[str] = []
     for path in paths:
         try:
-            value = load_object(path)
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            value: dict[str, Any] = dict(TOOL_RESULT.validate_python(load_object(path)))
+        except ValidationError as exc:
+            errors.append(validation_message(f"Invalid tool result {path}", exc, TOOL_RESULT))
+            continue
+        except (OSError, ValueError) as exc:
             errors.append(f"{path}: {exc}")
             continue
-        tool_id = value.get("tool_id")
+        tool_id = value["tool_id"]
         label = f"tool {tool_id}"
         local = identity_errors(value, manifest, label)
         if tool_id not in planned:
@@ -152,72 +129,32 @@ def validate_tool_results(
                 local.append(f"{label}: command differs from pinned plan")
         commands = value.get("commands")
         command_schema_valid = True
-        if status not in TOOL_STATUSES:
-            local.append(f"{label}: invalid status")
-        if status in {"NOT_APPLICABLE", "NOT_RUN"}:
-            if not isinstance(value.get("reason"), str) or not value["reason"]:
-                local.append(f"{label}: {status} requires reason")
-            if commands not in ([], None):
-                local.append(f"{label}: {status} forbids command records")
-            if status == "NOT_RUN":
-                local.append(f"{label}: NOT_RUN")
-        elif status in {"PASS", "FAIL", "BLOCKED"}:
-            if not isinstance(commands, list) or not commands:
-                local.append(f"{label}: completed result requires commands")
-            else:
-                exits: list[int] = []
-                blocked = False
-                for index, command in enumerate(commands):
-                    if not isinstance(command, dict):
-                        local.append(f"{label}[{index}]: command must be object")
+        if status == "NOT_RUN":
+            local.append(f"{label}: NOT_RUN")
+        if status in {"PASS", "FAIL", "BLOCKED"}:
+            exits: list[int] = []
+            blocked = False
+            for index, command in enumerate(value["commands"]):
+                exit_code = command["exit_code"]
+                execution_error = command.get("error")
+                if execution_error is not None:
+                    if exit_code is not None:
+                        local.append(f"{label}[{index}]: invalid execution error")
                         command_schema_valid = False
-                        continue
-                    argv, cwd, exit_code = (
-                        command.get("argv"),
-                        command.get("cwd"),
-                        command.get("exit_code"),
-                    )
-                    if (
-                        not isinstance(argv, list)
-                        or not argv
-                        or any(not isinstance(x, str) or not x for x in argv)
-                    ):
-                        local.append(f"{label}[{index}]: argv invalid")
-                        command_schema_valid = False
-                    if not isinstance(cwd, str) or not cwd:
-                        local.append(f"{label}[{index}]: cwd invalid")
-                        command_schema_valid = False
-                    execution_error = command.get("error")
-                    if execution_error is not None:
-                        if (
-                            not isinstance(execution_error, str)
-                            or not execution_error.strip()
-                            or exit_code is not None
-                        ):
-                            local.append(f"{label}[{index}]: invalid execution error")
-                            command_schema_valid = False
-                        blocked = True
-                        local.append(f"{label}[{index}]: command unavailable: {execution_error}")
-                    elif type(exit_code) is not int:
-                        local.append(f"{label}[{index}]: exit_code invalid")
-                        command_schema_valid = False
-                    else:
-                        exits.append(exit_code)
-                    if (
-                        not isinstance(command.get("stdout_excerpt"), str)
-                        or not isinstance(command.get("stderr_excerpt"), str)
-                        or type(command.get("stdout_truncated")) is not bool
-                        or type(command.get("stderr_truncated")) is not bool
-                    ):
-                        local.append(f"{label}[{index}]: output excerpts/truncation flags required")
-                        command_schema_valid = False
-                derived = (
-                    "FAIL" if any(code != 0 for code in exits) else "BLOCKED" if blocked else "PASS"
-                )
-                if status != derived:
-                    local.append(f"{label}: status {status} contradicts exit codes")
-                if derived == "FAIL":
-                    failures.append(str(tool_id))
+                    blocked = True
+                    local.append(f"{label}[{index}]: command unavailable: {execution_error}")
+                elif exit_code is None:
+                    local.append(f"{label}[{index}]: exit_code required")
+                    command_schema_valid = False
+                else:
+                    exits.append(exit_code)
+            derived = (
+                "FAIL" if any(code != 0 for code in exits) else "BLOCKED" if blocked else "PASS"
+            )
+            if status != derived:
+                local.append(f"{label}: status {status} contradicts exit codes")
+            if derived == "FAIL":
+                failures.append(tool_id)
         errors.extend(local)
         if (
             isinstance(tool_id, str)

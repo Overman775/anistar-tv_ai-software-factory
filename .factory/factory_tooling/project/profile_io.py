@@ -6,12 +6,16 @@ import hashlib
 import json
 from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Unpack, cast
+from typing import Annotated, Any, NotRequired, Unpack, cast
 
 import yaml
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
+from factory_tooling.decisions.decision_contract import DefinitionData
 from factory_tooling.project.contracts import (
     AcceptedDocument,
+    Gate,
     MaterialEntry,
     Policy,
     ProjectData,
@@ -21,14 +25,35 @@ from factory_tooling.project.contracts import (
 )
 from factory_tooling.project.profile_rules import (
     document_paths,
-    fields,
     local_policy_files,
     relative,
     require,
     select_rules,
-    strings,
     validate,
 )
+from factory_tooling.validation import validation_message
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProfileManifest(ProjectData):
+    gate_files: NotRequired[list[str]]
+    decision_files: NotRequired[list[str]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class GateFile(TypedDict):
+    gates: Annotated[list[Gate], Field(min_length=1)]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class DecisionFile(TypedDict):
+    decisions: Annotated[list[DefinitionData], Field(min_length=1)]
+
+
+PROFILE_MANIFEST = TypeAdapter[ProfileManifest](ProfileManifest)
+GATE_FILE = TypeAdapter[GateFile](GateFile)
+DECISION_FILE = TypeAdapter[DecisionFile](DecisionFile)
+SNAPSHOT = TypeAdapter[Snapshot](Snapshot)
 
 
 def sha(data: bytes) -> str:
@@ -88,30 +113,38 @@ def compose_profile(
     Reader owns storage (checkout, pinned snapshot or accepted Git tree).
     Bundles cannot include files or override unrelated profile fields.
     """
-    data = parse_yaml(raw)
-    if not (isinstance(data, dict)):
-        raise ValueError("Project policy: " + "profile must be a mapping")
-    paths = []
-    for field, collection in [("gate_files", "gates"), ("decision_files", "decisions")]:
-        if field not in data:
-            continue
-        require(collection not in data, f"choose {field} or inline {collection}, not both")
-        selected = data.pop(field)
-        strings(selected, field, empty=True)
-        for rel in selected:
-            relative(rel)
-            require(rel not in paths, f"duplicate definition file: {rel}")
-        entries = []
-        for rel in selected:
-            bundle = parse_yaml(read_definition(rel))
-            fields(bundle, {collection}, f"{collection} file")
-            if not (isinstance(bundle.get(collection), list) and bundle[collection]):
-                raise ValueError(
-                    "Project policy: " + f"definition file needs nonempty {collection}: {rel}"
-                )
-            entries.extend(bundle[collection])
-        data[collection] = entries
-        paths.extend(selected)
+    try:
+        data = PROFILE_MANIFEST.validate_python(parse_yaml(raw))
+    except ValidationError as exc:
+        raise ValueError(validation_message("Project policy", exc, PROFILE_MANIFEST)) from None
+    gate_files = data.pop("gate_files", None)
+    decision_files = data.pop("decision_files", None)
+    paths = [*(gate_files or []), *(decision_files or [])]
+    require(len(set(paths)) == len(paths), "duplicate definition file")
+    for rel in paths:
+        relative(rel)
+    if gate_files is not None:
+        require("gates" not in data, "choose gate_files or inline gates")
+        try:
+            data["gates"] = [
+                gate
+                for rel in gate_files
+                for gate in GATE_FILE.validate_python(parse_yaml(read_definition(rel)))["gates"]
+            ]
+        except ValidationError as exc:
+            raise ValueError(validation_message("Project gates", exc, GATE_FILE)) from None
+    if decision_files is not None:
+        require("decisions" not in data, "choose decision_files or inline decisions")
+        try:
+            data["decisions"] = [
+                decision
+                for rel in decision_files
+                for decision in DECISION_FILE.validate_python(parse_yaml(read_definition(rel)))[
+                    "decisions"
+                ]
+            ]
+        except ValidationError as exc:
+            raise ValueError(validation_message("Project decisions", exc, DECISION_FILE)) from None
     return validate(data), paths
 
 
@@ -227,14 +260,12 @@ def snapshot(
     policy: Policy, *, source: str, documents: dict[str, AcceptedDocument] | None = None
 ) -> Snapshot:
     """Portable review snapshot. Source is the coordinator's pinned policy baseline."""
-    if not (isinstance(source, str) and source.strip()):
-        raise ValueError("Project policy: " + "snapshot needs baseline provenance")
     contents: dict[str, str] = {}
     for p, expected in policy["files"].items():
         raw = Path(p).read_bytes()
         require(sha(raw) == expected, "policy changed while capturing snapshot")
         contents[str(Path(p).relative_to(Path(policy["path"]).parent))] = raw.decode("utf-8")
-    value = {
+    payload = {
         "profile": policy["data"],
         "manifest": Path(policy["path"]).name,
         "source": source,
@@ -245,55 +276,42 @@ def snapshot(
             for p, h in policy["files"].items()
         },
     }
-    value["profile_root"] = policy["profile_root"]
-    return cast(Snapshot, value | {"sha256": fingerprint(value)})
+    payload["profile_root"] = policy["profile_root"]
+    value = _snapshot_data(payload | {"sha256": "0" * 64})
+    value["sha256"] = fingerprint({k: v for k, v in value.items() if k != "sha256"})
+    return value
 
 
-def validate_snapshot(value: Any) -> ProjectData:
-    if not (
-        isinstance(value, dict)
-        and set(value)
-        == {
-            "profile_root",
-            "profile",
-            "manifest",
-            "source",
-            "files",
-            "contents",
-            "documents",
-            "sha256",
-        }
-    ):
+def _snapshot_data(raw: object) -> Snapshot:
+    try:
+        return SNAPSHOT.validate_python(raw)
+    except ValidationError as exc:
         raise ValueError(
-            "Project policy: "
-            + "missing/invalid pinned project_policy; capture accepted baseline before review"
-        )
+            validation_message("Invalid pinned project_policy", exc, SNAPSHOT)
+        ) from None
+
+
+def validate_snapshot(raw: object) -> ProjectData:
+    value = _snapshot_data(raw)
     require(
         value["sha256"] == fingerprint({k: v for k, v in value.items() if k != "sha256"}),
         "project_policy hash mismatch",
     )
-    if not (isinstance(value["source"], str) and value["source"].strip()):
-        raise ValueError("Project policy: " + "missing policy provenance")
-    if not (isinstance(value["files"], dict) and value["files"]):
-        raise ValueError("Project policy: " + "missing policy file hashes")
-    for p, h in value["files"].items():
-        relative(p)
-        if not (isinstance(h, str) and len(h) == 64 and all(c in "0123456789abcdef" for c in h)):
-            raise ValueError("Project policy: " + "invalid policy file hash")
-    if not (isinstance(value["contents"], dict) and set(value["contents"]) == set(value["files"])):
-        raise ValueError("Project policy: " + "policy content/file inventory mismatch")
-    for p, content in value["contents"].items():
-        if not (isinstance(content, str) and sha(content.encode("utf-8")) == value["files"][p]):
-            raise ValueError("Project policy: " + f"policy content hash mismatch: {p}")
-    if not (isinstance(value["manifest"], str) and value["manifest"] in value["contents"]):
-        raise ValueError("Project policy: " + "missing profile manifest")
+    for path in value["files"]:
+        relative(path)
+    require(
+        value["contents"].keys() == value["files"].keys(), "policy content/file inventory mismatch"
+    )
+    for path, content in value["contents"].items():
+        require(
+            sha(content.encode("utf-8")) == value["files"][path],
+            f"policy content hash mismatch: {path}",
+        )
+    require(value["manifest"] in value["contents"], "missing profile manifest")
 
     def read_definition(rel: str) -> str:
         require(rel in value["contents"], f"missing pinned gate/decision file: {rel}")
-        content = value["contents"][rel]
-        if not isinstance(content, str):
-            raise ValueError("Project policy: pinned definition must be text")
-        return content
+        return value["contents"][rel]
 
     composed, _ = compose_profile(value["contents"][value["manifest"]], read_definition)
     require(
@@ -302,17 +320,12 @@ def validate_snapshot(value: Any) -> ProjectData:
         "missing pinned local policy file",
     )
     require(composed == value["profile"], "parsed profile differs from pinned manifest bytes")
-    if not (isinstance(value["documents"], dict)):
-        raise ValueError("Project policy: " + "invalid pinned project documents")
-    for p, doc in value["documents"].items():
-        relative(p)
-        if not (
-            isinstance(doc, dict)
-            and isinstance(doc.get("content"), str)
-            and (sha(doc["content"].encode("utf-8")) == doc.get("sha256"))
-        ):
-            raise ValueError("Project policy: " + f"invalid pinned document: {p}")
-    return validate(value["profile"])
+    for path, doc in value["documents"].items():
+        relative(path)
+        require(
+            sha(doc["content"].encode("utf-8")) == doc["sha256"], f"invalid pinned document: {path}"
+        )
+    return composed
 
 
 def review_materials(

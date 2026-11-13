@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from factory_tooling.decisions.decision_contract import (
+    DEFINITION,
     preserve_obligations,
     validate_answer,
     validate_answers,
@@ -122,7 +123,7 @@ class DecisionInterfaceTests(unittest.TestCase):
     def test_check_consumer_requires_predicate_without_truthiness_coercion(self) -> None:
         for kind in ("choice", "score"):
             p = policy()
-            p["decisions"] = [definition(kind) | {"id": kind}]
+            p["decisions"] = [DEFINITION.validate_python(definition(kind) | {"id": kind})]
             p["gates"][0]["checks"][0]["decision"] = kind
             task = dict(scope=["src/a.py"], policy_decisions={kind: estimates()[kind]})
             with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, "must be predicate"):

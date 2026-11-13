@@ -10,12 +10,23 @@ import json
 import time
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, cast
+
+from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 from factory_tooling.runtime import report_history
 from factory_tooling.runtime import review_findings as review_findings
 from factory_tooling.runtime.acceptance import ensure as ensure
-from factory_tooling.runtime.contracts import Dispatch, Node, Task
+from factory_tooling.runtime.contracts import (
+    CorrectionRecord,
+    CorrectionSummary,
+    Dispatch,
+    EscalationStop,
+    Node,
+    Nonblank,
+    Task,
+)
 from factory_tooling.runtime.contracts import EscalationPolicy as EscalationPolicy
 from factory_tooling.runtime.contracts import State as State
 from factory_tooling.runtime.contracts import agent_key as agent_key
@@ -23,11 +34,13 @@ from factory_tooling.runtime.escalation_policy import CAUSES as CAUSES
 from factory_tooling.runtime.escalation_policy import configure as configure
 from factory_tooling.runtime.escalation_policy import guard as guard
 from factory_tooling.runtime.escalation_policy import limits as limits
+from factory_tooling.runtime.escalation_policy import routing as routing
 from factory_tooling.runtime.workflow_core import digest as digest
 from factory_tooling.runtime.workflow_core import snapshot as snapshot
 from factory_tooling.runtime.workflow_graph import ancestors as ancestors
 from factory_tooling.runtime.workflow_graph import validate_assignment_lineage
 from factory_tooling.runtime.workflow_graph import validate_graph as validate_graph
+from factory_tooling.validation import validation_message
 
 
 class CorrectionLedger(Protocol):
@@ -37,7 +50,24 @@ class CorrectionLedger(Protocol):
     def save(self, state: State, event: str, **details: object) -> None: ...
 
 
+CORRECTION_RECORD = TypeAdapter[CorrectionRecord](CorrectionRecord)
+
 ACTIVE = {"reserved", "running", "unknown"}
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class CorrectionRequest(TypedDict):
+    author_dispatch_id: Nonblank
+    evidence_node: Nonblank
+    evidence_dispatch_id: Nonblank
+    cause: Literal["static", "tests", "docs", "review"]
+    kind: Literal["quality", "environment", "requirements"]
+    reason: Nonblank
+    terminal_evidence: Nonblank
+    handoff: Nonblank
+
+
+CORRECTION_REQUEST = TypeAdapter[CorrectionRequest](CorrectionRequest)
 
 
 def correction_decision(
@@ -58,32 +88,14 @@ def correction_decision(
     return target, decision
 
 
-def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) -> dict[str, Any]:
+def correct(ledger: CorrectionLedger, state: State, node_id: str, raw: object) -> dict[str, Any]:
     # Called under the ledger lock. All changes are committed in one save.
-    if not (isinstance(request, dict)):
-        raise ValueError("Correction requires a JSON decision")
-    required = {
-        "author_dispatch_id",
-        "evidence_node",
-        "evidence_dispatch_id",
-        "cause",
-        "kind",
-        "reason",
-        "terminal_evidence",
-        "handoff",
-    }
-    if not (
-        set(request) == required
-        and all(isinstance(request[k], str) and request[k].strip() for k in required)
-    ):
+    try:
+        request = CORRECTION_REQUEST.validate_python(raw)
+    except ValidationError as exc:
         raise ValueError(
-            "Correction requires exact identities, cause, kind, reason, terminal_evidence and handoff"
-        )
-    ensure(
-        request["kind"] in {"quality", "environment", "requirements"},
-        "Unknown diagnosis",
-    )
-    ensure(request["cause"] in CAUSES, "Unknown correction cause")
+            validation_message("Invalid correction request", exc, CORRECTION_REQUEST)
+        ) from None
     identity = [
         node_id,
         request["author_dispatch_id"],
@@ -97,7 +109,9 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
             == digest(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()),
             "Conflicting decision for the same evidence",
         )
-        return existing  # Replay never spends budget, replaces a session or submits work twice.
+        return dict(
+            existing
+        )  # Replay never spends budget, replaces a session or submits work twice.
     nodes = validate_graph(state["graph"], state["config"], ledger.root)
     ensure(node_id in nodes and request["evidence_node"] in nodes, "Unknown correction node")
     node, evidence_node = nodes[node_id], nodes[request["evidence_node"]]
@@ -262,7 +276,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
     target, decision = correction_decision(
         request["kind"], profile_id, policy, failures, used, budget
     )
-    record = dict(
+    record: dict[str, Any] = dict(
         identity=identity,
         request_hash=digest(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()),
         task_id=task_id,
@@ -283,7 +297,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
     if decision in {"blocked", "human"}:
         state.setdefault("escalation_stops", {})[task_id] = dict(
             reason=request["reason"],
-            decision=decision,
+            decision="human" if decision == "human" else "blocked",
             node_id=node_id,
             kind=request["kind"],
             cause=request["cause"],
@@ -332,7 +346,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
             state["counters"][task_id + ":" + request["cause"]] = used + 1
     record["budget_cause"] = budget_cause
     record["budget_remaining"] = budget - state["counters"].get(task_id + ":" + budget_cause, 0)
-    state.setdefault("corrections", []).append(record)
+    state.setdefault("corrections", []).append(CORRECTION_RECORD.validate_python(record))
     ledger.save(state, "correction_decided", node=node_id, decision=decision, target=target)
     return record
 
@@ -351,44 +365,76 @@ def possible_actions(state: State, node: Node, dispatch: Dispatch) -> list[str]:
     return ["retry"]
 
 
-def worker_context(state: State, task_id: str) -> dict[str, Any]:
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class SessionHandoff(TypedDict):
+    agent: Nonblank
+    handoff: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class BlockerResolution(TypedDict):
+    evidence: Nonblank
+    previous: EscalationStop
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class RemainingRetries(TypedDict):
+    static: int
+    tests: int
+    docs: int
+    recovery: int
+    review: int
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class WorkerCorrection(TypedDict):
+    history: list[CorrectionSummary]
+    session_handoffs: list[SessionHandoff]
+    blocker_resolutions: list[BlockerResolution]
+    remaining_retries: RemainingRetries
+    instruction: Nonblank
+
+
+def worker_context(state: State, task_id: str) -> WorkerCorrection:
     """Facts for this task only, without the coordinator's target/threshold policy."""
-    history = []
-    for record in state.get("corrections", []):
-        if record["task_id"] == task_id:
-            history.append(
-                {
-                    k: deepcopy(record[k])
-                    for k in (
-                        "identity",
-                        "source_hash",
-                        "from_profile",
-                        "kind",
-                        "cause",
-                        "reason",
-                        "handoff",
-                        "evidence",
-                    )
-                }
-            )
+    history: list[CorrectionSummary] = [
+        {
+            "identity": list(record["identity"]),
+            "source_hash": record["source_hash"],
+            "from_profile": record["from_profile"],
+            "kind": record["kind"],
+            "cause": record["cause"],
+            "reason": record["reason"],
+            "handoff": record["handoff"],
+            "evidence": deepcopy(record["evidence"]),
+        }
+        for record in state.get("corrections", [])
+        if record["task_id"] == task_id
+    ]
     remaining = {
         k: v - state["counters"].get(task_id + ":" + k, 0)
         for k, v in limits(state, task_id).items()
     }
-    handoffs = [
-        dict(agent=e["agent"], handoff=e["task_handoffs"][task_id])
+    handoffs: list[SessionHandoff] = [
+        {"agent": e["agent"], "handoff": e["task_handoffs"][task_id]}
         for e in state["events"]
         if e["event"] == "session_replaced" and task_id in e.get("task_handoffs", {})
     ]
-    resolutions = [
-        dict(evidence=e["evidence"], previous=e["previous"])
+    resolutions: list[BlockerResolution] = [
+        {"evidence": e["evidence"], "previous": cast(EscalationStop, e["previous"])}
         for e in state["events"]
         if e["event"] == "task_resumed" and e["task"] == task_id
     ]
-    return dict(
-        history=history,
-        session_handoffs=handoffs,
-        blocker_resolutions=resolutions,
-        remaining_retries=remaining,
-        instruction="Past reports are historical. Verify current files and source; do not retry or choose another worker yourself.",
-    )
+    return {
+        "history": history,
+        "session_handoffs": handoffs,
+        "blocker_resolutions": resolutions,
+        "remaining_retries": {
+            "static": remaining["static"],
+            "tests": remaining["tests"],
+            "docs": remaining["docs"],
+            "recovery": remaining["recovery"],
+            "review": remaining["review"],
+        },
+        "instruction": "Past reports are historical. Verify current files and source; do not retry or choose another worker yourself.",
+    }

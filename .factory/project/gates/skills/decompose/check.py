@@ -4,33 +4,48 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any
+from typing import Annotated, Literal
 
-LAYERS = {"domain", "data", "presentation", "navigation", "di", "api", "tests"}
+from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
 
 
-def validate(tasks: dict[str, Any]) -> list[str]:
+@with_config(ConfigDict(strict=True, extra="ignore"))
+class TaskMetadata(TypedDict):
+    # The factory supplies a richer task record. AniStar owns these fields.
+    affected_layers: list[
+        Literal["domain", "data", "presentation", "navigation", "di", "api", "tests"]
+    ]
+    estimate_max_hours: Annotated[float, Field(ge=0, le=16, allow_inf_nan=False)]
+
+
+@with_config(ConfigDict(strict=True, extra="ignore"))
+class GateInput(TypedDict):
+    tasks: dict[str, object]
+
+
+INPUT = TypeAdapter[GateInput](GateInput)
+METADATA = TypeAdapter[TaskMetadata](TaskMetadata)
+
+
+def validate(tasks: dict[str, object]) -> list[str]:
     errors = []
     for key, task in tasks.items():
-        layers = task.get("affected_layers")
-        if not isinstance(layers, list) or any(
-            not isinstance(x, str) or x not in LAYERS for x in layers
-        ):
-            errors.append(f"{key}: affected_layers must list AniStar layers: {sorted(LAYERS)}")
-        estimate = task.get("estimate_max_hours")
-        if type(estimate) not in (int, float) or not 0 <= estimate <= 16:
-            errors.append(
-                f"{key}: estimated maximum must be within 0–16 hours; split oversized tasks"
-            )
+        try:
+            METADATA.validate_python(task)
+        except ValidationError as exc:
+            for issue in exc.errors(include_input=False, include_context=False, include_url=False):
+                field = ".".join(map(str, issue["loc"]))
+                errors.append(f"{key}: {field}: {issue['msg']}")
     return errors
 
 
 if __name__ == "__main__":
     try:
-        errors = validate(json.load(sys.stdin)["tasks"])
+        errors = validate(INPUT.validate_json(sys.stdin.read())["tasks"])
         status = "FAIL" if errors else "PASS"
-    except (ValueError, KeyError, TypeError) as exc:
-        errors = [f"Invalid decomposition input: {exc}"]
+    except ValidationError:
+        errors = ["Invalid decomposition input: expected tasks keyed by ID"]
         status = "BLOCKED"
     print(
         json.dumps(

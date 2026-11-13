@@ -8,6 +8,8 @@ import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from factory_tooling.project.contracts import Snapshot as Snapshot
 from factory_tooling.project.profile_io import validate_snapshot as validate_snapshot
 from factory_tooling.project.profile_rules import matches as matches
@@ -15,7 +17,10 @@ from factory_tooling.project.profile_rules import require as require
 from factory_tooling.project.profile_rules import review_criteria as review_criteria
 from factory_tooling.project.review_definition import CORE_CRITERIA as CORE_CRITERIA
 from factory_tooling.project.review_definition import DIRECTIONS as DIRECTIONS
+from factory_tooling.review.review_shapes import Manifest
+from factory_tooling.validation import validation_message
 
+MANIFEST = TypeAdapter[Manifest](Manifest)
 SCHEMA_VERSION = "4"
 
 
@@ -108,7 +113,18 @@ def feature_source_errors(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
+def parse_manifest(raw: object) -> dict[str, Any]:
+    try:
+        return dict(MANIFEST.validate_python(raw))
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid review manifest", exc, MANIFEST)) from None
+
+
 def validate_manifest(manifest: dict[str, Any]) -> list[str]:
+    try:
+        manifest = parse_manifest(manifest)
+    except ValueError as exc:
+        return [str(exc)]
     errors: list[str] = []
     try:
         from factory_tooling.review.review_plan import validate_plan
@@ -125,30 +141,16 @@ def validate_manifest(manifest: dict[str, Any]) -> list[str]:
             errors.append("manifest: project policy must come from the pinned base SHA")
     except (ValueError, TypeError) as exc:
         errors.append(str(exc))
-    if manifest.get("schema_version") != SCHEMA_VERSION:
-        errors.append(f"manifest: schema_version must be {SCHEMA_VERSION}")
-    for field in ("review_id", "target", "scope_hash"):
-        if not isinstance(manifest.get(field), str) or not manifest[field]:
-            errors.append(f"manifest: {field} must be nonempty")
-    if manifest.get("mode") not in {"branch", "pr", "feature"}:
-        errors.append("manifest: mode must be branch, pr, or feature")
-    if not re.fullmatch(r"[0-9a-f]{40}", str(manifest.get("head_sha", ""))):
-        errors.append("manifest: head_sha must be a full lowercase Git SHA")
-    scope = manifest.get("scope_files")
-    if (
-        not isinstance(scope, list)
-        or not scope
-        or any(not valid_scope_path(path) for path in scope)
-        or scope != sorted(set(scope))
-    ):
+    scope = manifest["scope_files"]
+    if any(not valid_scope_path(path) for path in scope) or scope != sorted(set(scope)):
         errors.append("manifest: scope_files must be nonempty, sorted, unique relative paths")
     mode = manifest.get("mode")
     if mode in {"branch", "pr"}:
-        if not re.fullmatch(r"[0-9a-f]{40}", str(manifest.get("base_sha", ""))):
+        if manifest["base_sha"] is None:
             errors.append(f"manifest: {mode} requires full base_sha")
-        if not isinstance(manifest.get("diff_file"), str) or not manifest["diff_file"]:
+        if manifest.get("diff_file") is None:
             errors.append(f"manifest: {mode} requires diff_file")
-        if not re.fullmatch(r"[0-9a-f]{64}", str(manifest.get("diff_sha256", ""))):
+        if manifest.get("diff_sha256") is None:
             errors.append(f"manifest: {mode} requires diff_sha256")
     elif mode == "feature":
         if manifest.get("base_sha") is not None:

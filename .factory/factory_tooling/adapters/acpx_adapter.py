@@ -188,8 +188,9 @@ def run_operation(
                 raise Invalid("Prepare JSON packet before prompt")
             read_packet_bytes(ledger.root, s, n, meta, meta)
             prompt_path = ledger.root / meta["path"]
+            bound = s["sessions"].get(agent_key(n))
             require(
-                s.get("sessions", {}).get(agent_key(n), {}).get("handle") == session,
+                bound is not None and bound["handle"] == session,
                 "Bound handle must equal prepared ACP session name",
             )
             v["prompt_submitted"] = True
@@ -225,9 +226,10 @@ def run_operation(
         if operation in {"create", "prompt"}:
             with ledger.locked():
                 current = ledger.read()
-                attempt = current["nodes"].get(node_id, {})
+                attempt = current["nodes"].get(node_id)
                 if (
                     current["run_id"] == expected_run
+                    and attempt is not None
                     and attempt.get("dispatch_id") == expected_dispatch
                 ):
                     attempt["status"] = "unknown"
@@ -235,9 +237,11 @@ def run_operation(
         raise
     with ledger.locked():
         s = ledger.read()
+        attempt = s["nodes"].get(node_id)
         if (
             s["run_id"] != expected_run
-            or s["nodes"].get(node_id, {}).get("dispatch_id") != expected_dispatch
+            or attempt is None
+            or attempt.get("dispatch_id") != expected_dispatch
         ):
             event(
                 "transport_returned",

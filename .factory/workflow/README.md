@@ -101,10 +101,8 @@ Archive verifies terminal obligations and writes one
 `run.json`, a digest manifest, all registered transport files, and evidence saved
 under the run's history directory. Put any external evidence needed for later
 review in that directory before archive. After archive, `clean` verifies the
-bundle and removes its exact loose copies and active ledger. For a legacy terminal
-ledger, call `archive` with the same outcome and summary to pack its loose history
-and transport before cleanup. Active, blocked
-and unknown work remains resumable. Keep individual packets until run cleanup.
+bundle and removes its exact loose copies and active ledger. Active, blocked and
+unknown work remains resumable. Keep individual packets until run cleanup.
 
 ## Repair, revision and recovery
 

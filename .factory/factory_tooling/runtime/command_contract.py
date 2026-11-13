@@ -1,67 +1,65 @@
 """Command declaration validation; no execution or acceptance policy."""
 
-from typing import NotRequired, TypedDict, cast
+from typing import Annotated, Literal, NotRequired
+
+from pydantic import (
+    AfterValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    TypeAdapter,
+    ValidationError,
+    with_config,
+)
+from pydantic_core import PydanticCustomError
+from typing_extensions import TypedDict
+
+from factory_tooling.validation import validation_message
+
+Argument = Annotated[str, StringConstraints(min_length=1, pattern=r"^[^\x00]+$")]
+Name = Annotated[str, StringConstraints(min_length=1)]
+CommandKind = Literal["tests", "static", "docs", "build", "codegen"]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Execution(TypedDict):
-    argv: list[str]
-    cwd: str
-    timeout_seconds: int
-    inputs: NotRequired[list[str]]
-    outputs: NotRequired[list[str]]
-    stages: NotRequired[list[str]]
-    mode: NotRequired[str]
+    argv: list[Argument]
+    cwd: Argument
+    timeout_seconds: Annotated[int, Field(ge=1, le=86400)]
+    inputs: NotRequired[list[Name]]
+    outputs: NotRequired[list[Name]]
+    stages: NotRequired[Annotated[list[Name], Field(min_length=1)]]
+    mode: NotRequired[Literal["full", "filtered", "update"]]
 
 
-def require(condition: object, message: str) -> None:
-    if not condition:
-        raise ValueError(message)
+def execution_shape(value: Execution) -> Execution:
+    for field, paths in (
+        ("inputs", value.get("inputs", [])),
+        ("outputs", value.get("outputs", [])),
+        ("stages", value.get("stages", [])),
+    ):
+        if len(set(paths)) != len(paths):
+            raise PydanticCustomError("duplicate_execution_field", f"Duplicate execution {field}")
+    if "stages" in value:
+        if value["argv"] or value.get("outputs"):
+            raise PydanticCustomError(
+                "composite_execution_fields",
+                "Composite execution has no independent argv or outputs",
+            )
+    elif not value["argv"]:
+        raise PydanticCustomError(
+            "empty_execution_argv", "Execution argv needs at least one argument"
+        )
+    return value
+
+
+CommandExecution = Annotated[Execution, AfterValidator(execution_shape)]
+EXECUTION = TypeAdapter[Execution](CommandExecution)
 
 
 def validate_execution(execution: object) -> Execution:
     """Validate a declared command independently of acceptance coverage."""
-    require(isinstance(execution, dict), "Required command needs execution")
-    if not isinstance(execution, dict):
-        raise ValueError("Required command needs execution")
-    require(
-        set(execution) <= {"argv", "cwd", "timeout_seconds", "inputs", "outputs", "stages", "mode"},
-        "Unknown execution field",
-    )
-    if not isinstance(execution, dict):
-        raise ValueError("Required command needs execution")
-    for field in ("inputs", "outputs"):
-        paths = execution.get(field, [])
-        require(
-            isinstance(paths, list)
-            and all(isinstance(x, str) and x for x in paths)
-            and len(set(paths)) == len(paths),
-            "Invalid execution " + field,
-        )
-    require(execution.get("mode", "full") in {"full", "filtered", "update"}, "Invalid check mode")
-    stages = execution.get("stages")
-    if stages is not None:
-        require(
-            isinstance(stages, list)
-            and stages
-            and all(isinstance(x, str) and x for x in stages)
-            and len(set(stages)) == len(stages)
-            and not execution.get("outputs"),
-            "Invalid composite execution stages",
-        )
-        require(execution.get("argv") == [], "Composite execution has no independent argv")
-    argv = execution.get("argv")
-    require(
-        isinstance(argv, list)
-        and (argv or stages)
-        and all(isinstance(x, str) and x and "\0" not in x for x in argv),
-        "Invalid execution argv",
-    )
-    require(
-        isinstance(execution.get("cwd"), str) and execution["cwd"] and "\0" not in execution["cwd"],
-        "Invalid execution cwd",
-    )
-    require(
-        type(execution.get("timeout_seconds")) is int and 0 < execution["timeout_seconds"] <= 86400,
-        "Invalid execution timeout",
-    )
-    return cast(Execution, execution)
+    try:
+        return EXECUTION.validate_python(execution)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid execution", exc, EXECUTION)) from None

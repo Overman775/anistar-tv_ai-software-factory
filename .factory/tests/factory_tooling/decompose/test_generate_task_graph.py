@@ -289,7 +289,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
     def test_empty_capability_ids_source_lock_is_rejected(self) -> None:
         _, messages = graph.load_source_lock(str(self.source_lock))
 
-        self.assertTrue(any("capability_ids must not be empty" in message for message in messages))
+        self.assertTrue(any("capability_ids" in message for message in messages))
 
     def test_source_lock_records_verifiable_git_provenance_without_guessing_dirty_head(
         self,
@@ -572,7 +572,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
         self.write_tasks([producer, closer])
         result = self.run_cli()
         self.assertNotEqual(0, result.returncode)
-        self.assertIn("Missing acceptance criteria", result.stderr)
+        self.assertIn("acceptance criteria", result.stderr)
 
     def test_full_closer_must_await_all_functional_contributors(self) -> None:
         producer, closer = self.contributor_pair()
@@ -652,13 +652,6 @@ class GenerateTaskGraphTest(unittest.TestCase):
         self.assertEqual("Show order list", task["name"])
         self.assertEqual(["domain", "data", "presentation"], task["affected_layers"])
 
-    def test_ignores_removed_name_alias(self) -> None:
-        tasks = self.write_tasks([self.task(name="Old name")])
-
-        self.assertEqual("Show order list", tasks["orders-list-core-01"]["name"])
-        mermaid = graph.generate_mermaid_graph(tasks)
-        self.assertNotIn("Old name", mermaid)
-
     def test_all_three_purposes_are_supported(self) -> None:
         source = [
             self.task(f"orders-{purpose}-01", purpose=purpose, scope=purpose)
@@ -676,7 +669,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
 
         messages = graph.validate_dependencies(tasks)
 
-        self.assertTrue(any("unknown purpose" in message.lower() for message in messages))
+        self.assertTrue(any("purpose: Input should be" in message for message in messages))
 
     def test_missing_purpose_is_reported(self) -> None:
         task = self.task()
@@ -695,9 +688,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
         messages = graph.validate_dependencies(tasks)
 
         self.assertIsNone(tasks[task["id"]]["scope"])
-        self.assertTrue(
-            any("scope" in message and "unspecified" in message for message in messages)
-        )
+        self.assertTrue(any("scope: Field required" in message for message in messages))
 
     def test_incomplete_task_is_rejected_without_graph(self) -> None:
         task: dict[str, Any] = {"id": "cart-ui-01", "title": "UI"}
@@ -706,28 +697,33 @@ class GenerateTaskGraphTest(unittest.TestCase):
         self.assertEqual(1, result.returncode)
         self.assertFalse((self.root / "graph.md").exists())
         violations = json.loads((self.root / "violations.json").read_text(encoding="utf-8"))
-        self.assertTrue(any("required field" in message for message in violations["violations"]))
+        self.assertTrue(any("Field required" in message for message in violations["violations"]))
 
-    def test_version_tagged_inputs_are_rejected_without_graph_or_projection(self) -> None:
+    def test_unknown_fields_are_rejected_without_graph_or_projection(self) -> None:
         from factory_tooling.decompose.metadata import project
 
         for location in ("envelope", "task"):
             with self.subTest(location=location):
                 task = self.task()
                 if location == "task":
-                    task["schema_version"] = 2
+                    task["unexpected"] = 2
                 self.write_tasks([task])
                 payload_path = self.tasks_dir / "generated/task_result.json"
                 payload = json.loads(payload_path.read_text())
                 if location == "envelope":
-                    payload["schema_version"] = 2
+                    payload["unexpected"] = 2
                     payload_path.write_text(json.dumps(payload))
                 result = self.run_cli()
                 self.assertEqual(1, result.returncode)
                 violations = json.loads((self.root / "violations.json").read_text())
-                self.assertTrue(any("regenerate" in item for item in violations["violations"]))
+                self.assertTrue(
+                    any(
+                        "Extra inputs are not permitted" in item
+                        for item in violations["violations"]
+                    )
+                )
                 self.assertFalse((self.root / "graph.md").exists())
-                with self.assertRaisesRegex(ValueError, "regenerate"):
+                with self.assertRaisesRegex(ValueError, "Extra inputs are not permitted"):
                     project(self.tasks_dir, self.source_lock)
 
     def test_empty_envelope_is_rejected_without_graph(self) -> None:
@@ -775,27 +771,6 @@ class GenerateTaskGraphTest(unittest.TestCase):
         self.assertTrue(violations["cycles"])
         self.assertTrue(any("outcome" in message for message in violations["violations"]))
 
-    def test_does_not_fallback_to_removed_aliases(self) -> None:
-        task = self.task(
-            primary_scope="old_scope",
-            layer="ui",
-            requires=["old-dependency-01"],
-            estimate_hours=5,
-        )
-        for field in ("scope", "depends_on", "estimate"):
-            task.pop(field)
-
-        tasks = self.write_tasks([task])
-        loaded = tasks[task["id"]]
-        messages = "\n".join(graph.validate_dependencies(tasks))
-
-        self.assertIsNone(loaded["scope"])
-        self.assertEqual(task["affected_layers"], loaded["affected_layers"])
-        self.assertIsNone(loaded["depends_on"])
-        self.assertEqual(0, loaded["estimate_max_hours"])
-        for field in ("scope", "depends_on", "estimate"):
-            self.assertIn(field, messages)
-
     def test_mermaid_defines_only_current_purpose_classes(self) -> None:
         tasks = self.write_tasks([self.task("orders-list-core-01", affected_layers=["domain"])])
 
@@ -810,37 +785,6 @@ class GenerateTaskGraphTest(unittest.TestCase):
             {"functionality", "technical_preparation", "research", "backend"},
             class_names,
         )
-
-    def test_loader_preserves_raw_presence_and_malformed_values(self) -> None:
-        task = self.task(
-            affected_layers="data",
-            implemented=0,
-            consumers="orders-consumer-02",
-            research_question=[],
-            timebox_hours="four",
-            expected_result={},
-            estimate={"min_hours": 1, "max_hours": 2, "confidence": ""},
-        )
-        tasks = self.write_tasks([task])
-        loaded = tasks[task["id"]]
-
-        for field in (
-            "filename",
-            "title",
-            "outcome",
-            "affected_layers",
-            "contract_type",
-            "implemented",
-            "consumers",
-            "research_question",
-            "timebox_hours",
-            "expected_result",
-        ):
-            self.assertTrue(loaded["raw_presence"][field])
-        self.assertTrue(loaded["raw_presence"]["estimate.confidence"])
-        self.assertEqual("data", loaded["affected_layers"])
-        self.assertEqual(0, loaded["implemented"])
-        self.assertEqual("", loaded["estimate_confidence"])
 
     def test_reports_missing_required_fields(self) -> None:
         task = self.task()
@@ -874,7 +818,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
             "estimate",
         ):
             self.assertTrue(
-                any(field in message and "required field" in message for message in messages),
+                any(field in message and "Field required" in message for message in messages),
                 field,
             )
 
@@ -902,13 +846,13 @@ class GenerateTaskGraphTest(unittest.TestCase):
             "title",
             "scope",
             "outcome",
-            "affected_layers must be a list",
-            "implemented must be a list",
-            "deferred must be a list",
+            "affected_layers:",
+            "implemented:",
+            "deferred:",
             "parent_task",
-            "depends_on must be a list",
-            "blocked_by must be a list",
-            "estimate must be an object",
+            "depends_on:",
+            "blocked_by:",
+            "estimate:",
         ):
             self.assertIn(fragment, combined)
 
@@ -948,7 +892,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
         violations = json.loads((self.root / "violations.json").read_text(encoding="utf-8"))
         self.assertTrue(
             any(
-                "id" in message and "required field" in message
+                "id" in message and "Field required" in message
                 for message in violations["violations"]
             )
         )
@@ -1077,7 +1021,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
     def test_cli_source_tuple_mismatch_is_hard_failure(self) -> None:
         self.write_tasks([self.task()])
         source = json.loads(self.source_lock.read_text(encoding="utf-8"))
-        source["plan_hash"] = "sha256:changed"
+        source["plan_revision"] += 1
         self.source_lock.write_text(json.dumps(source, ensure_ascii=False), encoding="utf-8")
 
         result = self.run_cli()
@@ -1152,34 +1096,7 @@ class GenerateTaskGraphTest(unittest.TestCase):
         messages = graph.validate_dependencies(tasks)
 
         self.assertEqual(0, tasks[task["id"]]["estimate_max_hours"])
-        self.assertTrue(any("estimate must be an object" in message for message in messages))
-
-    def test_estimate_dict_ignores_estimate_hours_alias(self) -> None:
-        task = self.task(
-            "orders-dict-01",
-            affected_layers=["domain"],
-            estimate={"min_hours": 9, "max_hours": 10, "confidence": "medium"},
-            estimate_hours=4,
-        )
-        tasks = self.write_tasks([task])
-
-        self.assertEqual(10, tasks[task["id"]]["estimate_max_hours"])
-
-    def test_invalid_estimate_dict_does_not_fallback_to_estimate_hours(self) -> None:
-        task = self.task(
-            "orders-invalid-dict-01",
-            affected_layers=["domain"],
-            estimate={"confidence": "low"},
-            estimate_hours=5,
-        )
-
-        tasks = self.write_tasks([task])
-        messages = graph.validate_dependencies(tasks)
-
-        self.assertEqual(0, tasks[task["id"]]["estimate_max_hours"])
-        self.assertTrue(
-            any("min_hours and max_hours must be numbers" in message for message in messages)
-        )
+        self.assertTrue(any("estimate:" in message for message in messages))
 
     def test_estimate_validates_order_numbers_but_confidence_is_optional(self) -> None:
         reversed_range = self.task(
@@ -1206,9 +1123,9 @@ class GenerateTaskGraphTest(unittest.TestCase):
         self.assertIn("orders-estimate-reversed-01", combined)
         self.assertIn("min_hours cannot exceed max_hours", combined)
         self.assertIn("orders-estimate-negative-02", combined)
-        self.assertIn("min_hours cannot be negative", combined)
+        self.assertIn("estimate.min_hours", combined)
         self.assertIn("orders-estimate-text-03", combined)
-        self.assertIn("min_hours and max_hours must be numbers", combined)
+        self.assertIn("valid number", combined)
         self.assertFalse(any("orders-estimate-confidence-04" in message for message in messages))
 
     def test_technical_preparation_requires_valid_existing_consumers(self) -> None:
@@ -1380,20 +1297,18 @@ class GenerateTaskGraphTest(unittest.TestCase):
 
         for task in source:
             self.assertTrue(
-                any(
-                    task["id"] in message and "deferred must be a list" in message
-                    for message in messages
-                )
+                any(task["id"] in message and "deferred:" in message for message in messages)
             )
 
-    def test_missing_or_none_deferred_defaults_to_empty_list(self) -> None:
+    def test_missing_and_null_deferred_are_invalid(self) -> None:
         missing = self.task("orders-deferred-missing-01")
         missing.pop("deferred")
         explicit_none = self.task("orders-deferred-none-02", deferred=None)
         tasks = self.write_tasks([missing, explicit_none])
 
-        self.assertEqual([], tasks[missing["id"]]["deferred"])
-        self.assertEqual([], tasks[explicit_none["id"]]["deferred"])
+        errors = "\n".join(graph.validate_dependencies(tasks))
+        self.assertIn(f"{missing['id']}': deferred: Field required", errors)
+        self.assertIn(f"{explicit_none['id']}': deferred: Input should be a valid list", errors)
 
     def test_dependency_cycle_is_detected(self) -> None:
         first = self.task("orders-first-01", depends_on=["orders-second-02"])

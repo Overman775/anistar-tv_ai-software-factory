@@ -99,7 +99,7 @@ class CommentsTest(unittest.TestCase):
                 fetch_comments("review", 8)
 
     def test_invalid_comment_fails(self) -> None:
-        with self.assertRaisesRegex(ValueError, "numeric id"):
+        with self.assertRaisesRegex(ValueError, r"id: .*integer"):
             find_context([{"id": "1"}], 1, "issue")
 
     def test_recent_orders_before_limit(self) -> None:

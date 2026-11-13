@@ -3,29 +3,42 @@
 import json
 from collections.abc import Iterable
 from hashlib import sha256
-from typing import Literal, TypedDict, cast
+from typing import Annotated, Literal
+
+from pydantic import ConfigDict, Field, StringConstraints, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+from factory_tooling.validation import validation_message
 
 GateStatus = Literal["PASS", "FAIL", "BLOCKED"]
+EvidenceText = Annotated[str, StringConstraints(pattern=r"\S")]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class GateCheck(TypedDict):
-    id: str
+    id: EvidenceText
     status: GateStatus
-    message: str
-    evidence: list[str]
+    message: EvidenceText
+    evidence: Annotated[list[EvidenceText], Field(min_length=1)]
 
 
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class GateResult(TypedDict):
-    gate_id: str
-    boundary: str
-    subject: str
-    policy_hash: str
-    artifact_hash: str
+    gate_id: EvidenceText
+    boundary: EvidenceText
+    subject: EvidenceText
+    policy_hash: EvidenceText
+    artifact_hash: EvidenceText
     status: GateStatus
-    checks: list[GateCheck]
+    checks: Annotated[list[GateCheck], Field(min_length=1)]
 
 
 STATUSES = {"PASS", "FAIL", "BLOCKED"}
+GATE_CHECK = TypeAdapter[GateCheck](GateCheck)
+GATE_RESULT = TypeAdapter[GateResult](GateResult)
+REQUIREMENTS = TypeAdapter[list[str]](
+    Annotated[list[EvidenceText], Field(min_length=1)], config=ConfigDict(strict=True)
+)
 
 
 def digest(value: object) -> str:
@@ -38,17 +51,17 @@ def text(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def validate_check(value: object) -> GateCheck:
+    try:
+        return GATE_CHECK.validate_python(value)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid gate check", exc, GATE_CHECK)) from None
+
+
 def evidence(check_id: str, status: str, message: str, references: list[str]) -> GateCheck:
-    if not text(check_id) or status not in STATUSES or not text(message):
-        raise ValueError("Invalid gate check identity/status/message")
-    if not isinstance(references, list) or not references or not all(text(x) for x in references):
-        raise ValueError("Gate check needs evidence references")
-    return {
-        "id": check_id,
-        "status": cast(GateStatus, status),
-        "message": message,
-        "evidence": references,
-    }
+    return validate_check(
+        {"id": check_id, "status": status, "message": message, "evidence": references}
+    )
 
 
 def conclude(
@@ -60,15 +73,17 @@ def conclude(
     required: list[str],
     records: Iterable[object],
 ) -> GateResult:
-    if not all(text(x) for x in (gate_id, boundary, subject, policy_hash, artifact_hash)):
-        raise ValueError("Gate needs identity and current policy/artifact hashes")
-    if not isinstance(required, list) or not required or len(set(required)) != len(required):
+    try:
+        required = REQUIREMENTS.validate_python(required)
+    except ValidationError as exc:
+        raise ValueError(
+            validation_message("Invalid gate requirements", exc, REQUIREMENTS)
+        ) from None
+    if len(set(required)) != len(required):
         raise ValueError("Gate needs unique requirements")
     by_id: dict[str, GateCheck] = {}
     for record in records:
-        if not isinstance(record, dict) or set(record) != {"id", "status", "message", "evidence"}:
-            raise ValueError("Invalid gate check shape")
-        checked = evidence(record["id"], record["status"], record["message"], record["evidence"])
+        checked = validate_check(record)
         if checked["id"] not in required or checked["id"] in by_id:
             raise ValueError("Unknown/duplicate gate check")
         by_id[checked["id"]] = checked
@@ -80,7 +95,7 @@ def conclude(
     status: GateStatus = (
         "FAIL" if "FAIL" in statuses else "BLOCKED" if "BLOCKED" in statuses else "PASS"
     )
-    return {
+    result = {
         "gate_id": gate_id,
         "boundary": boundary,
         "subject": subject,
@@ -89,6 +104,10 @@ def conclude(
         "status": status,
         "checks": checks,
     }
+    try:
+        return GATE_RESULT.validate_python(result)
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid gate result", exc, GATE_RESULT)) from None
 
 
 def require_pass(result: GateResult) -> None:

@@ -13,6 +13,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
 from factory_tooling.paths import FACTORY_ROOT
 from factory_tooling.review.render_review_report import render_report
 from factory_tooling.review.review_contracts import IDENTITY_FIELDS, validate_manifest
@@ -20,8 +22,13 @@ from factory_tooling.review.review_diff import load_diff_context
 from factory_tooling.review.review_evidence import validate_tool_results
 from factory_tooling.review.review_lenses import validate_lens
 from factory_tooling.review.review_plan import prepare, questions
+from factory_tooling.review.review_shapes import InputLock, ReviewAssignment
 from factory_tooling.review.run_tool_checks import collect_results
 from factory_tooling.review.validate_review_protocol import validate_protocol
+from factory_tooling.validation import validation_message
+
+INPUT_LOCK = TypeAdapter[InputLock](InputLock)
+REVIEW_ASSIGNMENT = TypeAdapter[ReviewAssignment](ReviewAssignment)
 
 
 def read(path: str | Path) -> dict[str, Any]:
@@ -57,7 +64,10 @@ def hashes(paths: Iterable[str]) -> dict[str, str | None]:
 
 def fresh(run: Path) -> dict[str, Any]:
     manifest = read(run / "manifest.json")
-    lock = read(run / "inputs.json")
+    try:
+        lock = INPUT_LOCK.validate_python(read(run / "inputs.json"))
+    except ValidationError as exc:
+        raise ValueError(validation_message("Invalid review input lock", exc, INPUT_LOCK)) from None
     if Path.cwd().resolve() != Path(lock["workspace"]):
         raise ValueError("run must be used from its reviewed workspace")
     if hashes(lock["files"]) != lock["files"]:
@@ -205,11 +215,13 @@ def initialize(request: Path, run: Path) -> dict[str, Any]:
     write(run / "manifest.json", manifest)
     write(
         run / "inputs.json",
-        {
-            "workspace": str(Path.cwd().resolve()),
-            "files": hashes(paths),
-            "manifest_sha256": sha256((run / "manifest.json").read_bytes()).hexdigest(),
-        },
+        INPUT_LOCK.validate_python(
+            {
+                "workspace": str(Path.cwd().resolve()),
+                "files": hashes(paths),
+                "manifest_sha256": sha256((run / "manifest.json").read_bytes()).hexdigest(),
+            }
+        ),
     )
     return inspect(run, manifest)
 
@@ -234,17 +246,22 @@ def main() -> None:
             result = state
         elif args.action == "assignment":
             a = next(a for a in m["assignments"] if a["id"] == args.id)
-            result = {
-                **{k: m[k] for k in IDENTITY_FIELDS},
-                "name": a["name"],
-                "lens": a["id"],
-                "task": {"scope": m["scope_files"]},
-                "project_policy": m["project_policy"],
-                "manifest": str(run / "manifest.json"),
-                "context": m["context"],
-                "owned_gates": questions(m, a["id"]),
-                "parent_evidence": [str(p) for p in tools(run, m)],
-            }
+            result = dict(
+                REVIEW_ASSIGNMENT.validate_python(
+                    {
+                        **{k: m[k] for k in IDENTITY_FIELDS},
+                        "name": a["name"],
+                        "lens": a["id"],
+                        "source": {"kind": "review", "target": m["target"]},
+                        "task": {"scope": m["scope_files"]},
+                        "project_policy": m["project_policy"],
+                        "manifest": str(run / "manifest.json"),
+                        "context": m["context"],
+                        "owned_gates": questions(m, a["id"]),
+                        "parent_evidence": [str(p) for p in tools(run, m)],
+                    }
+                )
+            )
         elif args.action == "check":
             c = next(c for c in m["checks"] if c["id"] == args.id)
             previous = current(run, "check", c["id"])
