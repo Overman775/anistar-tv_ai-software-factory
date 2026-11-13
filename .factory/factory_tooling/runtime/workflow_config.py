@@ -52,7 +52,7 @@ def expand_profiles(groups: Any) -> tuple[dict[str, Profile], dict[str, str]]:
             raise Invalid("Invalid profile group")
         fields(
             group,
-            set(common_fields) | {"default", "variants", "initial_profile_decision"},
+            set(common_fields) | {"default", "variants"},
             "profile group",
         )
         require(
@@ -85,8 +85,6 @@ def expand_profiles(groups: Any) -> tuple[dict[str, Profile], dict[str, str]]:
             ):
                 raise Invalid("Profile variant needs model and adapter")
             profiles[name] = deepcopy({k: group[k] for k in common_fields} | variant)
-            if "initial_profile_decision" in group:
-                profiles[name]["initial_profile_decision"] = group["initial_profile_decision"]
     return profiles, defaults
 
 
@@ -160,7 +158,6 @@ def load_config(path: str | Path) -> Config:
     c["_project"] = acceptance_guard(
         load_profile, acceptance_guard(safe_path, path.parent, c["project"])
     )
-    validate_profile_decisions(c)
     require(
         relative(path.parent, c["orchestration"]).is_file(),
         "Missing orchestration policy",
@@ -345,30 +342,6 @@ def load_config(path: str | Path) -> Config:
             files[str(dependency)] = digest(dependency.read_bytes())
     c["_path"], c["_files"], c["_limits"] = str(path), files, limits
     return cast(Config, c)
-
-
-def validate_profile_decisions(config: Config) -> None:
-    from factory_tooling.decisions.decision_contract import parse_definition
-
-    definitions = {d["id"]: d for d in config["_project"]["data"].get("decisions", [])}
-    groups: dict[str, set[str]] = {}
-    links: dict[str, object] = {}
-    for name, profile in config["profiles"].items():
-        role = profile["role"]
-        groups.setdefault(role, set()).add(name)
-        if "initial_profile_decision" in profile:
-            links[role] = profile["initial_profile_decision"]
-    for role, decision_id in links.items():
-        require(
-            isinstance(decision_id, str) and decision_id in definitions,
-            "Missing profile decision",
-        )
-        definition = acceptance_guard(parse_definition, definitions[decision_id])
-        require(
-            definition.kind == "choice"
-            and set(definition.options) == groups[role] | {"no-eligible-profile"},
-            "Profile decision choices must match the role",
-        )
 
 
 def check_capabilities(profile: Profile, node: Node | None = None) -> None:

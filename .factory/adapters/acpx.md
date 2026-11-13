@@ -4,24 +4,24 @@ Read [shared coordinator adapter rules](common.md) before dispatch.
 
 This adapter implements configured `runner: acpx` through
 `.factory/tools/acpx_adapter.py`; it shares the same orchestration/role contracts
-as native agents. ACP is the protocol, acpx is the client, and `zcode-acp server`
-is the configured bridge to ZCode. None is a replacement for workflow policy.
+as native agents. ACP is the protocol, acpx is the client, and `opencode acp`
+is the configured OpenCode entry point. None is a replacement for workflow policy.
 
 Syntax is based on acpx v0.21.0 at
 `c0b9dfdfad12ed4fc000b8ef2efc4b5644f1c3dc` ([CLI](https://github.com/openclaw/acpx/blob/c0b9dfdfad12ed4fc000b8ef2efc4b5644f1c3dc/docs/CLI.md)).
 Pin/install a compatible client and bridge in the consumer, authenticate the
 backend, and inspect `acpx --version`/help and actual capabilities. Executables
 are not bundled or automatically downloaded. No subscription limits are inferred
-from three configured slots.
+from the configured slot limit.
 
 ## Setup and preflight
 
 ```bash
 sh .factory/tools/python.sh .factory/tools/acpx_adapter.py doctor
-sh .factory/tools/python.sh .factory/tools/acpx_adapter.py setup zcode
+sh .factory/tools/python.sh .factory/tools/acpx_adapter.py setup opencode
 ```
 
-Setup validates executable and merges only `agents.zcode.argv` into the consumer
+Setup validates executable and merges only `agents.opencode.argv` into the consumer
 `.acpxrc.json`. It refuses a conflicting alias and preserves other configuration.
 This is a project file change; include it in installation scope, not a task's
 secret-bearing history. Credentials stay in provider-managed storage, not YAML.
@@ -34,17 +34,21 @@ accepts the configured default only when no exact user model is required. An
 explicit ID is passed with acpx's capability-dependent `--model`; unsupported
 selection blocks instead of guessing. Inspect returned `configOptions`/model
 metadata and bridge/provider identity. Record actual model using workflow bind;
-if identity cannot be established, do not send the task. Unsupported reasoning
-mapping is blocked, not silently ignored. A configured alias is not proof of a
-particular model/version. Recheck after reconnect or model switch.
+if identity cannot be established, do not send the task. Recheck after reconnect
+or model switch.
+
+For OpenCode, the helper applies an explicit model effort to the named session
+with `acpx <connection> set effort VALUE -s SESSION` before sending each
+assignment. A failed set blocks prompt delivery and records an unknown attempt
+for reconciliation. Other harnesses require their own confirmed mapping.
 
 ## Dispatch
 
 The current helper dispatches Implement graph nodes. Other processes keep their
 own dispatch/staging; a context packet alone does not provide an ACP session driver.
 
-1. Parent `claim`s a ready node. Native and connection pools each have three
-   slots in shipped YAML, across all roles. Do not use one ACP session for
+1. Parent `claim`s a ready node. Native and connection pools use the limits in
+   the active YAML. Each pool is shared across roles. Do not use one ACP session for
    parallel agents; ZCode can preempt a concurrent turn in the same session.
 2. `acpx_adapter.py prepare NODE` uses the shared context builder to write role/contract,
    worker adapter, applicable stage rules, source assignment and actual required
@@ -91,7 +95,7 @@ recovery path. Request IDs are not an exactly-once guarantee. Silence is not
 failure; one session has one active turn. Distinguish provider capacity feedback
 from authentication/balance/model/tool failures; do not retry every HTTP 429.
 
-Provider quotas may be below three. Nested ZCode workflow calls and aliases to
+Provider quotas may be below the configured limit. Nested ZCode workflow calls and aliases to
 one account do not multiply available capacity. Multiple independent checkouts
 need a common external admission owner if they share the same account; the
 local ledger is not a distributed semaphore. Do not enable acpx flows as a

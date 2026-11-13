@@ -3,8 +3,10 @@
 
 Required fields: run_id, task_id, slice_id, node_id, dispatch_id, source_hash,
 terminal:true, outcome:PASS|FAIL|BLOCKED, summary, files, checks, stage_result.
-Copy identities from the assignment. `files` contains every exact task.scope
-path with SHA-256 of current bytes or DELETED. Compute after writes/commands.
+Copy identities from the assignment. Use the displayed `finish_requirements`.
+`files` covers every authoritative task path with SHA-256 or DELETED.
+For projected integration work, `task.scope` shows the worker's local paths.
+Use `prepare-report` to capture the full authoritative snapshot at handoff.
 `checks` contains actual results, never planned commands masquerading as evidence.
 At author handoff, the worker may call `workflow.py prepare-report NODE DRAFT [RECEIPT_ID ...]`.
 Use `-` for DRAFT to read JSON from stdin when no assigned draft path is available.
@@ -57,7 +59,15 @@ open questions; distinguish facts from hypotheses. Preserve exact paths, interfa
 and evidence references in existing fields without repeating checks. Keep full logs
 in artifacts; include paths and necessary failure excerpts.
 
-Use `report_ref` path and keys to read only that predecessor report when needed;
-require matching run_id and dispatch_id, otherwise request fresh context. Prior PASS
+Use `workflow.py read-report REF.json` with the exact `report_ref` object when
+full predecessor evidence is needed. The helper checks content and dispatch
+identity and supports archived references. Read every supplied mandatory
+instruction and keep consequential caveats in the next handoff. Prior PASS
 is historical; verify current files. Author explanations never replace requirements
 as the test oracle.
+
+
+An actual unsuccessful attempt without a usable artifact may return FAIL with
+FAIL_CODE or FAIL_TEST and `unsuccessful_attempt` containing nonempty
+`attempted_work`, `unmet_requirement` and `evidence`. Describe what was attempted
+and what remains unfulfilled. Use actual observations or artifact references.

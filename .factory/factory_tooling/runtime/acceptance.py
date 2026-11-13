@@ -183,4 +183,5 @@ def verify_results(task: Task, checks: list[Check]) -> None:
                 successful(check) or resolved_extra(check),
                 "Additional failure needs explicit resolution",
             )
-    ensure(set(expected) <= set(actual), "Missing required check results")
+    missing = sorted(set(expected) - set(actual))
+    ensure(not missing, "Missing required check results: " + ", ".join(missing))

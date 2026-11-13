@@ -99,7 +99,7 @@ class Node(TypedDict, total=False):
     owns: list[str]
     resources: list[str]
     read: list[str]
-    profile_selection: dict[str, Any]
+    required_check_ids: list[str]
 
 
 class Graph(TypedDict):
@@ -138,7 +138,6 @@ class Profile(Adapter):
     enforcement: str
     mcp: list[str]
     escalation: NotRequired[EscalationPolicy | None]
-    initial_profile_decision: NotRequired[str]
 
 
 class Model(TypedDict):
@@ -227,6 +226,7 @@ class Report(TypedDict, total=False):
     findings: list[dict[str, Any]]
     finding_updates: list[dict[str, Any]]
     evidence: str
+    unsuccessful_attempt: dict[str, str]
 
 
 class Dispatch(TypedDict, total=False):
@@ -239,9 +239,12 @@ class Dispatch(TypedDict, total=False):
     handle: str
     model: str
     report: Report
+    assignment: dict[str, object]
+    report_ref: dict[str, str]
     prompt: dict[str, str]
     packet_file: dict[str, str]
     packet_chunks_read: int
+    packet_receipt: str
     packet_confirmed: bool
     prompt_submitted: bool
     prompt_hash: str
@@ -250,6 +253,12 @@ class Dispatch(TypedDict, total=False):
     observed: str
     terminal_evidence: str
     reason: str
+
+
+class CompositeStage(TypedDict):
+    execution_id: str
+    spec: Check
+    output: str
 
 
 class ExecutionReceipt(TypedDict, total=False):
@@ -263,6 +272,13 @@ class ExecutionReceipt(TypedDict, total=False):
     status: str
     started_at: float
     runner_pid: int
+    request_id: str
+    composite_stages: list[CompositeStage]
+    composite_parent: str
+    mode: str
+    selection: dict[str, int | str]
+    output_before: dict[str, str]
+    output_after: dict[str, str]
     pid: int
     output: str
     environment: dict[str, str | None]
@@ -298,6 +314,10 @@ class State(TypedDict):
     escalation_stops: NotRequired[dict[str, dict[str, Any]]]
     retired_node_profiles: NotRequired[dict[str, list[str]]]
     summary: NotRequired[str]
+    report_hashes: NotRequired[dict[str, str]]
+    report_index: NotRequired[dict[str, dict[str, str]]]
+    pause_reason: NotRequired[str]
+    processed_results: NotRequired[list[str]]
 
 
 def agent_key(node: Node) -> str:

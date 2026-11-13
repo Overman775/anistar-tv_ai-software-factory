@@ -9,7 +9,9 @@ from typing import Any
 from unittest.mock import patch
 
 from factory_tooling.runtime.memory import read_evidence
+from factory_tooling.runtime.packet_io import delivery_state, receipt_path
 from factory_tooling.runtime.run_archive import read_member
+from factory_tooling.runtime.workflow import Ledger
 from factory_tooling.runtime.workflow_core import Invalid, atomic_json
 from tests.factory_tooling.runtime import test_workflow
 
@@ -47,12 +49,17 @@ class FilePacketTests(unittest.TestCase):
         diagnostics = self.f.ledger.prepare_packet("write-label", with_diagnostics=True)
         last = diagnostics["diagnostics"]["chunks"]
         self.assertGreater(last, 1)
-        self.f.ledger.read_packet("write-label", self.meta(b), last)
-        self.assertEqual(0, self.f.ledger.read()["nodes"]["write-label"]["packet_chunks_read"])
+        with self.assertRaisesRegex(Invalid, "preceding chunk"):
+            self.f.ledger.read_packet("write-label", self.meta(b), last)
+        self.assertEqual(
+            {"served": 0, "acknowledged": 0}, delivery_state(self.f.root, self.meta(b), last)
+        )
         parts = []
         ordinal = 1
+        ack = None
         while ordinal is not None:
-            result = self.f.ledger.read_packet("write-label", self.meta(b), ordinal)
+            result = self.f.ledger.read_packet("write-label", self.meta(b), ordinal, ack)
+            ack = result["acknowledgement"]
             self.assertEqual(result["ordinal"], ordinal)
             self.assertLessEqual(len(result["content"].encode("utf-8")), 12000)
             parts.append(result["content"])
@@ -74,7 +81,45 @@ class FilePacketTests(unittest.TestCase):
         self.f.ledger.bind("write-label", "handle-author", model)
         self.assertEqual(b, self.prepare())
         self.f.ledger.read_packet("write-label", self.meta(b), 1)
-        self.f.ledger.confirm_packet("write-label", self.meta(b))
+        self.f.ledger.confirm_packet(
+            "write-label", self.meta(b), result["acknowledgement"], result["materials"]
+        )
+        self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
+
+    def test_lost_output_and_lost_receipt_replay_without_ledger_writes(self) -> None:
+        b = self.prepare()
+        meta = self.meta(b)
+        saved = self.f.ledger.path.read_bytes()
+        first = self.f.ledger.read_packet("write-label", meta, 1)
+        self.assertEqual(
+            {"served": 1, "acknowledged": 0}, delivery_state(self.f.root, meta, first["total"])
+        )
+        restarted = Ledger(self.f.root)
+        self.assertEqual(first, restarted.read_packet("write-label", meta, 1))
+        self.assertEqual(saved, self.f.ledger.path.read_bytes())
+        receipt_path(self.f.root, meta).unlink()
+        with self.assertRaisesRegex(Invalid, "restart at chunk 1"):
+            restarted.read_packet("write-label", meta, 2, first["acknowledgement"])
+        self.assertEqual(first, restarted.read_packet("write-label", meta, 1))
+
+    def test_interrupted_confirmation_retries_exact_delivery(self) -> None:
+        meta = self.meta(self.prepare())
+        first = self.f.ledger.read_packet("write-label", meta, 1)
+        chunk = first
+        while chunk["next"] is not None:
+            chunk = self.f.ledger.read_packet(
+                "write-label", meta, chunk["next"], chunk["acknowledgement"]
+            )
+        self.f.ledger.bind("write-label", "fixture", "gpt-6.1-sol")
+        with patch.object(self.f.ledger, "save", side_effect=OSError("interrupt")):
+            with self.assertRaises(OSError):
+                self.f.ledger.confirm_packet(
+                    "write-label", meta, chunk["acknowledgement"], chunk["materials"]
+                )
+        self.assertFalse(self.f.ledger.read()["nodes"]["write-label"].get("packet_confirmed"))
+        self.f.ledger.confirm_packet(
+            "write-label", meta, chunk["acknowledgement"], chunk["materials"]
+        )
         self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
 
     def test_rejects_bootstrap_digest_content_and_symlink_tampering(self) -> None:
@@ -204,10 +249,15 @@ class FilePacketTests(unittest.TestCase):
         self.f.ledger.bind("write-label", "handle-author", model)
         with self.assertRaisesRegex(Invalid, "Confirm native packet"):
             self.f.ledger.finish("write-label", self.f.report("write-label"))
-        ordinal: int | None = 1
-        while ordinal is not None:
-            ordinal = self.f.ledger.read_packet("write-label", self.meta(b), ordinal)["next"]
-        self.f.ledger.confirm_packet("write-label", self.meta(b))
+        chunk = self.f.ledger.read_packet("write-label", self.meta(b), 1)
+        while chunk["next"] is not None:
+            chunk = self.f.ledger.read_packet(
+                "write-label", self.meta(b), chunk["next"], chunk["acknowledgement"]
+            )
+        self.f.ledger.confirm_packet(
+            "write-label", self.meta(b), chunk["acknowledgement"], chunk["materials"]
+        )
+        receipt = receipt_path(self.f.root, self.meta(b))
         self.f.ledger.finish("write-label", self.f.report("write-label"))
         self.f.start("verify-label")
         self.f.ledger.finish("verify-label", self.f.report("verify-label"))
@@ -223,6 +273,7 @@ class FilePacketTests(unittest.TestCase):
         )
         self.f.ledger.clean()
         self.assertFalse((self.f.root / b["path"]).exists())
+        self.assertFalse(receipt.exists())
         self.assertEqual(foreign.read_text(), "preserve")
 
     def test_old_dispatch_cannot_read_after_retry(self) -> None:

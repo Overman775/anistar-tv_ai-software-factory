@@ -30,7 +30,6 @@ execution:
 # Variants do not override shared fields. Variant names are unique across the factory.
 profiles:
   developer:
-    initial_profile_decision: initial-developer-profile
     role: roles/developer.md
     contract: contracts/developer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
@@ -63,7 +62,6 @@ profiles:
           after_failed_attempts: 2
 
   test-writer:
-    initial_profile_decision: initial-test-writer-profile
     role: roles/test-writer.md
     contract: contracts/test-writer.md
     capabilities: {read: true, edit: true, commands: true, web: false}
@@ -98,10 +96,17 @@ profiles:
     enforcement: instructions
     mcp:
       - dcm.dcm_analyze
+    default: generalist
     variants:
       generalist:
         model: sol
         adapter: codex
+      generalist-deepseek:
+        model: deepseek-flash-1017
+        adapter: opencode
+      generalist-glm:
+        model: glm-5-3
+        adapter: opencode
 
   judge:
     role: roles/judge.md
@@ -222,7 +227,11 @@ models:
     id: gpt-6-astra
     effort: medium
   glm-5-3:
-    id: builtin:zai-coding-plan\GLM-5.3
+    id: openrouter/z-ai/glm-5.3
+    effort: max
+  deepseek-flash-1017:
+    id: openrouter/deepseek/deepseek-v4.1-flash-1017
+    effort: max
 
 # Adapters: harness, transport and participant instructions.
 adapters:
@@ -242,6 +251,12 @@ adapters:
     harness: zcode
     runner: acpx
     connection: zcode
+  opencode:
+    instructions: adapters/acpx.md
+    worker_instructions: adapters/worker/acpx.md
+    harness: opencode
+    runner: acpx
+    connection: opencode
 
 # Shared local limit native-workers, excluding the coordinator.
 native:
@@ -249,7 +264,7 @@ native:
 
 # Client ACP and connections; each backend has its own limit.
 acpx:
-  command: acpx
+  command: .acpx/node_modules/.bin/acpx
   connections:
     zcode:
       command: zcode-acp
@@ -257,3 +272,8 @@ acpx:
         - server
       max_parallel_agents: 3
       permissions: approve-reads
+    opencode:
+      command: opencode
+      args: [acp]
+      max_parallel_agents: 8
+      permissions: approve-all

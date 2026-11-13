@@ -199,39 +199,14 @@ approval before reintake; passing generic continuation does not refresh it.
 Without this explicit route the existing canonical validator is used unchanged.
 Canonical plan paths/identifying frontmatter cannot use the external route.
 
-## Initial profile selection
+## Initial profiles
 
-For a profile group with `initial_profile_decision`, each assigned node carries
-`profile_selection: {task_id, node_id, decision_id, answer}`. `answer` is the
-complete Choice estimate in the Decisions contract, stored as JSON in the workflow
-ledger and archived history. IDs match the graph node and task. The chosen profile
-must match its agent. Configurations without this optional group field retain their
-previous behavior. Invalid, tied, unknown and `no-eligible-profile` answers block
-assignment. `workflow.py validate` checks graph structure only; `init` additionally validates initial profile selections. Choices are coordinator judgments; validation cannot prove their reasons.
-
-Example node field (JSON, for a Developer group with these four choices):
-
-```json
-"profile_selection": {
-  "task_id": "T1",
-  "node_id": "write-label",
-  "decision_id": "initial-developer-profile",
-  "answer": {
-    "choice": "junior-developer",
-    "probabilities": {"junior-developer": 0.7, "middle-developer": 0.1, "senior-developer": 0.1, "no-eligible-profile": 0.1},
-    "confidence": 0.6,
-    "source": "agent:coordinator; choice confidence=(max(p)-1/n)/(1-1/n)",
-    "reason": "Bounded local change, known behavior and reliable checks."
-  }
-}
-```
-
-Revise preserves prior graphs in history. A different initial profile before any
-reservation requires a new agent and answer; after work starts, only the existing
-correction transition may change it. Corrections retain the initial answer and record
-exact reassigned nodes. Re-intake saves the prior graph and policy, preserves node
-task/stage identities and cannot undo correction budgets or retired profiles. Worker
-packets omit the coordinator-only selection; other packet integrity checks remain.
+Developer and TestWriter start at their configured group defaults. The supplied
+configuration starts both at middle. `validate`, `init` and `claim` check the
+default and any registered correction lineage. `revise` and `reintake` preserve
+started assignment identities. Physical replacement preserves its logical
+agent and profile. Correction records link exact reassigned nodes to new
+logical agents without resetting task/cause budgets.
 
 ## YAML: named profiles and adapters
 
@@ -263,16 +238,14 @@ For native file delivery, run `workflow.py prepare-packet NODE` after claim and
 send the returned bootstrap (including `read_command`, identity, role and owned
 paths) to a worker sharing this canonical workspace. Run the bootstrap command in
 its named shell (POSIX shell or Windows PowerShell). Spawn and bind its actual
-handle/model without waiting for work. The worker executes the command once per
-chunk, replacing `--chunk 1` with each returned `next`; it reads all chunks in order
-and waits for running bind before writes or assigned commands. Each chunk is at most
-12,000 UTF-8 bytes of packet content, without splitting a character. Calls recheck
-identity, config, source and the complete file hash. Preparation is idempotent only
-for the registered unchanged file; conflicting files block. `ready_for_work` on the
-last chunk describes binding and ordinal only. After receiving all chunks and
-running bind, the worker executes `confirm_command`. The ledger validates ordered
-serving and exact dispatch identity. This records the worker's confirmation.
-A file or receipt alone does not prove comprehension.
+handle/model without waiting for work. The worker requests one chunk per tool call. Supply the last response's
+`acknowledgement` as `--ack` on the next request. Retry lost output with the same
+arguments. A missing receipt requires reading from chunk one. Each chunk carries
+at most 12,000 UTF-8 bytes. When bound and the last response is received, append
+its `--ack` and `--materials` values to `confirm_command`. The receipt records
+served and acknowledged ordinals. The ledger records preparation and confirmed
+delivery. Confirmation validates packet, dispatch, source and material identity
+before work is authorized. Acknowledgement records transport receipt.
 
 Use `prepare-packet NODE --with-diagnostics` to get separate `bootstrap` and
 `diagnostics` objects. Send only `bootstrap` to the worker. Diagnostics report
@@ -334,7 +307,7 @@ failures or selects zero tests still needs semantic review.
 After claim/bind of a node with `project-checks`, run:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py run-check verify-label behavior
+sh .factory/tools/python.sh .factory/tools/workflow.py run-check verify-label behavior --request behavior-first --dispatch "$dispatch_id"
 ```
 
 The coordinator or the bound role may call this helper; it does not call an LLM
@@ -359,17 +332,13 @@ running without confirmation. Finish those deliveries before a synchronous check
 and start new deliveries after it. Wait outside the ledger lock and reconcile a
 failed or unknown delivery through normal recovery.
 
-The minimal runner is synchronous and holds the ledger lock for the whole command.
-Other state mutations wait operationally: they return `Ledger locked` and must be
-retried after completion. `show` and reading the log remain possible. Keep the
-host's command session and wait on it; do not start a duplicate command because a
-host tool yielded. The runner records its PID and child PID. On timeout/keyboard
-interrupt it kills the POSIX process group (on other platforms, only the direct
-child); it does not provide a portable process supervisor. Use foreground commands
-that do not detach children; non-POSIX descendant termination needs host verification.
+The CLI waits for a dedicated runner outside the ledger lock. The ledger stores
+intent and final receipts. The runner records process ownership before useful
+command work. Repeat a lost request with its original ID or reconcile by
+execution ID. An intentional rerun uses a different ID.
 
 If the runner is forcibly killed, a lock/RUNNING record may remain. Confirm the
-runner and descendants stopped before removing a stale ledger lock or resolving
+runner and descendants stopped before resolving
 the node. Use existing unknown/resolve/retry recovery with terminal evidence;
 never change RUNNING to PASS or reuse the old receipt. A fresh dispatch can run
 a new check after that recovery. There is no automatic restart or cross-host recovery.
@@ -432,8 +401,7 @@ sh .factory/tools/python.sh .factory/tools/workflow.py resume-task label "Verifi
 
 `correct` supports profiles with escalation in Implement. Cause is
 static/tests/docs/review. Kind is quality (FAIL, or diagnosed BLOCKED_STATIC_FAILURE
-with cause static), complexity (BLOCKED with a
-technical reason), environment or requirements (BLOCKED, no model cascade).
+with cause static), environment or requirements (BLOCKED, no model cascade).
 Use the actual IDs, not placeholder strings. Evidence belongs to this task and
 is the corrected node or its descendant. Files/source must still match.
 `FAIL_CODE` belongs to Developer; `FAIL_TEST` belongs to TestWriter. Successful
@@ -441,8 +409,7 @@ WRITES_READY, source drift, unavailable tools or missing requirements cannot be
 relabelled as poor model quality.
 
 Quality failure counts are task/cause/profile scoped; thresholds do not add retries.
-The configured chain is acyclic and ends at human. Complexity may advance early
-without a quality failure; the existing budget must still permit continuation.
+The configured chain is acyclic and ends at human. Advance only after an evidenced failure and threshold.
 An identical decision replay returns its stored result without another change;
 changed content for the same author/evidence pair is rejected. State is saved
 atomically before model calls. Inspect `decision`: retry/escalate opens work;
@@ -527,3 +494,26 @@ Final verify repeats every required check. Where independent review is required,
 for selected criteria; an eligible solo Generalist instead records SELF_REVIEW PASS, never independent APPROVE. Runtime derives gate_results. A blocked gate does not choose
 an owner or reset budgets: the coordinator uses existing correction/escalation.
 Planning, Decompose and standalone Review retain their own artifact validators.
+
+
+## Reconcile an active run
+
+`workflow.py next` lists unacknowledged results, runnable nodes, acceptance
+actions, dispatches, command ownership, correction routes and blockers.
+`status` is an alias. Repeat with `--after CURSOR` for an unchanged response.
+Reconcile recorded handles and unknown dispatches before retry. Read immutable
+reports with `read-report REF.json`, then acknowledge a processed result with
+`ack-result NODE DISPATCH_ID`. `pause REASON` and `resume` record the user's
+decision. Final completion requires successful `archive completed SUMMARY`.
+The native adapter depends on the host coordinator for launches and wakeups.
+
+Use `reconcile-check EXECUTION_ID` after a runner or coordinator interruption.
+Use `--abandon-unstarted` only to abandon an intent with no registered owner.
+The runner records intent before launch and binds the resource to the process
+group or Job Object until termination. Use a new `--request` for an intentional
+rerun. The original request ID returns its existing execution.
+
+Use `expand-scope TASK PATH... --reason REASON` for additional verification
+inputs under the same approved outcome. It keeps old reports and counters,
+invalidates affected verification/acceptance, and updates final integration scope.
+Old reports remain available for diagnosis. Correction requires current evidence.

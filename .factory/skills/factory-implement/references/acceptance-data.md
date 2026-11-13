@@ -47,7 +47,7 @@ The observation must identify the author report by run/node/dispatch and its
 fields, and distinguish absent information, unknown behavior and checks that
 were NOT_RUN. Give the author this expectation in the assignment. The verifier
 reads the author report retained by `finish` via
-`dependency_results[author_node].report_ref` when available, or the exact ledger
+the immutable `dependency_results[author_node].report_ref` when available, or the exact ledger
 node report; a separate output file or memory is
 not evidence of what `finish` retained. Missing or ambiguous information fails
 the observation. Apply this only to handoffs explicitly required by the source;

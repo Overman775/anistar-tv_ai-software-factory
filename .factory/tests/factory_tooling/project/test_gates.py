@@ -127,7 +127,7 @@ class GateTests(unittest.TestCase):
     def test_stage_command_gate_requires_reservation_at_graph_validation(self) -> None:
         f = self.f
         self.install(policy())
-        with self.assertRaisesRegex(Invalid, "Stage gate needs"):
+        with self.assertRaisesRegex(Invalid, "project-checks reservation"):
             validate_graph(f.g, f.config, f.root)
 
     def test_integrated_review_requires_criteria_before_approval_and_acceptance(self) -> None:

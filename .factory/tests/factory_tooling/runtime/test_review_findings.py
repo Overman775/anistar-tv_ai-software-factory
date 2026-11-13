@@ -444,7 +444,7 @@ class IntegrationFindingTests(unittest.TestCase):
         self.assertEqual("label", packet["integration_owners"]["write-label"]["task_id"])
         self.assertEqual("generalist", packet["integration_owners"]["write-label"]["role"])
         self.assertEqual(["lib/example.dart"], packet["integration_owners"]["write-label"]["owns"])
-        self.assertEqual({"label", "second", "integrated"}, set(packet["integration_tasks"]))
+        self.assertEqual({"label", "second"}, set(packet["integration_tasks"]))
         f.ledger.bind("review-all", "independent-reviewer", "gpt-6.1-sol")
         with self.assertRaisesRegex(Invalid, "omitted"):
             f.ledger.finish("review-all", f.report("review-all", verdict="APPROVE", findings=[]))
@@ -510,7 +510,11 @@ class IntegrationFindingTests(unittest.TestCase):
 
     def test_failed_integration_verification_routes_to_predecessor_then_rechecks(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="developer", profile="senior-developer")
+        f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
+        f.config["profiles"]["middle-developer"]["escalation"] = {
+            "to": "senior-developer",
+            "after_failed_attempts": 2,
+        }
         f.g["tasks"]["integrated"]["required_checks"][0]["execution"]["argv"] = [
             sys.executable,
             "-c",
@@ -553,7 +557,11 @@ class IntegrationFindingTests(unittest.TestCase):
 
     def test_cross_source_integration_correction_checks_exact_owner_and_fresh_bytes(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="developer", profile="senior-developer")
+        f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
+        f.config["profiles"]["middle-developer"]["escalation"] = {
+            "to": "senior-developer",
+            "after_failed_attempts": 2,
+        }
         f.g["sources"]["other"] = deepcopy(f.g["sources"]["request"])
         f.g["sources"]["other"]["text"] = "Independent integration source"
         task = f.g["tasks"]["integrated"]

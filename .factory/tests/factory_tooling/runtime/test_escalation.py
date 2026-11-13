@@ -28,7 +28,7 @@ class EscalationTests(unittest.TestCase):
         self.f = test_workflow.WorkflowTests()
         self.f.setUp()
         self.addCleanup(self.f.doCleanups)
-        self.f.g["agents"]["author"] = dict(role="developer", profile="junior-developer")
+        self.f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
         self.f.require_fixture_review()
 
     def batch(self) -> None:
@@ -77,16 +77,16 @@ class EscalationTests(unittest.TestCase):
             evidence_node="verify-label",
             evidence_dispatch_id=s["nodes"]["verify-label"]["dispatch_id"],
             cause="tests",
-            kind="quality" if outcome == "FAIL" else "complexity",
+            kind="quality" if outcome == "FAIL" else "requirements",
             reason="Confirmed failing behavior; next approach documented",
             terminal_evidence="Both turns returned terminal; no process remains",
             handoff="Keep AC-01. Failure log and rejected hypothesis in evidence; inspect current files.",
         )
 
-    def test_three_profiles_keep_one_task_budget_and_stop_after_senior_failure(self) -> None:
+    def test_profiles_keep_one_task_budget_and_stop_after_senior_failure(self) -> None:
         f = self.f
         f.init()
-        for expected in ["middle-developer", "senior-developer"]:
+        for expected in ["senior-developer", "senior-developer"]:
             decision = f.ledger.correct("write-label", self.fail_verification())
             self.assertEqual(expected, decision["to_profile"])
             s = f.ledger.read()
@@ -131,6 +131,7 @@ class EscalationTests(unittest.TestCase):
     def test_worker_gets_task_history_not_routing_policy_in_native_and_acp(self) -> None:
         f = self.f
         f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer-zcode")
+        f.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
         f.init()
         decision = f.ledger.correct("write-label", self.fail_verification("FAIL_TEST"))
         self.assertEqual("senior-test-writer", decision["to_profile"])
@@ -164,12 +165,12 @@ class EscalationTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             f.ledger.bind("write-label", old, "gpt-6.1-terra")
         with self.assertRaisesRegex(Invalid, "Actual model differs"):
-            f.ledger.bind("write-label", "new", "gpt-6.1-sol")
-        f.ledger.bind("write-label", "new", "gpt-6.1-terra")
+            f.ledger.bind("write-label", "new", "gpt-6.1-terra")
+        f.ledger.bind("write-label", "new", "gpt-6.1-sol")
 
     def test_fail_code_is_not_a_testwriter_failure(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="test-writer", profile="junior-test-writer")
+        f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer")
         f.init()
         request = self.fail_verification("FAIL_CODE")
         before = f.ledger.read()
@@ -260,13 +261,12 @@ class EscalationTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "Use correct"):
             f.ledger.retry("verify-label", "recovery", "Try stale failure", "stopped")
 
-    def test_complexity_transfers_without_fake_failure_but_not_for_tool_blocker(self) -> None:
+    def test_complexity_cannot_promote_before_a_quality_failure(self) -> None:
         f = self.f
         f.init()
         request = self.fail_verification("BLOCKED", "BLOCKED")
-        result = f.ledger.correct("write-label", request)
-        self.assertEqual("escalate", result["decision"])
-        self.assertEqual(0, result["failure_count"])
+        with self.assertRaisesRegex(Invalid, "Unknown diagnosis"):
+            f.ledger.correct("write-label", {**request, "kind": "complexity"})
         self.assertEqual({}, f.ledger.read()["counters"])
 
     def test_wr_ready_cannot_trigger_escalation(self) -> None:
@@ -291,8 +291,8 @@ class EscalationTests(unittest.TestCase):
 
     def test_senior_retries_same_session_below_threshold(self) -> None:
         f = self.f
-        f.g["agents"]["author"]["profile"] = "senior-developer"
         f.init()
+        f.ledger.correct("write-label", self.fail_verification())
         request = self.fail_verification()
         session = deepcopy(f.ledger.read()["sessions"])
         result = f.ledger.correct("write-label", request)
@@ -328,12 +328,12 @@ class EscalationTests(unittest.TestCase):
 
     def test_human_resume_opens_work_and_spends_remaining_budget_once(self) -> None:
         f = self.f
-        f.g["agents"]["author"]["profile"] = "senior-developer"
         f.init()
+        f.ledger.correct("write-label", self.fail_verification())
         request = self.fail_verification("BLOCKED", "BLOCKED")
-        self.assertEqual("human", f.ledger.correct("write-label", request)["decision"])
+        self.assertEqual("blocked", f.ledger.correct("write-label", request)["decision"])
         f.ledger.resume_task("label", "Human supplied missing implementation decision")
-        self.assertEqual({"label:tests": 1}, f.ledger.read()["counters"])
+        self.assertEqual({"label:tests": 2}, f.ledger.read()["counters"])
         self.assertEqual("pending", f.ledger.read()["nodes"]["write-label"]["status"])
         before = f.ledger.read()
         with self.assertRaisesRegex(Invalid, "no escalation stop"):
@@ -356,7 +356,7 @@ class EscalationTests(unittest.TestCase):
 
     def test_independent_failed_siblings_are_diagnosed_separately(self) -> None:
         f = self.f
-        f.g["agents"]["sibling"] = dict(role="developer", profile="junior-developer")
+        f.g["agents"]["sibling"] = dict(role="developer", profile="middle-developer")
         extra = deepcopy(f.g["nodes"][0])
         extra.update(id="write-sibling", agent="sibling")
         f.g["nodes"].append(extra)
@@ -379,7 +379,7 @@ class EscalationTests(unittest.TestCase):
             )
         f.ledger.correct("write-label", requests["write-label"])
         self.assertEqual(
-            "junior-developer", f.ledger.read()["graph"]["agents"]["sibling"]["profile"]
+            "middle-developer", f.ledger.read()["graph"]["agents"]["sibling"]["profile"]
         )
         self.assertEqual(
             "escalate", f.ledger.correct("write-sibling", requests["write-sibling"])["decision"]
@@ -397,9 +397,8 @@ class EscalationTests(unittest.TestCase):
         graph = deepcopy(s["graph"])
         graph["agents"]["new"] = {"role": "developer", "profile": "junior-developer"}
         graph["nodes"][0]["agent"] = "new"
-        f.ledger.revise(graph, "attempt to start over")
-        with self.assertRaisesRegex(Invalid, "already escalated"):
-            f.ledger.claim("write-label")
+        with self.assertRaisesRegex(Invalid, "Correction agent mismatch"):
+            f.ledger.revise(graph, "attempt to start over")
 
     def test_config_rejects_cycles_role_changes_bad_defaults_and_boolean_limits(self) -> None:
         mutations: list[Callable[[Any], object]] = [
@@ -424,7 +423,7 @@ class EscalationTests(unittest.TestCase):
         s = f.ledger.read()
         second = next(n for n in s["graph"]["nodes"] if n["id"] == "write-second")
         self.assertEqual("author", second["agent"])
-        self.assertEqual("junior-developer", s["graph"]["agents"]["author"]["profile"])
+        self.assertEqual("middle-developer", s["graph"]["agents"]["author"]["profile"])
         self.assertEqual([], escalation.worker_context(s, "second")["history"])
         self.assertNotIn("second:tests", s["counters"])
 
@@ -432,6 +431,7 @@ class EscalationTests(unittest.TestCase):
         f = self.f
         f.init()
         request = self.fail_verification("BLOCKED_TOOL_ERROR", "BLOCKED")
+        request["kind"] = "quality"
         with self.assertRaisesRegex(Invalid, "real blocker"):
             f.ledger.correct("write-label", request)
 
@@ -549,7 +549,7 @@ class EscalationTests(unittest.TestCase):
 
     def test_same_profile_sibling_assignments_advance_without_deadlock(self) -> None:
         f = self.f
-        f.g["agents"]["checker"] = dict(role="developer", profile="junior-developer")
+        f.g["agents"]["checker"] = dict(role="developer", profile="middle-developer")
         f.g["nodes"][1]["agent"] = "checker"
         f.init()
         f.start("write-label", "author")
@@ -571,6 +571,7 @@ class EscalationTests(unittest.TestCase):
     def test_backend_default_cannot_silently_change_model_in_existing_session(self) -> None:
         f = self.f
         f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer-zcode")
+        f.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
         f.config["models"][f.config["profiles"]["middle-test-writer-zcode"]["model"]]["id"] = None
         f.init()
         f.start("write-label", "acp-default")

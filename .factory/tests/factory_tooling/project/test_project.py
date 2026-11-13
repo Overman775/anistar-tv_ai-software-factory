@@ -808,7 +808,9 @@ class ProjectIntegrationTests(unittest.TestCase):
         (f.root / "check-input.txt").write_text("after")
         with self.assertRaisesRegex(Invalid, "stale"):
             f.ledger.run_check("verify-label", "second")
-        self.assertEqual("PASS", f.ledger.run_check("verify-label", "first")["result"])
+        self.assertEqual(
+            "PASS", f.ledger.run_check("verify-label", "first", "fresh-input")["result"]
+        )
         self.assertEqual("PASS", f.ledger.run_check("verify-label", "second")["result"])
 
     def test_failed_dependency_does_not_unlock_later_project_command(self) -> None:

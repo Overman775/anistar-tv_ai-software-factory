@@ -16,10 +16,15 @@ from factory_tooling.logging_config import (
     read_journal,
 )
 from factory_tooling.paths import FACTORY_ROOT
+from factory_tooling.runtime import command_worker, report_history
 from factory_tooling.runtime.workflow import Ledger
 from factory_tooling.runtime.workflow_config import load_config
 from factory_tooling.runtime.workflow_core import Invalid, digest, read_json, relative
-from factory_tooling.runtime.workflow_graph import diagram, validate_graph
+from factory_tooling.runtime.workflow_graph import (
+    diagram,
+    validate_assignment_lineage,
+    validate_graph,
+)
 
 
 def main() -> None:
@@ -56,7 +61,19 @@ def main() -> None:
     approved.add_argument("request_id")
     approved.add_argument("evidence")
     sub.add_parser("show")
+    next_action = sub.add_parser("next", aliases=["status"])
+    next_action.add_argument("--after")
+    paused = sub.add_parser("pause")
+    paused.add_argument("reason")
+    sub.add_parser("resume")
+    acknowledged = sub.add_parser("ack-result")
+    acknowledged.add_argument("node")
+    acknowledged.add_argument("dispatch_id")
     sub.add_parser("diagram")
+    expand = sub.add_parser("expand-scope")
+    expand.add_argument("task")
+    expand.add_argument("--reason", required=True)
+    expand.add_argument("paths", nargs="+")
     rev = sub.add_parser("revise")
     rev.add_argument("graph")
     rev.add_argument("reason")
@@ -86,8 +103,11 @@ def main() -> None:
             "revision",
         ):
             packet.add_argument(field)
+        packet.add_argument("--ack", required=name == "confirm-packet")
         if name == "read-packet":
             packet.add_argument("--chunk", type=int, default=1)
+        else:
+            packet.add_argument("--materials", required=True)
     b = sub.add_parser("bind")
     b.add_argument("node")
     b.add_argument("handle")
@@ -95,6 +115,14 @@ def main() -> None:
     check = sub.add_parser("run-check")
     check.add_argument("node")
     check.add_argument("check_id")
+    check.add_argument("--request", required=True)
+    check.add_argument("--dispatch", required=True)
+    reconciled = sub.add_parser("reconcile-check")
+    reconciled.add_argument("execution_id")
+    reconciled.add_argument("--abandon-unstarted", action="store_true")
+    sub.add_parser("check-results").add_argument("execution_id")
+    sub.add_parser("_check-worker").add_argument("execution_id")
+    sub.add_parser("read-report").add_argument("reference")
     report = sub.add_parser("prepare-report")
     report.add_argument("node")
     report.add_argument("report")
@@ -173,15 +201,23 @@ def main() -> None:
                     and pin["result"].get("_files") == c["_files"]
                 ):
                     raise Invalid("Config/instructions changed since snapshot; reload instructions")
-            result = (
-                ledger.init(g, c)
-                if args.action == "init"
-                else list(validate_graph(g, c, ledger.root))
-            )
+            if args.action == "init":
+                result = ledger.init(g, c)
+            else:
+                result = list(validate_graph(g, c, ledger.root))
+                validate_assignment_lineage(g, c)
         elif args.action == "correct":
             result = ledger.correct(args.node, read_json(args.decision))
         elif args.action == "resume-task":
             ledger.resume_task(args.task, args.evidence)
+            result = None
+        elif args.action in {"next", "status"}:
+            result = ledger.next_actions(args.after)
+        elif args.action in {"pause", "resume"}:
+            ledger.set_paused(args.reason if args.action == "pause" else None)
+            result = None
+        elif args.action == "ack-result":
+            ledger.acknowledge_result(args.node, args.dispatch_id)
             result = None
         elif args.action == "show":
             result = ledger.read()
@@ -190,6 +226,9 @@ def main() -> None:
             return
         elif args.action == "resume-approved":
             ledger.resume_approved(args.node, args.request_id, args.evidence)
+            result = None
+        elif args.action == "expand-scope":
+            ledger.expand_scope(args.task, args.paths, args.reason)
             result = None
         elif args.action == "revise":
             ledger.revise(read_json(args.graph), args.reason)
@@ -215,15 +254,26 @@ def main() -> None:
                 "revision": args.revision,
             }
             if args.action == "read-packet":
-                result = ledger.read_packet(args.node, bootstrap, args.chunk)
+                result = ledger.read_packet(args.node, bootstrap, args.chunk, args.ack)
             else:
-                ledger.confirm_packet(args.node, bootstrap)
+                ledger.confirm_packet(args.node, bootstrap, args.ack, args.materials)
                 result = None
         elif args.action == "bind":
             ledger.bind(args.node, args.handle, args.model)
             result = None
         elif args.action == "run-check":
-            result = ledger.run_check(args.node, args.check_id)
+            result = ledger.run_check(
+                args.node, args.check_id, args.request, expected_dispatch=args.dispatch
+            )
+        elif args.action == "reconcile-check":
+            result = ledger.reconcile_check(args.execution_id, args.abandon_unstarted)
+        elif args.action == "check-results":
+            result = ledger.check_results(args.execution_id)
+        elif args.action == "_check-worker":
+            command_worker.supervise(ledger, args.execution_id)
+            return
+        elif args.action == "read-report":
+            result = report_history.read(ledger.root, read_json(args.reference))
         elif args.action == "prepare-report":
             draft = json.load(sys.stdin) if args.report == "-" else read_json(args.report)
             result = ledger.prepare_report(args.node, draft, args.receipt_ids)

@@ -281,7 +281,11 @@ def validate(profile: Any) -> ProjectData:
             execution = validate_execution(item.get("execution"))
             relative(execution["cwd"])
             strings(execution.get("inputs", []), "inputs", empty=True)
-            for path in execution.get("inputs", []):
+            outputs = execution.get("outputs", [])
+            require(
+                not outputs or item["kind"] == "codegen", "Only code generation can declare outputs"
+            )
+            for path in execution.get("inputs", []) + outputs:
                 relative(path)
         else:
             require("execution" not in item, "observation cannot execute commands")

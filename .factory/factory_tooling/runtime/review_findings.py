@@ -25,10 +25,10 @@ def review_tasks(state: State, task_id: str) -> list[str]:
     return [task_id, *task.get("depends_on", [])] if task["kind"] == "integration" else [task_id]
 
 
-def view(state: State, task_id: str) -> dict[str, Any]:
+def view(state: State, task_id: str, *, include_dependencies: bool = True) -> dict[str, Any]:
     result = {}
     integration = state["graph"]["tasks"][task_id]["kind"] == "integration"
-    for tid in review_tasks(state, task_id):
+    for tid in review_tasks(state, task_id) if include_dependencies else [task_id]:
         for fid, item in state.get("review_findings", {}).get(tid, {}).items():
             value = {k: deepcopy(v) for k, v in item.items() if k != "history"}
             if integration:

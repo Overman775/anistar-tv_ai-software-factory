@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from factory_tooling.context import context
-from factory_tooling.runtime import escalation, review_findings
+from factory_tooling.runtime import escalation, finish_requirements, report_history, review_findings
 from factory_tooling.runtime.contracts import (
     Node,
     State,
+    Task,
     agent_key,
 )
 
@@ -39,22 +40,35 @@ def dependency_results(state: State, node: Node) -> dict[str, Any]:
         }
         if "report" in saved:
             report = deepcopy(saved["report"])
-            # Verification needs original evidence; workers can inspect bulky hash maps on demand.
-            if node["stage"] not in {"verify", "review"}:
-                report.pop("files", None)
+            # Prose and finding details stay inline. The immutable original carries hash maps.
+            report.pop("files", None)
             item["report"] = report
-            item["report_ref"] = {
-                "path": ".factory/memory/state/workflow.json",
-                "keys": ["nodes", key, "report"],
-                "run_id": state["run_id"],
-                "dispatch_id": saved["report"]["dispatch_id"],
-            }
+            if "report_ref" in saved:
+                item["report_ref"] = saved["report_ref"]
         results[key] = item
     return results
 
 
 def worker_node(node: Node) -> Node:
-    return cast(Node, {k: deepcopy(v) for k, v in node.items() if k != "profile_selection"})
+    return deepcopy(node)
+
+
+def projected_task(
+    task: Task, node: Node, obligations: finish_requirements.FinishRequirements
+) -> Task:
+    if task["kind"] != "integration" or not node.get("owns"):
+        return deepcopy(task)
+    result = deepcopy(task)
+    result.pop("depends_on", None)
+    result["scope"] = node.get("owns", [])
+    result["required_checks"] = obligations["allowed_checks"]
+    result["acceptance_ids"] = [
+        cid
+        for cid in task["acceptance_ids"]
+        if ":" not in cid
+        or any(cid in check["criteria"] for check in obligations["allowed_checks"])
+    ]
+    return result
 
 
 def implement_packet(state: State, node_id: str) -> dict[str, Any]:
@@ -62,6 +76,12 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
     current = state["nodes"][node_id]
     task = state["graph"]["tasks"][node["task"]]
     agent = state["graph"]["agents"][agent_key(node)]
+    role = agent["role"]
+    obligations = finish_requirements.requirements(
+        state["config"]["_project"]["data"], node, task, role
+    )
+    integration_verifier = task["kind"] == "integration" and node["stage"] in {"verify", "review"}
+    source = state["graph"]["sources"][task["source"]]
     envelope = dict(
         run_id=state["run_id"],
         node_id=node_id,
@@ -70,11 +90,23 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         slice_id=task["slice"],
         task=task,
         node=worker_node(node),
-        source=state["graph"]["sources"][task["source"]],
+        source=source,
+        finish_requirements=obligations,
+        assignment_sha256=report_history.identity(
+            report_history.assignment(state, node, obligations)
+        ),
         source_hash=state["graph"]["sources"][task["source"]]["hash"],
         dependency_results=dependency_results(state, node),
-        acceptance_sources=state["graph"]["sources"] if task["kind"] == "integration" else {},
-        integration_tasks=state["graph"]["tasks"] if task["kind"] == "integration" else {},
+        acceptance_sources={
+            key: value for key, value in state["graph"]["sources"].items() if key != task["source"]
+        }
+        if integration_verifier
+        else {},
+        integration_tasks={
+            key: value for key, value in state["graph"]["tasks"].items() if key != node["task"]
+        }
+        if integration_verifier
+        else {},
         integration_owners={
             n["id"]: {
                 "task_id": n["task"],
@@ -84,9 +116,11 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
             for n in state["graph"]["nodes"]
             if n.get("owns")
         }
-        if task["kind"] == "integration"
+        if integration_verifier
         else {},
-        review_findings=review_findings.view(state, node["task"]),
+        review_findings=review_findings.view(
+            state, node["task"], include_dependencies=integration_verifier
+        ),
         correction=escalation.worker_context(state, node["task"]),
     )
     if state["config"]["profiles"][agent["profile"]]["runner"] == "acpx":
@@ -96,7 +130,7 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
             / "state"
             / f"{state['run_id']}-{node_id}-{current['dispatch_id']}.report.json"
         )
-    return context.build(
+    packet = context.build(
         state["config"],
         state["workspace"],
         agent["profile"],
@@ -104,3 +138,5 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         "implement",
         envelope,
     )
+    packet["task"] = projected_task(task, node, obligations)
+    return packet

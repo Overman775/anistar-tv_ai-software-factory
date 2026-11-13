@@ -72,7 +72,7 @@ process exit or ACP delivery is not a gate verdict.
 
 Register applicable mandatory commands in task `required_checks.execution` before
 intake, with argv/cwd/timeout and additional input files. Execute through
-`workflow.py run-check NODE CHECK_ID` under project-checks; use the stored result
+`workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID` under project-checks; use the stored result
 unchanged in the report. Never infer PASS from successful transport, CLI `ok`,
 a missing exit code or a RUNNING receipt. A command failure needs diagnosis before
 an explicit retry. See workflow README for synchronous locking and process recovery.
@@ -106,7 +106,7 @@ it merely because a wait timed out.
 
 The correction transaction records the decision, invalidates affected dependent
 results and opens only a permitted retry. Quality consumes one remaining retry;
-complexity advances the finite profile chain without inventing a quality failure.
+profile changes require an evidenced unsuccessful attempt and the configured threshold.
 Before a profile change, retain old handles/connection identities and close a
 terminal ACP session through its adapter while the old node assignment still
 addresses it. The node-scoped ACP helper addresses the new assignment after
@@ -189,3 +189,16 @@ fixes to Developer, test fixes to TestWriter, unknown causes to diagnosis. Cross
 defects need explicit correction ownership and rechecking combined behavior.
 No product writes by the reviewer. Retry invalidates downstream evidence; final
 verification and review rerun on corrected bytes before accept/archive.
+
+
+## Reconciliation
+
+Call `workflow.py next` after dispatch, transport return, check result,
+correction, scope change and on resumed entry. Reconcile saved dispatches,
+session handles, pending executions and reports before any repeat request.
+Inspect new terminal reports and acknowledge each processed dispatch. Claim
+runnable assignments, accept eligible nodes, wait on active handles, and
+perform only evidence-supported correction or reconciliation. Report material
+progress in commentary. Keep the turn active while work remains and the host
+supports waiting. The native adapter supplies no autonomous launcher or wakeup.
+Respect recorded user pause/stop. Final completion follows successful archive.

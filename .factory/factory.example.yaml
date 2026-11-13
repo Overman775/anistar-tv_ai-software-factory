@@ -30,7 +30,7 @@ execution:
 
 # Specialties: shared permissions and tools, then model and adapter variants.
 # Variants do not override shared fields. Variant names are unique across the factory.
-# default required with multiple variants; a single variant is selected automatically.
+# default required with multiple variants. Developer/TestWriter always start at that default.
 # capabilities/MCP — instruction policy, not sandbox; enforcement: required blocks generic dispatch.
 # MCP servers and secrets are configured in harness, not here.
 profiles:
@@ -65,12 +65,6 @@ profiles:
         escalation:
           to: human
           after_failed_attempts: 2
-      middle-developer-zcode:
-        model: glm-5-3
-        adapter: zcode
-        escalation:
-          to: senior-developer
-          after_failed_attempts: 1
 
   test-writer:
     role: roles/test-writer.md
@@ -99,12 +93,6 @@ profiles:
         escalation:
           to: human
           after_failed_attempts: 2
-      middle-test-writer-zcode:
-        model: glm-5-3
-        adapter: zcode
-        escalation:
-          to: senior-test-writer
-          after_failed_attempts: 1
       middle-test-writer-pi:
         model: deepseek-flash
         adapter: pi
@@ -119,10 +107,17 @@ profiles:
     enforcement: instructions
     mcp:
       - dcm.dcm_analyze
+    default: generalist
     variants:
       generalist:
         model: sol
         adapter: codex
+      generalist-deepseek:
+        model: deepseek-flash-1017
+        adapter: opencode
+      generalist-glm:
+        model: glm-5-3
+        adapter: opencode
 
   judge:
     role: roles/judge.md
@@ -190,7 +185,7 @@ profiles:
     mcp: []
     variants:
       architect:
-        model: sol
+        model: astra
         adapter: codex
 
   task-decomposer:
@@ -244,14 +239,17 @@ models:
   # Model for senior and other specialties.
   sol:
     id: gpt-6.1-sol
-    effort: high
+    effort: medium
+  astra:
+    id: gpt-6-astra
+    effort: medium
 
-  # GLM-5.3 via ZCode: copy the exact value from your bridge model configOptions.
-  # Current zcode-acp publishes providerId\modelId; case and provider depend on the catalog.
-  # Example below for Z.ai Coding Plan. This value does not confirm availability in your account.
-  # ACP effort not set: helper has no universal mapping.
   glm-5-3:
-    id: 'builtin:zai-coding-plan\GLM-5.3'
+    id: openrouter/z-ai/glm-5.3
+    effort: max
+  deepseek-flash-1017:
+    id: openrouter/deepseek/deepseek-v4.1-flash-1017
+    effort: max
 
   # Pi ACP accepts provider/model. deepseek-flash — API alias for the V4.1 Flash family.
   # Provider, key and model must be configured beforehand in Pi.
@@ -277,14 +275,20 @@ adapters:
     harness: claude
     runner: native
 
-  # ZCode — harness, zcode-acp — bridge, acpx — ACP protocol client.
+
   zcode:
     instructions: adapters/acpx.md
     worker_instructions: adapters/worker/acpx.md
     harness: zcode
     runner: acpx
-    # Alias from acpx.connections; not a model name or MCP server.
     connection: zcode
+
+  opencode:
+    instructions: adapters/acpx.md
+    worker_instructions: adapters/worker/acpx.md
+    harness: opencode
+    runner: acpx
+    connection: opencode
 
   # Pi — harness; used bridge — svkozak/pi-acp.
   pi:
@@ -304,34 +308,18 @@ acpx:
   command: acpx
   # One connection shares a pool across all assigned profiles.
   connections:
-    # Bridge william0wang/zcode-acp launches a real ZCode app-server.
-    # Configure MCP in the harness, not through profiles.*.mcp strings.
-    # For ZCode CLI: ~/.zcode/cli/config.json → mcp.servers. Example JSON shape:
-    # {
-    #   "mcp": {
-    #     "servers": {
-    #       "context7": {
-    #         "type": "stdio",
-    #         "command": "npx",
-    #         "args": ["-y", "@upstash/context7-mcp"],
-    #         "env": {"CONTEXT7_API_KEY": "<key in local configuration>"}
-    #       }
-    #     }
-    #   }
-    # }
-    # For DCM: command "dcm", args ["start-mcp-server", "--force-roots-fallback"].
-    # For HTTP server use url and headers according to client documentation.
-    # Keys are not stored here; helper does not copy MCP configuration between harnesses.
     zcode:
       command: zcode-acp
-      # Separate process arguments; server enables stdio ACP, not a terminal UI.
       args:
         - server
-      max_parallel_agents: 3  # limit on concurrent unfinished assignments for this connection
-      # Actual acpx mode: approve-reads / approve-all / deny-all.
-      # approve-reads + noninteractive fail does not automatically approve write requests.
-      # These are responses to permission requests, not a restriction on local harness tools.
+      max_parallel_agents: 3
       permissions: approve-reads
+
+    opencode:
+      command: opencode
+      args: [acp]
+      max_parallel_agents: 8
+      permissions: approve-all
 
     # svkozak/pi-acp launches without server and uses the installed Pi.
     # MCP requires a separate Pi extension; accepted ACP mcpServers are not connected automatically.

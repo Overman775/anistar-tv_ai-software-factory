@@ -81,8 +81,9 @@ def build_command(
     if operation in {"create", "prompt"}:
         check_capabilities(profile, node)
     model = c["models"][profile["model"]]
+    effort = model.get("effort")
     require(
-        not model.get("effort"),
+        not effort or profile["harness"] == "opencode",
         "ACP effort needs a confirmed backend-specific mapping; not silently ignored",
     )
     base = [
@@ -107,6 +108,9 @@ def build_command(
         "cancel": ["cancel", "-s", session],
         "close": ["sessions", "close", session],
     }
+    if operation == "set-effort":
+        require(bool(effort), "No ACP effort configured")
+        return base + ["set", "effort", str(effort), "-s", session]
     return base + tails[operation]
 
 
@@ -191,15 +195,32 @@ def run_operation(
             v["prompt_submitted"] = True
         argv = build_command(s, node_id, operation, prompt_path)
         argv[0] = executable_path
+        effort_argv = None
+        if operation == "prompt" and s["config"]["models"][profile["model"]].get("effort"):
+            effort_argv = build_command(s, node_id, "set-effort")
+            effort_argv[0] = executable_path
         prefix = ledger.dir / f"{s['run_id']}-{node_id}-{v['dispatch_id']}-{operation}"
         out, err = Path(str(prefix) + ".stdout"), Path(str(prefix) + ".stderr")
         for p in (out, err):
             require(not p.is_symlink(), "Symlink transport output")
             s.setdefault("transport_artifacts", []).append(str(p.relative_to(ledger.root)))
-        ledger.save(s, "transport_requested", node=node_id, operation=operation, argv=argv)
+        ledger.save(
+            s,
+            "transport_requested",
+            node=node_id,
+            operation=operation,
+            argv=argv,
+            **({"effort_argv": effort_argv} if effort_argv else {}),
+        )
     try:
         with out.open("w") as stdout, err.open("w") as stderr:
-            result = run(argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
+            result = (
+                run(effort_argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
+                if effort_argv
+                else None
+            )
+            if result is None or result.returncode == 0:
+                result = run(argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
     except BaseException:
         if operation in {"create", "prompt"}:
             with ledger.locked():

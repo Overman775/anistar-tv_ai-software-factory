@@ -159,6 +159,7 @@ def pack_run(root: Path, state: State) -> Path:
         if packet is not None:
             recorded_hashes[packet["path"]] = packet["sha256"]
     recorded_hashes.update(state.get("packet_hashes", {}))
+    recorded_hashes.update(state.get("report_hashes", {}))
     require(
         set(recorded_hashes) <= {source.relative_to(root).as_posix() for source in paths},
         "Missing recorded run artifact",

@@ -115,6 +115,7 @@ generated_plugin_registrant.dart
 /.factory/memory/
 /.factory/diagnostics/
 /.factory/.venv/
+/.factory/.acpx/
 /.factory/.venv.setup.lock
 /.factory/**/__pycache__/
 /.factory/**/*.pyc

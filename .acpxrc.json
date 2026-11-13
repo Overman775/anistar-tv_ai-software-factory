@@ -1,0 +1,10 @@
+{
+  "agents": {
+    "opencode": {
+      "argv": [
+        "/opt/homebrew/bin/opencode",
+        "acp"
+      ]
+    }
+  }
+}

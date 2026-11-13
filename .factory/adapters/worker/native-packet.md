@@ -1,10 +1,12 @@
 # Native Implement packet
 
-For a native file bootstrap, run its `read_command` in `read_shell` and the stated
-shared workspace.
-Read one returned chunk per tool result; follow `next` until all ordinals are visible.
-Do not concatenate all chunks into one tool output that may truncate. Each call checks
-identity, digest, config and source; stop on failure. If the last chunk says reserved,
-repeat its command until bound/running. Execute `confirm_command` in the same
-shell after receiving all chunks and before assigned writes or commands. Stop and
-report a failed read or confirmation. Save observable read outputs when requested.
+Run `read_command` in `read_shell` in the stated workspace. Keep each chunk in
+its own tool result. For the next chunk use `--chunk NEXT --ack ACKNOWLEDGEMENT`
+with the values from the received result. Repeat identical arguments after lost
+output. If the receipt was lost, restart at chunk one.
+
+After the final response, append `--ack ACKNOWLEDGEMENT --materials MATERIALS`
+from that response to `confirm_command`. Confirm after the coordinator binds
+the dispatch. Read the complete assignment and every mandatory instruction.
+Begin writes and assigned commands only after successful confirmation. Report a
+failed read or confirmation. Preserve observable read outputs when requested.

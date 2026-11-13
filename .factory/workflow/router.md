@@ -54,50 +54,28 @@ UI→storage→playback slice with end-to-end tests, not only layer mocks; split
 Developers only when scope/competence warrants it. Large features may combine
 exploration, planning, slices and advisory review; this is no mandatory template.
 
-## Initial profile decisions
+## Initial profiles
 
-Choose the team first. For each Developer or TestWriter node, evaluate the group's
-`initial_profile_decision` against the assignment, constraints and its Choice
-definition. Record a separate `profile_selection` with task/node IDs, decision ID
-and the complete Decisions answer on that node. Choose the configured default absent
-reason for another option. Test complexity is assessed separately from code work;
-independent evidence establishes expected behavior. A known example or helper can
-support junior, but is not required. An unknown file path alone does not require
-senior. Missing material requirements or access need clarification or a blocker;
-`no-eligible-profile` means all options are known incompatible, and blocks dispatch.
-Do not substitute a profile for a busy slot; wait. Explicit model, harness,
-permission and tool requirements
-apply before initial dispatch and before correction. An incompatible correction
-target is a blocker; do not spend the budget or silently substitute.
-
-For changed assignment inputs, reassess affected pending nodes using current facts.
-A pre-dispatch profile change requires revise, a reason, fresh answer and a new
-logical agent; after any reservation use correct for a failed assignment. Technical
-revision after correct retains the initial choice and records current suitability in
-the revision reason. Source or decision-policy changes require authorized re-intake.
-Choice confidence is not worker success probability; model quality and savings are
-not established by these policies.
+Choose the team first. Start each Developer and TestWriter assignment at its
+configured group default. The supplied defaults are middle-developer and
+middle-test-writer. Confirm model, harness, permissions and tools before
+dispatch. Wait for a busy slot. An incompatible default blocks assignment.
+Started task, node, logical agent and profile identities survive revise,
+re-intake and physical replacement. Only a recorded correction changes profile.
 
 ## Named profiles and escalation
 
-Choose the specialty/team before the model. Use `profiles.<role>.default` for normal
-assignments; choose junior for bounded, clear, low-risk work and senior for
-technical complexity or risk. Names do not prove quality. Generalist retains
-its existing eligibility; adding junior Developers does not change team rules.
 All profiles of a specialty share its procedure, contract and permissions.
+Classify evidenced failures as quality, environment or requirements. Code defects
+belong to Developer and test defects to TestWriter. WRITES_READY is intermediate.
+An attempt without usable output can report FAIL_CODE or FAIL_TEST with attempted
+work, unmet requirement and evidence. Prediction, silence and transport delay
+cannot count as a failed attempt.
 
-For a failed assignment, classify quality, complexity, environment or requirements.
-Attribute a code defect to Developer and a test defect to TestWriter. FAIL_CODE
-is not a TestWriter failure. WRITES_READY is intermediate until assigned verification.
-Do not interpret tool calls, a waiting timeout or silence as failed attempts.
-
-For Developer/TestWriter profiles with escalation, submit a task-scoped `correct`
-decision through workflow helpers. Quality uses configured failure thresholds and
-remaining task/cause budgets. Complexity can move early with terminal evidence;
-environment/requirements stop for the actual blocker. Human is the terminal target.
-Never change the cause, profile name, logical agent or run merely to reset a budget.
-Honor explicit model/tool requirements; unavailable targets block, not silently
-fall back. Verify candidate tools, model and permissions before dispatch.
+Submit quality corrections through `correct` after confirming terminal status
+and current applicability. The configured threshold and task/cause budget
+govern escalation. Environment and requirements blockers retain their own
+resolution paths. Keep logical lineage and budget on every transition.
 
 Only the coordinator reads escalation policies and chooses diagnoses. Workers
 return evidence and unresolved questions; they do not choose or spawn successors.

@@ -6,12 +6,20 @@ import tempfile
 from pathlib import Path
 
 from factory_tooling.context.context import WORKER_PROFILE_FIELDS
-from factory_tooling.runtime.assignment import implement_packet, worker_node
+from factory_tooling.runtime import finish_requirements, report_history
+from factory_tooling.runtime.assignment import (
+    dependency_results,
+    implement_packet,
+    projected_task,
+    worker_node,
+)
 from factory_tooling.runtime.contracts import Dispatch, Node, State, agent_key
 from factory_tooling.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
+    atomic_json,
     digest,
+    read_json,
     relative,
     require,
 )
@@ -119,6 +127,9 @@ def read_packet_bytes(
     agent = s["graph"]["agents"][agent_key(n)]
     profile = s["config"]["profiles"][agent["profile"]]
     worker_profile = {k: value for k, value in profile.items() if k in WORKER_PROFILE_FIELDS}
+    obligations = finish_requirements.requirements(
+        s["config"]["_project"]["data"], n, task, agent["role"]
+    )
     require(
         isinstance(packet, dict)
         and packet.get("workspace") == str(root)
@@ -131,9 +142,15 @@ def read_packet_bytes(
         and packet.get("model") == s["config"]["models"][profile["model"]]
         and packet.get("source") == s["graph"]["sources"][task["source"]]
         and packet.get("node") == worker_node(n)
-        and packet.get("task") == task,
+        and packet.get("task") == projected_task(task, n, obligations)
+        and packet.get("finish_requirements") == obligations
+        and packet.get("assignment_sha256") == report_history.identity(v["assignment"])
+        and packet.get("dependency_results") == dependency_results(s, n),
         "Packet content identity mismatch",
     )
+    for item in packet["dependency_results"].values():
+        if "report_ref" in item:
+            report_history.read(root, item["report_ref"])
     for entry in packet.get("instructions", []):
         if entry.get("reason") == "mandatory project reading":
             path = Path(entry["path"])
@@ -147,3 +164,81 @@ def read_packet_bytes(
                 "Packet mandatory instruction drift",
             )
     return data
+
+
+def receipt_path(root: Path, meta: dict[str, str]) -> Path:
+    return relative(root, f"{meta['path']}.{meta['sha256']}.delivery.json")
+
+
+def delivery_state(root: Path, meta: dict[str, str], total: int) -> dict[str, int]:
+    path = receipt_path(root, meta)
+    if not path.exists():
+        return {"acknowledged": 0, "served": 0}
+    record = read_json(path)
+    require(
+        isinstance(record, dict)
+        and record.get("packet") == meta
+        and type(record.get("acknowledged")) is int
+        and type(record.get("served")) is int
+        and 0 <= record["acknowledged"] <= record["served"] <= total
+        and record["served"] - record["acknowledged"] <= 1,
+        "Invalid packet delivery receipt",
+    )
+    return {"acknowledged": record["acknowledged"], "served": record["served"]}
+
+
+def acknowledgement(chunks: list[str], ordinal: int) -> str:
+    return f"{ordinal}:{digest(chunks[ordinal - 1].encode('utf-8'))}"
+
+
+def serve_chunk(
+    root: Path, meta: dict[str, str], chunks: list[str], ordinal: int, received: str | None
+) -> None:
+    require(type(ordinal) is int and 1 <= ordinal <= len(chunks), "Invalid packet chunk")
+    expected = acknowledgement(chunks, ordinal - 1) if ordinal > 1 else None
+    require(received == expected, "Acknowledge the preceding chunk ordinal and digest")
+    progress = delivery_state(root, meta, len(chunks))
+    require(
+        ordinal <= progress["served"] + 1,
+        "Chunk was not served in order; restart at chunk 1 if delivery receipt was lost",
+    )
+    updated = {
+        "served": max(ordinal, progress["served"]),
+        "acknowledged": max(ordinal - 1, progress["acknowledged"]),
+    }
+    if updated != progress:
+        atomic_json(receipt_path(root, meta), {"packet": meta, **updated})
+
+
+def material_digest(data: bytes) -> str:
+    packet = json.loads(data)
+    return report_history.identity(
+        {
+            "instructions": [(entry["path"], entry["sha256"]) for entry in packet["instructions"]],
+            "report_references": [
+                item["report_ref"]
+                for item in packet["dependency_results"].values()
+                if "report_ref" in item
+            ],
+        }
+    )
+
+
+def confirm_delivery(
+    root: Path, meta: dict[str, str], data: bytes, received: str, materials: str
+) -> None:
+    chunks = packet_chunks(data)
+    final = len(chunks)
+    require(
+        received == acknowledgement(chunks, final) and materials == material_digest(data),
+        "Confirm final chunk ordinal/digest and mandatory material set",
+    )
+    progress = delivery_state(root, meta, final)
+    require(
+        progress["served"] == final and progress["acknowledged"] >= final - 1,
+        "Packet chunks must be received in order before confirmation",
+    )
+    if progress["acknowledged"] != final:
+        atomic_json(
+            receipt_path(root, meta), {"packet": meta, "served": final, "acknowledged": final}
+        )

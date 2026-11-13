@@ -48,7 +48,7 @@ Do not run multiple active turns in one session or duplicate an uncertain reques
 
 Parallel writers need nonoverlapping ownership. All shared build, generation
 and project checks share the serialized `project-checks` resource. Before any
-`run-check` invocation, inspect the ledger and wait for every outstanding native
+`run-check` invocation, use `workflow.py next` and wait for every outstanding native
 packet confirmation, including other nodes. A ready check reservation alone
 does not clear this delivery gate. Authoritative verification waits for every relevant writer. Update affected docs/specs before
 final verification. Reuse the same suitable logical agent across related steps,
@@ -102,3 +102,12 @@ review kind, docs updates, unresolved work and history path. Missing checks are
 `NOT_RUN`/`BLOCKED`, never success. Canonical instructions are English;
 user-facing reports follow dialogue language; history follows task/project language.
 Internal messages use the shared communication contract.
+
+
+After meaningful events and on resumed entry, reconcile `workflow.py next`.
+Check recorded sessions, dispatches and commands before repeat requests.
+Read and process new terminal reports once per dispatch. Acknowledge with
+`ack-result`. Claim ready work, accept eligible nodes and wait on active work.
+Route permitted corrections with current evidence. Report material progress in
+commentary. Respect user pause/stop. Native launches and wakeups require the
+host coordinator. Final completion follows successful archive.

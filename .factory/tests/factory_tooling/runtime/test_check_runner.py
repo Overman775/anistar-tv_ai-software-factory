@@ -198,19 +198,19 @@ class CheckRunnerTests(unittest.TestCase):
             )
         }
         with self.assertRaisesRegex(Invalid, "outstanding native packet"):
-            f.ledger.run_check(node, "behavior")
-        with self.assertRaisesRegex(Invalid, "served in order"):
+            f.ledger.run_check(node, "behavior", "superseding-attempt")
+        with self.assertRaisesRegex(Invalid, "Confirm final chunk"):
             f.ledger.confirm_packet(node, meta)
         chunk = f.ledger.read_packet(node, meta, 1)
         self.assertEqual(chunk["total"], prepared["diagnostics"]["chunks"])
         self.assertEqual((f.root / meta["path"]).stat().st_size, prepared["diagnostics"]["bytes"])
         for ordinal in range(2, chunk["total"] + 1):
-            f.ledger.read_packet(node, meta, ordinal)
+            chunk = f.ledger.read_packet(node, meta, ordinal, chunk["acknowledgement"])
         with self.assertRaisesRegex(Invalid, "bootstrap mismatch"):
             f.ledger.confirm_packet(node, {**meta, "dispatch_id": "old"})
         with self.assertRaisesRegex(Invalid, "outstanding native packet"):
             f.ledger.run_check(node, "behavior")
-        f.ledger.confirm_packet(node, meta)
+        f.ledger.confirm_packet(node, meta, chunk["acknowledgement"], chunk["materials"])
         self.assertEqual("PASS", f.ledger.run_check(node, "behavior")["result"])
         self.assertEqual(1, len(f.ledger.read()["executions"]))
 
@@ -258,11 +258,11 @@ class CheckRunnerTests(unittest.TestCase):
         )
         f.ledger.bind(node, "explorer", model)
         for ordinal in range(2, chunk["total"] + 1):
-            f.ledger.read_packet(node, meta, ordinal)
+            chunk = f.ledger.read_packet(node, meta, ordinal, chunk["acknowledgement"])
         with self.assertRaisesRegex(Invalid, "outstanding native packet"):
             f.ledger.run_check("verify-label", "behavior")
         self.assertFalse(f.ledger.read().get("executions"))
-        f.ledger.confirm_packet(node, meta)
+        f.ledger.confirm_packet(node, meta, chunk["acknowledgement"], chunk["materials"])
         self.assertEqual("PASS", f.ledger.run_check("verify-label", "behavior")["result"])
         self.assertEqual(1, len(f.ledger.read()["executions"]))
 
@@ -373,7 +373,7 @@ class CheckRunnerTests(unittest.TestCase):
         (f.root / "ordinary-input.txt").write_text("changed")
         with self.assertRaisesRegex(Invalid, "Runner evidence invalidated"):
             f.ledger.finish(node, report)
-        f.ledger.run_check(node, "behavior")
+        f.ledger.run_check(node, "behavior", "fresh-input")
         f.ledger.finish(node, report)
         self.assertEqual("blocked", f.ledger.read()["nodes"][node]["status"])
 
@@ -484,7 +484,8 @@ class CheckRunnerTests(unittest.TestCase):
         self.assertEqual("BLOCKED", result["result"])
         self.assertIsNone(result["exit_code"])
         self.assertIn("started", (f.root / result["evidence"]).read_text())
-        self.assertFalse((f.ledger.dir / "workflow.lock").exists())
+        with f.ledger.locked():
+            self.assertTrue((f.ledger.dir / "workflow.lock").exists())
 
     def test_missing_binary_is_blocked(self) -> None:
         f = self.f
@@ -523,7 +524,7 @@ class CheckRunnerTests(unittest.TestCase):
         )
         first = f.ledger.run_check("verify-label", "behavior")
         (f.root / "fail.flag").touch()
-        latest = f.ledger.run_check("verify-label", "behavior")
+        latest = f.ledger.run_check("verify-label", "behavior", "intentional-rerun")
         self.assertEqual("FAIL", latest["result"])
         with self.assertRaisesRegex(Invalid, "superseded"):
             f.ledger.finish("verify-label", self.report(first))
@@ -554,9 +555,11 @@ class CheckRunnerTests(unittest.TestCase):
         result = f.ledger.run_check("verify-label", "behavior")
         s = f.ledger.read()
         s["executions"][result["execution_id"]]["status"] = "RUNNING"
+        (f.root / (result["evidence"] + ".owner.json")).unlink()
         atomic_json(f.ledger.path, s)
+        self.assertEqual("RUNNING", f.ledger.run_check("verify-label", "behavior")["result"])
         with self.assertRaisesRegex(Invalid, "Unresolved command"):
-            f.ledger.run_check("verify-label", "behavior")
+            f.ledger.run_check("verify-label", "behavior", "new-request")
         with self.assertRaisesRegex(Invalid, "not passed"):
             f.ledger.finish("verify-label", self.report(result))
 
@@ -574,22 +577,27 @@ class CheckRunnerTests(unittest.TestCase):
         with f.ledger.locked(), self.assertRaisesRegex(Invalid, "Ledger locked"):
             Ledger(f.root).run_check("verify-label", "behavior")
 
-    def test_keyboard_interrupt_is_recorded_without_success(self) -> None:
-        f = self.ready("import time; time.sleep(30)")
+    def test_interrupted_coordinator_leaves_reconcilable_actual_result(self) -> None:
+        f = self.ready()
         original_wait = subprocess.Popen.wait
-        calls = []
 
-        def interrupted_once(process: subprocess.Popen[bytes], *args: Any, **kwargs: Any) -> int:
-            calls.append(True)
-            if len(calls) == 1:
-                raise KeyboardInterrupt()
-            return original_wait(process, *args, **kwargs)
+        def wait_then_interrupt(process: subprocess.Popen[bytes], *args: Any, **kwargs: Any) -> int:
+            original_wait(process, *args, **kwargs)
+            raise KeyboardInterrupt()
 
-        with patch.object(subprocess.Popen, "wait", interrupted_once):
-            result = f.ledger.run_check("verify-label", "behavior")
-        self.assertEqual("BLOCKED", result["result"])
-        record = f.ledger.read()["executions"][result["execution_id"]]
-        self.assertEqual("KeyboardInterrupt", record["error"])
+        with (
+            patch.object(subprocess.Popen, "wait", wait_then_interrupt),
+            self.assertRaises(KeyboardInterrupt),
+        ):
+            f.ledger.run_check("verify-label", "behavior", "interrupted")
+        state = f.ledger.read()
+        [execution_id] = state["executions"]
+        self.assertEqual("RUNNING", state["executions"][execution_id]["status"])
+        with self.assertRaisesRegex(Invalid, "Unresolved project commands"):
+            f.ledger.archive("cancelled", "test")
+        result = f.ledger.run_check("verify-label", "behavior", "interrupted")
+        self.assertEqual(("PASS", 0), (result["result"], result["exit_code"]))
+        self.assertEqual(result, f.ledger.run_check("verify-label", "behavior", "interrupted"))
 
     def test_source_change_during_command_is_blocked(self) -> None:
         (self.f.root / "request.md").write_text("original request")

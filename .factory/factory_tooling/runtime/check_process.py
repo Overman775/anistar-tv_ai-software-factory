@@ -65,6 +65,7 @@ def run_process(
     stderr: Path | None = None,
     input_bytes: bytes | None = None,
     popen: Spawn | None = None,
+    separate_group: bool = True,
 ) -> ProcessResult:
     """Return exit_code/error facts, never a gate verdict.
 
@@ -91,7 +92,7 @@ def run_process(
                 stdin=stdin,
                 stdout=stdout,
                 stderr=err,
-                start_new_session=os.name == "posix",
+                start_new_session=os.name == "posix" and separate_group,
             )
             try:
                 if on_started is not None:
@@ -99,7 +100,7 @@ def run_process(
                 code = process.wait(timeout=execution["timeout_seconds"])
             except BaseException:
                 try:
-                    if os.name == "posix":
+                    if os.name == "posix" and separate_group:
                         os.killpg(process.pid, signal.SIGKILL)
                     else:
                         process.kill()

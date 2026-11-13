@@ -3,7 +3,7 @@
 Implement command nodes require an existing project-checks reservation and profile
 command capability. This file grants neither. Read actual project command definitions
 and `.factory/skills/factory-implement/references/project-checks.md` before commands.
-Run required commands with `sh .factory/tools/python.sh .factory/tools/workflow.py run-check NODE CHECK_ID`.
+Run required commands with `sh .factory/tools/python.sh .factory/tools/workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`.
 Copy its returned result unchanged into checks, or select its execution ID in
 `prepare-report` and leave it out of draft checks. Do not do both: duplicate
 selected check IDs are rejected. CLI ok:true means a saved record,
@@ -11,9 +11,9 @@ not a successful check: inspect result.result. Do not call claim/bind/finish/ret
 
 Keep and wait on the host command session. Never duplicate a yielded/running
 command. FAIL/BLOCKED or lost process state returns to the coordinator for diagnosis;
-no blind retries or stale-lock removal. Commands run synchronously and hold the ledger
-lock. POSIX timeout/interrupt kills the process group; other hosts must confirm
-remaining descendants stopped. Use foreground checks, not detached services.
+no blind retries or stale-lock removal. The CLI waits outside the ledger lock. Use the same request ID after lost output.
+Intentional reruns use a new ID. The coordinator reconciles process ownership
+before releasing the resource. Use foreground commands within the runner tree.
 
 Verify supplies all required checks plus applicable static/tests/docs evidence or
 justified not_applicable reasons; high risk cannot skip tests. Required checks
@@ -23,7 +23,7 @@ independent APPROVE. Correct assertions and nonzero test selection need inspecti
 
 `verify` returns each required check's exact `id/category/kind/criteria/method`, plus
 `execution`, command/cwd/exit code, `execution_id` and the log reference returned
-by `workflow.py run-check NODE CHECK_ID`, or an observation. Copy runner results
+by `workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`, or an observation. Copy runner results
 unchanged; do not manufacture command evidence. Required commands need an
 `execution` definition before intake. `argv` is an argument array (no implicit
 shell), `cwd` is workspace-relative, timeout is a positive integer in seconds
@@ -78,3 +78,18 @@ and findings from other roles still require parent/reviewer reconciliation.
 Runner receipts cover declared commands/inputs, not all external state. The ledger
 is not a tamper-proof sandbox. Observations/additional diagnostics still require
 honest evidence; full command recovery belongs to the coordinator.
+
+
+An assigned check may declare registered ordered `execution.stages` and an empty
+`argv`. The runner executes each registered read-only full stage once and records distinct
+child receipts, command results, input hashes and logs under the parent execution.
+Use `check-results EXECUTION_ID` to retrieve the parent and child results. Copy each actual receipt ID into `prepare-report`; a parent receipt alone cannot
+satisfy child gates. A stage that never ran has no receipt. Judge uses its own
+assignment. A `codegen` command may declare exact owned `outputs`; the runner
+records before/after hashes and checks immutability of other declared inputs.
+
+A registered composite test stage supplies one log record
+`FACTORY_TEST_SELECTION {"mode":"full","selected":N,"completed":N}` from its
+actual test runner or wrapper. N is positive and reflects completed tests. A
+missing, filtered or incomplete selection blocks the composite. Generation
+with declared outputs uses a separate assigned writer command.

@@ -20,7 +20,7 @@ question's acceptance policy; tune on labeled project examples and error costs.
 
 ## Accepted answers
 
-Record project applicability answers by definition ID in task.policy_decisions. Initial profile Choice answers belong to their Implement node in profile_selection; see the workflow contract. All typed answers need
+Record project applicability answers by definition ID in task.policy_decisions. All typed answers need
 nonempty reason (actual evidence/paths) and source (agent identity or provider/model).
 Exact shapes; probability maps cover every choice or level and sum to 1:
 

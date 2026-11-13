@@ -12,11 +12,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
 
+from factory_tooling.runtime import report_history
 from factory_tooling.runtime import review_findings as review_findings
 from factory_tooling.runtime.acceptance import ensure as ensure
+from factory_tooling.runtime.contracts import Dispatch, Node, Task
 from factory_tooling.runtime.contracts import EscalationPolicy as EscalationPolicy
 from factory_tooling.runtime.contracts import State as State
-from factory_tooling.runtime.contracts import Task
 from factory_tooling.runtime.contracts import agent_key as agent_key
 from factory_tooling.runtime.escalation_policy import CAUSES as CAUSES
 from factory_tooling.runtime.escalation_policy import configure as configure
@@ -25,8 +26,8 @@ from factory_tooling.runtime.escalation_policy import limits as limits
 from factory_tooling.runtime.workflow_core import digest as digest
 from factory_tooling.runtime.workflow_core import snapshot as snapshot
 from factory_tooling.runtime.workflow_graph import ancestors as ancestors
+from factory_tooling.runtime.workflow_graph import validate_assignment_lineage
 from factory_tooling.runtime.workflow_graph import validate_graph as validate_graph
-from factory_tooling.runtime.workflow_graph import validate_profile_selections
 
 
 class CorrectionLedger(Protocol):
@@ -49,7 +50,7 @@ def correction_decision(
     elif used >= budget:
         target, decision = "human", "human"
     else:
-        if kind == "complexity" or failures >= policy["after_failed_attempts"]:
+        if failures >= policy["after_failed_attempts"]:
             target = policy["to"]
         decision = (
             "human" if target == "human" else ("escalate" if target != profile_id else "retry")
@@ -79,7 +80,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
             "Correction requires exact identities, cause, kind, reason, terminal_evidence and handoff"
         )
     ensure(
-        request["kind"] in {"quality", "complexity", "environment", "requirements"},
+        request["kind"] in {"quality", "environment", "requirements"},
         "Unknown diagnosis",
     )
     ensure(request["cause"] in CAUSES, "Unknown correction cause")
@@ -119,10 +120,17 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
         and current.get("profile") == profile_id,
         "Stale author assignment",
     )
-    ensure(
-        evidence.get("dispatch_id") == request["evidence_dispatch_id"], "Stale correction evidence"
+    historical = report_history.historical(
+        ledger.root, state, request["evidence_node"], request["evidence_dispatch_id"]
     )
-    report = evidence.get("report", {})
+    report = historical["report"]
+    original = historical["assignment"]
+    if not isinstance(report, dict) or not isinstance(original, dict):
+        raise ValueError("Invalid historical report or assignment")
+    ensure(
+        report.get("terminal") is True and report.get("outcome") in {"FAIL", "BLOCKED"},
+        "Need terminal failed/blocked report",
+    )
     integration_evidence = evidence_node["task"] != task_id
     if integration_evidence:
         ensure(
@@ -131,29 +139,53 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
             and task_id in review_findings.review_tasks(state, evidence_node["task"]),
             "Cross-task correction needs integration review evidence",
         )
-        ensure(
-            any(
-                item.get("owner_node_id") == node_id
-                and item.get("status") == "open"
-                and item.get("reviewed", {}).get("dispatch_id") == request["evidence_dispatch_id"]
-                and item["reviewed"]["revision"] == state["revision"]
-                for item in state.get("review_findings", {}).get(task_id, {}).values()
-            ),
-            "Integration correction needs a current finding assigned to this author",
-        )
     ensure(
         (evidence_node["task"] == task_id or integration_evidence)
         and (node_id == evidence_node["id"] or node_id in ancestors(nodes, evidence_node["id"])),
         "Evidence must belong to this task or integration and depend on the corrected work",
     )
+    relevant_findings = [
+        item
+        for item in state.get("review_findings", {}).get(task_id, {}).values()
+        if item.get("owner_node_id") == node_id
+        and any(
+            event.get("dispatch_id") == request["evidence_dispatch_id"] for event in item["history"]
+        )
+    ]
+    if relevant_findings or integration_evidence:
+        ensure(
+            any(
+                item.get("status") == "open"
+                and item.get("reviewed", {}).get("dispatch_id") == request["evidence_dispatch_id"]
+                for item in relevant_findings
+            ),
+            "Correction needs an unresolved current finding assigned to this author",
+        )
     ensure(
-        evidence["status"] == "blocked" and report.get("terminal") is True,
-        "Need terminal failed/blocked report",
+        evidence.get("dispatch_id") == request["evidence_dispatch_id"]
+        and evidence["status"] == "blocked",
+        "Historical failure was superseded; need a current unresolved obligation",
     )
     evidence_task = state["graph"]["tasks"][evidence_node["task"]]
+    original_scope = original["task"]["scope"]
     ensure(
-        report.get("files") == snapshot(ledger.root, evidence_task["scope"]),
-        "Correction evidence is stale",
+        set(original_scope) == set(evidence_task["scope"]),
+        "Historical scope requires current verification",
+    )
+    ensure(
+        original["task"]["required_checks"] == evidence_task["required_checks"],
+        "Historical requirements need current verification",
+    )
+    ensure(
+        report.get("files") == snapshot(ledger.root, original_scope),
+        "Correction evidence is stale for current files; historical report retained",
+    )
+    ensure(
+        not any(
+            r["kind"] == "quality" and r["node_id"] == node_id and r["identity"][2:] == identity[2:]
+            for r in state.get("corrections", [])
+        ),
+        "Failure incident already counted",
     )
     ledger.check_sources(state, state["graph"]["tasks"][task_id])
     ledger.check_sources(state, evidence_task)
@@ -162,7 +194,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
         and report.get("source_hash") == state["graph"]["sources"][evidence_task["source"]]["hash"],
         "Source drift requires current evidence after re-intake",
     )
-    if request["kind"] in {"quality", "complexity"}:
+    if request["kind"] == "quality":
         ensure(
             report.get("stage_result")
             not in {
@@ -195,6 +227,18 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
                 "BLOCKED_UNTESTABLE",
             },
             "Diagnose the real blocker first",
+        )
+        ensure(
+            report.get("unsuccessful_attempt")
+            or report.get("evidence")
+            or any(
+                c.get("execution_id") and c.get("result") == "FAIL"
+                for c in report.get("checks", [])
+            )
+            or any(
+                item.get("blocking") and item.get("evidence") for item in report.get("findings", [])
+            ),
+            "Quality correction needs evidence of actual unsuccessful work",
         )
         if report.get("stage_result") == "FAIL_CODE":
             ensure(
@@ -266,12 +310,10 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
                     )
             record["agents"] = replacements
             validate_graph(next_graph, state["config"], ledger.root)
-            validate_profile_selections(
+            validate_assignment_lineage(
                 next_graph,
                 state["config"],
                 [*state.get("corrections", []), record],
-                state["events"],
-                state["graph"],
             )
             state["events"].append(
                 dict(at=time.time(), event="correction_graph", previous_graph=state["graph"])
@@ -286,8 +328,6 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
                 dict(at=time.time(), event="invalidated", node=key, previous=old)
             )
             state["nodes"][key] = dict(status="pending", attempt=old["attempt"])
-        # Complexity is a terminal inability before a verified failure; the finite
-        # profile chain limits this transfer. A quality correction spends a retry.
         if request["kind"] == "quality":
             state["counters"][task_id + ":" + request["cause"]] = used + 1
     record["budget_cause"] = budget_cause
@@ -295,6 +335,20 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, request: Any) 
     state.setdefault("corrections", []).append(record)
     ledger.save(state, "correction_decided", node=node_id, decision=decision, target=target)
     return record
+
+
+def possible_actions(state: State, node: Node, dispatch: Dispatch) -> list[str]:
+    """Show coordinator operations whose diagnosis still needs evidence."""
+    report = dispatch.get("report", {})
+    if report.get("stage_result") == "APPROVAL_REQUIRED":
+        return ["resume-approved"]
+    if node["task"] in state.get("escalation_stops", {}):
+        return ["resume-task"]
+    if report.get("observed_source_drift"):
+        return ["reintake"]
+    if report.get("terminal") and dispatch.get("role") in {"developer", "test-writer", "judge"}:
+        return ["correct"]
+    return ["retry"]
 
 
 def worker_context(state: State, task_id: str) -> dict[str, Any]:

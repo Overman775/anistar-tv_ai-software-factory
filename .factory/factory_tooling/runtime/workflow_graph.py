@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from factory_tooling.project.profile_rules import (
-    boundary_gates,
     check_task,
     project_checks,
 )
-from factory_tooling.runtime import acceptance
+from factory_tooling.runtime import acceptance, finish_requirements
 from factory_tooling.runtime.contracts import (
     Config,
+    Graph,
     Node,
     State,
     agent_key,
@@ -101,6 +101,17 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
         for check in t["required_checks"]:
             if check["kind"] != "observation" and check["execution"]["cwd"] != ".":
                 relative(workspace, check["execution"]["cwd"])
+        for check in t["required_checks"]:
+            if check["kind"] == "observation":
+                continue
+            execution = check["execution"]
+            for path in execution.get("inputs", []) + execution.get("outputs", []):
+                target = relative(workspace, path)
+                require(not target.is_dir(), "Check paths must name exact files")
+            require(
+                not execution.get("outputs") or check["kind"] == "codegen",
+                "Only code generation can declare outputs",
+            )
         require(t["risk"] in {"low", "moderate", "high"}, "Invalid task risk")
         require(type(t["independent_review"]) is bool, "Explicit review decision required")
         require(
@@ -153,17 +164,13 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
                 "project-checks" in n.get("resources", []),
                 "Verification needs project-checks lock",
             )
-        gates = boundary_gates(
-            config["_project"]["data"], "implement." + n["stage"], tasks[n["task"]]
-        )
-        ids = {cid for gate in gates for cid in gate.get("checks", [])}
-        if any(
-            c["id"] in ids and c["kind"] != "observation"
-            for c in tasks[n["task"]]["required_checks"]
-        ):
-            require(
-                "project-checks" in n.get("resources", []),
-                "Stage gate needs project-checks reservation",
+        if n["stage"] != "accept":
+            acceptance_guard(
+                finish_requirements.requirements,
+                config["_project"]["data"],
+                n,
+                tasks[n["task"]],
+                agents[agent_key(n)]["role"],
             )
         if n["stage"] == "review":
             require(agents[agent_key(n)]["role"] == "judge", "Integrated review needs Judge")
@@ -192,12 +199,44 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
         upstream = ancestors(nodes, accept)
         require(set(own) - {accept} <= upstream, "Task has work outside acceptance path")
         verify = [k for k, n in own.items() if n["stage"] == "verify"]
-        require(verify, "Missing final verification")
+        full_verify = [k for k in verify if "required_check_ids" not in nodes[k]]
+        require(full_verify, "Missing full final verification")
         writers = {k for k, n in own.items() if n.get("owns")}
         require(
-            any(writers <= ancestors(nodes, v) for v in verify),
+            any(writers <= ancestors(nodes, v) for v in full_verify),
             "Verification must follow all writers",
         )
+        for check in task["required_checks"]:
+            outputs = check.get("execution", {}).get("outputs", [])
+            if not outputs:
+                continue
+            producers = [
+                n
+                for n in own.values()
+                if n.get("agent")
+                and check
+                in finish_requirements.requirements(
+                    config["_project"]["data"], n, task, agents[agent_key(n)]["role"]
+                )["required_checks"]
+            ]
+            require(
+                len(producers) == 1
+                and set(outputs) <= set(task["scope"])
+                and set(outputs) <= set(producers[0].get("owns", [])),
+                "Generation needs one assigned writer owning every exact output path",
+            )
+            require(
+                all(
+                    any(
+                        output in final_check.get("execution", {}).get("inputs", [])
+                        and not final_check.get("execution", {}).get("outputs")
+                        and final_check.get("execution", {}).get("mode", "full") == "full"
+                        for final_check in task["required_checks"]
+                    )
+                    for output in outputs
+                ),
+                "Generated outputs need a read-only full verification check declaring each output input",
+            )
         reviews = [k for k, n in own.items() if n["stage"] == "review"]
         if task["independent_review"]:
             require(
@@ -214,7 +253,7 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
                     any(
                         agents[nodes[v]["agent"]]["role"] == "judge"
                         and writers <= ancestors(nodes, v)
-                        for v in verify
+                        for v in full_verify
                     ),
                     "Final project checks require independent Judge verification",
                 )
@@ -287,108 +326,51 @@ def validate_graph(g: Any, config: Config, workspace: str | Path | None = None) 
     return cast(dict[str, Node], nodes)
 
 
-def validate_profile_selections(
-    g: Any,
-    config: Config,
-    corrections: list[Any] | None = None,
-    history: list[Any] | None = None,
-    previous_graph: Any = None,
+def validate_assignment_lineage(
+    graph: Graph, config: Config, corrections: list[dict[str, Any]] | None = None
 ) -> None:
-    """Validate coordinator choices and the node-specific correction chain."""
-    from factory_tooling.decisions.decision_contract import validate_answer
-
-    definitions = {d["id"]: d for d in config["_project"]["data"].get("decisions", [])}
-    for node in g["nodes"]:
+    """Every specialist starts at its group default; only registered corrections advance it."""
+    for node in graph["nodes"]:
+        require("profile_selection" not in node, "Initial profile choices are unsupported")
         if not node.get("agent"):
-            require("profile_selection" not in node, "Acceptance cannot select a profile")
             continue
-        agent = g["agents"][node["agent"]]
-        profile = config["profiles"][agent["profile"]]
-        decision = profile.get("initial_profile_decision")
-        if decision is None:
-            require("profile_selection" not in node, "No profile decision configured")
+        agent = graph["agents"][agent_key(node)]
+        if agent["role"] not in {"developer", "test-writer"}:
             continue
-        selection = node.get("profile_selection")
-        require(
-            isinstance(selection, dict)
-            and set(selection) == {"task_id", "node_id", "decision_id", "answer"},
-            "Profile selection required",
-        )
-        require(
-            selection["task_id"] == node["task"]
-            and selection["node_id"] == node["id"]
-            and selection["decision_id"] == decision,
-            "Profile selection identity mismatch",
-        )
-        definition = definitions[decision]
-        corrected = any(
-            r.get("task_id") == node["task"] and node["id"] in r.get("reassigned_nodes", [])
-            for r in corrections or []
-        )
-        prior_nodes = (previous_graph or g)["nodes"]
-        immediately_prior = next(
-            (n for n in prior_nodes if n["id"] == node["id"] and n["task"] == node["task"]), None
-        )
-        if (
-            corrected
-            and immediately_prior
-            and immediately_prior.get("profile_selection") == selection
-        ):
-            for event in history or []:
-                prior_graph, prior_config = (
-                    event.get("previous_graph"),
-                    event.get("previous_config"),
-                )
-                if not isinstance(prior_graph, dict) or not isinstance(prior_config, dict):
-                    continue
-                previous_node = next(
-                    (
-                        n
-                        for n in prior_graph["nodes"]
-                        if n["id"] == node["id"] and n["task"] == node["task"]
-                    ),
-                    None,
-                )
-                if previous_node and previous_node.get("profile_selection") == selection:
-                    prior_defs = {
-                        d["id"]: d for d in prior_config["_project"]["data"].get("decisions", [])
-                    }
-                    if decision in prior_defs:
-                        definition = prior_defs[decision]
-                        break
-        result = acceptance_guard(validate_answer, definition, selection["answer"])
-        selected = result["value"]
-        selected_agent = None
-        require(selected != "no-eligible-profile", "BLOCKED: no eligible profile")
-        retained = previous_graph is None or (
-            immediately_prior is not None
-            and immediately_prior.get("profile_selection") == selection
-        )
+        expected = config["_defaults"][agent["role"]]
+        logical_agent = None
         for record in corrections or []:
-            if (
-                retained
-                and record.get("task_id") == node["task"]
-                and node["id"] in record.get("reassigned_nodes", [])
-                and record.get("from_profile") == selected
-            ):
-                mapping = record.get("agents", {})
-                require(
-                    isinstance(mapping, dict) and len(mapping) == 1,
-                    "Invalid correction agent lineage",
-                )
-                origin, target = next(iter(mapping.items()))
-                require(
-                    selected_agent is None or selected_agent == origin,
-                    "Broken correction agent lineage",
-                )
-                selected_agent = target
-                selected = record["to_profile"]
+            if node["id"] not in record.get("reassigned_nodes", []):
+                continue
+            require(
+                record["task_id"] == node["task"] and record["from_profile"] == expected,
+                "Broken correction profile lineage",
+            )
+            mapping = record.get("agents", {})
+            require(
+                isinstance(mapping, dict) and len(mapping) == 1,
+                "Invalid correction agent lineage",
+            )
+            origin, target = next(iter(mapping.items()))
+            require(
+                logical_agent is None or logical_agent == origin,
+                "Broken correction agent lineage",
+            )
+            require(
+                graph["agents"].get(origin) == {"role": agent["role"], "profile": expected}
+                and graph["agents"].get(target)
+                == {"role": agent["role"], "profile": record["to_profile"]},
+                "Correction agent registration changed",
+            )
+            logical_agent = target
+            expected = record["to_profile"]
         require(
-            selected_agent is None or selected_agent == node["agent"], "Correction agent mismatch"
+            logical_agent is None or logical_agent == node["agent"],
+            "Correction agent mismatch",
         )
         require(
-            selected == agent["profile"],
-            "Profile selection does not authorize assignment",
+            agent["profile"] == expected,
+            f"Assignment requires profile {expected} from default/correction lineage",
         )
 
 

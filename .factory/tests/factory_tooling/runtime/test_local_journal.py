@@ -12,6 +12,8 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
+from factory_tooling.runtime import command_worker
+from factory_tooling.runtime.workflow_core import Invalid
 from tests.factory_tooling.runtime import test_workflow
 
 FACTORY = Path(__file__).resolve().parents[3]
@@ -283,12 +285,13 @@ class JournalCliTests(unittest.TestCase):
                 unlocked = False
                 while time.monotonic() < deadline:
                     state = json.loads(state_path.read_text())
-                    if (
-                        state["nodes"]["write-label"]["status"] == "reserved"
-                        and not lock_path.exists()
-                    ):
-                        unlocked = True
-                        break
+                    if state["nodes"]["write-label"]["status"] == "reserved":
+                        try:
+                            with command_worker.lock(lock_path):
+                                unlocked = True
+                                break
+                        except Invalid:
+                            pass
                     time.sleep(0.005)
                 db.rollback()
                 self.assertTrue(unlocked, "workflow lock held by diagnostic contention")

@@ -17,6 +17,7 @@ from factory_tooling.adapters.acpx_adapter import (
     prepare_prompt,
     run_operation,
 )
+from factory_tooling.runtime import report_history
 from factory_tooling.runtime.contracts import State, agent_key
 from factory_tooling.runtime.memory import read_task, resolve_evidence
 from factory_tooling.runtime.workflow import Ledger
@@ -91,10 +92,18 @@ class WorkflowTests(unittest.TestCase):
                         }
                     ]
                 )
-                if "project-checks" in n.get("resources", [])
+                if "checks" not in extra and "project-checks" in n.get("resources", [])
                 else []
             ),
-            "not_applicable": {"static": "Fixture has no Dart tools", "docs": "Fixture only"},
+            "not_applicable": {
+                kind: "Fixture lacks this evidence kind"
+                for kind in ("static", "tests", "docs")
+                if n["stage"] == "verify"
+                and kind not in {c["kind"] for c in task["required_checks"]}
+            },
+            **(
+                {"evidence": "Fixture inspected the reported behavior"} if outcome != "PASS" else {}
+            ),
             **extra,
         }
 
@@ -469,7 +478,7 @@ class WorkflowTests(unittest.TestCase):
         self.start("write-label")
         self.ledger.finish("write-label", self.report("write-label"))
         self.start("verify-label")
-        with self.assertRaisesRegex(Invalid, "verification commands"):
+        with self.assertRaisesRegex(Invalid, "Missing required check results"):
             self.ledger.finish("verify-label", self.report("verify-label", checks=[]))
 
     def test_acceptance_rejects_later_write(self) -> None:
@@ -714,6 +723,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "blocked")
 
     def parallel_graph(self) -> None:
+        self.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
         works = []
         for i in range(8):
             acp = i >= 4
@@ -768,6 +778,7 @@ class WorkflowTests(unittest.TestCase):
             self.ledger.bind("worker1", "shared", "gpt-6.1-sol")
 
     def fake_acp(self, code: int = 0) -> Path:
+        self.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
         binary = Path(sys.executable)
         self.transport_exit_code = code
         self.config["acpx"]["command"] = str(binary)
@@ -879,6 +890,71 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "running")
         with self.assertRaisesRegex(Invalid, "already submitted"):
             run_operation(self.ledger, "write-label", "prompt", run=self.transport)
+
+    def run_opencode_prompt_with_effort(
+        self, set_exit_code: int
+    ) -> tuple[dict[str, Any], dict[str, Any], list[list[str]]]:
+        def configure(raw: dict[str, Any]) -> None:
+            raw["acpx"]["command"] = sys.executable
+            raw["acpx"]["connections"]["opencode"] = {
+                "command": sys.executable,
+                "args": ["acp"],
+                "max_parallel_agents": 1,
+            }
+            raw["adapters"]["opencode"] = {
+                **raw["adapters"]["zcode"],
+                "harness": "opencode",
+                "connection": "opencode",
+            }
+            raw["models"]["openrouter-glm"] = {
+                "id": "openrouter/z-ai/glm-5.3",
+                "effort": "max",
+            }
+            raw["profiles"]["generalist"]["variants"]["generalist"].update(
+                adapter="opencode", model="openrouter-glm"
+            )
+
+        self.config = load_config(self.config_file(configure))
+        install_connection(self.config, self.root, "opencode")
+        self.init()
+        node = "write-label"
+        self.ledger.claim(node)
+        prepared = prepare_prompt(self.ledger, node)
+        calls: list[list[str]] = []
+
+        def fake_process(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, set_exit_code if "set" in argv else 0)
+
+        run_operation(self.ledger, node, "create", run=fake_process)
+        self.ledger.bind(node, prepared["session"], "openrouter/z-ai/glm-5.3")
+        calls.clear()
+        result = run_operation(self.ledger, node, "prompt", run=fake_process)
+        return prepared, result, calls
+
+    def test_opencode_sets_effort_before_prompt_in_the_same_session(self) -> None:
+        prepared, result, calls = self.run_opencode_prompt_with_effort(set_exit_code=0)
+        session = prepared["session"]
+        self.assertEqual(
+            [argv[-6:] for argv in calls],
+            [
+                ["opencode", "set", "effort", "max", "-s", session],
+                ["opencode", "prompt", "-s", session, "--file", prepared["prompt"]],
+            ],
+        )
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "running")
+
+    def test_opencode_effort_failure_skips_prompt_and_leaves_attempt_unknown(
+        self,
+    ) -> None:
+        prepared, result, calls = self.run_opencode_prompt_with_effort(set_exit_code=9)
+        self.assertEqual(
+            [argv[-6:] for argv in calls],
+            [["opencode", "set", "effort", "max", "-s", prepared["session"]]],
+        )
+        self.assertEqual(result["exit_code"], 9)
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "unknown")
 
     def test_create_failure_is_unknown_and_cannot_be_recreated(self) -> None:
         self.fake_acp(code=2)
@@ -1372,9 +1448,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(results["verify-label"]["report"]["checks"][0]["result"], "PASS")
         self.assertNotIn("files", results["write-label"]["report"])
         reference = results["write-label"]["report_ref"]
-        stored = read_json(self.root / reference["path"])
-        for key in reference["keys"]:
-            stored = stored[key]
+        stored = read_json(self.root / reference["path"])["report"]
         self.assertEqual(stored["dispatch_id"], reference["dispatch_id"])
         self.assertEqual(stored["files"], snapshot(self.root, ["lib/example.dart"]))
         self.assertEqual(before, self.ledger.read())
@@ -1387,7 +1461,9 @@ class WorkflowTests(unittest.TestCase):
         self.start("verify-label")
         packet = self.ledger.packet("verify-label")
         self.assertEqual(
-            packet["dependency_results"]["write-label"]["report"],
+            report_history.read(
+                self.root, packet["dependency_results"]["write-label"]["report_ref"]
+            )["report"],
             self.ledger.read()["nodes"]["write-label"]["report"],
         )
 

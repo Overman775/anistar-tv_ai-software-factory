@@ -4,19 +4,17 @@
 from __future__ import annotations
 
 import json
-import os
 import platform
 import shlex
 import shutil
 import time
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager
 from copy import deepcopy
 
 # Direct CLI execution and import-by-path use the same tool modules.
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from factory_tooling.decisions.decision_contract import (
     preserve_obligations as preserve_obligations,
@@ -28,13 +26,19 @@ from factory_tooling.project.profile_io import load_profile, parse_yaml
 from factory_tooling.project.profile_rules import boundary_gates as boundary_gates
 from factory_tooling.project.profile_rules import project_checks as project_checks
 from factory_tooling.runtime import acceptance as acceptance
-from factory_tooling.runtime import approval, run_archive
+from factory_tooling.runtime import (
+    approval,
+    command_worker,
+    finish_requirements,
+    report_history,
+    run_archive,
+)
 from factory_tooling.runtime import escalation as escalation
 from factory_tooling.runtime import review_findings as review_findings
 from factory_tooling.runtime import transition_gates as transition_gates
 from factory_tooling.runtime.assignment import implement_packet as implement_packet
 from factory_tooling.runtime.assignment import worker_node
-from factory_tooling.runtime.check_evidence import check_receipts
+from factory_tooling.runtime.check_evidence import check_generated, check_receipts
 from factory_tooling.runtime.check_process import execute_check as execute_check
 from factory_tooling.runtime.contracts import Check as Check
 from factory_tooling.runtime.contracts import Config as Config
@@ -42,14 +46,20 @@ from factory_tooling.runtime.contracts import Dispatch as Dispatch
 from factory_tooling.runtime.contracts import ExecutionReceipt as ExecutionReceipt
 from factory_tooling.runtime.contracts import Graph as Graph
 from factory_tooling.runtime.contracts import Node as Node
+from factory_tooling.runtime.contracts import Report
 from factory_tooling.runtime.contracts import State as State
 from factory_tooling.runtime.contracts import Task as Task
 from factory_tooling.runtime.contracts import agent_key as agent_key
 from factory_tooling.runtime.packet_io import (
+    acknowledgement,
+    confirm_delivery,
     freeze_packet,
+    material_digest,
     packet_chunks,
     packet_diagnostics,
     read_packet_bytes,
+    receipt_path,
+    serve_chunk,
 )
 from factory_tooling.runtime.state_io import parse_state
 from factory_tooling.runtime.workflow_config import (
@@ -59,7 +69,6 @@ from factory_tooling.runtime.workflow_config import check_config as check_config
 from factory_tooling.runtime.workflow_config import freeze_project as freeze_project
 from factory_tooling.runtime.workflow_config import load_config as load_config
 from factory_tooling.runtime.workflow_config import pool as pool
-from factory_tooling.runtime.workflow_config import validate_profile_decisions
 from factory_tooling.runtime.workflow_core import Invalid as Invalid
 from factory_tooling.runtime.workflow_core import acceptance_guard as acceptance_guard
 from factory_tooling.runtime.workflow_core import atomic_json as atomic_json
@@ -71,8 +80,8 @@ from factory_tooling.runtime.workflow_core import snapshot as snapshot
 from factory_tooling.runtime.workflow_graph import ancestors as ancestors
 from factory_tooling.runtime.workflow_graph import diagram as diagram
 from factory_tooling.runtime.workflow_graph import overlaps as overlaps
+from factory_tooling.runtime.workflow_graph import validate_assignment_lineage
 from factory_tooling.runtime.workflow_graph import validate_graph as validate_graph
-from factory_tooling.runtime.workflow_graph import validate_profile_selections
 from factory_tooling.runtime.workflow_sources import lock_source as lock_source
 
 # Compatibility exports: existing imports and command entry points stay valid.
@@ -87,6 +96,41 @@ def has_prior_dispatch_evidence(state: State, node_id: str) -> bool:
         node_id in record.get("reassigned_nodes", []) or record.get("node_id") == node_id
         for record in state.get("corrections", [])
     )
+
+
+def validate_assignment_change(state: State, graph: Graph) -> None:
+    validate_assignment_lineage(graph, state["config"], state.get("corrections", []))
+    old = state["graph"]
+    new_nodes = {n["id"]: n for n in graph["nodes"]}
+    old_ids = {n["id"] for n in old["nodes"]}
+    for previous in old["nodes"]:
+        node_id = previous["id"]
+        require(node_id in new_nodes, "Retain stable node IDs/history")
+        node = new_nodes[node_id]
+        require(
+            node["task"] == previous["task"] and node["stage"] == previous["stage"],
+            "Keep task/stage identity for existing nodes",
+        )
+        if not (state["nodes"][node_id]["attempt"] or has_prior_dispatch_evidence(state, node_id)):
+            continue
+        aid = previous.get("agent")
+        if aid is None:
+            continue
+        assignment = old["agents"][aid]
+        require(
+            node.get("agent") == aid and graph["agents"].get(aid) == assignment,
+            "Started assignments require correct",
+        )
+        if assignment["role"] not in {"developer", "test-writer"}:
+            continue
+        owns = previous.get("owns", [])
+        require(set(owns) <= set(node.get("owns", [])), "Keep started assignment ownership")
+        for added in (n for n in graph["nodes"] if n["id"] not in old_ids):
+            if added["task"] == previous["task"] and overlaps(owns, added.get("owns", [])):
+                require(
+                    node_id in ancestors(new_nodes, added["id"]),
+                    "New overlapping work must follow the started assignment",
+                )
 
 
 def preserve_task_guards(before: Task, after: Task) -> None:
@@ -117,21 +161,8 @@ class Ledger:
         self.diagnostic_state: dict[str, Any] | None = None
         self.diagnostic_attempt: tuple[str, str] | None = None
 
-    @contextmanager
-    def locked(self) -> Iterator[None]:
-        directory = relative(self.root, ".factory/memory/state")
-        lock = relative(self.root, ".factory/memory/state/workflow.lock")
-        directory.mkdir(parents=True, exist_ok=True)
-        try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
-            raise Invalid("Ledger locked; reconcile owner before removing a stale lock") from None
-        try:
-            os.write(fd, str(os.getpid()).encode())
-            os.close(fd)
-            yield
-        finally:
-            lock.unlink()
+    def locked(self) -> AbstractContextManager[None]:
+        return command_worker.lock(relative(self.root, ".factory/memory/state/workflow.lock"))
 
     def read(self) -> State:
         path = relative(self.root, ".factory/memory/state/workflow.json")
@@ -219,7 +250,7 @@ class Ledger:
         input_graph = graph
         graph = deepcopy(graph)
         validate_graph(graph, config, self.root)
-        validate_profile_selections(graph, config)
+        validate_assignment_lineage(graph, config)
         config = freeze_project(config, graph, self.root)
         for task in graph["tasks"].values():
             for p in task["scope"]:
@@ -277,7 +308,9 @@ class Ledger:
             already_prepared = "packet_file" in v
             meta = freeze_packet(self.root, self.dir, s, n, v)
             if not already_prepared:
-                v["packet_chunks_read"] = 0
+                receipt = receipt_path(self.root, meta).relative_to(self.root).as_posix()
+                v["packet_receipt"] = receipt
+                s.setdefault("transport_artifacts", []).append(receipt)
                 self.save(s, "packet_prepared", node=node_id, dispatch_id=v["dispatch_id"])
             bootstrap = self._packet_bootstrap(s, n, meta)
             if with_diagnostics:
@@ -352,15 +385,18 @@ class Ledger:
             "read_shell": shell,
             "confirm_command": confirm,
             "instruction": (
-                "In read_shell, run read_command once per tool result. Follow next by changing --chunk; "
-                "do not combine outputs or truncate. Read all chunks in order; "
-                "wait for running bind before writes or assigned commands. "
-                "Run confirm_command after receiving the last chunk."
+                "Run read_command in read_shell. For each next chunk set --chunk to next "
+                "and --ack to the last result's acknowledgement. Retry a lost response "
+                "with identical arguments. After receiving the last chunk, append --ack "
+                "and --materials from that result to confirm_command. Wait for confirmation "
+                "before writes or assigned commands."
             ),
         }
 
-    def read_packet(self, node_id: str, bootstrap: dict[str, str], chunk: int) -> dict[str, Any]:
-        """Validate the entire frozen assignment; emit one bounded, ordered text chunk."""
+    def read_packet(
+        self, node_id: str, bootstrap: dict[str, str], chunk: int, received: str | None = None
+    ) -> dict[str, Any]:
+        """Serve one bounded chunk; only an acknowledged response advances delivery."""
         with self.locked():
             s = self.read()
             n, v = self.packet_dispatch(s, node_id)
@@ -370,21 +406,21 @@ class Ledger:
             data = read_packet_bytes(self.root, s, n, expected, bootstrap)
             chunks = packet_chunks(data)
             total = len(chunks)
-            require(type(chunk) is int and 1 <= chunk <= total, "Invalid packet chunk")
-            if chunk == v.get("packet_chunks_read", 0) + 1:
-                v["packet_chunks_read"] = chunk
-                self.save(s, "packet_chunk_served", node=node_id, ordinal=chunk)
+            serve_chunk(self.root, expected, chunks, chunk, received)
             return {
                 "ordinal": chunk,
                 "total": total,
                 "next": chunk + 1 if chunk < total else None,
                 "content": chunks[chunk - 1],
+                "acknowledgement": acknowledgement(chunks, chunk),
+                "materials": material_digest(data) if chunk == total else None,
                 "binding": v["status"],
-                "ready_for_work": v["status"] == "running" and chunk == total,
-                "ready_condition": "Only after reading all chunks in order and a running bind.",
+                "ready_for_work": bool(v.get("packet_confirmed")),
             }
 
-    def confirm_packet(self, node_id: str, bootstrap: dict[str, str]) -> None:
+    def confirm_packet(
+        self, node_id: str, bootstrap: dict[str, str], received: str = "", materials: str = ""
+    ) -> None:
         with self.locked():
             s = self.read()
             n, dispatch = self.packet_dispatch(s, node_id)
@@ -393,19 +429,217 @@ class Ledger:
                 raise Invalid("Prepare packet first")
             require(dispatch["status"] == "running", "Bind before confirming packet")
             data = read_packet_bytes(self.root, s, n, expected, bootstrap)
-            require(
-                dispatch.get("packet_chunks_read") == len(packet_chunks(data)),
-                "Packet chunks must be served in order before confirmation",
-            )
-            if not dispatch.get("packet_confirmed"):
-                dispatch["packet_confirmed"] = True
-                self.save(
-                    s,
-                    "packet_confirmed",
-                    node=node_id,
-                    dispatch_id=expected["dispatch_id"],
-                    sha256=expected["sha256"],
+            if dispatch.get("packet_confirmed"):
+                chunks = packet_chunks(data)
+                require(
+                    received == acknowledgement(chunks, len(chunks))
+                    and materials == material_digest(data),
+                    "Confirmation does not match the authorized delivery",
                 )
+                return
+            confirm_delivery(self.root, expected, data, received, materials)
+            dispatch["packet_confirmed"] = True
+            self.save(
+                s,
+                "packet_confirmed",
+                node=node_id,
+                dispatch_id=expected["dispatch_id"],
+                sha256=expected["sha256"],
+            )
+
+    def set_paused(self, reason: str | None) -> None:
+        with self.locked():
+            state = self.read()
+            require(state["status"] == "active", "Run is not active")
+            if reason is None:
+                require(state.get("pause_reason"), "Run is not paused")
+                del state["pause_reason"]
+                self.save(state, "resumed")
+            else:
+                require(reason.strip(), "User pause/stop reason required")
+                state["pause_reason"] = reason
+                self.save(state, "paused", reason=reason)
+
+    def acknowledge_result(self, node_id: str, dispatch_id: str) -> None:
+        with self.locked():
+            state = self.read()
+            ref = state.get("report_index", {}).get(dispatch_id)
+            require(
+                ref is not None and ref["node_id"] == node_id,
+                "Result dispatch is stale or unavailable",
+            )
+            processed = state.setdefault("processed_results", [])
+            if dispatch_id not in processed:
+                processed.append(dispatch_id)
+                self.save(state, "result_acknowledged", node=node_id)
+
+    def next_actions(self, after: str | None = None) -> dict[str, Any]:
+        with self.locked():
+            state = self.read()
+            require(
+                after is None or after.startswith(state["run_id"] + ":"),
+                "Cursor belongs to a different run",
+            )
+            active = {
+                key: {
+                    field: value
+                    for field, value in current.items()
+                    if field in {"status", "dispatch_id", "profile", "handle", "reason"}
+                }
+                for key, current in state["nodes"].items()
+                if current["status"] in escalation.ACTIVE
+            }
+            commands = {
+                rid: {
+                    "node_id": r["node_id"],
+                    "dispatch_id": r["dispatch_id"],
+                    "check_id": r["spec"]["id"],
+                    "owner_registered": command_worker.artifact(
+                        self.root, r, ".owner.json"
+                    ).exists(),
+                }
+                for rid, r in self.active_commands(state).items()
+            }
+            result: dict[str, Any] = {
+                "run_status": state["status"],
+                "pause_reason": state.get("pause_reason"),
+                "automatic_continuation": False,
+                "dispatches": active,
+                "sessions": {
+                    key: session
+                    for key, session in state["sessions"].items()
+                    if any(
+                        n["id"] in active and n.get("agent") == key for n in state["graph"]["nodes"]
+                    )
+                },
+                "commands": commands,
+            }
+            results = {}
+            ready, accepts = [], []
+            blockers: dict[str, str] = {}
+            corrections: dict[str, list[str]] = {}
+            if state["status"] == "active":
+                nodes = validate_graph(state["graph"], state["config"], self.root)
+                try:
+                    check_config(state)
+                    validate_assignment_lineage(
+                        state["graph"], state["config"], state.get("corrections", [])
+                    )
+                except Invalid as exc:
+                    blockers["run"] = str(exc)
+                for key, current in state["nodes"].items():
+                    report = current.get("report")
+                    if report and current.get("dispatch_id") not in state.get(
+                        "processed_results", []
+                    ):
+                        results[key] = {
+                            "dispatch_id": current["dispatch_id"],
+                            "outcome": report["outcome"],
+                            "stage_result": report.get("stage_result"),
+                            "report_ref": current.get("report_ref"),
+                        }
+                    if current["status"] == "unknown":
+                        blockers[key] = "Reconcile actual transport ownership before retry"
+                    if current["status"] == "blocked":
+                        blockers[key] = (
+                            str(report.get("stage_result", "Blocked")) if report else "Blocked"
+                        )
+                        if (
+                            not active
+                            and not commands
+                            and not state.get("pause_reason")
+                            and "run" not in blockers
+                        ):
+                            corrections[key] = escalation.possible_actions(
+                                state, nodes[key], current
+                            )
+                    if current["status"] != "pending" or "run" in blockers:
+                        continue
+                    try:
+                        if nodes[key]["stage"] == "accept":
+                            self.acceptance_task(state, nodes, key)
+                            accepts.append(key)
+                        else:
+                            self.claim_pool(state, nodes, key)
+                            ready.append(key)
+                    except Invalid as exc:
+                        blockers[key] = str(exc)
+            completion = False
+            if state["status"] == "active" and not active:
+                try:
+                    self.check_completion(state)
+                    completion = True
+                except Invalid as exc:
+                    blockers["completion"] = str(exc)
+            result = {
+                **result,
+                "results": results,
+                "runnable": ready,
+                "acceptance": accepts,
+                "blockers": blockers,
+                "corrections": corrections,
+                "completion_eligible": completion,
+            }
+
+            cursor = (
+                f"{state['run_id']}:{len(state['events'])}:{report_history.identity(result)[:16]}"
+            )
+            if after == cursor and not commands:
+                return {"cursor": cursor, "unchanged": True, "run_status": state["status"]}
+            return {**result, "cursor": cursor, "unchanged": False}
+
+    def claim_pool(self, s: State, nodes: dict[str, Node], node_id: str) -> str:
+        """Authoritative claim eligibility shared by planning and reservation."""
+        require(s["status"] == "active", "Run is not active")
+        require(not s.get("pause_reason"), "Run is paused by user")
+        n, current = nodes[node_id], s["nodes"][node_id]
+        for path in n.get("owns", []):
+            relative(self.root, path)
+        require(n["stage"] != "accept", "Use accept for orchestrator node")
+        profile = s["config"]["profiles"][s["graph"]["agents"][agent_key(n)]["profile"]]
+        check_capabilities(profile, n)
+        require(
+            current["status"] == "pending",
+            "Already dispatched or unresolved; never redispatch blindly",
+        )
+        require(
+            all(s["nodes"][d]["status"] == "done" for d in n["depends_on"]),
+            "Dependencies not complete",
+        )
+        self.check_sources(s, s["graph"]["tasks"][n["task"]])
+        profile_id = s["graph"]["agents"][agent_key(n)]["profile"]
+        acceptance_guard(escalation.guard, s, n["task"], profile_id, node_id)
+        p = pool(s["config"], profile_id)
+        busy = [
+            k for k, v in s["nodes"].items() if v["status"] in {"reserved", "running", "unknown"}
+        ]
+        used = sum(s["nodes"][k]["pool"] == p for k in busy)
+        require(used < s["config"]["_limits"][p], "QUEUED_CAPACITY")
+        for k in busy:
+            other = nodes[k]
+            require(n["agent"] != other["agent"], "One active turn per logical agent")
+            require(
+                not overlaps(n.get("owns", []), other.get("owns", [])),
+                "QUEUED_OWNERSHIP",
+            )
+            require(
+                not set(n.get("resources", [])) & set(other.get("resources", [])),
+                "QUEUED_RESOURCE",
+            )
+            # Authoritative verification observes a quiescent shared checkout.
+            require(
+                not (
+                    (n["stage"] in {"verify", "review"} and other.get("owns"))
+                    or (other["stage"] in {"verify", "review"} and n.get("owns"))
+                ),
+                "QUEUED_SNAPSHOT",
+            )
+        active = self.active_commands(s)
+        require(
+            not active or not (n.get("owns") or "project-checks" in n.get("resources", [])),
+            "QUEUED_COMMAND_RESOURCE",
+        )
+        return p
 
     def claim(self, node_id: str) -> dict[str, object]:
         with self.locked():
@@ -413,53 +647,10 @@ class Ledger:
             require(s["status"] == "active", "Run is not active")
             check_config(s)
             nodes = validate_graph(s["graph"], s["config"], self.root)
-            validate_profile_selections(
-                s["graph"], s["config"], s.get("corrections", []), s["events"]
-            )
+            validate_assignment_lineage(s["graph"], s["config"], s.get("corrections", []))
             n, current = nodes[node_id], s["nodes"][node_id]
-            for path in n.get("owns", []):
-                relative(self.root, path)
-            require(n["stage"] != "accept", "Use accept for orchestrator node")
-            profile = s["config"]["profiles"][s["graph"]["agents"][agent_key(n)]["profile"]]
-            check_capabilities(profile, n)
-            require(
-                current["status"] == "pending",
-                "Already dispatched or unresolved; never redispatch blindly",
-            )
-            require(
-                all(s["nodes"][d]["status"] == "done" for d in n["depends_on"]),
-                "Dependencies not complete",
-            )
-            self.check_sources(s, s["graph"]["tasks"][n["task"]])
+            p = self.claim_pool(s, nodes, node_id)
             profile_id = s["graph"]["agents"][agent_key(n)]["profile"]
-            acceptance_guard(escalation.guard, s, n["task"], profile_id, node_id)
-            p = pool(s["config"], profile_id)
-            busy = [
-                k
-                for k, v in s["nodes"].items()
-                if v["status"] in {"reserved", "running", "unknown"}
-            ]
-            used = sum(s["nodes"][k]["pool"] == p for k in busy)
-            require(used < s["config"]["_limits"][p], "QUEUED_CAPACITY")
-            for k in busy:
-                other = nodes[k]
-                require(n["agent"] != other["agent"], "One active turn per logical agent")
-                require(
-                    not overlaps(n.get("owns", []), other.get("owns", [])),
-                    "QUEUED_OWNERSHIP",
-                )
-                require(
-                    not set(n.get("resources", [])) & set(other.get("resources", [])),
-                    "QUEUED_RESOURCE",
-                )
-                # Authoritative verification observes a quiescent shared checkout.
-                require(
-                    not (
-                        (n["stage"] in {"verify", "review"} and other.get("owns"))
-                        or (other["stage"] in {"verify", "review"} and n.get("owns"))
-                    ),
-                    "QUEUED_SNAPSHOT",
-                )
             current.update(
                 {
                     "status": "reserved",
@@ -470,6 +661,7 @@ class Ledger:
                     "attempt": current["attempt"] + 1,
                 }
             )
+            current["assignment"] = report_history.assignment(s, n, self.finish_requirements(s, n))
             self.save(s, "reserved", node=node_id, dispatch_id=current["dispatch_id"])
             return {
                 "run_id": s["run_id"],
@@ -516,130 +708,329 @@ class Ledger:
             v.update({"status": "running", "handle": handle})
             self.save(s, "bound", node=node_id, handle=handle, model=model)
 
-    def run_check(self, node_id: str, check_id: str) -> Check:
-        """Run one declared command synchronously; persist facts before returning.
-
-        The ledger lock is intentionally held throughout this minimal runner.
-        A killed runner leaves a RUNNING receipt, never a successful result.
-        """
+    def run_check(
+        self,
+        node_id: str,
+        check_id: str,
+        request_id: str | None = None,
+        *,
+        expected_dispatch: str | None = None,
+    ) -> Check:
+        """Persist intent, run outside the ledger lock, then reconcile real process facts."""
+        process = None
         with self.locked():
-            s = self.read()
-            require(s["status"] == "active", "Run is not active")
-            check_config(s)
-            nodes = validate_graph(s["graph"], s["config"], self.root)
-            n, v = nodes[node_id], s["nodes"][node_id]
-            require(v["status"] == "running", "Check needs a bound running node")
+            state = self.read()
+            current = state["nodes"][node_id]
+            dispatch_id = current.get("dispatch_id")
             require(
-                not any(
-                    d["status"] in {"reserved", "running"}
-                    and "packet_chunks_read" in d
-                    and not d.get("packet_confirmed")
-                    for d in s["nodes"].values()
-                ),
-                "Wait for outstanding native packet delivery before running checks",
+                expected_dispatch is None or expected_dispatch == dispatch_id,
+                "Execution request dispatch is stale",
             )
-            require(
-                "project-checks" in n.get("resources", []),
-                "Check needs project-checks reservation",
-            )
-            profile = s["config"]["profiles"][s["graph"]["agents"][agent_key(n)]["profile"]]
-            check_capabilities(profile, n)
-            task = s["graph"]["tasks"][n["task"]]
-            self.check_sources(s, task)
-            spec = next((c for c in task["required_checks"] if c["id"] == check_id), None)
-            if not (spec is not None and spec["kind"] != "observation"):
-                raise Invalid("Unknown required command")
-            policy_check = next(
-                (c for c in project_checks(s["config"]["_project"]["data"]) if c["id"] == check_id),
-                ProjectCheck(),
-            )
-            prior = [
-                r
-                for r in s.get("executions", {}).values()
-                if r["node_id"] == node_id and r["dispatch_id"] == v["dispatch_id"]
-            ]
-            for dependency in policy_check.get("after", []):
-                attempts = [r for r in prior if r["spec"]["id"] == dependency]
+            request_id = check_id if request_id is None else request_id
+            require(request_id.strip(), "Execution request ID required")
+            executions = state.setdefault("executions", {})
+            rid = report_history.identity([state["run_id"], node_id, dispatch_id, request_id])
+            record = executions.get(rid)
+            if record is not None:
                 require(
-                    attempts
-                    and attempts[-1]["status"] == "PASS"
-                    and attempts[-1]["files"] == snapshot(self.root, attempts[-1]["input_scope"]),
-                    "Project check dependency missing/failed/stale: " + dependency,
+                    record["spec"]["id"] == check_id,
+                    "Execution request ID already refers to different commands",
                 )
-            executions = s.setdefault("executions", {})
-            require(
-                not any(
-                    r["node_id"] == node_id
-                    and r["dispatch_id"] == v["dispatch_id"]
-                    and r["status"] == "RUNNING"
-                    for r in executions.values()
-                ),
-                "Unresolved command; reconcile process before retrying node",
-            )
+            else:
+                record = self._check_intent(state, node_id, check_id, rid, request_id)
+                executions[rid] = record
+                self.save(state, "check_started", node=node_id, execution_id=rid)
+                # Start after the intent commit. The supervisor cannot execute until it
+                # acquires the ledger lock, rechecks the intent and registers ownership.
+                try:
+                    process = command_worker.launch(
+                        self.root, FACTORY_ROOT / "tools/workflow.py", rid, record
+                    )
+                except OSError:
+                    # No owner exists yet. Reconcile or explicitly abandon the intent.
+                    return self._pending_check(rid, record)
+        if process is not None:
+            process.wait()
+        return self.reconcile_check(rid)
+
+    def _check_intent(
+        self,
+        state: State,
+        node_id: str,
+        check_id: str,
+        rid: str,
+        request_id: str,
+    ) -> ExecutionReceipt:
+        require(state["status"] == "active", "Run is not active")
+        require(not state.get("pause_reason"), "Run is paused by user")
+
+        check_config(state)
+        nodes = validate_graph(state["graph"], state["config"], self.root)
+        node, dispatch = nodes[node_id], state["nodes"][node_id]
+        require(dispatch["status"] == "running", "Check needs a bound running node")
+        require(
+            not any(
+                d["status"] in {"reserved", "running"}
+                and "packet_receipt" in d
+                and not d.get("packet_confirmed")
+                for d in state["nodes"].values()
+            ),
+            "Wait for outstanding native packet delivery before running checks",
+        )
+        require(
+            "project-checks" in node.get("resources", []), "Check needs project-checks reservation"
+        )
+        require(
+            not self.active_commands(state),
+            "Unresolved command; reconcile process before retrying node",
+        )
+        task = state["graph"]["tasks"][node["task"]]
+        self.check_sources(state, task)
+        obligations = self.finish_requirements(state, node)
+        available = {
+            c["id"]: c for c in obligations["allowed_checks"] if c["kind"] != "observation"
+        }
+        require(check_id in available, "Unknown assigned command")
+        child_ids = available[check_id]["execution"].get("stages", [])
+        require(
+            len(set(child_ids)) == len(child_ids)
+            and check_id not in child_ids
+            and set(child_ids) <= set(available),
+            "Composite requires distinct assigned command stages",
+        )
+        registrations = {c["id"]: c for c in project_checks(state["config"]["_project"]["data"])}
+        require(
+            not child_ids or {check_id, *child_ids} <= set(registrations),
+            "Composite and child checks must be registered",
+        )
+        require(
+            not any(available[cid]["execution"].get("stages") for cid in child_ids),
+            "Composite children must be direct commands",
+        )
+        previous: dict[str, ExecutionReceipt] = {
+            r["spec"]["id"]: r
+            for r in state.get("executions", {}).values()
+            if r["node_id"] == node_id and r["dispatch_id"] == dispatch["dispatch_id"]
+        }
+        included: set[str] = set()
+        for cid in (check_id, *child_ids):
+            spec = available[cid]
             execution = spec["execution"]
             cwd = self.root if execution["cwd"] == "." else relative(self.root, execution["cwd"])
             require(cwd.is_dir(), "Check cwd does not exist")
-            input_scope = sorted(set(task["scope"] + execution.get("inputs", [])))
-            before = snapshot(self.root, input_scope)
-            rid = uuid.uuid4().hex
-            output_rel = f".factory/memory/history/{s['run_id']}/checks/{rid}.log"
-            output = relative(self.root, output_rel)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            record: ExecutionReceipt = dict(
-                run_id=s["run_id"],
-                node_id=node_id,
-                dispatch_id=v["dispatch_id"],
-                source_hash=s["graph"]["sources"][task["source"]]["hash"],
-                spec=spec,
-                input_scope=input_scope,
-                files=before,
-                status="RUNNING",
-                started_at=time.time(),
-                runner_pid=os.getpid(),
-                output=output_rel,
-                environment={
-                    "platform": platform.platform(),
-                    "python": platform.python_version(),
-                    "executable": shutil.which(execution["argv"][0], path=os.environ.get("PATH")),
-                },
+            outputs = execution.get("outputs", [])
+            require(
+                not outputs
+                or (
+                    spec["kind"] == "codegen"
+                    and set(outputs) <= set(node.get("owns", []))
+                    and set(outputs) <= set(task["scope"])
+                ),
+                "Generator outputs must be exact owned task paths",
             )
-            executions[rid] = record
-            self.save(s, "check_started", node=node_id, execution_id=rid)
-
-            def on_started(pid: int) -> None:
-                record["pid"] = pid
-                self.save(s, "check_process", node=node_id, execution_id=rid)
-
-            code, status, error = execute_check(execution, cwd, output, on_started)
-            after = snapshot(self.root, input_scope)
-            if after != before:
-                status, error = "BLOCKED", "Files changed during check"
-            try:
-                self.check_sources(s, task)
-                check_config(s)
-            except Invalid as exc:
-                status, error = "BLOCKED", str(exc)
-            result: Check = {
-                **spec,
-                "command": execution["argv"],
-                "cwd": execution["cwd"],
-                "exit_code": code,
-                "result": status,
-                "evidence": output_rel,
-                "execution_id": rid,
-            }
-            record.update(
+            for dependency in registrations.get(cid, ProjectCheck()).get("after", []):
+                if dependency in included:
+                    continue
+                prior = previous.get(dependency)
+                require(
+                    prior is not None
+                    and prior["status"] == "PASS"
+                    and prior["after_files"] == snapshot(self.root, prior["input_scope"]),
+                    "Project check dependency missing/failed/stale: " + dependency,
+                )
+            included.add(cid)
+        execution = available[check_id]["execution"]
+        # Freeze all declared inputs and outputs before the first stage starts.
+        scope = sorted(
+            set(task["scope"]).union(
+                *[
+                    set(available[cid]["execution"].get("inputs", []))
+                    | set(available[cid]["execution"].get("outputs", []))
+                    for cid in (check_id, *child_ids)
+                ]
+            )
+        )
+        output = f".factory/memory/history/{state['run_id']}/checks/{rid}.log"
+        relative(self.root, output).parent.mkdir(parents=True, exist_ok=True)
+        return {
+            "run_id": state["run_id"],
+            "node_id": node_id,
+            "dispatch_id": dispatch["dispatch_id"],
+            "source_hash": state["graph"]["sources"][task["source"]]["hash"],
+            "spec": available[check_id],
+            "input_scope": scope,
+            "files": snapshot(self.root, scope),
+            "status": "RUNNING",
+            "started_at": time.time(),
+            "request_id": request_id,
+            "output": output,
+            "environment": {
+                "platform": platform.platform(),
+                "python": platform.python_version(),
+                "executable": shutil.which(execution["argv"][0]) if execution["argv"] else None,
+            },
+            "composite_stages": [
                 {
-                    "status": status,
-                    "ended_at": time.time(),
-                    "error": error,
-                    "after_files": after,
-                    "output_hash": digest(output.read_bytes()),
-                    "result": result,
+                    "execution_id": f"{rid}-{cid}",
+                    "spec": available[cid],
+                    "output": f".factory/memory/history/{state['run_id']}/checks/{rid}-{cid}.log",
                 }
+                for cid in child_ids
+            ],
+        }
+
+    @staticmethod
+    def _pending_check(rid: str, record: ExecutionReceipt) -> Check:
+        return {"id": record["spec"]["id"], "execution_id": rid, "result": "RUNNING"}
+
+    @staticmethod
+    def active_commands(state: State) -> dict[str, ExecutionReceipt]:
+        return {
+            key: record
+            for key, record in state.get("executions", {}).items()
+            if record["status"] == "RUNNING"
+        }
+
+    def reconcile_check(self, rid: str, abandon_unstarted: bool = False) -> Check:
+        with self.locked():
+            state = self.read()
+            record = state.get("executions", {}).get(rid)
+            if record is None:
+                raise Invalid("Unknown execution")
+            if record["status"] != "RUNNING":
+                return record["result"]
+            facts = command_worker.facts(self.root, rid, record)
+            if facts is None:
+                if not abandon_unstarted:
+                    return self._pending_check(rid, record)
+                require(
+                    not command_worker.artifact(self.root, record, ".owner.json").exists(),
+                    "Cannot abandon a registered process; reconcile after its group terminates",
+                )
+                # The worker needs this same lock to register. A delayed worker sees
+                # the terminal receipt and cannot start project code after abandonment.
+                facts = {"stages": {}}
+            stages = facts["stages"]
+            if not isinstance(stages, dict):
+                raise Invalid("Invalid execution stage results")
+            error = None
+            node_id = record["node_id"]
+            node = next(n for n in state["graph"]["nodes"] if n["id"] == node_id)
+            task = state["graph"]["tasks"][node["task"]]
+            if state["nodes"][node_id].get("dispatch_id") != record["dispatch_id"] or (
+                state["nodes"][node_id]["status"] != "running"
+            ):
+                error = "Execution returned to a stale dispatch"
+            else:
+                try:
+                    check_config(state)
+                    self.check_sources(state, task)
+                except Invalid as exc:
+                    error = str(exc)
+            parent = self._complete_check(rid, record, stages.get(rid), error)
+            for stage in record.get("composite_stages", []):
+                child_id = stage["execution_id"]
+                if child_id not in stages:
+                    continue
+                child: ExecutionReceipt = {
+                    **record,
+                    "spec": stage["spec"],
+                    "output": stage["output"],
+                    "composite_parent": rid,
+                    "mode": stages[child_id]["mode"],
+                }
+                child.pop("composite_stages", None)
+                if stages[child_id].get("selection"):
+                    child["selection"] = stages[child_id]["selection"]
+                self._complete_check(child_id, child, stages[child_id], error)
+                state["executions"][child_id] = child
+            self.save(
+                state, "check_finished", node=node_id, execution_id=rid, result=parent["result"]
             )
-            self.save(s, "check_finished", node=node_id, execution_id=rid, result=status)
-            return result
+            return parent
+
+    def check_results(self, rid: str) -> list[Check]:
+        with self.locked():
+            state = self.read()
+            record = state.get("executions", {}).get(rid)
+            require(
+                record is not None and record.get("result"), "Execution is unknown or not finished"
+            )
+            assert record is not None
+            return [
+                record["result"],
+                *[
+                    child["result"]
+                    for child in state["executions"].values()
+                    if child.get("composite_parent") == rid
+                ],
+            ]
+
+    def _complete_check(
+        self,
+        rid: str,
+        record: ExecutionReceipt,
+        observed: dict[str, Any] | None,
+        error: str | None,
+    ) -> Check:
+        spec = record["spec"]
+        execution = spec["execution"]
+        code = None
+        if observed is None:
+            error = error or "Process ended without a recorded exit status"
+            after = snapshot(self.root, record["input_scope"])
+        else:
+            code = observed["exit_code"]
+            scope, before, after = (
+                observed["input_scope"],
+                observed["files"],
+                observed["after_files"],
+            )
+            record.update({"input_scope": scope, "files": before})
+            outputs = execution.get("outputs", [])
+            if any(before[path] != after[path] for path in scope if path not in outputs):
+                error = "Files changed during check"
+            if outputs:
+                record["output_before"] = {path: before[path] for path in outputs}
+                record["output_after"] = {path: after[path] for path in outputs}
+            error = error or observed["error"]
+        if after != snapshot(self.root, record["input_scope"]):
+            error = error or "Command output snapshot is stale"
+        status = "BLOCKED" if error else "PASS" if code == 0 else "FAIL"
+        result: Check = {
+            **spec,
+            "command": execution["argv"]
+            or "registered stages: " + ", ".join(execution.get("stages", [])),
+            "cwd": execution["cwd"],
+            "exit_code": code,
+            "result": status,
+            "evidence": record["output"],
+            "execution_id": rid,
+        }
+        record.update(
+            {
+                "status": status,
+                "ended_at": time.time(),
+                "error": error,
+                "after_files": after,
+                "result": result,
+            }
+        )
+        output = relative(self.root, record["output"])
+        if output.is_file():
+            record["output_hash"] = digest(output.read_bytes())
+        return result
+
+    def finish_requirements(
+        self, state: State, node: Node
+    ) -> finish_requirements.FinishRequirements:
+        return acceptance_guard(
+            finish_requirements.requirements,
+            state["config"]["_project"]["data"],
+            node,
+            state["graph"]["tasks"][node["task"]],
+            state["graph"]["agents"][agent_key(node)]["role"],
+        )
 
     def prepare_report(
         self, node_id: str, report: dict[str, Any], receipt_ids: list[str]
@@ -701,6 +1092,14 @@ class Ledger:
             check_receipts(
                 self.root, state, node_id, checks, complete=False, require_pass=require_pass
             )
+            obligations = self.finish_requirements(state, node)
+            acceptance_guard(finish_requirements.validate_selection, obligations, checks)
+            if require_pass:
+                acceptance_guard(
+                    finish_requirements.validate_pass,
+                    obligations,
+                    cast(Report, {**report, "checks": checks}),
+                )
             self.source_drifted(state, task, outcome)
             return {
                 **report,
@@ -722,6 +1121,10 @@ class Ledger:
             n = next(n for n in s["graph"]["nodes"] if n["id"] == node_id)
             v, task = s["nodes"][node_id], s["graph"]["tasks"][n["task"]]
             require(v["status"] == "running", "Cannot finish unbound/unknown work")
+            require(
+                not any(r["node_id"] == node_id for r in self.active_commands(s).values()),
+                "Unresolved command result not passed; reconcile execution before finish",
+            )
             src = s["graph"]["sources"][task["source"]]
             require(
                 report.get("run_id") == s["run_id"]
@@ -741,7 +1144,7 @@ class Ledger:
             require(outcome in {"PASS", "FAIL", "BLOCKED"}, "Invalid outcome")
             if outcome == "PASS":
                 require(
-                    "packet_chunks_read" not in v or v.get("packet_confirmed"),
+                    "packet_receipt" not in v or v.get("packet_confirmed"),
                     "Confirm native packet before finishing successful work",
                 )
                 check_config(s)
@@ -783,66 +1186,17 @@ class Ledger:
                         ),
                         "Failed/incomplete command evidence",
                     )
-            if outcome == "PASS" and n["stage"] != "verify":
-                check_receipts(self.root, s, node_id, checks, complete=False)
-            if (
-                outcome == "PASS"
-                and n["stage"] == "work"
-                and s["graph"]["agents"][agent_key(n)]["role"] == "test-writer"
-                and "project-checks" in n.get("resources", [])
-            ):
-                require(
-                    report.get("stage_result") != "WRITES_READY",
-                    "TestWriter checks required",
-                )
-                test_ids = {c["id"] for c in task["required_checks"] if c["kind"] == "tests"}
-                require(
-                    any(c.get("id") in test_ids and acceptance.successful(c) for c in checks),
-                    "TestWriter needs a successful tests receipt",
-                )
+            obligations = self.finish_requirements(s, n)
+            acceptance_guard(finish_requirements.validate_selection, obligations, checks)
             if outcome == "PASS":
-                report = {
-                    **report,
-                    "gate_results": acceptance_guard(
-                        transition_gates.evaluate,
-                        s["config"]["_project"]["data"],
-                        n,
-                        task,
-                        report,
-                    ),
-                }
-            if (
-                outcome == "PASS"
-                and n.get("owns")
-                and "project-checks" not in n.get("resources", [])
-            ):
-                require(
-                    report.get("stage_result") == "WRITES_READY",
-                    "Unlocked writer returns WRITES_READY, checks deferred",
+                acceptance_guard(finish_requirements.validate_pass, obligations, report)
+            check_receipts(
+                self.root, s, node_id, checks, complete=False, require_pass=outcome == "PASS"
+            )
+            if outcome == "PASS":
+                report["gate_results"] = acceptance_guard(
+                    transition_gates.evaluate, s["config"]["_project"]["data"], n, task, report
                 )
-            if outcome == "PASS" and n["stage"] in {"verify", "review"}:
-                require(
-                    checks
-                    and all(
-                        acceptance.successful(c) or acceptance.resolved_extra(c) for c in checks
-                    ),
-                    "Missing/failed verification commands",
-                )
-                if n["stage"] == "verify":
-                    acceptance_guard(acceptance.verify_results, task, checks)
-                    check_receipts(self.root, s, node_id, checks)
-                    kinds = {c.get("kind") for c in checks if acceptance.successful(c)}
-                    for kind in ("static", "tests", "docs"):
-                        skipped = report.get("not_applicable", {}).get(kind)
-                        if not (kind in kinds or (isinstance(skipped, str) and skipped.strip())):
-                            raise Invalid(f"Missing {kind} evidence/reason")
-                        if kind == "tests" and task["risk"] == "high":
-                            require(kind in kinds, "High risk cannot skip tests")
-                if n["stage"] == "review":
-                    require(
-                        report.get("verdict") == "APPROVE",
-                        "Missing independent APPROVE",
-                    )
             if report.get("stage_result") == "APPROVAL_REQUIRED" or "approval_request" in report:
                 require(
                     isinstance(report.get("approval_request"), dict),
@@ -857,7 +1211,26 @@ class Ledger:
                     **report,
                     "gate_results": [core_gate, *report.get("gate_results", [])],
                 }
-            v.update({"status": "done" if outcome == "PASS" else "blocked", "report": report})
+            unsuccessful = report.get("unsuccessful_attempt")
+            if unsuccessful is not None:
+                require(
+                    outcome == "FAIL"
+                    and report.get("stage_result") in {"FAIL_CODE", "FAIL_TEST"}
+                    and isinstance(unsuccessful, dict)
+                    and set(unsuccessful) == {"attempted_work", "unmet_requirement", "evidence"}
+                    and all(isinstance(x, str) and x.strip() for x in unsuccessful.values()),
+                    "Unsuccessful attempt needs actual work, an unmet requirement and evidence",
+                )
+            report_ref = report_history.store(self.root, s, v, report)
+            s.setdefault("report_hashes", {})[report_ref["path"]] = report_ref["sha256"]
+            s.setdefault("report_index", {})[v["dispatch_id"]] = report_ref
+            v.update(
+                {
+                    "status": "done" if outcome == "PASS" else "blocked",
+                    "report": report,
+                    "report_ref": report_ref,
+                }
+            )
             self.save(s, "finished", node=node_id, outcome=outcome)
 
     def unknown(self, node_id: str, reason: str) -> None:
@@ -902,6 +1275,7 @@ class Ledger:
                 "Need reason, old terminal evidence and handoff",
             )
             require(agent_id in s["graph"]["agents"], "Unknown agent")
+            validate_assignment_lineage(s["graph"], s["config"], s.get("corrections", []))
             own = [n["id"] for n in s["graph"]["nodes"] if n.get("agent") == agent_id]
             require(
                 not any(s["nodes"][k]["status"] in {"reserved", "running", "unknown"} for k in own),
@@ -942,146 +1316,135 @@ class Ledger:
                 task_handoffs=handoffs,
             )
 
+    def expand_scope(self, task_id: str, paths: list[str], reason: str) -> None:
+        with self.locked():
+            state = self.read()
+            require(task_id in state["graph"]["tasks"], "Unknown task")
+            require(paths and reason.strip(), "Need added verification paths and reason")
+            graph = deepcopy(state["graph"])
+            for path in paths:
+                relative(self.root, path)
+            task = graph["tasks"][task_id]
+            task["scope"] = list(dict.fromkeys([*task["scope"], *paths]))
+            for integration in graph["tasks"].values():
+                if integration["kind"] == "integration" and task_id in integration.get(
+                    "depends_on", []
+                ):
+                    integration["scope"] = list(dict.fromkeys([*integration["scope"], *paths]))
+            self._revise(state, graph, reason)
+
     def revise(self, graph: Graph, reason: str) -> None:
         with self.locked():
-            s = self.read()
+            self._revise(self.read(), graph, reason)
+
+    def _revise(self, s: State, graph: Graph, reason: str) -> None:
+        require(not s.get("pause_reason"), "Run is paused by user")
+        require(
+            s["status"] == "active" and reason,
+            "Need active run and revision reason",
+        )
+        require(
+            not any(v["status"] in {"reserved", "running", "unknown"} for v in s["nodes"].values()),
+            "Quiesce runtime before graph revision",
+        )
+        require(not self.active_commands(s), "Unresolved project commands")
+        check_config(s)
+        validate_graph(graph, s["config"], self.root)
+        old = s["graph"]
+        if graph == old:
+            return
+        validate_assignment_change(s, graph)
+        require(
+            graph["sources"] == old["sources"] and set(graph["tasks"]) == set(old["tasks"]),
+            "Revision cannot alter locked tasks/sources; re-intake required",
+        )
+        strengthened = set()
+        for tid, before in old["tasks"].items():
+            after = graph["tasks"][tid]
+            mutable = {
+                "scope",
+                "risk",
+                "independent_review",
+                "reason",
+                "required_checks",
+                "policy_decisions",
+            }
             require(
-                s["status"] == "active" and reason,
-                "Need active run and revision reason",
+                {k: v for k, v in before.items() if k not in mutable}
+                == {k: v for k, v in after.items() if k not in mutable},
+                "Revision cannot alter locked tasks/sources",
             )
-            require(
-                not any(
-                    v["status"] in {"reserved", "running", "unknown"} for v in s["nodes"].values()
-                ),
-                "Quiesce runtime before graph revision",
-            )
-            check_config(s)
-            validate_graph(graph, s["config"], self.root)
-            old = s["graph"]
-            validate_profile_selections(
-                graph, s["config"], s.get("corrections", []), s["events"], s["graph"]
-            )
-            require(
-                graph["sources"] == old["sources"] and set(graph["tasks"]) == set(old["tasks"]),
-                "Revision cannot alter locked tasks/sources; re-intake required",
-            )
-            strengthened = set()
-            for tid, before in old["tasks"].items():
-                after = graph["tasks"][tid]
-                mutable = {
-                    "scope",
-                    "risk",
-                    "independent_review",
-                    "reason",
-                    "required_checks",
-                    "policy_decisions",
-                }
-                require(
-                    {k: v for k, v in before.items() if k not in mutable}
-                    == {k: v for k, v in after.items() if k not in mutable},
-                    "Revision cannot alter locked tasks/sources",
+            try:
+                preserve_obligations(
+                    s["config"]["_project"]["data"].get("decisions", []),
+                    before.get("policy_decisions", {}),
+                    after.get("policy_decisions", {}),
                 )
-                try:
-                    preserve_obligations(
-                        s["config"]["_project"]["data"].get("decisions", []),
-                        before.get("policy_decisions", {}),
-                        after.get("policy_decisions", {}),
-                    )
-                except ValueError as exc:
-                    require(False, str(exc))
-                preserve_task_guards(before, after)
-                if before != after:
-                    strengthened.add(tid)
-            new_nodes = {n["id"]: n for n in graph["nodes"]}
-            for old_node in old["nodes"]:
-                new_node = new_nodes.get(old_node["id"])
-                if new_node is None or not old_node.get("agent") or not new_node.get("agent"):
-                    continue
-                old_agent = old["agents"][agent_key(old_node)]
-                new_agent = graph["agents"][agent_key(new_node)]
-                if (
-                    old_node.get("profile_selection") is not None
-                    or new_node.get("profile_selection") is not None
-                ) and (old_agent != new_agent or old_node["agent"] != new_node["agent"]):
-                    require(
-                        graph["agents"].get(agent_key(old_node)) == old_agent,
-                        "Keep previous logical agent unchanged",
-                    )
-                    require(
-                        old_agent == new_agent
-                        or (
-                            old_node["agent"] != new_node["agent"]
-                            and new_node["agent"] not in old["agents"]
-                        ),
-                        "Profile change needs a new logical agent",
-                    )
-                    require(
-                        s["nodes"][old_node["id"]]["status"] == "pending"
-                        and s["nodes"][old_node["id"]].get("attempt", 0) == 0
-                        and not has_prior_dispatch_evidence(s, old_node["id"])
-                        and not any(
-                            e.get("node") == old_node["id"]
-                            and e.get("event") in {"bound", "correction_decided"}
-                            for e in s["events"]
-                        ),
-                        "Started assignments require correct",
-                    )
-                if any(
-                    old_node["id"] in r.get("reassigned_nodes", [])
-                    for r in s.get("corrections", [])
+            except ValueError as exc:
+                require(False, str(exc))
+            preserve_task_guards(before, after)
+            if before != after:
+                strengthened.add(tid)
+        new_nodes = {n["id"]: n for n in graph["nodes"]}
+        invalidate = set()
+        for n in old["nodes"]:
+            require(
+                n["id"] in new_nodes,
+                "Keep stable node identities; do not erase work",
+            )
+            require(
+                n["task"] == new_nodes[n["id"]]["task"]
+                and n["stage"] == new_nodes[n["id"]]["stage"],
+                "Keep task/stage identity for existing nodes",
+            )
+            if worker_node(n) != worker_node(new_nodes[n["id"]]) or (
+                n["task"] in strengthened and n["stage"] in {"verify", "review", "accept"}
+            ):
+                invalidate.add(n["id"])
+        invalidate |= {k for k in new_nodes if ancestors(new_nodes, k) & invalidate}
+        for a, old_assignment in old["agents"].items():
+            if a in s["sessions"]:
+                require(
+                    graph["agents"].get(a) == old_assignment,
+                    "Replace physical session before changing role/profile",
+                )
+        s["config"] = freeze_project(s["config"], graph, self.root)
+        s["graph"] = graph
+        s["revision"] += 1
+        for n in graph["nodes"]:
+            s["nodes"].setdefault(n["id"], {"status": "pending", "attempt": 0})
+            if n["id"] in invalidate:
+                prev = s["nodes"][n["id"]]
+                s["events"].append(
+                    {
+                        "at": time.time(),
+                        "event": "invalidated",
+                        "node": n["id"],
+                        "previous": prev,
+                    }
+                )
+                # A technical graph edit is not a free retry of failed work.
+                prior_task = old["tasks"].get(n["task"], {})
+                current_task = graph["tasks"][n["task"]]
+                verify_changed = n["stage"] in {"verify", "review"} and any(
+                    prior_task.get(field) != current_task.get(field)
+                    for field in ("scope", "required_checks")
+                )
+                if prev["status"] != "blocked" or (
+                    verify_changed
+                    and prev.get("report", {}).get("outcome") == "FAIL"
+                    and n["task"] not in s.get("escalation_stops", {})
                 ):
-                    require(
-                        old_node.get("profile_selection") == new_node.get("profile_selection"),
-                        "Corrected assignment retains initial choice",
-                    )
-            invalidate = set()
-            for n in old["nodes"]:
-                require(
-                    n["id"] in new_nodes,
-                    "Keep stable node identities; do not erase work",
-                )
-                require(
-                    n["task"] == new_nodes[n["id"]]["task"]
-                    and n["stage"] == new_nodes[n["id"]]["stage"],
-                    "Keep task/stage identity for existing nodes",
-                )
-                if worker_node(n) != worker_node(new_nodes[n["id"]]) or (
-                    n["task"] in strengthened and n["stage"] in {"verify", "review", "accept"}
-                ):
-                    invalidate.add(n["id"])
-            invalidate |= {k for k in new_nodes if ancestors(new_nodes, k) & invalidate}
-            for a, old_assignment in old["agents"].items():
-                if a in s["sessions"]:
-                    require(
-                        graph["agents"].get(a) == old_assignment,
-                        "Replace physical session before changing role/profile",
-                    )
-            s["config"] = freeze_project(s["config"], graph, self.root)
-            s["graph"] = graph
-            s["revision"] += 1
-            for n in graph["nodes"]:
-                s["nodes"].setdefault(n["id"], {"status": "pending", "attempt": 0})
-                if n["id"] in invalidate:
-                    prev = s["nodes"][n["id"]]
-                    s["events"].append(
-                        {
-                            "at": time.time(),
-                            "event": "invalidated",
-                            "node": n["id"],
-                            "previous": prev,
-                        }
-                    )
-                    # A technical graph edit is not a free retry of failed work.
-                    if prev["status"] != "blocked":
-                        s["nodes"][n["id"]] = {
-                            "status": "pending",
-                            "attempt": prev["attempt"],
-                        }
-            self.save(s, "revised", reason=reason, previous_graph=old)
+                    s["nodes"][n["id"]] = {
+                        "status": "pending",
+                        "attempt": prev["attempt"],
+                    }
+        self.save(s, "revised", reason=reason, previous_graph=old)
 
     def reintake(self, graph: Graph, reason: str, authorization: str) -> None:
         with self.locked():
             s = self.read()
+            require(not s.get("pause_reason"), "Run is paused by user")
             require(
                 s["status"] == "active" and reason and authorization,
                 "Source re-intake requires reason and source/user authorization evidence",
@@ -1097,6 +1460,7 @@ class Ledger:
                 and set(graph["sources"]) == set(s["graph"]["sources"]),
                 "New tasks/sources need a separate run",
             )
+            require(not self.active_commands(s), "Unresolved project commands")
             # Refresh only decision definitions, never arbitrary model, gate or security config.
             old_config = s["config"]
             old_policy = old_config["_project"]
@@ -1122,7 +1486,6 @@ class Ledger:
             )
             new_config = deepcopy(old_config)
             new_config["_project"] = new_policy
-            validate_profile_decisions(new_config)
             new_config["_files"].update(new_policy["files"])
             require(
                 freeze_project(new_config, s["graph"], self.root)["_project_documents"]
@@ -1150,90 +1513,9 @@ class Ledger:
                 k: lock_source(self.root, src, check_expected=False)
                 for k, src in graph["sources"].items()
             }
-            previous_by_id = {n["id"]: n for n in s["graph"]["nodes"]}
-            for node in graph["nodes"]:
-                previous_node = previous_by_id.get(node["id"])
-                if previous_node:
-                    require(
-                        node["task"] == previous_node["task"]
-                        and node["stage"] == previous_node["stage"],
-                        "Keep task/stage identity for existing nodes",
-                    )
-                    if (
-                        previous_node.get("agent")
-                        and node.get("agent")
-                        and (
-                            previous_node.get("profile_selection") is not None
-                            or node.get("profile_selection") is not None
-                        )
-                    ):
-                        prior_agent = agent_key(previous_node)
-                        next_agent = agent_key(node)
-                        prior_profile = s["graph"]["agents"][prior_agent]["profile"]
-                        next_profile = graph["agents"][next_agent]["profile"]
-                        started = s["nodes"][node["id"]].get(
-                            "attempt", 0
-                        ) > 0 or has_prior_dispatch_evidence(s, node["id"])
-                        if started:
-                            require(
-                                prior_profile == next_profile and prior_agent == next_agent,
-                                "Started assignments require correct",
-                            )
-                        elif prior_profile != next_profile:
-                            source_id = graph["tasks"][node["task"]]["source"]
-                            decision_id = s["config"]["profiles"][next_profile].get(
-                                "initial_profile_decision"
-                            )
-                            old_definition = next(
-                                (
-                                    d
-                                    for d in old_data.get("decisions", [])
-                                    if d["id"] == decision_id
-                                ),
-                                None,
-                            )
-                            new_definition = next(
-                                (
-                                    d
-                                    for d in new_data.get("decisions", [])
-                                    if d["id"] == decision_id
-                                ),
-                                None,
-                            )
-                            require(
-                                refreshed_sources[source_id] != s["graph"]["sources"][source_id]
-                                or old_definition != new_definition,
-                                "Profile change without source or policy change requires revise",
-                            )
-                            require(
-                                graph["agents"].get(prior_agent)
-                                == s["graph"]["agents"][prior_agent],
-                                "Keep previous logical agent unchanged",
-                            )
-                            require(
-                                prior_agent != next_agent
-                                and next_agent not in s["graph"]["agents"],
-                                "Profile change needs a new logical agent",
-                            )
-                        require(
-                            next_profile
-                            not in s.get("retired_node_profiles", {}).get(node["id"], []),
-                            "Retired profile cannot be restored",
-                        )
-            old_nodes = {n["id"] for n in s["graph"]["nodes"]}
-            require(
-                old_nodes <= {n["id"] for n in graph["nodes"]},
-                "Retain stable node IDs/history",
-            )
             graph["sources"] = refreshed_sources
             validate_graph(graph, s["config"], self.root)
-            validate_profile_selections(
-                graph,
-                s["config"],
-                s.get("corrections", []),
-                [*s["events"], {"previous_graph": s["graph"], "previous_config": old_config}],
-                s["graph"],
-            )
+            validate_assignment_change(s, graph)
             for a in s["sessions"]:
                 require(
                     graph["agents"].get(a) == s["graph"]["agents"].get(a),
@@ -1291,9 +1573,11 @@ class Ledger:
     def retry(self, node_id: str, stage: str, reason: str, terminal_evidence: str) -> None:
         with self.locked():
             s = self.read()
+            require(not s.get("pause_reason"), "Run is paused by user")
             nodes = {n["id"]: n for n in s["graph"]["nodes"]}
             n, v = nodes[node_id], s["nodes"][node_id]
             require(terminal_evidence and reason, "Reconcile old writer and explain retry")
+            require(not self.active_commands(s), "Unresolved project commands")
             require(
                 v["status"] in {"blocked", "unknown", "done"},
                 "Cannot retry a live writer",
@@ -1303,7 +1587,7 @@ class Ledger:
             acceptance_guard(escalation.guard, s, n["task"])
             require(
                 stage == "recovery" or not profile.get("escalation"),
-                "Use correct for an escalating profile's quality/complexity decision",
+                "Use correct for an escalating profile's quality decision",
             )
             require(stage in limits, "Unknown retry stage")
             key = n["task"] + ":" + stage
@@ -1349,6 +1633,8 @@ class Ledger:
         with self.locked():
             state = self.read()
             require(state["status"] == "active", "Run is not active")
+            require(not state.get("pause_reason"), "Run is paused by user")
+            require(not self.active_commands(state), "Unresolved project commands")
             check_config(state)
             return acceptance_guard(escalation.correct, self, state, node_id, request)
 
@@ -1359,6 +1645,8 @@ class Ledger:
                 state["status"] == "active" and evidence.strip(),
                 "Need active run and resolved blocker/human decision",
             )
+            require(not state.get("pause_reason"), "Run is paused by user")
+            require(not self.active_commands(state), "Unresolved project commands")
             check_config(state)
             require(
                 task_id in state.get("escalation_stops", {}),
@@ -1402,6 +1690,8 @@ class Ledger:
     def resume_approved(self, node_id: str, request_id: str, evidence: str) -> None:
         with self.locked():
             state = self.read()
+            require(not state.get("pause_reason"), "Run is paused by user")
+            require(not self.active_commands(state), "Unresolved project commands")
             require(state["status"] == "active", "Run is not active")
             check_config(state)
             require(
@@ -1446,57 +1736,46 @@ class Ledger:
                 added_scope=added,
             )
 
+    def acceptance_task(self, s: State, nodes: dict[str, Node], node_id: str) -> Task:
+        require(s["status"] == "active", "Run is not active")
+        require(not s.get("pause_reason"), "Run is paused by user")
+        n = nodes[node_id]
+        require(n["stage"] == "accept", "Not an acceptance node")
+        acceptance_guard(escalation.guard, s, n["task"])
+        require(not self.active_commands(s), "Unresolved project commands")
+        require(s["nodes"][node_id]["status"] == "pending", "Already accepted")
+        require(
+            all(s["nodes"][k]["status"] == "done" for k in ancestors(nodes, node_id)),
+            "Required work not done",
+        )
+        task = s["graph"]["tasks"][n["task"]]
+        self.check_sources(s, task)
+        for key in ancestors(nodes, node_id):
+            predecessor = nodes[key]
+            if predecessor["task"] != n["task"]:
+                continue
+            report = s["nodes"][key].get("report", {})
+            if predecessor["stage"] in {"verify", "review"}:
+                self.check_current_verification(
+                    s, predecessor, report, "Evidence invalidated by later write"
+                )
+            check_generated(self.root, s, key, report.get("checks", []))
+        acceptance_guard(
+            review_findings.gate,
+            s,
+            n["task"],
+            snapshot(self.root, task["scope"]),
+            s["graph"]["sources"][task["source"]]["hash"],
+        )
+        return task
+
     def accept(self, node_id: str) -> None:
         with self.locked():
             s = self.read()
             check_config(s)
             nodes = validate_graph(s["graph"], s["config"], self.root)
             n = nodes[node_id]
-            require(n["stage"] == "accept", "Not an acceptance node")
-            acceptance_guard(escalation.guard, s, n["task"])
-            require(s["nodes"][node_id]["status"] == "pending", "Already accepted")
-            require(
-                all(s["nodes"][k]["status"] == "done" for k in ancestors(nodes, node_id)),
-                "Required work not done",
-            )
-            task = s["graph"]["tasks"][n["task"]]
-            self.check_sources(s, task)
-            for k in ancestors(nodes, node_id):
-                if nodes[k]["task"] == n["task"] and nodes[k]["stage"] in {
-                    "verify",
-                    "review",
-                }:
-                    if nodes[k]["stage"] == "verify":
-                        acceptance_guard(
-                            acceptance.verify_results,
-                            task,
-                            s["nodes"][k]["report"].get("checks", []),
-                        )
-                    check_receipts(
-                        self.root,
-                        s,
-                        k,
-                        s["nodes"][k]["report"].get("checks", []),
-                        complete=nodes[k]["stage"] == "verify",
-                    )
-                    require(
-                        s["nodes"][k]["report"]["files"] == snapshot(self.root, task["scope"]),
-                        "Evidence invalidated by later write",
-                    )
-                    acceptance_guard(
-                        transition_gates.evaluate,
-                        s["config"]["_project"]["data"],
-                        nodes[k],
-                        task,
-                        s["nodes"][k]["report"],
-                    )
-            acceptance_guard(
-                review_findings.gate,
-                s,
-                n["task"],
-                snapshot(self.root, task["scope"]),
-                s["graph"]["sources"][task["source"]]["hash"],
-            )
+            task = self.acceptance_task(s, nodes, node_id)
             s["nodes"][node_id]["gate_result"] = transition_gates.stage_result(
                 s,
                 n,
@@ -1509,6 +1788,46 @@ class Ledger:
             s["nodes"][node_id]["status"] = "done"
             self.save(s, "accepted", node=node_id)
 
+    def check_current_verification(
+        self, state: State, node: Node, report: Report, stale_message: str
+    ) -> None:
+        task = state["graph"]["tasks"][node["task"]]
+        obligations = self.finish_requirements(state, node)
+        acceptance_guard(finish_requirements.validate_pass, obligations, report)
+        check_receipts(self.root, state, node["id"], report.get("checks", []), complete=False)
+        require(report["files"] == snapshot(self.root, task["scope"]), stale_message)
+        acceptance_guard(
+            transition_gates.evaluate, state["config"]["_project"]["data"], node, task, report
+        )
+
+    def check_completion(self, s: State) -> None:
+        require(not s.get("pause_reason"), "Run is paused by user")
+        require(not self.active_commands(s), "Unresolved project commands")
+        check_config(s)
+        require(
+            all(v["status"] == "done" for v in s["nodes"].values()),
+            "Unfinished nodes",
+        )
+        for tid, task in s["graph"]["tasks"].items():
+            acceptance_guard(
+                review_findings.gate,
+                s,
+                tid,
+                snapshot(self.root, task["scope"]),
+                s["graph"]["sources"][task["source"]]["hash"],
+            )
+        # Recheck every final acceptance, including cross-task invalidation.
+        for n in s["graph"]["nodes"]:
+            report = s["nodes"][n["id"]].get("report", {})
+            check_generated(self.root, s, n["id"], report.get("checks", []))
+            task = s["graph"]["tasks"][n["task"]]
+            self.check_sources(s, task)
+            current_final = len(s["graph"]["tasks"]) == 1 or task["kind"] == "integration"
+            if current_final and n["stage"] in {"verify", "review"}:
+                self.check_current_verification(
+                    s, n, s["nodes"][n["id"]]["report"], "Final evidence stale"
+                )
+
     def archive(self, outcome: str, summary: str) -> str:
         with self.locked():
             s = self.read()
@@ -1517,6 +1836,7 @@ class Ledger:
                 "Only terminal runs can be archived",
             )
             require(summary, "Final summary required")
+            require(not self.active_commands(s), "Unresolved project commands")
             if s["status"] in {"completed", "cancelled"}:
                 require(
                     s["status"] == outcome and s["summary"] == summary,
@@ -1535,43 +1855,7 @@ class Ledger:
                 "Outstanding runtime work",
             )
             if outcome == "completed":
-                require(
-                    all(v["status"] == "done" for v in s["nodes"].values()),
-                    "Unfinished nodes",
-                )
-                for tid, task in s["graph"]["tasks"].items():
-                    acceptance_guard(
-                        review_findings.gate,
-                        s,
-                        tid,
-                        snapshot(self.root, task["scope"]),
-                        s["graph"]["sources"][task["source"]]["hash"],
-                    )
-                # Recheck every final acceptance, including cross-task invalidation.
-                for n in s["graph"]["nodes"]:
-                    task = s["graph"]["tasks"][n["task"]]
-                    self.check_sources(s, task)
-                    current_final = len(s["graph"]["tasks"]) == 1 or task["kind"] == "integration"
-                    if current_final and n["stage"] in {"verify", "review"}:
-                        check_receipts(
-                            self.root,
-                            s,
-                            n["id"],
-                            s["nodes"][n["id"]]["report"].get("checks", []),
-                            complete=n["stage"] == "verify",
-                        )
-                        require(
-                            s["nodes"][n["id"]]["report"]["files"]
-                            == snapshot(self.root, task["scope"]),
-                            "Final evidence stale",
-                        )
-                        acceptance_guard(
-                            transition_gates.evaluate,
-                            s["config"]["_project"]["data"],
-                            n,
-                            task,
-                            s["nodes"][n["id"]]["report"],
-                        )
+                self.check_completion(s)
             s["status"], s["summary"] = outcome, summary
             return self._save_terminal_archive(s)
 
