@@ -85,6 +85,7 @@ coverage/
 /.ai-pipeline/staging/
 
 # Personal agent overrides and locks; shared instructions/configs remain tracked.
+/.acpxrc.json
 AGENTS.local.md
 CLAUDE.local.md
 **/.claude/settings.local.json
