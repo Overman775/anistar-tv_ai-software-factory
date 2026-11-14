@@ -8,16 +8,16 @@ import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:core/data.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 
 import '../../../../../mocks/features/anime/fake_anime_screen_repository.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
-    for (final scale in [1.0, 2.0]) {
-      for (final loading in [true, false]) {
-        testWidgets('anime ${loading ? 'loading' : 'long content'} at $name viewport scale $scale', (tester) async {
+  for (final textScale in GoldenTextScale.values) {
+    for (final loading in [true, false]) {
+      testWidgets(
+        'anime ${loading ? 'loading' : 'long content'} at tv${textScale == GoldenTextScale.large ? ' 200%' : ''}',
+        (tester) async {
           final pending = Completer<Result<AnimeScreenData, Failure>>();
           final initial = (await const FakeAnimeScreenRepository().getAnime(
             id: 1,
@@ -39,18 +39,16 @@ void main() {
             ),
             episodes: initial.episodes,
           );
-          await pumpTvApp(
+          await testScreenGolden(
             tester,
-            MediaQuery(
-              data: MediaQueryData(size: size, disableAnimations: true, textScaler: TextScaler.linear(scale)),
-              child: AnimeScreen(
-                animeId: 1,
-                slug: 'test',
-                fallbackTitle: data.details.title,
-                onEpisodeTap: (_) => fail('Unexpected episode activation'),
-              ),
+            'anime_${loading ? 'loading' : 'ready'}',
+            textScale: textScale,
+            screen: AnimeScreen(
+              animeId: 1,
+              slug: 'test',
+              fallbackTitle: data.details.title,
+              onEpisodeTap: (_) => fail('Unexpected episode activation'),
             ),
-            size: size,
             wrapInScaffold: false,
             overrides: [
               authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
@@ -62,14 +60,9 @@ void main() {
               ),
             ],
           );
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-          await expectLater(
-            find.byType(MaterialApp),
-            matchesGoldenFile('goldens/anime_${loading ? 'loading' : 'ready'}_$name${scale == 1 ? '' : '_scaled'}.png'),
-          );
-        }, tags: ['golden']);
-      }
+        },
+        tags: ['golden'],
+      );
     }
   }
 }

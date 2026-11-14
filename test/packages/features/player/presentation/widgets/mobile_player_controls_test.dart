@@ -54,21 +54,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final (name, size, scale) in [
-    ('small', const Size(320, 568), 1.0),
-    ('portrait', const Size(390, 844), 1.0),
-    ('portrait_scaled', const Size(320, 568), 2.0),
-    ('landscape_scaled', const Size(640, 320), 2.0),
-  ]) {
-    testWidgets('mobile player $name fits and keeps all actions visible', (tester) async {
-      final calls = <String>[];
-      final seeks = <Duration>[];
-      await pumpMobileApp(
-        tester,
-        Builder(
-          builder: (context) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
-            child: MobilePlayerControls(
+  for (final profile in [GoldenProfile.phonePortrait, GoldenProfile.phoneLandscape]) {
+    for (final textScale in GoldenTextScale.values) {
+      testWidgets(
+        'mobile player ${profile.name}${textScale == GoldenTextScale.large ? ' 200%' : ''} fits and keeps all actions visible',
+        (tester) async {
+          final calls = <String>[];
+          final seeks = <Duration>[];
+          await testScreenGolden(
+            tester,
+            'mobile_player',
+            profile: profile,
+            textScale: textScale,
+            screen: MobilePlayerControls(
               title: 'Очень длинное название сериала для проверки доступности управления',
               episodeNumber: 24,
               session: _session,
@@ -86,25 +84,26 @@ void main() {
               onRotate: () => calls.add('rotate'),
               onBack: () => calls.add('back'),
             ),
-          ),
-        ),
-        size: size,
+            prepare: (tester) async {
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull);
+              final play = tester.getRect(find.byKey(const ValueKey('player-play')));
+              final back = tester.getRect(find.byKey(const ValueKey('player-back')));
+              final timeline = tester.getRect(find.byKey(const ValueKey('player-timeline')));
+              expect(play.top, greaterThanOrEqualTo(back.bottom));
+              expect(play.bottom, lessThanOrEqualTo(timeline.top));
+            },
+          );
+          for (final key in ['play', 'episodes', 'quality', 'previous-episode', 'next-episode', 'rotate', 'back']) {
+            await tester.tap(find.byKey(ValueKey('player-$key')));
+          }
+          expect(calls, ['pause', 'episodes', 'quality', 'previous', 'next', 'rotate', 'back']);
+          await tester.tapAt(tester.getCenter(find.byKey(const ValueKey('player-timeline'))));
+          expect(seeks, isNotEmpty);
+          expect(seeks.last.inSeconds, closeTo(12 * 60, 1));
+        },
+        tags: ['golden'],
       );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      final play = tester.getRect(find.byKey(const ValueKey('player-play')));
-      final back = tester.getRect(find.byKey(const ValueKey('player-back')));
-      final timeline = tester.getRect(find.byKey(const ValueKey('player-timeline')));
-      expect(play.top, greaterThanOrEqualTo(back.bottom));
-      expect(play.bottom, lessThanOrEqualTo(timeline.top));
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/mobile_player_$name.png'));
-      for (final key in ['play', 'episodes', 'quality', 'previous-episode', 'next-episode', 'rotate', 'back']) {
-        await tester.tap(find.byKey(ValueKey('player-$key')));
-      }
-      expect(calls, ['pause', 'episodes', 'quality', 'previous', 'next', 'rotate', 'back']);
-      await tester.tapAt(timeline.center);
-      expect(seeks, isNotEmpty);
-      expect(seeks.last.inSeconds, closeTo(12 * 60, 1));
-    }, tags: ['golden']);
+    }
   }
 }

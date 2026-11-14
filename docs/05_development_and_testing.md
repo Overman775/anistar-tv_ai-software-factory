@@ -216,7 +216,9 @@ Fixtures и fakes находятся в `test/mocks/`. HTTP заменяется
 `textScale` и `disableAnimations`. `TestAppViewport.tv()` по умолчанию задаёт
 960×540, а `TestAppViewport.mobile()` — 390×844. `setTestViewport` выставляет
 physical size как произведение logical size и DPR и регистрирует сброс свойств
-view через `addTearDown`.
+view через `addTearDown`. Полноэкранные golden-тесты вместо размеров по месту
+задают окно общими профилями `GoldenProfile` — см. «Общие профили полноэкранных
+golden» в разделе 4.
 
 `pumpTvApp` использует TV-профиль, production theme и `ProviderScope`.
 `pumpMobileApp` сохраняет `AppResponsiveRoot` с mobile-профилем, touch theme и
@@ -242,7 +244,7 @@ retry пагинации, redaction подписанного URL и закрыт
 | Unit | Charset, HTML/JSON5, DTO mapping, пагинация, Failure и retry |
 | BLoC | Переходы состояний, загрузка, ошибка и повтор |
 | Widget / TV layout | Focus, OK, overflow, смена серии/качества и dispose |
-| Golden | Каталог и экран ошибки в 960×540 и 1280×720 |
+| Golden | Полноэкранные сцены в общих профилях `GoldenProfile.tv`, `phonePortrait` и `phoneLandscape` |
 | Architecture | Нейтральность Core, публичные API и направление зависимостей |
 | App DI | Repository bindings, общие сервисы и закрытие HTTP |
 | Emulator E2E | Production runner/DI, HTTP/HTML, native HLS, login/Secure Storage, каталог, retry и Back |
@@ -266,6 +268,68 @@ expect(tester.takeException(), isNull);
 ```
 
 Размер по умолчанию: **960×540**, `wideTvSize`: **1280×720**, DPR: **1**. ProviderContainer освобождается в tearDown/addTearDown. Подписки, timers и controllers не должны переживать тест.
+
+### Общие профили полноэкранных golden
+
+Полноэкранные golden-тесты задают окно через общие профили из
+`test/support/test_app.dart`. Профиль фиксирует логический размер окна и DPR 1.
+Масштаб текста задаётся отдельным аргументом и по умолчанию равен 100%
+(`GoldenTextScale.normal`), а `GoldenTextScale.large` задаёт 200% через
+`TextScaler`, не меняя параметры окна.
+
+| Профиль | Логический размер | DPR |
+| --- | --- | --- |
+| `GoldenProfile.tv` | 960×540 | 1 |
+| `GoldenProfile.phonePortrait` | 360×800 | 1 |
+| `GoldenProfile.phoneLandscape` | 800×360 | 1 |
+
+Хелпер применяет профиль через `TestAppViewport` до построения экрана, выбирает
+TV- или мобильную тему по профилю и включает профиль в имя PNG. В этих
+вызовах `catalogFixture` и `animeFixture` — экраны с подготовленными тестовыми
+данными, а `catalogOverrides` и `animeOverrides` подменяют зависимости:
+
+```dart
+await testScreenGolden(
+  tester,
+  'catalog_loading',
+  profile: GoldenProfile.phonePortrait,
+  screen: catalogFixture,
+  overrides: catalogOverrides,
+);
+
+// Отдельный визуальный сценарий с текстом 200%:
+await testScreenGolden(
+  tester,
+  'anime_ready',
+  profile: GoldenProfile.tv,
+  textScale: GoldenTextScale.large,
+  screen: animeFixture,
+  overrides: animeOverrides,
+);
+```
+
+Полные примеры с fake repositories есть в
+[тестах каталога](../test/packages/features/catalog/presentation/screens/catalog_screen_golden_test.dart) и
+[тестах карточки](../test/packages/features/anime/presentation/screens/anime_screen_golden_test.dart).
+
+Итоговые эталоны: `goldens/catalog_loading.phonePortrait.png` и
+`goldens/anime_ready.tv.largeText.png`. Хелпер не принимает произвольный размер
+или DPR. Когда тест строит сцену сам или снимает несколько эталонов, используйте
+`pumpScreenGolden` и `expectScreenGolden` с теми же аргументами.
+
+Когда нужен отдельный снимок:
+
+* поворот меняет раскладку — добавьте альбомный снимок `phoneLandscape` для
+  соответствующей сцены;
+* нужно проверить переполнение, видимость кнопок, фокус или повышенный DPR —
+  используйте целевой widget-тест с подходящими параметрами, а не новый размер
+  golden;
+* снимок фиксирует отдельный компонент — подберите размер под его состояние;
+  примеры галерей компонентов: `test/app/content_typography_golden_test.dart`,
+  `test/packages/ui_kit/widgets/visual_foundation_golden_test.dart`.
+
+Новый профиль добавляется только для раскладки, которую существующие профили не
+покрывают.
 
 ### Пример BLoC-теста с fake repository
 
@@ -435,7 +499,7 @@ Device test зависит от сети и зеркала. Проверка э�
 Login E2E использует вымышленные кириллические credentials локального fixture. Реальный Android Secure Storage сохраняет cookies между пересозданием ProviderScope/runner; повторного POST при восстановлении нет. Проверяются неверный пароль, истечение сессии и выход. Live-проверка использует отдельный тестовый аккаунт и локальный JSON; настройка и автоматический вход описаны в разделе 9. Credentials в исходники и команды не добавляются.
 
 
-Favorites E2E хранит список в локальном HTTPS fixture, выполняет настоящий AJAX-запрос с session cookie и пересоздаёт приложение без локального списка. Проверяется изменение на другом клиенте и отказ сервера. Golden baselines фиксируют вкладки и звезду при 960×540 и 1280×720. Реальная запись избранного проверяется отдельным live-прогоном из раздела 9; результат fixture не заменяет эту проверку.
+Favorites E2E хранит список в локальном HTTPS fixture, выполняет настоящий AJAX-запрос с session cookie и пересоздаёт приложение без локального списка. Проверяется изменение на другом клиенте и отказ сервера. Golden baselines фиксируют вкладки и звезду в общем TV-профиле golden (960×540, DPR 1). Реальная запись избранного проверяется отдельным live-прогоном из раздела 9; результат fixture не заменяет эту проверку.
 
 ---
 

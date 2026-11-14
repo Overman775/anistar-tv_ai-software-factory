@@ -56,7 +56,6 @@ void main() {
   final homeDestination = destinations.at(0);
   final favoritesDestination = destinations.at(2);
   final genresDestination = destinations.at(3);
-  final app = find.byType(MaterialApp);
   final firstCard = find.byKey(const ValueKey(1));
   final longCatalogOverride = catalogRepositoryProvider.overrideWithValue(longMobileCatalog());
 
@@ -531,11 +530,11 @@ void main() {
   }
 
   testWidgets('mobile main, actions, empty favorites and genres goldens', (tester) async {
-    await pumpMobileApp(
+    await pumpScreenGolden(
       tester,
       const HomeScreen(accountName: 'overman', onAnimeTap: ignoreAnimeTap, onSignOut: ignoreSignOut),
+      profile: GoldenProfile.phonePortrait,
       wrapInScaffold: false,
-      disableAnimations: true,
       overrides: [
         authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
         favoritesAccountProvider.overrideWithValue('test'),
@@ -545,22 +544,23 @@ void main() {
       ],
     );
     await tester.pumpAndSettle();
-    await expectLater(app, matchesGoldenFile('goldens/mobile_home_390.png'));
+    await expectScreenGolden('mobile_home', profile: GoldenProfile.phonePortrait);
     await tester.longPress(firstCard);
     await tester.pumpAndSettle();
-    await expectLater(app, matchesGoldenFile('goldens/mobile_actions_390.png'));
+    await expectScreenGolden('mobile_actions', profile: GoldenProfile.phonePortrait);
     await tester.tap(find.byTooltip('Закрыть').last);
     await tester.pumpAndSettle();
     await tester.tap(favoritesDestination);
     await tester.pumpAndSettle();
-    await expectLater(app, matchesGoldenFile('goldens/mobile_favorites_empty_390.png'));
+    await expectScreenGolden('mobile_favorites_empty', profile: GoldenProfile.phonePortrait);
     await tester.tap(genresDestination);
     await tester.pumpAndSettle();
-    await expectLater(app, matchesGoldenFile('goldens/mobile_genres_390.png'));
+    await expectScreenGolden('mobile_genres', profile: GoldenProfile.phonePortrait);
     await tester.tap(homeDestination);
     await tester.pumpAndSettle();
     await tester.drag(catalogScroll, const Offset(0, -250));
     await tester.pumpAndSettle();
-    await expectLater(app, matchesGoldenFile('goldens/mobile_home_scrolled_390.png'));
+    await expectScreenGolden('mobile_home_scrolled', profile: GoldenProfile.phonePortrait);
+    expect(tester.takeException(), isNull);
   }, tags: ['golden']);
 }

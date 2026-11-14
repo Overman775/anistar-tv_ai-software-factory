@@ -24,10 +24,11 @@ void main() {
         ],
       );
       final repository = FakeFavoritesRepository()..load = (_) async => Result.success(page);
-      await pumpMobileApp(
+      await testScreenGolden(
         tester,
-        HomeScreen(onAnimeTap: (_) => fail('Unexpected navigation')),
-        disableAnimations: true,
+        'mobile_badges_${favorites ? 'favorites' : 'home'}',
+        profile: GoldenProfile.phonePortrait,
+        screen: HomeScreen(onAnimeTap: (_) => fail('Unexpected navigation')),
         wrapInScaffold: false,
         overrides: [
           authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
@@ -37,20 +38,18 @@ void main() {
           ),
           favoritesRepositoryProvider.overrideWithValue(repository),
         ],
-      );
-      // Each pump observes the preceding navigation state.
-      await tester.pumpAndSettle();
-      if (favorites) {
-        await tester.tap(find.byType(NavigationDestination).at(2));
-        // Each pump observes the preceding navigation state.
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('8,7'), favorites ? findsNothing : findsOneWidget);
-      expect(find.text('0,0'), findsNothing);
-      expect(tester.takeException(), isNull);
-      await expectLater(
-        find.byType(MaterialApp),
-        matchesGoldenFile('goldens/mobile_badges_${favorites ? 'favorites' : 'home'}_390.png'),
+        prepare: (tester) async {
+          // Each pump observes the preceding navigation state.
+          await tester.pumpAndSettle();
+          if (favorites) {
+            await tester.tap(find.byType(NavigationDestination).at(2));
+            // Each pump observes the preceding navigation state.
+            await tester.pumpAndSettle();
+          }
+          expect(find.text('8,7'), favorites ? findsNothing : findsOneWidget);
+          expect(find.text('0,0'), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
       );
     }, tags: ['golden']);
   }

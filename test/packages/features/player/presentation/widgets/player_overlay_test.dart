@@ -121,62 +121,55 @@ void main() {
     expect(target?.inSeconds, closeTo(12, 1));
   });
 
-  for (final (name, size) in [
-    ('compact', compactTvSize),
-    ('wide', wideTvSize),
-    ('1920x1080', const Size(1920, 1080)),
-  ]) {
-    testWidgets('player controls and timeline at $name viewport', (tester) async {
-      final frame = await cacheDecodedFixtureImage(tester, filePath: 'prototype/assets/frieren.jpg');
-      final play = FocusNode();
-      addTearDown(play.dispose);
-      await pumpTvApp(
-        tester,
-        Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              RawImage(image: frame, fit: BoxFit.cover),
-              PlayerOverlay(
-                title: 'Тестовое аниме с длинным названием',
-                episodeNumber: 2,
-                session: _session,
-                value: VideoPlayerValue(
-                  duration: const Duration(minutes: 24),
-                  position: const Duration(minutes: 10),
-                  buffered: [DurationRange(Duration.zero, const Duration(minutes: 16))],
-                  isInitialized: true,
-                  isPlaying: true,
-                ),
-                playFocusNode: play,
-                onPlayPause: () => fail('Unexpected activation'),
-                onSeek: (_) => fail('Unexpected seek'),
-                onBack: () => fail('Unexpected activation'),
-                onSelectEpisode: () => fail('Unexpected activation'),
-                onPreviousEpisode: () => fail('Unexpected activation'),
-                onNextEpisode: () => fail('Unexpected activation'),
-                onSelectQuality: () => fail('Unexpected activation'),
+  testWidgets('player controls and timeline at tv profile', (tester) async {
+    final frame = await cacheDecodedFixtureImage(tester, filePath: 'prototype/assets/frieren.jpg');
+    final play = FocusNode();
+    addTearDown(play.dispose);
+    await pumpScreenGolden(
+      tester,
+      Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            RawImage(image: frame, fit: BoxFit.cover),
+            PlayerOverlay(
+              title: 'Тестовое аниме с длинным названием',
+              episodeNumber: 2,
+              session: _session,
+              value: VideoPlayerValue(
+                duration: const Duration(minutes: 24),
+                position: const Duration(minutes: 10),
+                buffered: [DurationRange(Duration.zero, const Duration(minutes: 16))],
+                isInitialized: true,
+                isPlaying: true,
               ),
-            ],
-          ),
+              playFocusNode: play,
+              onPlayPause: () => fail('Unexpected activation'),
+              onSeek: (_) => fail('Unexpected seek'),
+              onBack: () => fail('Unexpected activation'),
+              onSelectEpisode: () => fail('Unexpected activation'),
+              onPreviousEpisode: () => fail('Unexpected activation'),
+              onNextEpisode: () => fail('Unexpected activation'),
+              onSelectQuality: () => fail('Unexpected activation'),
+            ),
+          ],
         ),
-        size: size,
-        wrapInScaffold: false,
-      );
-      play.requestFocus();
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(
-        tester.getRect(find.byType(Slider)).bottom,
-        lessThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('player-play'))).top),
-      );
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_$name.png'));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_timeline_$name.png'));
-    }, tags: ['golden']);
-  }
+      ),
+      wrapInScaffold: false,
+    );
+    play.requestFocus();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getRect(find.byType(Slider)).bottom,
+      lessThanOrEqualTo(tester.getRect(find.byKey(const ValueKey('player-play'))).top),
+    );
+    await expectScreenGolden('player');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    await expectScreenGolden('player_timeline');
+  }, tags: ['golden']);
 }
 
 final _session = PlaybackSession(

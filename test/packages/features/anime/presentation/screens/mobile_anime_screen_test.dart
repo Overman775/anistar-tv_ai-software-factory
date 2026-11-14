@@ -354,56 +354,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final (name, size) in [
-    ('narrow', const Size(320, 740)),
-    ('phone', const Size(390, 844)),
-    ('landscape', const Size(844, 390)),
-  ]) {
-    for (final scale in [1.0, 2.0]) {
+  for (final profile in [GoldenProfile.phonePortrait, GoldenProfile.phoneLandscape]) {
+    for (final textScale in GoldenTextScale.values) {
       for (final loading in [true, false]) {
-        testWidgets('mobile anime $name scale $scale loading $loading', (tester) async {
-          final pending = Completer<Result<AnimeScreenData, Failure>>();
-          await pumpMobileApp(
-            tester,
-            MediaQuery(
-              data: MediaQueryData(size: size, disableAnimations: true, textScaler: TextScaler.linear(scale)),
-              child: const AnimeScreen(
+        testWidgets(
+          'mobile anime ${profile.name}${textScale == GoldenTextScale.large ? ' 200%' : ''} loading $loading',
+          (tester) async {
+            final pending = Completer<Result<AnimeScreenData, Failure>>();
+            await testScreenGolden(
+              tester,
+              'mobile_anime_${loading ? 'loading' : 'ready'}',
+              profile: profile,
+              textScale: textScale,
+              screen: const AnimeScreen(
                 animeId: 1,
                 slug: 'test',
                 fallbackTitle: _title,
                 onEpisodeTap: _ignoreEpisode,
                 onFilterTap: _ignoreFilter,
               ),
-            ),
-            size: size,
-            wrapInScaffold: false,
-            overrides: [
-              animeRepositoryProvider.overrideWithValue(
-                FakeAnimeScreenRepository(
-                  load: (_, _) => loading ? pending.future : Future.value(Result.success(_data)),
+              wrapInScaffold: false,
+              overrides: [
+                animeRepositoryProvider.overrideWithValue(
+                  FakeAnimeScreenRepository(
+                    load: (_, _) => loading ? pending.future : Future.value(Result.success(_data)),
+                  ),
                 ),
-              ),
-            ],
-          );
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-          if (!loading && name == 'landscape' && scale > 1) {
-            expect(find.text('Подробнее').hitTestable(), findsOneWidget);
-          }
-          await expectLater(
-            find.byType(MaterialApp),
-            matchesGoldenFile(
-              'goldens/mobile_anime_${loading ? 'loading' : 'ready'}_$name${scale == 1 ? '' : '_scaled'}.png',
-            ),
-          );
-          if (!loading) {
-            final episode = find.byKey(const ValueKey('mobile-episode-5'));
-            await tester.scrollUntilVisible(episode, 200, scrollable: find.byType(Scrollable).first);
-            await tester.pumpAndSettle();
-            expect(episode.hitTestable(), findsOneWidget);
-            expect(tester.takeException(), isNull);
-          }
-        }, tags: ['golden']);
+              ],
+              prepare: (tester) async {
+                await tester.pumpAndSettle();
+                expect(tester.takeException(), isNull);
+                if (!loading && profile == GoldenProfile.phoneLandscape && textScale == GoldenTextScale.large) {
+                  expect(find.text('Подробнее').hitTestable(), findsOneWidget);
+                }
+              },
+            );
+            if (!loading) {
+              final episode = find.byKey(const ValueKey('mobile-episode-5'));
+              await tester.scrollUntilVisible(episode, 200, scrollable: find.byType(Scrollable).first);
+              await tester.pumpAndSettle();
+              expect(episode.hitTestable(), findsOneWidget);
+              expect(tester.takeException(), isNull);
+            }
+          },
+          tags: ['golden'],
+        );
       }
     }
   }

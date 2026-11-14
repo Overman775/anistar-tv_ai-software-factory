@@ -64,10 +64,10 @@
 
 Снимки фиксируют принятый вид AniStar TV, а не вид стороннего приложения:
 
-- [Свёрнутое меню](../../test/packages/features/catalog/presentation/screens/goldens/catalog_compact.png), [раскрытое меню](../../test/packages/features/favorites/goldens/navigation_expanded_compact.png), [правая панель](../../test/packages/features/favorites/goldens/actions_sheet_compact.png).
-- [Плеер](../../test/packages/features/player/presentation/widgets/goldens/player_compact.png), [фокус шкалы](../../test/packages/features/player/presentation/widgets/goldens/player_timeline_wide.png).
+- [Свёрнутое меню](../../test/packages/features/catalog/presentation/screens/goldens/catalog.tv.png), [раскрытое меню](../../test/packages/features/favorites/goldens/navigation_expanded.tv.png), [правая панель](../../test/packages/features/favorites/goldens/actions_sheet.tv.png).
+- [Плеер](../../test/packages/features/player/presentation/widgets/goldens/player.tv.png), [фокус шкалы](../../test/packages/features/player/presentation/widgets/goldens/player_timeline.tv.png).
 
-Изменение геометрии требует обновления маршрутов фокуса и соответствующих widget/E2E-тестов. Проверяем короткое/долгое OK, возврат после Back, отмену панели, ошибки, пустые списки, исчезновение последнего избранного и управление плеером. Экранные TV golden-проверки используют 960×540, 1280×720 и 1920×1080 logical pixels при DPR 1; PNG просматриваются перед повторным сравнением. 640×360 служит дополнительной widget-проверкой адаптации и overflow. Узкий Android-экран проверяется на overflow. Анимация панели должна завершиться до координатного нажатия в E2E.
+Изменение геометрии требует обновления маршрутов фокуса и соответствующих widget/E2E-тестов. Проверяем короткое/долгое OK, возврат после Back, отмену панели, ошибки, пустые списки, исчезновение последнего избранного и управление плеером. Экранные TV golden-проверки используют общий профиль `GoldenProfile.tv` — 960×540 logical pixels при DPR 1, а текст 200% — отдельный эталон `largeText` того же окна; PNG просматриваются перед повторным сравнением. 640×360 служит дополнительной widget-проверкой адаптации и overflow. Узкий Android-экран проверяется на overflow. Анимация панели должна завершиться до координатного нажатия в E2E.
 
 Команды и границы проверки находятся в [руководстве](../05_development_and_testing.md#10-результаты-и-границы-проверки). Результаты конкретного запуска сообщаются в отчёте задачи. Эмулятор и снимки не заменяют оценку читаемости и плавности на физическом телевизоре.
 

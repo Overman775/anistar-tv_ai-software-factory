@@ -7,77 +7,69 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:core/data.dart';
-import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../../../../../support/test_app.dart';
 
 void main() {
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize), ('portrait', const Size(412, 915))]) {
-    testWidgets(name == 'portrait' ? 'mobile catalog portrait loading' : 'catalog loading at $name viewport', (
-      tester,
-    ) async {
+  for (final profile in [GoldenProfile.tv, GoldenProfile.phonePortrait]) {
+    testWidgets('catalog loading at ${profile.name}', (tester) async {
       final pending = Completer<Result<AnimePage, Failure>>();
-      await _pumpCatalogHome(
+      await testScreenGolden(
         tester,
-        size: size,
+        'catalog_loading',
+        profile: profile,
+        screen: _home,
+        wrapInScaffold: false,
         overrides: [
           authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
           favoritesAccountProvider.overrideWithValue('test'),
           catalogRepositoryProvider.overrideWithValue(FakeCatalogScreenRepository(load: (_) => pending.future)),
         ],
+        prepare: (tester) async {
+          await tester.pump();
+          await tester.pump();
+        },
       );
-      await tester.pump();
-      await tester.pump();
       expect(tester.takeException(), isNull);
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_loading_$name.png'));
     }, tags: ['golden']);
-    testWidgets(
-      name == 'portrait' ? 'mobile catalog portrait layout/focus' : 'catalog layout/focus at $name viewport',
-      (tester) async {
-        await _pumpCatalogHome(
-          tester,
-          size: size,
-          overrides: [
-            authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
-            favoritesAccountProvider.overrideWithValue('test'),
-            catalogRepositoryProvider.overrideWithValue(
-              FakeCatalogScreenRepository(
-                load: (_) async => Result.success(
-                  AnimePage(
-                    page: 1,
-                    hasNext: false,
-                    items: List.generate(
-                      12,
-                      (index) => AnimeSummary(
-                        id: index + 1,
-                        slug: '${index + 1}-anime',
-                        title: 'Аниме ${index + 1}',
-                        posterUri: Uri(),
-                        isFavorite: index == 0,
-                        rating: index == 2 ? null : 8.4,
-                      ),
+
+    testWidgets('catalog layout/focus at ${profile.name}', (tester) async {
+      await testScreenGolden(
+        tester,
+        'catalog',
+        profile: profile,
+        screen: _home,
+        wrapInScaffold: false,
+        overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          favoritesAccountProvider.overrideWithValue('test'),
+          catalogRepositoryProvider.overrideWithValue(
+            FakeCatalogScreenRepository(
+              load: (_) async => Result.success(
+                AnimePage(
+                  page: 1,
+                  hasNext: false,
+                  items: List.generate(
+                    12,
+                    (index) => AnimeSummary(
+                      id: index + 1,
+                      slug: '${index + 1}-anime',
+                      title: 'Аниме ${index + 1}',
+                      posterUri: Uri(),
+                      isFavorite: index == 0,
+                      rating: index == 2 ? null : 8.4,
                     ),
                   ),
                 ),
               ),
             ),
-          ],
-        );
-        await tester.pumpAndSettle();
-        await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/catalog_$name.png'));
-      },
-      tags: ['golden'],
-    );
+          ),
+        ],
+      );
+    }, tags: ['golden']);
   }
 }
 
-Future<void> _pumpCatalogHome(WidgetTester tester, {required Size size, required List<Override> overrides}) {
-  final home = HomeScreen(onAnimeTap: (anime) => expect(anime.id, isPositive));
-
-  return size.height > size.width
-      ? pumpMobileApp(tester, home, size: size, disableAnimations: true, wrapInScaffold: false, overrides: overrides)
-      : pumpTvApp(tester, home, size: size, disableAnimations: true, wrapInScaffold: false, overrides: overrides);
-}
+final _home = HomeScreen(onAnimeTap: (anime) => expect(anime.id, isPositive));

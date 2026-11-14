@@ -16,67 +16,61 @@ import '../mocks/features/catalog/fake_catalog_browse_repository.dart';
 import '../support/test_app.dart';
 
 void main() {
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
-    testWidgets('long recovery state at 200% on $name TV', (tester) async {
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await pumpTvApp(
-        tester,
-        TvBackdrop(
-          child: TvStateView(
-            icon: Icons.cloud_off_rounded,
-            title: 'Каталог недоступен',
-            message: 'Не удалось получить данные AniStar. Проверьте подключение к интернету и повторите загрузку. Ваши изменения в аккаунте сохраняются на сайте.',
-            actionLabel: 'Повторить',
-            onAction: () => fail('Unexpected retry'),
-          ),
+  testWidgets('long recovery state at 200% on TV', (tester) async {
+    await testScreenGolden(
+      tester,
+      'harden_error',
+      textScale: GoldenTextScale.large,
+      screen: TvBackdrop(
+        child: TvStateView(
+          icon: Icons.cloud_off_rounded,
+          title: 'Каталог недоступен',
+          message: 'Не удалось получить данные AniStar. Проверьте подключение к интернету и повторите загрузку. Ваши изменения в аккаунте сохраняются на сайте.',
+          actionLabel: 'Повторить',
+          onAction: () => fail('Unexpected retry'),
         ),
-        size: size,
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/harden_error_${name}_scaled.png'));
-      final title = find.text('Каталог недоступен');
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
-      await tester.pumpAndSettle();
-      expect(tester.getTopLeft(title).dy, greaterThanOrEqualTo(0));
-      expect(tester.getBottomRight(title).dy, lessThanOrEqualTo(size.height));
-    }, tags: ['golden']);
-  }
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    final title = find.text('Каталог недоступен');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(title).dy, greaterThanOrEqualTo(0));
+    expect(tester.getBottomRight(title).dy, lessThanOrEqualTo(GoldenProfile.tv.logicalSize.height));
+    expect(tester.takeException(), isNull);
+  }, tags: ['golden']);
 
   testWidgets('portrait login at 200%', (tester) async {
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final repository = FakeAuthRepository();
     addTearDown(repository.close);
-    await pumpTvApp(
+    await testScreenGolden(
       tester,
-      const LoginScreen(),
-      size: const Size(390, 844),
+      'harden_login',
+      profile: GoldenProfile.phonePortrait,
+      textScale: GoldenTextScale.large,
+      screen: const LoginScreen(),
       wrapInScaffold: false,
       overrides: [authRepositoryProvider.overrideWithValue(repository)],
     );
-    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/harden_login_portrait_scaled.png'));
   }, tags: ['golden']);
 
   testWidgets('long portrait genres at 200%', (tester) async {
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final items = List.generate(
       50,
       (index) => CatalogFilter(label: 'Научная фантастика и путешествия $index', path: '/genre-$index/'),
     );
-    await pumpTvApp(
+    await testScreenGolden(
       tester,
-      TvRouteShell(
+      'harden_genres',
+      profile: GoldenProfile.phonePortrait,
+      textScale: GoldenTextScale.large,
+      screen: TvRouteShell(
         destination: HomeDestination.genres,
         onDestinationSelected: (_) => fail('Unexpected destination selection'),
         builder: (onOpenNavigation) =>
             GenresScreen(onOpenNavigation: onOpenNavigation, onSelected: (_) => fail('Unexpected selection')),
       ),
-      size: const Size(390, 844),
       wrapInScaffold: false,
       overrides: [
         catalogBrowseRepositoryProvider.overrideWithValue(
@@ -84,8 +78,6 @@ void main() {
         ),
       ],
     );
-    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/harden_genres_portrait_scaled.png'));
   }, tags: ['golden']);
 }

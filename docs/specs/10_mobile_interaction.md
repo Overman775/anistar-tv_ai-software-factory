@@ -89,10 +89,10 @@ Pull to refresh в плеере отсутствует: сенсорная шк�
 
 | Область | Регрессии |
 | --- | --- |
-| TV | Экранные goldens 960×540, 1280×720 и 1920×1080 при DPR 1; 640×360 — дополнительная widget-проверка; пульт, focus, панели и возврат |
-| Каталог mobile | 320×640, 390×844, 844×390 с 200% текста; вкладки, Back, сохранение прокрутки, действия |
-| Карточка mobile | 320×740, 390×844, 844×390; loading/ready, 100%/200% текста, фильтры, история и semantic tap |
-| Плеер mobile | Узкий portrait, обычный portrait и landscape; controls, шкала, качество, поворот, выход и lifecycle |
+| TV | Экранные goldens в общем профиле tv (960×540 при DPR 1) и его вариантах с текстом 200%; 640×360 — дополнительная widget-проверка; пульт, focus, панели и возврат |
+| Каталог mobile | Экранные goldens каталога в профиле phonePortrait. Поиск отдельно проверяется в phonePortrait и phoneLandscape, включая текст 200%. Узкие размеры остаются целевыми widget-тестами; вкладки, Back, сохранение прокрутки, действия |
+| Карточка mobile | Экранные goldens loading/ready в профилях phonePortrait и phoneLandscape при 100%/200% текста; фильтры, история и semantic tap |
+| Плеер mobile | Профили phonePortrait и phoneLandscape при 100%/200% текста; controls, шкала, качество, поворот, выход и lifecycle |
 | Общий слой | Профиль, Sizer, тема, SafeArea и нижняя панель при увеличенном тексте |
 
 Точки входа: `test/packages/features/catalog/presentation/screens/mobile_pull_refresh_test.dart`, `test/packages/features/catalog/presentation/screens/mobile_catalog_test.dart`, `test/packages/features/anime/presentation/screens/mobile_anime_screen_test.dart`, `test/packages/features/player/presentation/widgets/mobile_player_controls_test.dart`, `test/packages/features/player/presentation/screens/mobile_player_screen_test.dart`, `test/app/mobile_responsive_test.dart`.

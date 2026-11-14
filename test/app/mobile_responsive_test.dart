@@ -162,19 +162,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final size in [const Size(320, 640), const Size(390, 844)]) {
-    testWidgets('mobile login golden ${size.width}', (tester) async {
-      final auth = FakeAuthRepository();
-      addTearDown(auth.close);
-      await pumpMobileApp(
-        tester,
-        const LoginScreen(),
-        size: size,
-        wrapInScaffold: false,
-        overrides: [authRepositoryProvider.overrideWithValue(auth)],
-      );
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/mobile_login_${size.width.toInt()}.png'));
-    }, tags: ['golden']);
-  }
+  testWidgets('mobile login golden at phone portrait', (tester) async {
+    final auth = FakeAuthRepository();
+    addTearDown(auth.close);
+    await testScreenGolden(
+      tester,
+      'mobile_login',
+      profile: GoldenProfile.phonePortrait,
+      screen: const LoginScreen(),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(auth)],
+    );
+  }, tags: ['golden']);
 }

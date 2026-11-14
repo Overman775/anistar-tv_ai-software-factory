@@ -19,17 +19,10 @@ import '../../../../mocks/features/search/fake_search_repository.dart';
 import '../../../../support/test_app.dart';
 
 void main() {
-  // This matrix owns visual states across profile, viewport and text scale.
+  // This matrix owns visual states across the common golden profiles and text scales.
   // Query rules and retry semantics stay covered by SearchBloc/SearchScreen tests.
-  for (final (mobile, size) in [
-    (false, compactTvSize),
-    (false, wideTvSize),
-    (false, const Size(1920, 1080)),
-    (true, const Size(320, 640)),
-    (true, const Size(390, 844)),
-    (true, const Size(844, 390)),
-  ]) {
-    for (final textScale in [1.0, 2.0]) {
+  for (final profile in GoldenProfile.values) {
+    for (final textScale in GoldenTextScale.values) {
       for (final scene in [
         'idle',
         'history',
@@ -40,12 +33,10 @@ void main() {
         'error',
         'pagination_retry',
       ]) {
-        final profile = mobile ? 'mobile' : 'tv';
-        final dimensions = '${size.width.toInt()}x${size.height.toInt()}';
-        final scale = (textScale * 100).toInt();
-        final legacy = textScale == 1 && size == (mobile ? const Size(390, 844) : compactTvSize);
-        final suffix = legacy ? '' : '_${dimensions}_$scale';
-        testWidgets('guest search $scene $profile $dimensions $scale% golden', (tester) async {
+        final mobile = profile != GoldenProfile.tv;
+        testWidgets('guest search $scene ${profile.name}${textScale == GoldenTextScale.large ? ' 200%' : ''} golden', (
+          tester,
+        ) async {
           final semantics = tester.ensureSemantics();
           try {
             final opened = <int>[];
@@ -91,25 +82,7 @@ void main() {
               ),
             ];
             final screen = SearchScreen(onAnimeTap: (anime) => opened.add(anime.id));
-            if (mobile) {
-              await pumpMobileApp(
-                tester,
-                screen,
-                size: size,
-                textScale: textScale,
-                overrides: overrides,
-                disableAnimations: true,
-              );
-            } else {
-              await pumpTvApp(
-                tester,
-                screen,
-                size: size,
-                textScale: textScale,
-                disableAnimations: true,
-                overrides: overrides,
-              );
-            }
+            await pumpScreenGolden(tester, screen, profile: profile, textScale: textScale, overrides: overrides);
             await settle();
             if (!['idle', 'history'].contains(scene)) {
               final field = find.byKey(const ValueKey('search-query'));
@@ -141,19 +114,22 @@ void main() {
                 expect(find.byKey(const ValueKey('search-pagination-retry')).hitTestable(), findsOneWidget);
               }
             }
-            if (!mobile && scene == 'loading') {
+            if (profile == GoldenProfile.tv && scene == 'loading') {
               final skeleton = find.byType(CatalogSkeleton);
               final row = find.descendant(of: skeleton, matching: find.byType(ListView));
               expect(tester.widget<ListView>(row).scrollDirection, Axis.horizontal);
               final placeholders = find.descendant(of: row, matching: find.byType(TvSkeletonBox));
               final first = placeholders.first;
-              expect(tester.getSize(first).width, closeTo(CatalogLayout.posterWidth(size.height), 0.01));
+              expect(
+                tester.getSize(first).width,
+                closeTo(CatalogLayout.posterWidth(GoldenProfile.tv.logicalSize.height), 0.01),
+              );
               expect(
                 tester.getBottomLeft(first).dy,
                 closeTo(tester.getBottomLeft(find.byType(SearchLoading)).dy - CatalogLayout.railBottomPadding, 0.01),
               );
             }
-            if (!mobile && scene == 'pagination_retry' && textScale == 2 && size != const Size(1920, 1080)) {
+            if (profile == GoldenProfile.tv && scene == 'pagination_retry' && textScale == GoldenTextScale.large) {
               for (final label in ['Сбой', 'Ещё раз']) {
                 final text = find.descendant(
                   of: find.byKey(const ValueKey('search-pagination-retry')),
@@ -167,7 +143,7 @@ void main() {
                 );
               }
             }
-            if (mobile && size == const Size(320, 640) && textScale == 2) {
+            if (profile == GoldenProfile.phonePortrait && textScale == GoldenTextScale.large) {
               final label = switch (scene) {
                 'history' => 'Последние запросы',
                 'error' => 'Поиск недоступен',
@@ -190,10 +166,7 @@ void main() {
             }
             final layoutException = takeException();
             expect(layoutException, isNull);
-            await expectLater(
-              find.byType(MaterialApp),
-              matchesGoldenFile('goldens/search_${profile}_$scene$suffix.png'),
-            );
+            await expectScreenGolden('search_$scene', profile: profile, textScale: textScale);
             _expectAction(tester, find.byKey(const ValueKey('search-submit')), 'Найти');
             final field = find.byKey(const ValueKey('search-query'));
             final controller = tester.widget<TextField>(field).controller;

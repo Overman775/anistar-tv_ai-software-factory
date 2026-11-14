@@ -26,14 +26,11 @@ void main() {
 
   Future<void> pumpChoices(
     WidgetTester tester, {
-    required double textScale,
+    required GoldenTextScale textScale,
     bool reducedMotion = false,
-    Size size = compactTvSize,
   }) async {
     final settle = tester.pumpAndSettle;
-    tester.platformDispatcher.textScaleFactorTestValue = textScale;
-    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await pumpTvApp(
+    await pumpScreenGolden(
       tester,
       Builder(
         builder: (context) => FilledButton(
@@ -50,7 +47,7 @@ void main() {
           child: const Text('Серии'),
         ),
       ),
-      size: size,
+      textScale: textScale,
     );
     await settle();
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
@@ -72,7 +69,7 @@ void main() {
   testWidgets('current long-list episode receives focus, scrolls into view and keeps metadata states distinct', (
     tester,
   ) async {
-    await pumpChoices(tester, textScale: 1);
+    await pumpChoices(tester, textScale: GoldenTextScale.normal);
 
     expectSelectedCard(tester);
     final position = tester.state<ScrollableState>(find.byType(Scrollable)).position;
@@ -82,21 +79,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final (name, scale, size) in [
-    ('compact', 1.0, compactTvSize),
-    ('compact_scaled', 2.0, compactTvSize),
-    ('1280x720', 1.0, wideTvSize),
-    ('1920x1080', 1.0, const Size(1920, 1080)),
-  ]) {
-    testWidgets('episode choices golden at $name', (tester) async {
-      await pumpChoices(tester, textScale: scale, size: size);
+  for (final textScale in GoldenTextScale.values) {
+    testWidgets('episode choices golden at tv${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
+      await pumpChoices(tester, textScale: textScale);
       expectSelectedCard(tester);
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_episode_choices_$name.png'));
+      await expectScreenGolden('player_episode_choices', textScale: textScale);
     }, tags: ['golden']);
   }
 
   testWidgets('200% text and reduced motion keep the selected card available without focus scaling', (tester) async {
-    await pumpChoices(tester, textScale: 2, reducedMotion: true);
+    await pumpChoices(tester, textScale: GoldenTextScale.large, reducedMotion: true);
 
     expectSelectedCard(tester);
     final scale = tester.widget<AnimatedScale>(

@@ -7,8 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import 'golden_profile.dart';
 import 'test_app_viewport.dart';
 
+export 'golden_profile.dart';
 export 'test_app_viewport.dart';
 
 const compactTvSize = Size(960, 540);
@@ -109,6 +111,91 @@ Future<void> pumpMobileApp(
   await tester.runAsync(
     () => precacheImage(Assets.images.anistarLogo.provider(), tester.element(find.byType(MaterialApp).first)),
   );
+}
+
+/// Applies [profile] through [TestAppViewport] and pumps [screen] inside the
+/// matching platform harness. [textScale] only scales text; the window size
+/// and DPR always come from [profile].
+Future<void> pumpScreenGolden(
+  WidgetTester tester,
+  Widget screen, {
+  GoldenProfile profile = GoldenProfile.tv,
+  GoldenTextScale textScale = GoldenTextScale.normal,
+  List<Override> overrides = const [],
+  bool wrapInScaffold = true,
+  bool disableAnimations = true,
+}) {
+  final shared = (
+    size: profile.logicalSize,
+    devicePixelRatio: profile.devicePixelRatio,
+    textScale: textScale.factor,
+    disableAnimations: disableAnimations,
+    wrapInScaffold: wrapInScaffold,
+    overrides: overrides,
+  );
+  return profile.platform == AppDeviceProfile.tv
+      ? pumpTvApp(
+          tester,
+          screen,
+          size: shared.size,
+          devicePixelRatio: shared.devicePixelRatio,
+          textScale: shared.textScale,
+          disableAnimations: shared.disableAnimations,
+          wrapInScaffold: shared.wrapInScaffold,
+          overrides: shared.overrides,
+        )
+      : pumpMobileApp(
+          tester,
+          screen,
+          size: shared.size,
+          devicePixelRatio: shared.devicePixelRatio,
+          textScale: shared.textScale,
+          disableAnimations: shared.disableAnimations,
+          wrapInScaffold: shared.wrapInScaffold,
+          overrides: shared.overrides,
+        );
+}
+
+/// Compares the current frame with the baseline named by [screenGoldenFile].
+Future<void> expectScreenGolden(
+  String scenario, {
+  GoldenProfile profile = GoldenProfile.tv,
+  GoldenTextScale textScale = GoldenTextScale.normal,
+  Finder? target,
+}) => expectLater(
+  target ?? find.byType(MaterialApp).first,
+  matchesGoldenFile(screenGoldenFile(scenario, profile, textScale)),
+);
+
+/// Pumps [screen] for [profile], runs [prepare] (or settles by default) and
+/// captures one fullscreen baseline named after the scenario and profile.
+Future<void> testScreenGolden(
+  WidgetTester tester,
+  String scenario, {
+  required Widget screen,
+  GoldenProfile profile = GoldenProfile.tv,
+  GoldenTextScale textScale = GoldenTextScale.normal,
+  List<Override> overrides = const [],
+  bool wrapInScaffold = true,
+  bool disableAnimations = true,
+  Finder? target,
+  Future<void> Function(WidgetTester tester)? prepare,
+}) async {
+  await pumpScreenGolden(
+    tester,
+    screen,
+    profile: profile,
+    textScale: textScale,
+    overrides: overrides,
+    wrapInScaffold: wrapInScaffold,
+    disableAnimations: disableAnimations,
+  );
+  if (prepare == null) {
+    await tester.pumpAndSettle();
+  } else {
+    await prepare(tester);
+  }
+  await expectScreenGolden(scenario, profile: profile, textScale: textScale, target: target);
 }
 
 /// Match the focused rail control by its public FocusNode identity.
