@@ -23,7 +23,7 @@ sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py init workflow
 ```
 
 For Implement, save the snapshot in OS temporary storage and use verified
-`read-instructions` content for factory instructions. See the Implement entry
+`read-instructions` content for factory instructions. See [orchestration entry](orchestration.md#entry)
 for the complete reading sequence. Bare `init` remains a low-level compatibility
 interface; it does not verify what the coordinator read before initialization.
 

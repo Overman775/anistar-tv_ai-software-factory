@@ -2,8 +2,8 @@
 plan_id: golden-screen-profiles
 revision: 1
 plan_state: PLAN_READY
-status: draft
-approved_revision: none
+status: approved
+approved_revision: 1
 source: mixed
 handoff_recommendation: direct
 
@@ -83,12 +83,17 @@ handoff_recommendation: direct
 
 ### Developer acceptance and readiness
 
-Объём ограничен тестовой инфраструктурой, эталонами и документацией. Реализацию можно вести одним проходом после утверждения плана.
+- Acceptance: выполнены AC-01–AC-04.
+- Readiness: объём ограничен тестовой инфраструктурой, эталонами и документацией; реализацию можно вести одним проходом после утверждения плана.
 
-### QA and verification
+### QA checks
 
-При реализации сверить каталог и плеер на ТВ, карточку на телефоне и плеер в альбоме. Просмотреть обновлённые PNG и diff, затем повторно запустить сравнение.
+- При реализации сверить каталог и плеер на ТВ, карточку на телефоне и плеер в альбоме. Просмотреть обновлённые PNG и diff, затем повторно запустить сравнение.
 
 ## Handoff
 
-Прямая реализация. Начать с хелпера и проверки его параметров, затем перенести экранные тесты и обновить руководство.
+- Recommendation: `direct`.
+- Why: объём ограничен тестовой инфраструктурой, эталонами и документацией.
+- What the next stage receives: план и AC-01–AC-04.
+- Warning/conditions: начать с хелпера и проверки его параметров, затем перенести экранные тесты и обновить руководство.
+- Continuation: awaiting user choice.

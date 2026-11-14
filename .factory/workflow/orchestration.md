@@ -5,18 +5,63 @@ The parent builds and drives the workflow using `factory.yaml` and its configure
 Scripts validate/record decisions, not product semantics. Apply the router
 before creating or revising assignments; persist decisions before dispatch.
 
+Every child launch or follow-up, including intake/research helpers, must use
+an eligible configured role/profile and its adapter. ACP forbids direct native
+spawn or implicit coordinator model/effort inheritance. If the adapter cannot
+execute the assignment, report a blocker; never silently substitute native.
+Until a valid Implement assignment can be reserved, prepare directly as coordinator.
+
 Read [coordinator communication and waiting](../contracts/common/agent-checkpoint.md).
+
+## Entry
+
+Complete this entry before preparation or delegation, whether invoked through
+Factory Implement or directly as Orchestrator.
+
+Save `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config`
+output as JSON in OS temporary storage. Keep it through `init`; do not send it
+to workers. Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py
+read-instructions SNAPSHOT PATH...` for mandatory Implement factory instructions.
+Paths are relative to `.factory/`. Use the returned content, including when
+rereading this policy and the entry skill. The command verifies the same bytes.
+Read the Orchestrator role and contract, communication and project policy,
+execution source contract, configured router, this policy and their applicable
+Implement instruction links through that command. Other process handoffs follow
+their own entry instructions. On changed bytes, stop and reload the snapshot and
+instructions; pass the same snapshot to `init`.
+
+Resolve project inputs with `sh .factory/tooling/bin/python.sh
+.factory/tooling/bin/project.py context --process implement --audience coordinator`.
+Add `--scope PATH` for each known scope. Read returned instructions and applicable
+documents: project `AGENTS.md`, architecture, structure, codestyle, testing, specs,
+ADRs and package READMEs. Unknown scope retains obligations; read actual domain
+rules and command definitions, not only indexes. Read selected adapter instructions
+and role contracts before their assignments.
+
+Inspect `.factory/memory/state/workflow.json`. Reconcile files and runtime before
+resuming; cancel an old run only on user instruction. Never silently replace
+legacy `pipeline.md` or an unknown writer.
 
 ## Intake
 
 One active implementation run per checkout, with a fixed batch of direct tasks,
 intents, approved plans or decomposed tasks. Resolve each source using
-`factory-implement/references/execution-source-contract.md`; preserve hashes and
-approvals. New unrelated tasks need another run. Coordinate shared provider
-quotas across checkouts.
+[execution source contract](../skills/factory-implement/references/execution-source-contract.md); preserve hashes and
+approvals. New unrelated tasks need another run. A follow-up records its bounded
+new delta without inheriting completed gate verdicts. Coordinate shared provider
+quotas across checkouts. Planning owns product decisions and immutable approved
+plans; Decompose owns published vertical tasks. The parent coordinates; even
+small product edits go to a Generalist, not a root-only editing exception.
+
+Lock intended behavior, exclusions, criteria and risk. For a direct source, copy
+the complete request into `text`, excluding credentials, and check it against the
+original. Preserve explicit no-plan and decision-delegation wording verbatim in
+`directive`; use `none` only when neither appears. Apply the source contract's
+directive precedence and Material Semantic Gap Gate. Technical graph preparation
+is not a new semantic approval gate.
 
 Inspect code before asking for missing product decisions. Self-contained requests
-need no mandatory Planning; planning-only requests never authorize implementation. Reuse an
+need no mandatory Planning; planning-only requests go to Planning or stop without an Implement run, assignments or product edits. Reuse an
 execution sketch only after checking sources, checkout and available profiles;
 otherwise build it before dispatch.
 
@@ -28,6 +73,10 @@ graphs in history.
 
 ## Graph and verification
 
+Build/reuse slices, tasks and agent steps; record why the selected team is sufficient.
+Use the [state contract](../skills/factory-implement/references/shared-state.md)
+and [workflow usage](README.md). Run `workflow.py init GRAPH --config-pin CONFIG_SNAPSHOT`
+to verify observed instruction versions; validate before dispatch.
 Persist an acyclic graph before the first worker. Each logical agent has one ID;
 Developer instances have distinct IDs. Steps bind task, slice, source hashes,
 profile, inputs, owned paths, dependencies and output. Fixes reuse nodes with new
@@ -66,9 +115,20 @@ and mandatory deferred work; local PASS is not integration PASS.
 
 ## Gates and corrections
 
+Read the [shared acceptance contract](../gates/common/verification-rules.md),
+[Implement gates](../gates/skills/implement.md) and coordinator
+[acceptance data](../skills/factory-implement/references/acceptance-data.md).
+Carry stable AC IDs through source, tasks, required checks and results.
+Acceptance criteria neither replace mandatory project gates nor limit additional
+risk-based checks.
+
 Apply Implement's shared gates: architecture, source drift, static/test/build,
 golden, refactor and evidence. Reports bind final scope and file hashes;
 process exit or ACP delivery is not a gate verdict.
+
+Before any `run-check`, call `workflow.py next` and wait for every outstanding
+native packet confirmation, including other nodes. A ready check reservation
+does not clear this delivery gate.
 
 Register applicable mandatory commands in task `required_checks.execution` before
 intake, with argv/cwd/timeout and additional input files. Execute through
@@ -131,16 +191,36 @@ current source/AC, findings, dependencies and remaining budgets. Prior reports
 are historical evidence, not proof that current files pass. No automatic parent
 or predecessor transcript inheritance and no worker-side escalation policy.
 
-Before finish and acceptance, ensure reports contain consequential decisions and
-reasons, constraints, unverified behavior and open questions needed downstream.
-Before dispatch, check predecessor reports. For facts discovered after a terminal
-report, provide existing authorized scoped sources for the dependent worker to read;
-do not keep required handoff only in chat. The packet follows relevant dependencies through
+Before finishing a predecessor needed downstream, read its author report against
+the [dependency-handoff contract](../contracts/common/implement-result.md#dependency-handoff);
+compare it with the locked source and applicable documents for the downstream
+consumer. Return missing or ambiguous facts to the same bound author for a
+report-only amendment after the terminal turn and writer reconciliation, if the
+adapter permits continuation; reread before `finish`. If continuation is
+unavailable, preserve the terminal report and use the normal verification-failure
+and correction path, or block; do not change its outcome or dispatch the successor.
+After `finish`, the ledger holds
+a copy: use the existing correction/retry path and invalidate dependent evidence,
+not an edit to the output file. For an explicitly required durable handoff, also
+apply the required observation in [acceptance data](../skills/factory-implement/references/acceptance-data.md)
+before predecessor acceptance and successor dispatch.
+
+Before successor dispatch, check predecessor reports. For facts discovered after
+a terminal report, provide authorized scoped sources
+for dependent workers; do not keep required handoff only in chat. The packet follows relevant dependencies through
 acceptance, deduplicates nodes and preserves full evidence for verification/review.
 It does not infer missing reasons or import every task in a slice/run. Supply any
 additional required source through scoped reading; keep messages Telegraphic.
 
 ## Sessions and recovery
+
+For each ready node, recheck source, model/tools/permissions and host capacity;
+reserve with `claim`, then execute the selected adapter's packet delivery and
+session-binding procedure. Native/ACP launch commands belong to that adapter.
+Use [shared adapter rules](../adapters/common.md) for context ownership; workers
+receive worker instructions and assignments, not coordinator instructions.
+Do not run multiple active turns in one session. Validate returned evidence
+before `finish` or routing findings to their owner.
 
 Reuse sessions for related work only after checking specialization, instructions,
 context and newly locked assignment; a new slice alone needs no new agent.
@@ -163,6 +243,11 @@ confirming the old writer stopped. Cancel only on user instruction or an explici
 allowed failure condition; cancellation acknowledgement does not prove writes ended.
 
 ## History
+
+Follow [finalize](../skills/factory-implement/references/shared-finalize.md), then
+[cleanup](../skills/factory-implement/references/shared-cleanup.md). Commit, push,
+publication, live tests, golden changes and destructive cleanup retain their
+explicit authorization rules.
 
 Checkpoint every transition in `.factory/memory/state/`, separately from planning/
 decomposition staging. Before terminal cleanup, save a self-contained record in
@@ -196,9 +281,34 @@ verification and review rerun on corrected bytes before accept/archive.
 Call `workflow.py next` after dispatch, transport return, check result,
 correction, scope change and on resumed entry. Reconcile saved dispatches,
 session handles, pending executions and reports before any repeat request.
-Inspect new terminal reports and acknowledge each processed dispatch. Claim
+Inspect new terminal reports once per dispatch and acknowledge with `ack-result`. Claim
 runnable assignments, accept eligible nodes, wait on active handles, and
 perform only evidence-supported correction or reconciliation. Report material
 progress in commentary. Keep the turn active while work remains and the host
 supports waiting. The native adapter supplies no autonomous launcher or wakeup.
 Respect recorded user pause/stop. Final completion follows successful archive.
+
+## Task guidance
+
+| Work | Additional guidance |
+| --- | --- |
+| Feature | [feature](../skills/factory-implement/references/feature-pipeline.md) |
+| Bug | [task](../skills/factory-implement/references/task-pipeline.md) |
+| Refactor | [refactor](../skills/factory-implement/references/refactor-pipeline.md) |
+| Tiny bounded change | [fix](../skills/factory-implement/references/fix-pipeline.md) |
+| Read-only exploration | [explore](../skills/factory-implement/references/explore-pipeline.md) |
+| Diagnosis only | [debug](../skills/factory-implement/references/debug-pipeline.md) |
+| Documentation only | [docs](../skills/factory-implement/references/docs-pipeline.md) |
+
+These are domain requirements/examples, not fixed agent sequences. The source
+contract still controls semantic gaps and source drift. Minimality preserves
+security, error handling, accessibility and required tests. Prefer established
+helpers, platform features and installed dependencies before new abstractions.
+
+## Final report
+
+Report actual outcome, completed slices, agents/models used, checks, review kind,
+docs updates, unresolved work and history path. Missing checks are `NOT_RUN` or
+`BLOCKED`, never success. Canonical instructions are English; user-facing reports
+follow dialogue language and history follows task/project language. Internal
+messages follow the shared communication contract.
