@@ -12,7 +12,7 @@ orchestration: workflow/orchestration.md
 # Future separate launch requires this alias to have explicit id and effort;
 # the current loader checks the alias only.
 orchestrator:
-  model: sol
+  model: glm-5-3
 
 # Shared task retry budgets; changing the worker does not reset the counter.
 execution:
@@ -43,20 +43,20 @@ profiles:
     default: middle-developer
     variants:
       middle-developer:
-        model: terra
-        adapter: codex
+        model: deepseek-flash-1017
+        adapter: opencode
         escalation:
           to: senior-developer
           after_failed_attempts: 1
       junior-developer:
-        model: luna
-        adapter: codex
+        model: deepseek-flash-1017-low
+        adapter: opencode
         escalation:
           to: middle-developer
           after_failed_attempts: 1
       senior-developer:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
         escalation:
           to: human
           after_failed_attempts: 2
@@ -71,20 +71,20 @@ profiles:
     default: middle-test-writer
     variants:
       middle-test-writer:
-        model: terra
-        adapter: codex
+        model: deepseek-flash-1017
+        adapter: opencode
         escalation:
           to: senior-test-writer
           after_failed_attempts: 1
       junior-test-writer:
-        model: luna
-        adapter: codex
+        model: deepseek-flash-1017-low
+        adapter: opencode
         escalation:
           to: middle-test-writer
           after_failed_attempts: 1
       senior-test-writer:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
         escalation:
           to: human
           after_failed_attempts: 2
@@ -99,8 +99,8 @@ profiles:
     default: generalist
     variants:
       generalist:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
       generalist-deepseek:
         model: deepseek-flash-1017
         adapter: opencode
@@ -118,8 +118,8 @@ profiles:
       - dcm.dcm_analyze
     variants:
       judge:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
 
   code-explorer:
     role: roles/code-explorer.md
@@ -133,8 +133,8 @@ profiles:
       - context7.query-docs
     variants:
       code-explorer:
-        model: sol
-        adapter: codex
+        model: deepseek-flash-1017
+        adapter: opencode
 
   bug-hunter:
     role: roles/bug-hunter.md
@@ -152,8 +152,8 @@ profiles:
       - dart.hot_reload
     variants:
       bug-hunter:
-        model: sol
-        adapter: codex
+        model: kimi-k3-1-pro
+        adapter: opencode
 
   doc-writer:
     role: roles/doc-writer.md
@@ -163,8 +163,8 @@ profiles:
     mcp: []
     variants:
       doc-writer:
-        model: terra
-        adapter: codex
+        model: deepseek-flash-1017
+        adapter: opencode
 
   architect:
     role: roles/architect.md
@@ -174,8 +174,8 @@ profiles:
     mcp: []
     variants:
       architect:
-        model: astra
-        adapter: codex
+        model: kimi-k3-1-pro
+        adapter: opencode
 
   task-decomposer:
     role: roles/task-decomposer.md
@@ -185,8 +185,8 @@ profiles:
     mcp: []
     variants:
       task-decomposer:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
 
   task-reviewer:
     role: roles/task-reviewer.md
@@ -196,8 +196,8 @@ profiles:
     mcp: []
     variants:
       task-reviewer:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
 
   reviewer:
     role: roles/reviewer.md
@@ -209,8 +209,8 @@ profiles:
       - dcm.dcm_analyze
     variants:
       reviewer:
-        model: sol
-        adapter: codex
+        model: glm-5-3
+        adapter: opencode
 
 # Models: exact ID and parameters, referenced by variants.
 models:
@@ -229,9 +229,15 @@ models:
   glm-5-3:
     id: openrouter/z-ai/glm-5.3
     effort: max
+  kimi-k3-1-pro:
+    id: openrouter/moonshotai/kimi-k3.1-pro
+    effort: max
   deepseek-flash-1017:
     id: openrouter/deepseek/deepseek-v4.1-flash-1017
     effort: max
+  deepseek-flash-1017-low:
+    id: openrouter/deepseek/deepseek-v4.1-flash-1017
+    effort: low
 
 # Adapters: harness, transport and participant instructions.
 adapters:
