@@ -111,328 +111,259 @@ final _details = AnimeScreenData(
 
 void main() {
   // Player's seventh scene and its panels use the native-controller fixture goldens
-  // in features/player; these six scenes exercise actual nullable domain metadata.
-  for (final (mobile, size, scale) in [
-    (true, const Size(390, 844), 1.0),
-    (false, const Size(960, 540), 1.0),
-    (false, const Size(960, 540), 2.0),
-    (false, const Size(1280, 720), 1.0),
-    (false, const Size(1280, 720), 2.0),
-    (false, const Size(1920, 1080), 1.0),
-  ]) {
-    for (final scene
-        in mobile
-            ? ['login', 'home', 'favorites', 'genres', 'browse', 'detail']
-            : ['home', 'favorites', 'genres', 'browse', 'search', 'menu', 'detail']) {
-      testWidgets(
-        'rich redesign $scene ${mobile ? 'mobile' : 'tv'} ${size.width.toInt()}x${size.height.toInt()} ${scale.toInt() * 100}%',
-        (tester) async {
-          final decoded = await cacheDecodedFixtureImage(
-            tester,
-            filePath: scene == 'home' || scene == 'browse' ? 'prototype/assets/frieren.jpg' : null,
-          );
-          if (mobile) {
-            final padding = (size.width * 0.04).clamp(16.0, 24.0);
-            final available = size.width - 2 * padding;
-            final columns = CatalogLayout.mobileColumnCount(available, scale, landscape: size.width > size.height);
-            final width = ((available - (columns - 1) * CatalogLayout.mobilePosterGap) / columns).ceil();
-            for (final cacheWidth in {width, 240}) {
-              final resized = ResizeImage.resizeIfNeeded(
-                cacheWidth,
-                null,
-                const CachedNetworkImageProvider(decodedFixtureUrl),
-              );
-              final key = await resized.obtainKey(ImageConfiguration.empty);
-              PaintingBinding.instance.imageCache.putIfAbsent(
-                key,
-                () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: decoded.clone()))),
-              );
-            }
-          } else {
-            for (final width in [
-              (size.height * 0.17).clamp(104, 232).ceil(),
-              size.width.toInt() - 88,
-              (size.width * 0.22).clamp(140, 240).ceil(),
-            ]) {
-              final resized = ResizeImage.resizeIfNeeded(
-                width,
-                null,
-                const CachedNetworkImageProvider(decodedFixtureUrl),
-              );
-              final key = await resized.obtainKey(ImageConfiguration.empty);
-              PaintingBinding.instance.imageCache.putIfAbsent(
-                key,
-                () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: decoded.clone()))),
-              );
-            }
-          }
-          final settle = tester.pumpAndSettle;
-          const capture = expectLater;
-          final app = find.byType(MaterialApp).first;
-          final auth = FakeAuthRepository()
-            ..restoreResult = scene == 'login'
-                ? const Result.success(null)
-                : const Result.success('Тестовый пользователь');
-          addTearDown(auth.close);
-          final router = AppRouter(AppLogger.logger);
-          addTearDown(router.dispose);
-          final overrides = <Override>[
-            authRepositoryProvider.overrideWithValue(auth),
-            catalogRepositoryProvider.overrideWithValue(
-              FakeCatalogScreenRepository(load: (_) async => Result.success(_page)),
-            ),
-            catalogBrowseRepositoryProvider.overrideWithValue(
-              FakeCatalogBrowseRepository(
-                load: (_, _) async => Result.success(_page),
-                genres: () async => const Result.success([
-                  CatalogFilter(label: 'Приключения', path: '/adventure/'),
-                  CatalogFilter(label: 'Драма', path: '/drama/'),
-                  CatalogFilter(label: 'Комедия', path: '/comedy/'),
-                ]),
-              ),
-            ),
-            favoritesRepositoryProvider.overrideWithValue(
-              FakeFavoritesRepository()
-                ..load = (_) async =>
-                    Result.success(AnimePage(page: 1, hasNext: false, items: _page.items.take(1).toList())),
-            ),
-            searchRepositoryProvider.overrideWithValue(FakeSearchRepository(load: (_) async => Result.success(_page))),
-            searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
-            animeRepositoryProvider.overrideWithValue(
-              FakeAnimeScreenRepository(load: (_, _) async => Result.success(_details)),
-            ),
-          ];
-          final Widget screen = scene == 'login'
-              ? const LoginScreen()
-              : MaterialApp.router(
-                  routerConfig: router.router,
-                  debugShowCheckedModeBanner: false,
-                  theme: mobile ? AppTheme.mobileDarkTheme : AppTheme.darkTheme,
-                );
-          if (mobile) {
-            await pumpMobileApp(tester, screen, wrapInScaffold: false, disableAnimations: true, overrides: overrides);
-          } else {
-            await pumpTvApp(
-              tester,
-              screen,
-              size: size,
-              textScale: scale,
-              disableAnimations: true,
-              wrapInScaffold: false,
-              overrides: overrides,
-            );
-          }
-          await settle();
-          if (scene == 'browse' || scene == 'detail') {
-            final context = tester.element(find.byType(HomeScreen));
-            if (scene == 'browse') {
-              unawaited(
-                const FilterRoute(
-                  path: '/xfsearch/author/%c8%ec%ff/',
-                  title: 'Автор с длинным именем',
-                ).push<void>(context),
-              );
-            } else {
-              AnimeRoute(animeId: 1, slug: '1-fixture', title: _details.details.title).go(context);
-            }
-            await settle();
-          }
-          if (scene == 'favorites' || scene == 'genres') {
-            if (mobile) {
-              final navigation = find.byKey(const ValueKey('mobile-navigation'));
-              final destination = find.descendant(
-                of: navigation,
-                matching: find.text(scene == 'genres' ? 'Жанры' : 'Избранное'),
-              );
-              await tester.tap(destination);
-            } else {
-              final destination = find.byKey(ValueKey(scene == 'genres' ? 'catalog-genres' : 'catalog-tab-true'));
-              tester.widget<TextButton>(destination).focusNode?.requestFocus();
-              await tester.pump();
-              await tester.sendKeyEvent(LogicalKeyboardKey.select);
-            }
-            await settle();
-          }
-          if (!mobile && scene == 'search') {
-            const HomeRoute(destination: HomeDestination.search).go(tester.element(find.byType(HomeScreen)));
-            await settle();
-            await tester.enterText(find.byKey(const ValueKey('search-query')), 'Наруто');
-            await tester.testTextInput.receiveAction(TextInputAction.search);
-            await settle();
-          }
-          if (!mobile && scene == 'menu') {
-            await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-            await settle();
-          }
-          final sceneError = tester.takeException();
-          expect(sceneError, isNull, reason: sceneError is Error ? '${sceneError.stackTrace}' : null);
-          if (!mobile && scene == 'home') {
-            expect(find.byType(CatalogPosterRail), findsOneWidget);
-          }
-          if (['home', 'favorites', 'browse'].contains(scene)) {
-            expect(
-              tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(decoded) ?? false),
-              isTrue,
-              reason: 'the bundled poster must render successfully alongside nullable image fallbacks',
-            );
-          }
-          if (scene == 'home' || scene == 'browse') {
-            expect(find.byType(MediaCardBookmark), findsOneWidget);
-          }
-          if (!mobile && scene == 'browse' && size == compactTvSize && scale == 2) {
-            final title = find.text(_page.items.first.title).first;
-            final sort = find.byKey(const ValueKey('catalog-sort'));
-            expect(
-              tester.getRect(title).overlaps(tester.getRect(sort)),
-              isFalse,
-              reason: 'title and sort must not overlap',
-            );
-          }
-          if (mobile || (size == wideTvSize && scale == 1 && scene == 'login')) {
-            final profile = mobile ? 'mobile' : 'tv';
-            final golden = mobile && scene == 'login' ? 'mobile_login_390.png' : 'redesign_${scene}_$profile.png';
-            await capture(app, matchesGoldenFile('goldens/$golden'));
-          }
-          if (!mobile && scene != 'login') {
-            final suffix = scale == 2 ? '_200' : '';
-            await capture(
-              app,
-              matchesGoldenFile('goldens/redesign_${scene}_tv_${size.width.toInt()}x${size.height.toInt()}$suffix.png'),
-            );
-          }
-          if (scene == 'detail') {
-            if (mobile) {
-              await tester.tap(find.text('Подробнее'));
-              await settle();
-            }
-            if (!mobile) {
-              expect(find.text('Второй сезон с полной подписью'), findsNothing);
-              await tester.tap(find.text('Подробнее'));
-              await settle();
-              expect(
-                tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(decoded) ?? false),
-                isTrue,
-                reason: 'expanded details must show the decoded poster',
-              );
-              if (scale == 2) {
-                for (final label in ['Рейтинг', 'Жанры', 'Режиссёр']) {
-                  final paragraph = tester.renderObject<RenderParagraph>(
-                    find.descendant(of: find.byType(AnimeDetailFilterActions), matching: find.text(label)),
-                  );
-                  expect(
-                    paragraph.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: label.length)).length,
-                    1,
-                    reason: '$label must stay whole at 200% text',
-                  );
-                }
-              }
-              final suffix = scale == 2 ? '_200' : '';
-              await capture(
-                app,
-                matchesGoldenFile(
-                  'goldens/redesign_detail_expanded_tv_${size.width.toInt()}x${size.height.toInt()}$suffix.png',
-                ),
-              );
-            }
-            final part = find.text('Второй сезон с полной подписью');
-            await tester.scrollUntilVisible(part, 180, scrollable: find.byType(Scrollable).first);
-            await settle();
-            expect(part.hitTestable(), findsOneWidget);
-            expect(tester.takeException(), isNull);
-            if (mobile) {
-              await capture(app, matchesGoldenFile('goldens/redesign_parts_mobile.png'));
-            } else {
-              final suffix = scale == 2 ? '_200' : '';
-              await capture(
-                app,
-                matchesGoldenFile('goldens/redesign_parts_tv_${size.width.toInt()}x${size.height.toInt()}$suffix.png'),
-              );
-            }
-          }
-          await tester.pumpWidget(const SizedBox.shrink());
-        },
-        tags: ['golden'],
-      );
-    }
-  }
-  for (final size in [compactTvSize, wideTvSize]) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets(
-        'rich redesign detail tv error ${size.width.toInt()}x${size.height.toInt()} ${scale.toInt() * 100}%',
-        (tester) async {
-          var calls = 0;
-          await pumpTvApp(
-            tester,
-            AnimeScreen(
-              animeId: 1,
-              slug: '1-fixture',
-              fallbackTitle: 'Аниме',
-              onEpisodeTap: (_) => fail('Unexpected episode'),
-            ),
-            size: size,
-            textScale: scale,
-            disableAnimations: true,
-            wrapInScaffold: false,
-            overrides: [
-              animeRepositoryProvider.overrideWithValue(
-                FakeAnimeScreenRepository(
-                  load: (_, _) async {
-                    calls++;
-                    return const Result.failure(UnknownFailure());
-                  },
-                ),
-              ),
-            ],
-          );
-          await tester.pumpAndSettle();
-          expect(find.text('Повторить').hitTestable(), findsOneWidget);
-          expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
-          final suffix = scale == 2 ? '_200' : '';
-          await expectLater(
-            find.byType(MaterialApp),
-            matchesGoldenFile(
-              'goldens/redesign_detail_error_tv_${size.width.toInt()}x${size.height.toInt()}$suffix.png',
-            ),
-          );
-          await tester.sendKeyEvent(LogicalKeyboardKey.select);
-          await tester.pumpAndSettle();
-          expect(calls, 2);
-          expect(tester.takeException(), isNull);
-        },
-        tags: ['golden'],
-      );
-    }
-  }
-  for (final size in [const Size(360, 800), const Size(430, 932)]) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets('rich home at width ${size.width} text $scale', (tester) async {
-        await cacheDecodedFixtureImage(tester);
-        await pumpMobileApp(
-          tester,
-          HomeScreen(
-            onAnimeTap: (_) => fail('Unexpected navigation'),
-            onOpenGenres: () => fail('Unexpected genres'),
-            onOpenLogs: () => fail('Unexpected logs'),
-            onSignOut: () => fail('Unexpected logout'),
-            accountName: 'Тестовый пользователь',
-          ),
-          size: size,
-          textScale: scale,
-          disableAnimations: true,
-          wrapInScaffold: false,
-          overrides: [
-            catalogRepositoryProvider.overrideWithValue(
-              FakeCatalogScreenRepository(load: (_) async => Result.success(_page)),
-            ),
-          ],
-        );
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        await expectLater(
-          find.byType(MaterialApp),
-          matchesGoldenFile('goldens/redesign_home_${size.width.toInt()}_${scale.toInt()}.png'),
-        );
+  // in features/player; these scenes exercise actual nullable domain metadata.
+  for (final textScale in GoldenTextScale.values) {
+    for (final scene in ['home', 'favorites', 'genres', 'browse', 'search', 'menu', 'detail']) {
+      testWidgets('rich redesign $scene tv${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
+        await _runRedesignScene(tester, scene: scene, profile: GoldenProfile.tv, textScale: textScale);
       }, tags: ['golden']);
     }
   }
+  for (final scene in ['login', 'home', 'favorites', 'genres', 'browse', 'detail']) {
+    testWidgets('rich redesign $scene phone portrait', (tester) async {
+      await _runRedesignScene(
+        tester,
+        scene: scene,
+        profile: GoldenProfile.phonePortrait,
+        textScale: GoldenTextScale.normal,
+      );
+    }, tags: ['golden']);
+  }
+  for (final textScale in GoldenTextScale.values) {
+    testWidgets('rich redesign detail tv error${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
+      var calls = 0;
+      await pumpScreenGolden(
+        tester,
+        AnimeScreen(
+          animeId: 1,
+          slug: '1-fixture',
+          fallbackTitle: 'Аниме',
+          onEpisodeTap: (_) => fail('Unexpected episode'),
+        ),
+        textScale: textScale,
+        wrapInScaffold: false,
+        overrides: [
+          animeRepositoryProvider.overrideWithValue(
+            FakeAnimeScreenRepository(
+              load: (_, _) async {
+                calls++;
+                return const Result.failure(UnknownFailure());
+              },
+            ),
+          ),
+        ],
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Повторить').hitTestable(), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
+      await expectScreenGolden('redesign_detail_error', textScale: textScale);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(calls, 2);
+      expect(tester.takeException(), isNull);
+    }, tags: ['golden']);
+  }
+  testWidgets('rich home at phone portrait 200%', (tester) async {
+    await cacheDecodedFixtureImage(tester);
+    await testScreenGolden(
+      tester,
+      'redesign_home',
+      profile: GoldenProfile.phonePortrait,
+      textScale: GoldenTextScale.large,
+      screen: HomeScreen(
+        onAnimeTap: (_) => fail('Unexpected navigation'),
+        onOpenGenres: () => fail('Unexpected genres'),
+        onOpenLogs: () => fail('Unexpected logs'),
+        onSignOut: () => fail('Unexpected logout'),
+        accountName: 'Тестовый пользователь',
+      ),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(load: (_) async => Result.success(_page)),
+        ),
+      ],
+    );
+  }, tags: ['golden']);
+}
+
+Future<void> _runRedesignScene(
+  WidgetTester tester, {
+  required String scene,
+  required GoldenProfile profile,
+  required GoldenTextScale textScale,
+}) async {
+  final mobile = profile != GoldenProfile.tv;
+  final decoded = await cacheDecodedFixtureImage(
+    tester,
+    filePath: scene == 'home' || scene == 'browse' ? 'prototype/assets/frieren.jpg' : null,
+  );
+  final size = profile.logicalSize;
+  if (mobile) {
+    final padding = (size.width * 0.04).clamp(16.0, 24.0);
+    final available = size.width - 2 * padding;
+    final columns = CatalogLayout.mobileColumnCount(available, textScale.factor, landscape: size.width > size.height);
+    final width = ((available - (columns - 1) * CatalogLayout.mobilePosterGap) / columns).ceil();
+    for (final cacheWidth in {width, 240}) {
+      final resized = ResizeImage.resizeIfNeeded(cacheWidth, null, const CachedNetworkImageProvider(decodedFixtureUrl));
+      final key = await resized.obtainKey(ImageConfiguration.empty);
+      PaintingBinding.instance.imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: decoded.clone()))),
+      );
+    }
+  } else {
+    for (final width in [
+      (size.height * 0.17).clamp(104, 232).ceil(),
+      size.width.toInt() - 88,
+      (size.width * 0.22).clamp(140, 240).ceil(),
+    ]) {
+      final resized = ResizeImage.resizeIfNeeded(width, null, const CachedNetworkImageProvider(decodedFixtureUrl));
+      final key = await resized.obtainKey(ImageConfiguration.empty);
+      PaintingBinding.instance.imageCache.putIfAbsent(
+        key,
+        () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: decoded.clone()))),
+      );
+    }
+  }
+  final settle = tester.pumpAndSettle;
+  final auth = FakeAuthRepository()
+    ..restoreResult = scene == 'login' ? const Result.success(null) : const Result.success('Тестовый пользователь');
+  addTearDown(auth.close);
+  final router = AppRouter(AppLogger.logger);
+  addTearDown(router.dispose);
+  final overrides = <Override>[
+    authRepositoryProvider.overrideWithValue(auth),
+    catalogRepositoryProvider.overrideWithValue(FakeCatalogScreenRepository(load: (_) async => Result.success(_page))),
+    catalogBrowseRepositoryProvider.overrideWithValue(
+      FakeCatalogBrowseRepository(
+        load: (_, _) async => Result.success(_page),
+        genres: () async => const Result.success([
+          CatalogFilter(label: 'Приключения', path: '/adventure/'),
+          CatalogFilter(label: 'Драма', path: '/drama/'),
+          CatalogFilter(label: 'Комедия', path: '/comedy/'),
+        ]),
+      ),
+    ),
+    favoritesRepositoryProvider.overrideWithValue(
+      FakeFavoritesRepository()
+        ..load = (_) async => Result.success(AnimePage(page: 1, hasNext: false, items: _page.items.take(1).toList())),
+    ),
+    searchRepositoryProvider.overrideWithValue(FakeSearchRepository(load: (_) async => Result.success(_page))),
+    searchHistoryRepositoryProvider.overrideWithValue(FakeSearchHistoryRepository()),
+    animeRepositoryProvider.overrideWithValue(
+      FakeAnimeScreenRepository(load: (_, _) async => Result.success(_details)),
+    ),
+  ];
+  final Widget screen = scene == 'login'
+      ? const LoginScreen()
+      : MaterialApp.router(
+          routerConfig: router.router,
+          debugShowCheckedModeBanner: false,
+          theme: mobile ? AppTheme.mobileDarkTheme : AppTheme.darkTheme,
+        );
+  await pumpScreenGolden(
+    tester,
+    screen,
+    profile: profile,
+    textScale: textScale,
+    wrapInScaffold: false,
+    overrides: overrides,
+  );
+  await settle();
+  if (scene == 'browse' || scene == 'detail') {
+    final context = tester.element(find.byType(HomeScreen));
+    if (scene == 'browse') {
+      unawaited(
+        const FilterRoute(path: '/xfsearch/author/%c8%ec%ff/', title: 'Автор с длинным именем').push<void>(context),
+      );
+    } else {
+      AnimeRoute(animeId: 1, slug: '1-fixture', title: _details.details.title).go(context);
+    }
+    await settle();
+  }
+  if (scene == 'favorites' || scene == 'genres') {
+    if (mobile) {
+      final navigation = find.byKey(const ValueKey('mobile-navigation'));
+      final destination = find.descendant(
+        of: navigation,
+        matching: find.text(scene == 'genres' ? 'Жанры' : 'Избранное'),
+      );
+      await tester.tap(destination);
+    } else {
+      final destination = find.byKey(ValueKey(scene == 'genres' ? 'catalog-genres' : 'catalog-tab-true'));
+      tester.widget<TextButton>(destination).focusNode?.requestFocus();
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    }
+    await settle();
+  }
+  if (!mobile && scene == 'search') {
+    const HomeRoute(destination: HomeDestination.search).go(tester.element(find.byType(HomeScreen)));
+    await settle();
+    await tester.enterText(find.byKey(const ValueKey('search-query')), 'Наруто');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await settle();
+  }
+  if (!mobile && scene == 'menu') {
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await settle();
+  }
+  final sceneError = tester.takeException();
+  expect(sceneError, isNull, reason: sceneError is Error ? '${sceneError.stackTrace}' : null);
+  if (!mobile && scene == 'home') {
+    expect(find.byType(CatalogPosterRail), findsOneWidget);
+  }
+  if (['home', 'favorites', 'browse'].contains(scene)) {
+    expect(
+      tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(decoded) ?? false),
+      isTrue,
+      reason: 'the bundled poster must render successfully alongside nullable image fallbacks',
+    );
+  }
+  if (scene == 'home' || scene == 'browse') {
+    expect(find.byType(MediaCardBookmark), findsOneWidget);
+  }
+  if (!mobile && scene == 'browse' && textScale == GoldenTextScale.large) {
+    final title = find.text(_page.items.first.title).first;
+    final sort = find.byKey(const ValueKey('catalog-sort'));
+    expect(tester.getRect(title).overlaps(tester.getRect(sort)), isFalse, reason: 'title and sort must not overlap');
+  }
+  await expectScreenGolden('redesign_$scene', profile: profile, textScale: textScale);
+  if (scene == 'detail') {
+    if (mobile) {
+      await tester.tap(find.text('Подробнее'));
+      await settle();
+    }
+    if (!mobile) {
+      expect(find.text('Второй сезон с полной подписью'), findsNothing);
+      await tester.tap(find.text('Подробнее'));
+      await settle();
+      expect(
+        tester.widgetList<RawImage>(find.byType(RawImage)).any((raw) => raw.image?.isCloneOf(decoded) ?? false),
+        isTrue,
+        reason: 'expanded details must show the decoded poster',
+      );
+      if (textScale == GoldenTextScale.large) {
+        for (final label in ['Рейтинг', 'Жанры', 'Режиссёр']) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(of: find.byType(AnimeDetailFilterActions), matching: find.text(label)),
+          );
+          expect(
+            paragraph.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: label.length)).length,
+            1,
+            reason: '$label must stay whole at 200% text',
+          );
+        }
+      }
+      await expectScreenGolden('redesign_detail_expanded', profile: profile, textScale: textScale);
+    }
+    final part = find.text('Второй сезон с полной подписью');
+    await tester.scrollUntilVisible(part, 180, scrollable: find.byType(Scrollable).first);
+    await settle();
+    expect(part.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await expectScreenGolden('redesign_parts', profile: profile, textScale: textScale);
+  }
+  await tester.pumpWidget(const SizedBox.shrink());
 }

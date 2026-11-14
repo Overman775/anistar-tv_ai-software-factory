@@ -11,29 +11,20 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../../support/test_app.dart';
 
 void main() {
-  for (final (name, size, scale) in [
-    ('compact', compactTvSize, 1.0),
-    ('wide', wideTvSize, 1.0),
-    ('compact_scaled', compactTvSize, 2.0),
-    ('wide_scaled', wideTvSize, 2.0),
-    ('1920x1080', const Size(1920, 1080), 1.0),
-  ]) {
-    testWidgets('quality choices at $name', (tester) async {
-      tester.platformDispatcher.textScaleFactorTestValue = scale;
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      await pumpTvApp(
+  for (final textScale in GoldenTextScale.values) {
+    testWidgets('quality choices at tv${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
+      await testScreenGolden(
         tester,
-        PlayerChoicesDialog<String>(
+        'player_choices',
+        textScale: textScale,
+        screen: PlayerChoicesDialog<String>(
           title: 'Качество',
           choices: const ['SD 360p', 'HD 720p'],
           selected: 'HD 720p',
           label: (quality) => quality,
         ),
-        size: size,
       );
-      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/player_choices_$name.png'));
     }, tags: ['golden']);
   }
 

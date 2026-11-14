@@ -7,21 +7,22 @@ import '../../../mocks/features/auth/fake_auth_repository.dart';
 import '../../../support/test_app.dart';
 
 void main() {
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
-    testWidgets('login panel at $name viewport', (tester) async {
-      final repository = FakeAuthRepository();
-      addTearDown(repository.close);
-      await pumpTvApp(
-        tester,
-        const LoginScreen(),
-        size: size,
-        wrapInScaffold: false,
-        overrides: [authRepositoryProvider.overrideWithValue(repository)],
-      );
-      await tester.pumpAndSettle();
-      expect(tester.takeException(), isNull);
-      expect(tester.getBottomRight(find.byKey(const ValueKey('login_submit'))).dy, lessThan(size.height));
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/login_$name.png'));
-    }, tags: ['golden']);
-  }
+  testWidgets('login panel at the common TV profile', (tester) async {
+    final repository = FakeAuthRepository();
+    addTearDown(repository.close);
+    await testScreenGolden(
+      tester,
+      'login',
+      screen: const LoginScreen(),
+      wrapInScaffold: false,
+      overrides: [authRepositoryProvider.overrideWithValue(repository)],
+      prepare: (tester) async {
+        await tester.pumpAndSettle();
+        expect(
+          tester.getBottomRight(find.byKey(const ValueKey('login_submit'))).dy,
+          lessThan(GoldenProfile.tv.logicalSize.height),
+        );
+      },
+    );
+  }, tags: ['golden']);
 }

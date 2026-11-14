@@ -86,6 +86,7 @@ coverage/
 
 # Personal agent overrides and locks; shared instructions/configs remain tracked.
 /.acpxrc.json
+/.factory/.acpx
 AGENTS.local.md
 CLAUDE.local.md
 **/.claude/settings.local.json

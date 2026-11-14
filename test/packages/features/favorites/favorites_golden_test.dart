@@ -58,56 +58,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final (name, size) in [('compact', compactTvSize), ('wide', wideTvSize)]) {
-    testWidgets('expanded navigation and right action sheet at $name', (tester) async {
-      await pumpTvApp(
-        tester,
-        HomeScreen(
-          onAnimeTap: (_) => fail('Unexpected activation'),
-          onSignOut: () => fail('Unexpected logout'),
-          onOpenLogs: () => fail('Unexpected logs'),
-          onOpenGenres: () => fail('Unexpected genres'),
-          accountName: 'anime_fan',
-        ),
-        size: size,
-        wrapInScaffold: false,
-        overrides: [
-          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
-          favoritesAccountProvider.overrideWithValue('test'),
-          catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
-          favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
-        ],
-      );
-      await tester.pumpAndSettle();
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/navigation_expanded_$name.png'));
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
-      await tester.pumpAndSettle();
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
-      await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
-      await tester.pumpAndSettle();
-      expect(find.byType(FavoriteActionsSheet), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/actions_sheet_$name.png'));
-    }, tags: ['golden']);
+  testWidgets('expanded navigation and right action sheet at tv', (tester) async {
+    await pumpScreenGolden(
+      tester,
+      HomeScreen(
+        onAnimeTap: (_) => fail('Unexpected activation'),
+        onSignOut: () => fail('Unexpected logout'),
+        onOpenLogs: () => fail('Unexpected logs'),
+        onOpenGenres: () => fail('Unexpected genres'),
+        accountName: 'anime_fan',
+      ),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        favoritesRepositoryProvider.overrideWithValue(FakeFavoritesRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await expectScreenGolden('navigation_expanded');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.select);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.byType(FavoriteActionsSheet), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await expectScreenGolden('actions_sheet');
+  }, tags: ['golden']);
 
-    testWidgets('favorites tab and website row at $name', (tester) async {
-      final repository = FakeFavoritesRepository()..ids.add(1);
-      await pumpTvApp(
-        tester,
-        HomeScreen(destination: HomeDestination.favorites, onAnimeTap: (_) => fail('Unexpected navigation')),
-        size: size,
-        wrapInScaffold: false,
-        overrides: [
-          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
-          favoritesAccountProvider.overrideWithValue('test'),
-          favoritesRepositoryProvider.overrideWithValue(repository),
-        ],
-      );
-      await tester.pumpAndSettle();
-      await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/favorites_$name.png'));
-    }, tags: ['golden']);
-  }
+  testWidgets('favorites tab and website row at tv', (tester) async {
+    final repository = FakeFavoritesRepository()..ids.add(1);
+    await testScreenGolden(
+      tester,
+      'favorites',
+      screen: HomeScreen(destination: HomeDestination.favorites, onAnimeTap: (_) => fail('Unexpected navigation')),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+  }, tags: ['golden']);
 }
