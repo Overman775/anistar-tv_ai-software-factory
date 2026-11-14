@@ -1,0 +1,279 @@
+# Application profile: documents, rules and project gates.
+project: project/project.yaml
+
+# Coordinator instructions for selecting the team and workers.
+router: workflow/router.md
+
+# Coordinator instructions for launching, waiting and accepting results.
+orchestration: workflow/orchestration.md
+
+# Reserved model alias for a future separate Orchestrator launch.
+# Skill invocation uses the current session model and effort.
+# Future separate launch requires this alias to have explicit id and effort;
+# the current loader checks the alias only.
+orchestrator:
+  model: sol
+
+# Shared task retry budgets; changing the worker does not reset the counter.
+execution:
+  retry_budgets:
+    static: 2
+    tests: 2
+    docs: 2
+    review:
+      feature: 2
+      other: 1
+    recovery: 1
+  on_budget_exhausted: human
+
+# Specialties: shared permissions and tools, then model and adapter variants.
+# Variants do not override shared fields. Variant names are unique across the factory.
+profiles:
+  developer:
+    role: roles/developer.md
+    contract: contracts/developer.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - dart.analyze_files
+      - dcm.dcm_analyze
+      - dcm.dcm_format
+      - context7.resolve-library-id
+      - context7.query-docs
+    default: middle-developer
+    variants:
+      middle-developer:
+        model: terra
+        adapter: codex
+        escalation:
+          to: senior-developer
+          after_failed_attempts: 1
+      junior-developer:
+        model: luna
+        adapter: codex
+        escalation:
+          to: middle-developer
+          after_failed_attempts: 1
+      senior-developer:
+        model: sol
+        adapter: codex
+        escalation:
+          to: human
+          after_failed_attempts: 2
+
+  test-writer:
+    role: roles/test-writer.md
+    contract: contracts/test-writer.md
+    capabilities: {read: true, edit: true, commands: true, web: false}
+    enforcement: instructions
+    mcp:
+      - dcm.dcm_analyze
+    default: middle-test-writer
+    variants:
+      middle-test-writer:
+        model: terra
+        adapter: codex
+        escalation:
+          to: senior-test-writer
+          after_failed_attempts: 1
+      junior-test-writer:
+        model: luna
+        adapter: codex
+        escalation:
+          to: middle-test-writer
+          after_failed_attempts: 1
+      senior-test-writer:
+        model: sol
+        adapter: codex
+        escalation:
+          to: human
+          after_failed_attempts: 2
+
+  generalist:
+    role: roles/generalist.md
+    contract: contracts/generalist.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - dcm.dcm_analyze
+    default: generalist
+    variants:
+      generalist:
+        model: sol
+        adapter: codex
+      generalist-deepseek:
+        model: deepseek-flash-1017
+        adapter: opencode
+      generalist-glm:
+        model: glm-5-3
+        adapter: opencode
+
+  judge:
+    role: roles/judge.md
+    contract: contracts/judge.md
+    capabilities: {read: true, edit: false, commands: true, web: false}
+    enforcement: instructions
+    mcp:
+      - dart.analyze_files
+      - dcm.dcm_analyze
+    variants:
+      judge:
+        model: sol
+        adapter: codex
+
+  code-explorer:
+    role: roles/code-explorer.md
+    contract: contracts/code-explorer.md
+    capabilities: {read: true, edit: false, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - dart.analyze_files
+      - dcm.dcm_analyze
+      - context7.resolve-library-id
+      - context7.query-docs
+    variants:
+      code-explorer:
+        model: sol
+        adapter: codex
+
+  bug-hunter:
+    role: roles/bug-hunter.md
+    contract: contracts/bug-hunter.md
+    capabilities: {read: true, edit: false, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - dart.analyze_files
+      - dcm.dcm_analyze
+      - context7.resolve-library-id
+      - context7.query-docs
+      - dart.dtd
+      - dart.get_runtime_errors
+      - dart.hot_restart
+      - dart.hot_reload
+    variants:
+      bug-hunter:
+        model: sol
+        adapter: codex
+
+  doc-writer:
+    role: roles/doc-writer.md
+    contract: contracts/doc-writer.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp: []
+    variants:
+      doc-writer:
+        model: terra
+        adapter: codex
+
+  architect:
+    role: roles/architect.md
+    contract: contracts/architect.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp: []
+    variants:
+      architect:
+        model: astra
+        adapter: codex
+
+  task-decomposer:
+    role: roles/task-decomposer.md
+    contract: contracts/task-decomposer.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp: []
+    variants:
+      task-decomposer:
+        model: sol
+        adapter: codex
+
+  task-reviewer:
+    role: roles/task-reviewer.md
+    contract: contracts/task-reviewer.md
+    capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp: []
+    variants:
+      task-reviewer:
+        model: sol
+        adapter: codex
+
+  reviewer:
+    role: roles/reviewer.md
+    contract: contracts/reviewer.md
+    capabilities: {read: true, edit: false, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - dart.analyze_files
+      - dcm.dcm_analyze
+    variants:
+      reviewer:
+        model: sol
+        adapter: codex
+
+# Models: exact ID and parameters, referenced by variants.
+models:
+  terra:
+    id: gpt-6.1-terra
+    effort: high
+  luna:
+    id: gpt-6-luna
+    effort: high
+  sol:
+    id: gpt-6.1-sol
+    effort: medium
+  astra:
+    id: gpt-6-astra
+    effort: medium
+  glm-5-3:
+    id: openrouter/z-ai/glm-5.3
+    effort: max
+  deepseek-flash-1017:
+    id: openrouter/deepseek/deepseek-v4.1-flash-1017
+    effort: max
+
+# Adapters: harness, transport and participant instructions.
+adapters:
+  codex:
+    instructions: adapters/codex.md
+    worker_instructions: adapters/worker/codex.md
+    harness: codex
+    runner: native
+  claude:
+    instructions: adapters/claude.md
+    worker_instructions: adapters/worker/claude.md
+    harness: claude
+    runner: native
+  zcode:
+    instructions: adapters/acpx.md
+    worker_instructions: adapters/worker/acpx.md
+    harness: zcode
+    runner: acpx
+    connection: zcode
+  opencode:
+    instructions: adapters/acpx.md
+    worker_instructions: adapters/worker/acpx.md
+    harness: opencode
+    runner: acpx
+    connection: opencode
+
+# Shared local limit native-workers, excluding the coordinator.
+native:
+  max_parallel_agents: 3
+
+# Client ACP and connections; each backend has its own limit.
+acpx:
+  command: .acpx/node_modules/.bin/acpx
+  connections:
+    zcode:
+      command: zcode-acp
+      args:
+        - server
+      max_parallel_agents: 3
+      permissions: approve-reads
+    opencode:
+      command: opencode
+      args: [acp]
+      max_parallel_agents: 8
+      permissions: approve-all
