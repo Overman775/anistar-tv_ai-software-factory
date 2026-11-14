@@ -30,7 +30,7 @@ A check result applies only to its tested source state and environment.
   typed-API violation may use a narrow, explained ignore.
 - Use a small Protocol for an actual replaceable dependency, including test doubles;
   do not require a fake to implement an entire external library.
-- Keep the coupled core and process implementations in `factory_tooling`;
+- Keep the coupled core and process implementations in `factory`;
   process subpackages retain their own responsibilities. The factory is installed
   as a bundle; running a skill separately does not imply its folder is self-contained.
 - An autonomous skill helper may stay in that skill's `scripts/`; moving every new
@@ -39,7 +39,7 @@ A check result applies only to its tested source state and environment.
 - No sys.path mutation in working modules; necessary bootstrap stays at entry points.
   Keep CLI entry points thin. Preserve existing commands and callers.
 
-Implement, Decompose and Review freeze the entire `factory_tooling` package and
+Implement, Decompose and Review freeze the entire `factory` package and
 their executable wrappers alongside other run dependencies. Any package change,
 including an unrelated module, blocks continuation as drift. Compatibility of saved
 runs with an updated factory is not automatic.
@@ -61,13 +61,13 @@ runs with an updated factory is not automatic.
 - Pip-audit: separate online audit of resolved runtime/dev dependencies when they
   change and before delivery. Unavailable advisory data is not a successful audit.
 
-Import-linter enforces the shipped dependency contracts for the `factory_tooling`
+Import-linter enforces the shipped dependency contracts for the `factory`
 namespace. Update a contract only when the intended ownership changes. Retain runtime import-side-effect tests. Deptry, Pylint, Vulture,
 standalone Bandit and a second type checker are not mandatory.
 
 ## Execution and environments
 
-Use [Python setup and launchers](../../../tools/README.md); do not fall back to a
+Use [Python setup and launchers](../../../tooling/README.md); do not fall back to a
 global interpreter. Run `check.py` through that launcher after explicit `setup --dev`.
 Use `--stage` for a focused check and `--stage audit` for the separate online audit.
 Keep retained reports in an explicitly selected directory outside the factory.

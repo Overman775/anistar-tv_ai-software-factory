@@ -9,7 +9,7 @@ Never replace this with manual copying or reuse an old PASS after changes.
 After graph preflight, bind the real author/reviewer assignment identities:
 
 ```bash
-sh .factory/tools/python.sh .factory/gates/skills/decompose/assemble.py review-request \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/assemble.py review-request \
   --staging-dir .factory/memory/staging/tasks \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --request .factory/memory/staging/review-request.json \
@@ -27,7 +27,7 @@ A repair requires a newly bound request and confirmation of the final set.
 ## Transactional final assembly
 
 ```bash
-sh .factory/tools/python.sh .factory/gates/skills/decompose/assemble.py assemble \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/assemble.py assemble \
   --staging-dir .factory/memory/staging/tasks \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --request .factory/memory/staging/review-request.json \

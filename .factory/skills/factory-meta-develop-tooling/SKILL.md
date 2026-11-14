@@ -31,7 +31,7 @@ working in that workflow; otherwise follow repository instructions and task auth
 
 For Python changes, read [Python tooling](references/python.md).
 For factory-owned YAML changes, read [YAML tooling](references/yaml.md).
-For setup and actual commands, read [tools](../../tools/README.md).
+For setup and actual commands, read [tools](../../tooling/README.md).
 
 ## Change and verify
 
@@ -56,4 +56,6 @@ Report changed behavior and files, checks with results, known failures and unver
 areas. Record the tested revision or source state, including uncommitted changes,
 execution environment and exact commands with results. No separate report file required.
 Distinguish implementation from verified readiness. Preserve contract changes
-in the source-owned documentation and repair affected references.
+in the source-owned documentation and repair affected references. Before completion,
+synchronize affected installed-bundle contracts, command examples and
+[tooling documentation](../../tooling/README.md) with the verified implementation.

@@ -14,13 +14,13 @@ Canonical output fields:
 A confirmed violation wins FAIL; otherwise missing/stale/unavailable evidence gives
 BLOCKED; only all required PASS gives PASS. Retain every reason, including blockers
 alongside failures. Unknown/duplicate check IDs cannot satisfy requirements.
-The shared implementation is factory_tooling/gates/gate_contract.py; it does not authenticate
+The shared implementation is tooling/factory/gates/gate_contract.py; it does not authenticate
 model output, assess semantic truth or grant execution permissions.
 
 Generate the current core + project map (no commands are executed):
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/catalog.py
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/catalog.py
 ```
 
 Core definitions come from the same catalog used by executors; project additions

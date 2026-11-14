@@ -28,7 +28,7 @@ refactoring. Detailed project norms and domain reading follow below.
 For standalone Code Review, use the assigned criteria from the pinned review
 policy. Judge and Audit use their own process contracts with these project norms.
 Factory Review criteria live in
-`.factory/factory_tooling/project/review_definition.py`; project questions and path selectors
+`.factory/tooling/factory/project/review_definition.py`; project questions and path selectors
 live in `.factory/project/gates/skills/code-review.yaml`. Do not maintain a second
 catalog here or recalculate routing from this prose. AcceptanceReviewer owns intent
 and requirement coverage; each reviewer answers its assigned criteria and may report

@@ -13,7 +13,7 @@ Statuses: `PASS | FINDING | NOT_APPLICABLE | NOT_RUN`.
 
 ## Core criteria and project additions
 
-Canonical core definitions: `factory_tooling/project/review_definition.py`. Assignments,
+Canonical core definitions: `tooling/factory/project/review_definition.py`. Assignments,
 expected coverage and questions derive from those definitions. SYS-INTENT belongs to
 AcceptanceReviewer. Project criteria extend the minimum via gate_files, never replace IDs.
 Project norms arrive through rules.file. No advisory ID registry remains.
@@ -25,6 +25,7 @@ additional checks. Each has one ID and exact execution; one result per selected 
 There are no mandatory static/tests/deps families. Zero commands requires a selection
 explanation. Missing execution blocks completeness; failed execution prevents APPROVE.
 Command substitution and post-plan NOT_APPLICABLE cannot waive a selected obligation.
+Composite execution is rejected during plan preparation; declare individual commands.
 
 Command output uses `stdout_excerpt`, `stderr_excerpt`,
 `stdout_truncated`, `stderr_truncated`; excerpt limit is 24 KiB per stream.

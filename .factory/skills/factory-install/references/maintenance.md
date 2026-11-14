@@ -42,7 +42,7 @@ Before mutation create a dated backup outside the destination paths containing e
 affected file and symlink and record original paths and hashes. Move `.ai-pipeline`
 to `.factory/memory` without changing archived bytes or run IDs; never create an
 old-root symlink. Preserve referenced evidence and resolve archived relative
-`.ai-pipeline/` references using `factory_tooling.runtime.memory.resolve_evidence(workspace, path)`
+`.ai-pipeline/` references using `factory.runtime.memory.resolve_evidence(workspace, path)`
 when viewing them; do not rewrite archives or hashes. If a reference cannot be resolved, report
 the missing evidence. Reject an existing destination or active run until resolved.
 Keep the backup until verification completes. On interruption, stop writers, restore

@@ -32,6 +32,6 @@ Portable examples with timeouts, dependencies, path filters and observations:
 [project.example.yaml](../project.example.yaml). Adapt commands before use.
 
 Gate results follow [the common contract](../../gates/result-contract.md).
-Inspect the generated map with `sh .factory/tools/python.sh .factory/tools/catalog.py`.
+Inspect the generated map with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/catalog.py`.
 Custom Decompose scripts print structured status/message/evidence; malformed output
 or execution error blocks the transition. Project checks never replace core/review.

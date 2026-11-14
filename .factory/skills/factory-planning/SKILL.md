@@ -8,7 +8,7 @@ Read [communication rules](../../contracts/common/communication.md) for messages
 # Factory Planning
 
 Read `.factory/contracts/common/project-policy.md`. Before dependent work, resolve
-project inputs with `sh .factory/tools/python.sh .factory/tools/project.py context --process planning --audience coordinator`
+project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process planning --audience coordinator`
 (add `--scope PATH` for every known scope path). Read the returned instructions and
 actual applicable documents. Unknown scope retains obligations; it never waives them.
 
@@ -76,7 +76,7 @@ Read active runtime adapter and relevant role contract before spawn:
 Read `.factory/contracts/common/agent-checkpoint.md` before any delegated Reality Check
 or Architect pass.
 Canonical persona: `.factory/roles/architect.md`. Resolve profile/adapter from `.factory/factory.yaml`;
-Build via `sh .factory/tools/python.sh .factory/tools/context.py --process planning --role ROLE --profile PROFILE ASSIGNMENT.json`; source, planning evidence and project read paths stay in the assignment. Deliver full output. Keep Planning staging; do not use Implement packet/claim.
+Build via `sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process planning --role ROLE --profile PROFILE ASSIGNMENT.json`; source, planning evidence and project read paths stay in the assignment. Deliver full output. Keep Planning staging; do not use Implement packet/claim.
 
 Read `AGENTS.md` and pass its path to delegated roles. The project profile owns
 canonical architecture/product documents, affected specification/ADR routes,
@@ -209,7 +209,7 @@ Apply [the planning gate](../../gates/skills/planning/gate.md) at this step; com
 Render complete candidate first. For first promoted revision run:
 
 ```bash
-sh .factory/tools/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
+sh .factory/tooling/bin/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
   --plan .factory/memory/staging/planning-plan.md.candidate --phase draft
 ```
 
@@ -217,7 +217,7 @@ For every later promoted revision or nonsemantic correction, compare the
 candidate with the last user-reviewable target:
 
 ```bash
-sh .factory/tools/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
+sh .factory/tooling/bin/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
   --plan .factory/memory/staging/planning-plan.md.candidate \
   --previous .factory/memory/staging/planning-plan.md --phase draft
 ```
@@ -257,7 +257,7 @@ planning revision passes preflight with its exact authorization recorded under
 and matching `approved_revision`, then run:
 
 ```bash
-sh .factory/tools/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
+sh .factory/tooling/bin/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
   --plan .factory/memory/staging/planning-plan.md.candidate \
   --previous .factory/memory/staging/planning-plan.md --phase approved
 ```

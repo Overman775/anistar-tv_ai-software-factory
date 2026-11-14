@@ -108,9 +108,7 @@ generated_plugin_registrant.dart
 /.factory/gates/
 /.factory/workflow/
 /.factory/adapters/
-/.factory/tools/
-/.factory/factory_tooling/
-/.factory/tests/
+/.factory/tooling/
 /.factory/skills/
 /.factory/memory/
 /.factory/diagnostics/

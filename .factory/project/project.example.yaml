@@ -56,7 +56,7 @@ documents:
 # paths_any: * внутри каталога, ** через каталоги; неизвестный scope включает правило.
 # usage: policy по умолчанию (закреплённая норма); reference — обновляемая справка.
 # Объединяйте документы с одинаковыми условиями, как в planning-context.
-# Полная схема и допустимые роли/процессы: .factory/factory_tooling/project/profile_rules.py.
+# Полная схема и допустимые роли/процессы: .factory/tooling/factory/project/profile_rules.py.
 
 rules:
   coordinator:

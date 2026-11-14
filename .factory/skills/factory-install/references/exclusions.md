@@ -106,9 +106,7 @@ discovery aliases if present. Existing application exclusions stay outside the b
 /.factory/gates/
 /.factory/workflow/
 /.factory/adapters/
-/.factory/tools/
-/.factory/factory_tooling/
-/.factory/tests/
+/.factory/tooling/
 /.factory/skills/
 /.factory/skills/factory-install/
 /.factory/skills/factory-planning/

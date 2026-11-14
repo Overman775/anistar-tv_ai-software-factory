@@ -3,7 +3,7 @@
 Read [shared coordinator adapter rules](common.md) before dispatch.
 
 This adapter implements configured `runner: acpx` through
-`.factory/tools/acpx_adapter.py`; it shares the same orchestration/role contracts
+`.factory/tooling/bin/acpx_adapter.py`; it shares the same orchestration/role contracts
 as native agents. ACP is the protocol, acpx is the client, and `opencode acp`
 is the configured OpenCode entry point. None is a replacement for workflow policy.
 
@@ -17,8 +17,8 @@ from the configured slot limit.
 ## Setup and preflight
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/acpx_adapter.py doctor
-sh .factory/tools/python.sh .factory/tools/acpx_adapter.py setup opencode
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py doctor
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py setup opencode
 ```
 
 Setup validates executable and merges only `agents.opencode.argv` into the consumer

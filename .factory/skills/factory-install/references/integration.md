@@ -60,19 +60,19 @@ existing AGENTS.md or user host configuration. Explain a required host reload.
 
 ## Interpreter
 
-Follow [Python setup](../../../tools/README.md#python-setup). Inventory Python first;
+Follow [Python setup](../../../tooling/README.md#python-setup). Inventory Python first;
 if missing or too old, obtain official OS/distribution installation instructions.
 Do not assume Homebrew, a Python launcher, sudo or an existing PATH entry. Explain
 any required user/system action; never overwrite system Python. This prerequisite
 is separate from project packages and requires authorized scope.
 
-Use the chosen Python 3.11+ only to run `tools/python_runtime.py setup`. That helper
-creates the factory-owned `.factory/.venv/` and installs tools/requirements.txt there.
+Use the chosen Python 3.11+ only to run `tooling/bootstrap.py setup`. That helper
+creates the factory-owned `.factory/.venv/` and installs tooling/requirements.txt there.
 This standard Python environment does not change vendor project-install layouts.
 Do not add factory packages to application manifests or install them globally.
 
-All later factory Python commands use `sh .factory/tools/python.sh` on macOS/Linux,
-or `.\.factory\tools\python.cmd` on native Windows, followed by the script and args.
+All later factory Python commands use `sh .factory/tooling/bin/python.sh` on macOS/Linux,
+or `.\.factory\tooling\bin\python.cmd` on native Windows, followed by the script and args.
 Record this convention in the project's existing agent entrypoint without replacing
 its content. Do not record machine-absolute paths or rely on activation. From a fresh
 agent command session run launcher `--check` and the dry-run script; report actual
@@ -130,8 +130,8 @@ the selected connection. The executable name does not necessarily name a package
 Use the selected config and the verified interpreter from the target root:
 
 ```sh
-sh .factory/tools/python.sh .factory/tools/acpx_adapter.py --config .factory/factory.yaml doctor --connection CONNECTION
-sh .factory/tools/python.sh .factory/tools/acpx_adapter.py --config .factory/factory.yaml setup CONNECTION
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py --config .factory/factory.yaml doctor --connection CONNECTION
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py --config .factory/factory.yaml setup CONNECTION
 ```
 
 Replace CONNECTION with the actual selected alias; setup is a mutation, not diagnosis.

@@ -26,6 +26,6 @@ plus check.py beside it; no per-gate README or duplicate validator is required.
 ## Current map and results
 
 Use [the common result contract](result-contract.md) and
-`sh .factory/tools/python.sh .factory/tools/catalog.py` to inspect actual core
+`sh .factory/tooling/bin/python.sh .factory/tooling/bin/catalog.py` to inspect actual core
 and configured project gates. Definitions and executor ownership, not this index,
 are the machine source of the map. gate.md describes the human obligations.

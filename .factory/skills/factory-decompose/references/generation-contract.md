@@ -54,7 +54,7 @@ Markdown and uses existing architecture/evidence fields; graph validation remain
 After authoring the structured envelopes and Markdown prose, run:
 
 ```bash
-sh .factory/tools/python.sh .factory/gates/skills/decompose/prepare_metadata.py \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/prepare_metadata.py \
   .factory/memory/staging/tasks .factory/memory/staging/decomposition-source.json \
   --checkpoint UNIQUE_CHECKPOINT_ID
 ```
@@ -161,7 +161,7 @@ regeneration; do not mix revisions.
 ## Graph Gate
 
 ```bash
-sh .factory/tools/python.sh .factory/gates/skills/decompose/generate_task_graph.py \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/generate_task_graph.py \
   --staging-dir .factory/memory/staging/tasks/ \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --output .factory/memory/staging/mermaid_graph.txt

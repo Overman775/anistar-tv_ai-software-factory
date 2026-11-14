@@ -47,9 +47,9 @@ The retained scripts use `gh api` GET, paginate all pages and fail on API,
 parse or incomplete-thread errors. Run from the checkout root:
 
 ```bash
-sh .factory/tools/python.sh .factory/skills/factory-pr/scripts/fetch_note.py review NOTE_ID N --repo OWNER/REPO
-sh .factory/tools/python.sh .factory/skills/factory-pr/scripts/fetch_note_context.py review NOTE_ID N --repo OWNER/REPO
-sh .factory/tools/python.sh .factory/skills/factory-pr/scripts/fetch_recent_notes.py issue N -n 10 --repo OWNER/REPO
+sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_note.py review NOTE_ID N --repo OWNER/REPO
+sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_note_context.py review NOTE_ID N --repo OWNER/REPO
+sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_recent_notes.py issue N -n 10 --repo OWNER/REPO
 ```
 
 The first two also accept a flat comment array on stdin when PR number is omitted.

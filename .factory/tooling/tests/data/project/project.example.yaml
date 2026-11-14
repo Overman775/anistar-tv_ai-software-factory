@@ -1,0 +1,170 @@
+# Учебный web/API-профиль. Замените пути и требования на проектные.
+# Переносите вместе с объявленными gate_files, decision_files и rules.file.
+# Подключение в .factory/factory.yaml: project: project/project.example.yaml
+# Runtime, модели и права остаются в factory.yaml.
+id: example-project
+
+# Гейты и decisions: точные пути от этого YAML, без glob.
+# Каждый список несовместим с одноимёнными inline-определениями.
+gate_files:
+  - examples/gates/skills/decompose/gate.yaml
+  - examples/gates/roles/authors.yaml
+  - examples/gates/roles/judge.yaml
+  - examples/gates/skills/code-review.yaml
+
+# Только определения вопросов; типизированные ответы принадлежат задаче.
+# Нет ответа — UNKNOWN; контракт: .factory/contracts/common/decisions.md.
+decision_files:
+  - examples/decisions/verification.yaml
+
+# Необязательный каталог: ID -> файл от корня приложения.
+# category — справочная метка, на отбор не влияет.
+documents:
+  development-guide:
+    path: CONTRIBUTING.md
+    category: development
+  backend-design:
+    path: docs/backend/design.md
+    category: architecture
+  frontend-design:
+    path: docs/frontend/design.md
+    category: architecture
+  api-contract:
+    path: docs/api.md
+    category: architecture
+  product-overview:
+    path: docs/product.md
+    category: product
+  business-rules:
+    path: docs/business/billing.md
+    category: product
+  testing-guide:
+    path: docs/testing.md
+    category: testing
+  release-guide:
+    path: docs/release.md
+    category: operations
+  current-notes:
+    path: docs/notes.md       # Пример без category.
+
+# Доставка материалов: один источник — documents, project_file или file.
+# documents: список ID выше; project_file: путь от корня приложения;
+# file: локальная инструкция относительно этого YAML.
+# Две группы получателей: coordinator и worker; for.roles — только в worker.
+# ID уникальны во всём rules; для обеих групп подключите материал дважды.
+# Условия for — И; значения списка — ИЛИ; пропуск условия снимает ограничение.
+# paths_any: * внутри каталога, ** через каталоги; неизвестный scope включает правило.
+# usage: policy по умолчанию (закреплённая норма); reference — обновляемая справка.
+# Объединяйте документы с одинаковыми условиями, как в planning-context.
+# Полная схема и допустимые роли/процессы: .factory/tooling/factory/project/profile_rules.py.
+
+rules:
+  coordinator:
+    # Только сбор источников координатором; Reviewer получает закреплённый контекст.
+    - id: review-inputs
+      for:
+        processes: [code-review]
+      file: examples/review-inputs.md
+
+    # Одно дополнение для двух разных получателей: условия не объединяем.
+    - id: decomposition-coordinator
+      for:
+        processes: [decompose]
+      file: examples/decomposition.md
+
+    # Координатор получает исходные требования до подготовки плана.
+    - id: planning-context
+      for:
+        processes: [planning, decompose]
+      documents: [product-overview, development-guide]
+
+    # Локальная инструкция профиля; файл существует рядом с этим example.
+    - id: planning-method
+      for:
+        processes: [planning]
+      file: examples/planning.md
+
+    # Нормы API для координатора, когда задача касается API.
+    - id: planning-api
+      for:
+        processes: [planning, decompose]
+        paths_any: ["services/api/**"]
+      documents: [backend-design, api-contract]
+
+    # Общий документ подключён отдельно в каждой группе.
+    - id: billing-requirements-coordinator
+      for:
+        processes: [planning, implement, code-review]
+        paths_any: ["services/api/billing/**", "apps/web/billing/**"]
+      documents: [business-rules]
+
+    - id: release-context
+      for:
+        processes: [pr]
+      documents: [release-guide]
+
+    - id: planning-background
+      for:
+        processes: [planning]
+      documents: [current-notes]
+      usage: reference
+
+  worker:
+    - id: decomposition-workers
+      for:
+        processes: [decompose]
+        roles: [task-decomposer, task-reviewer]
+      file: examples/decomposition.md
+
+    - id: development-conventions
+      for:
+        processes: [implement]
+        roles: [developer, generalist, test-writer]
+        stages: [work]
+      documents: [development-guide]
+
+    - id: backend-context
+      for:
+        processes: [implement, code-review]
+        roles: [developer, generalist, test-writer, judge, reviewer]
+        paths_any: ["services/api/**"]
+      documents: [backend-design, api-contract]
+
+    - id: frontend-context
+      for:
+        processes: [implement, code-review]
+        roles: [developer, generalist, test-writer, judge, reviewer]
+        paths_any: ["apps/web/**"]
+      documents: [frontend-design, api-contract]
+
+    # Исследователь/архитектор получают те же документы в своих назначениях.
+    - id: planning-investigation
+      for:
+        processes: [planning]
+        roles: [architect, code-explorer]
+      documents: [product-overview]
+
+    - id: decomposition-contracts
+      for:
+        processes: [decompose]
+        roles: [task-decomposer, task-reviewer]
+      documents: [api-contract, testing-guide]
+
+    # Общий документ подключён отдельно в каждой группе.
+    - id: billing-requirements-worker
+      for:
+        processes: [planning, implement, code-review]
+        paths_any: ["services/api/billing/**", "apps/web/billing/**"]
+      documents: [business-rules]
+
+    - id: verification-guidance
+      for:
+        processes: [implement]
+        roles: [test-writer, generalist, judge]
+        stages: [work, verify, review]
+      documents: [testing-guide]
+
+# Один файл, выбранный несколькими правилами, доставляется один раз.
+# Не переносите regex критериев ревью в автоматические правила чтения.
+# Остальные спецификации/ADR агенты ищут через README, актуальный доступный
+# Graphify и поиск. Выбранные пути передают через read; discovery-секции нет.

@@ -3,23 +3,23 @@
 The parent agent is the scheduler. These Python helpers load YAML, validate a
 proposed graph, reserve local resources, preserve evidence/counters and invoke
 ACP and declared required check commands. They are not a daemon, sandbox, semantic verifier or cross-machine queue.
-Use Python 3.11+ and `pip install -r .factory/tools/requirements.txt` in a venv.
+Prepare Python 3.11+ with the [factory setup](../tooling/README.md#python-setup).
 Run commands from the consumer checkout. `--workspace` can select another
 checkout; `--config` can select another factory YAML. Do not run application work
 inside the Lab snapshot, which has no AniStar source or Flutter toolchain.
 
 ## Tool layout
 
-Executable helpers and tests live in [`../tools/`](../tools/README.md).
+Executable helpers and tests live in [`../tooling/`](../tooling/README.md).
 This directory contains process instructions and the operation reference.
 
 ## Configuration and preparation
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py config > "$CONFIG_SNAPSHOT"
-sh .factory/tools/python.sh .factory/tools/workflow.py read-instructions "$CONFIG_SNAPSHOT" roles/orchestrator.md
-sh .factory/tools/python.sh .factory/tools/workflow.py validate workflow.json
-sh .factory/tools/python.sh .factory/tools/workflow.py init workflow.json --config-pin "$CONFIG_SNAPSHOT"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config > "$CONFIG_SNAPSHOT"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py read-instructions "$CONFIG_SNAPSHOT" roles/orchestrator.md
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py validate workflow.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py init workflow.json --config-pin "$CONFIG_SNAPSHOT"
 ```
 
 For Implement, save the snapshot in OS temporary storage and use verified
@@ -35,7 +35,7 @@ adapter mapping. The shipped native model is a configurable choice, not proof
 of availability on another account. Native defaults to Codex; changing native
 harness/profile requires the matching host adapter.
 
-The file `.factory/tools/example.workflow.json` is a runnable structural example
+The file `.factory/tooling/examples/example.workflow.json` is a runnable structural example
 for a small low-risk label correction. Replace source/outcome/scope with the real
 request, and replace the explicit REPLACE_WITH_ACTUAL_TEST command placeholder.
 It does not authorize edits or supply actual PASS evidence.
@@ -72,10 +72,10 @@ Role ownership and mandatory project command choice are also semantic checks.
 ## Native/ACP dispatch and results
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py claim write-label
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py claim write-label
 # Parent inspects actual host capacity and uses selected adapter to start/continue.
-sh .factory/tools/python.sh .factory/tools/workflow.py bind write-label ACTUAL_HANDLE ACTUAL_MODEL
-sh .factory/tools/python.sh .factory/tools/workflow.py finish write-label /path/to/result.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py bind write-label ACTUAL_HANDLE ACTUAL_MODEL
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py finish write-label /path/to/result.json
 ```
 
 Claim is atomic and creates `dispatch_id` before external side effects. It blocks
@@ -91,9 +91,9 @@ The parent validates those interfaces before acceptance. Native delivers the ful
 packet inline or by the file route below; ACP persists it in its prompt.
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py accept accept-label
-sh .factory/tools/python.sh .factory/tools/workflow.py archive completed "Brief outcome"
-sh .factory/tools/python.sh .factory/tools/workflow.py clean
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py accept accept-label
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py archive completed "Brief outcome"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py clean
 ```
 
 Archive verifies terminal obligations and writes one
@@ -107,11 +107,11 @@ unknown work remains resumable. Keep individual packets until run cleanup.
 ## Repair, revision and recovery
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py unknown write-label "Lost transport outcome"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py unknown write-label "Lost transport outcome"
 # Reconcile actual runtime/files first; evidence below must be real.
-sh .factory/tools/python.sh .factory/tools/workflow.py retry write-label recovery "Reason" "Proof old writer stopped"
-sh .factory/tools/python.sh .factory/tools/workflow.py revise /path/to/revised-graph.json "Reason for technical change"
-sh .factory/tools/python.sh .factory/tools/workflow.py replace-session author "Reason" "Proof old session stopped" "Handoff summary"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py retry write-label recovery "Reason" "Proof old writer stopped"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py revise /path/to/revised-graph.json "Reason for technical change"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py replace-session author "Reason" "Proof old session stopped" "Handoff summary"
 ```
 
 Retry invalidates downstream nodes and retains old results in events. Stage is
@@ -305,7 +305,7 @@ failures or selects zero tests still needs semantic review.
 After claim/bind of a node with `project-checks`, run:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py run-check verify-label behavior --request behavior-first --dispatch "$dispatch_id"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py run-check verify-label behavior --request behavior-first --dispatch "$dispatch_id"
 ```
 
 The coordinator or the bound role may call this helper; it does not call an LLM
@@ -366,7 +366,7 @@ staging, approvals and result formats. Their coordinators prepare a JSON assignm
 with `source`, exact input/output paths, allowed writes and mandatory `read` paths:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/context.py --process planning --role architect --profile architect assignment.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process planning --role architect --profile architect assignment.json
 ```
 
 Use the process/role/profile actually selected by the owning skill. The CLI
@@ -393,8 +393,8 @@ JSON decision (paths below belong to the consuming project's state directory):
 ```
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/workflow.py correct write-label .factory/memory/state/correction.json
-sh .factory/tools/python.sh .factory/tools/workflow.py resume-task label "Verified resolution or human decision"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py correct write-label .factory/memory/state/correction.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py resume-task label "Verified resolution or human decision"
 ```
 
 `correct` supports profiles with escalation in Implement. Cause is

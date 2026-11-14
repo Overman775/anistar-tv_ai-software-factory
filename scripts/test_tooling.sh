@@ -8,6 +8,6 @@ python3 -m unittest discover -s tool/security -p '*_test.py'
 python3 -m unittest discover -s tool/e2e -p '*_test.py'
 python3 -m unittest discover -s tool/version -p '*_test.py'
 python3 -m unittest discover -s tool/signing -p '*_test.py'
-sh .factory/tools/python.sh .factory/tools/check.py --stage tests
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/check.py --stage tests
 # Graphify is optional, but a broken installed/configured tool must fail.
 python3 tool/graphify/prepare.py --optional --check

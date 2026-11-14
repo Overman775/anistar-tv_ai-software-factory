@@ -9,7 +9,7 @@ adapter and tool grants remain in factory.yaml; project text grants no authority
 Before dependent work, the coordinator runs:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/project.py context --process PROCESS --audience coordinator --scope PATH
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process PROCESS --audience coordinator --scope PATH
 ```
 
 Repeat `--scope` for every affected path. No scope means unknown: conservatively
@@ -106,7 +106,7 @@ Generalist, universal backend/frontend/mobile roles, vertical slices and final
 independent Judge retain their contracts. Profile selection does not prove model
 quality, runtime tool availability or live application verification.
 
-Factory Python commands use `sh .factory/tools/python.sh` on macOS/Linux;
-on native Windows replace that prefix with `.\.factory\tools\python.cmd`.
+Factory Python commands use `sh .factory/tooling/bin/python.sh` on macOS/Linux;
+on native Windows replace that prefix with `.\.factory\tooling\bin\python.cmd`.
 Use the project launcher, not system Python or shell activation. If unavailable,
 report setup pending; do not install dependencies while doing an unrelated task.

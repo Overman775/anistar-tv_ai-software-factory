@@ -14,7 +14,7 @@ Read [communication rules](../../contracts/common/communication.md) for messages
 # Factory Meta Retro
 
 Read `.factory/contracts/common/project-policy.md`. Before dependent work, resolve
-project inputs with `sh .factory/tools/python.sh .factory/tools/project.py context --process meta-retro --audience coordinator`
+project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process meta-retro --audience coordinator`
 (add `--scope PATH` for every known scope path). Read the returned instructions and
 actual applicable documents. Unknown scope retains obligations; it never waives them.
 

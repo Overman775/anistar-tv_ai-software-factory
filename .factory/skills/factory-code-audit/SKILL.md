@@ -6,7 +6,7 @@ description: "Read-only quality audit of an existing project, package or subsyst
 # Factory Code Audit
 
 Read `.factory/contracts/common/project-policy.md`. Before dependent work, resolve
-project inputs with `sh .factory/tools/python.sh .factory/tools/project.py context --process code-audit --audience coordinator`
+project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process code-audit --audience coordinator`
 (add `--scope PATH` for every known scope path). Read the returned instructions and
 actual applicable documents. Unknown scope retains obligations; it never waives them.
 

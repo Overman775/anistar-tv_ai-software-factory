@@ -1,10 +1,10 @@
 # Verification
 
-Use the project launcher after [Python setup](../../../tools/README.md#python-setup),
+Use the project launcher after [Python setup](../../../tooling/README.md#python-setup),
 from the target root. Native Windows uses python.cmd as documented there:
 
 ```sh
-sh .factory/tools/python.sh -B .factory/tools/dry_run.py
+sh .factory/tooling/bin/python.sh -B .factory/tooling/bin/dry_run.py
 ```
 
 Verify the launcher from a fresh agent command session without prior activation.
@@ -12,7 +12,7 @@ Require exit 0 and JSON PASS. The driver tests seven preparation stages with a
 synthetic project/configuration: config loading, project context, workflow
 reservation and native/ACP dispatch preparation. It cleans temporary files and
 never dispatches models. Missing dependencies or files remain failures, not skips.
-`--help` alone is not a substitute. See [driver contract](../../../tools/README.md).
+`--help` alone is not a substitute. See [driver contract](../../../tooling/README.md).
 
 The driver covers its fixture routes and required runtime inputs, not the integrity
 of every installed skill. Separately check the selected bundle's file inventory,
@@ -22,7 +22,7 @@ or universal runtime freeze of all install references is implemented.
 If an actual project profile exists, additionally validate actual configuration:
 
 ```sh
-sh .factory/tools/python.sh .factory/tools/workflow.py --config .factory/factory.yaml config
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py --config .factory/factory.yaml config
 ```
 
 Check CLI help if flags differ in the selected version. This command requires the

@@ -13,7 +13,7 @@ risk-based checks. Preserve the skill's existing semantic and authorization boun
 
 ## Start
 
-1. Resolve project inputs with `sh .factory/tools/python.sh .factory/tools/project.py context --process implement --audience coordinator`. Add `--scope PATH` for each known scope. Read returned instructions and applicable documents. Unknown scope retains obligations. Read project `AGENTS.md`, applicable architecture, structure, codestyle, testing, specs, ADRs and package READMEs. Include actual domain rules and command definitions, not only indexes.
+1. Resolve project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process implement --audience coordinator`. Add `--scope PATH` for each known scope. Read returned instructions and applicable documents. Unknown scope retains obligations. Read project `AGENTS.md`, applicable architecture, structure, codestyle, testing, specs, ADRs and package READMEs. Include actual domain rules and command definitions, not only indexes.
 2. Use the pinned config from entry. Read the selected adapter and role
    contracts. Explicit user model/harness requirements bind.
 3. Inspect existing `.factory/memory/state/workflow.json`. Resume after reconciling

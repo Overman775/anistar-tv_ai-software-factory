@@ -3,7 +3,7 @@
 Implement command nodes require an existing project-checks reservation and profile
 command capability. This file grants neither. Read actual project command definitions
 and `.factory/skills/factory-implement/references/project-checks.md` before commands.
-Run required commands with `sh .factory/tools/python.sh .factory/tools/workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`.
+Run required commands with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`.
 Copy its returned result unchanged into checks, or select its execution ID in
 `prepare-report` and leave it out of draft checks. Do not do both: duplicate
 selected check IDs are rejected. CLI ok:true means a saved record,

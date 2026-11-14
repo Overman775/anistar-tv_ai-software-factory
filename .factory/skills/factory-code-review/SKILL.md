@@ -27,7 +27,7 @@ Read [scope rules](references/scope-and-modes.md). Pin the accepted project poli
 with project.py review-policy, never candidate policy. Resolve coordinator rules:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/project.py context --process code-review --audience coordinator --policy-snapshot POLICY.json --scope PATH
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process code-review --audience coordinator --policy-snapshot POLICY.json --scope PATH
 ```
 
 For PRs always read title and complete description, linked tasks/incidents and relevant
@@ -51,7 +51,7 @@ Additional requirements cannot be silently waived. Capture scoped bytes, check i
 and exact contextual source excerpts/files needed for evidence outside the diff.
 
 ```bash
-sh .factory/tools/python.sh .factory/skills/factory-code-review/scripts/review_run.py init --input REQUEST.json --run .factory/memory/state/reviews/UNIQUE_ID
+sh .factory/tooling/bin/python.sh .factory/skills/factory-code-review/scripts/review_run.py init --input REQUEST.json --run .factory/memory/state/reviews/UNIQUE_ID
 ```
 
 Use a new directory for each identity. The plan derives all mandatory criteria and
@@ -69,7 +69,7 @@ Create each assignment with `review_run.py assignment --id DIRECTION --run RUN`;
 save the returned JSON and package it with:
 
 ```bash
-sh .factory/tools/python.sh .factory/tools/context.py --process code-review --role reviewer --profile reviewer ASSIGNMENT.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process code-review --role reviewer --profile reviewer ASSIGNMENT.json
 ```
 
 Keep three independent assignments, in parallel or sequentially according to available slots:
@@ -104,7 +104,7 @@ No automatic merging based only on criterion/location. Any significant new disco
 can be added by QA under the same evidence requirements.
 
 ```bash
-sh .factory/tools/python.sh .factory/skills/factory-code-review/scripts/review_run.py finish --input QA.json --run RUN
+sh .factory/tooling/bin/python.sh .factory/skills/factory-code-review/scripts/review_run.py finish --input QA.json --run RUN
 ```
 
 Return the generated JSON and Markdown from the same validated result. Missing or stale
@@ -112,7 +112,7 @@ results give INCOMPLETE; retain valid findings and blockers together. A complete
 can conclude NEEDS_WORK. No local verdict grants merge or publication permission.
 New commits or policy/context changes require a new run; no automatic reuse across revisions.
 
-Core definitions: factory_tooling/project/review_definition.py. Project prose extends via rules.file;
+Core definitions: tooling/factory/project/review_definition.py. Project prose extends via rules.file;
 mandatory criteria/commands via gate_files. No review_rule_ids or separate extension registry.
 Decisions reuse the factory contract when routing is explicitly implemented; no private
 provider, decision engine or implicit threshold-based waiver exists in this version.

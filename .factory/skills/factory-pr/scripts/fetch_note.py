@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Command entry point; implementation: factory_tooling.github.fetch_note."""
+"""Command entry point; implementation: factory.github.fetch_note."""
 
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 if __name__ == "__main__":
-    from factory_tooling.github.fetch_note import main
+    from factory.github.fetch_note import main
 
     sys.exit(main())

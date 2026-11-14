@@ -24,9 +24,9 @@ small edits go to a Generalist, not a hidden root-only editing exception.
 
 ## Entry
 
-Save `sh .factory/tools/python.sh .factory/tools/workflow.py config` output as
+Save `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config` output as
 JSON in OS temporary storage. Keep it through `init`; do not send it to workers.
-Use `sh .factory/tools/python.sh .factory/tools/workflow.py read-instructions
+Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py read-instructions
 SNAPSHOT PATH...` for mandatory Implement factory instructions. Paths are
 relative to `.factory/`. Use the returned content, including for rereading this
 skill. The command verifies and returns the same bytes. Read the Orchestrator

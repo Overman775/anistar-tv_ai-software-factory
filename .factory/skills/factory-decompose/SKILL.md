@@ -8,7 +8,7 @@ Read [communication rules](../../contracts/common/communication.md) for messages
 # Factory Plan Decomposition
 
 Read `.factory/contracts/common/project-policy.md`. Before dependent work, resolve
-project inputs with `sh .factory/tools/python.sh .factory/tools/project.py context --process decompose --audience coordinator`
+project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process decompose --audience coordinator`
 (add `--scope PATH` for every known scope path). Read the returned instructions and
 actual applicable documents. Unknown scope retains obligations; it never waives them.
 
@@ -50,7 +50,7 @@ Accept an explicit approved plan path, normally `docs/plans/{plan_id}.md`.
 Validate it with:
 
 ```bash
-sh .factory/tools/python.sh .factory/gates/skills/planning/validate_plan.py \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/planning/validate_plan.py \
   --plan docs/plans/{plan_id}.md --phase approved
 ```
 
@@ -84,7 +84,7 @@ Main session is orchestrator. Read active runtime adapter, then use:
 - `task-reviewer`: reviews and repairs decomposition without changing plan
   semantics.
 
-Build worker context with `sh .factory/tools/python.sh .factory/tools/context.py --process decompose --role ROLE --profile PROFILE ASSIGNMENT.json`. Include source, exact allowed staging paths, expected output and project read paths; deliver the full packet. For the decomposer, authorize temporary siblings of its assigned staging files and its checkpoint under `.factory/memory/staging/checkpoints/`.
+Build worker context with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process decompose --role ROLE --profile PROFILE ASSIGNMENT.json`. Include source, exact allowed staging paths, expected output and project read paths; deliver the full packet. For the decomposer, authorize temporary siblings of its assigned staging files and its checkpoint under `.factory/memory/staging/checkpoints/`.
 
 Before either spawn, read `.factory/contracts/common/agent-checkpoint.md`. Validate
 initial generation, metadata fast-fix, review, and repair handoffs equally;

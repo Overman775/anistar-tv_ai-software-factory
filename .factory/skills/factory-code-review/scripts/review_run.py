@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
-"""Command entry point; implementation: factory_tooling.review.review_run."""
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+"""Command entry point; implementation: factory.review.review_run."""
 
 if __name__ == "__main__":
-    from factory_tooling.review.review_run import main
+    from factory.review.review_run import main
 
     main()

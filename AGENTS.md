@@ -16,6 +16,7 @@ factory-code-review / factory-code-audit / factory-code-debt / factory-pr → fo
 For factory execution, use [.factory/skills/factory-implement/SKILL.md](.factory/skills/factory-implement/SKILL.md).
 Read [.factory/factory.yaml](.factory/factory.yaml), its configured router and
 [.factory/workflow/orchestration.md](.factory/workflow/orchestration.md).
+Factory Python: `sh .factory/tooling/bin/python.sh SCRIPT [ARGS]` (macOS/Linux); Windows: `.\.factory\tooling\bin\python.cmd SCRIPT [ARGS]`.
 factory-meta-retro → session retrospective and factory improvements
 
 ## BLOCK

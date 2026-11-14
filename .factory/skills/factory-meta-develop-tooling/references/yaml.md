@@ -1,6 +1,6 @@
 # YAML tooling
 
-Use the shipped configuration and [checker](../../../tools/README.md#yaml-checks).
+Use the shipped configuration and [checker](../../../tooling/README.md#yaml-checks).
 Owned `.yaml` and `.yml` files include factory settings, project profiles, gates,
 decisions, examples, pinned fixtures and factory skill metadata. Vendor skills,
 environments, caches and run output are outside scope.
