@@ -150,6 +150,9 @@ def pack_run(root: Path, state: State) -> Path:
     if existing is not None:
         verified_cleanup_paths(root, state)
         return path
+    from factory_tooling.runtime import telemetry
+
+    usage = telemetry.collect(state)
     directory = relative(root, f"{HISTORY}/{run_id}")
     paths = transport_paths(root, state)
     for item in directory.rglob("*"):
@@ -179,6 +182,7 @@ def pack_run(root: Path, state: State) -> Path:
         with os.fdopen(fd, "wb") as output:
             with tarfile.open(fileobj=output, mode="w:gz") as tar:
                 hashes = {"run.json": _add_json(tar, "run.json", state)}
+                hashes["usage.acpx.json"] = _add_json(tar, "usage.acpx.json", usage)
                 for source in paths:
                     name = source.relative_to(root).as_posix()
                     expected = recorded_hashes.get(name)
@@ -219,7 +223,7 @@ def verified_cleanup_paths(root: Path, state: State) -> list[Path]:
     history = f"{HISTORY}/{state['run_id']}/"
     remove = []
     for name, expected in hashes.items():
-        if name == "run.json":
+        if name in {"run.json", "usage.acpx.json"}:
             continue
         source = relative(root, name)
         require(name.startswith(history) or source in transport, "Invalid archive ownership")

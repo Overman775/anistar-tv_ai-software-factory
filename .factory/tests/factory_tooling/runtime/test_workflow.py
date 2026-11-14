@@ -32,6 +32,9 @@ _TOOLS = Path(__file__).resolve().parents[3] / "tools"
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
+        acpx = patch("factory_tooling.runtime.telemetry._show", side_effect=FileNotFoundError)
+        acpx.start()
+        self.addCleanup(acpx.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="factory-workflow-test-")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
