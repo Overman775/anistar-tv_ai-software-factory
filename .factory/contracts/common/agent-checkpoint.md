@@ -110,9 +110,8 @@ valid role result was produced. Track it separately as agent recovery.
 For dynamic Factory Implement, identity is run + logical agent, while each
 assignment binds task/node/dispatch and immutable source hash. Reuse a suitable
 session for related tasks/slices only after reading the new assignment and
-checking specialization, permissions, instructions and context. Same source is
-not required across explicitly locked assignments; source drift inside one
-assignment still blocks. Reviewer never shares any author's session.
+checking specialization, permissions, instructions and context. Related assignments may bind different accepted sources. Missing or invalid
+accepted snapshots block dependent work. Reviewer never shares any author's session.
 
 A new physical session increments its epoch and gets an explicit handoff: goal,
 decisions, completed work, remaining findings/checks and current files. It has

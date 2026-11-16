@@ -29,6 +29,7 @@ from factory.project.contracts import (
 from factory.project.profile_io import (
     check_frozen,
     review_materials,
+    safe_path,
     selected_materials,
     validate_snapshot,
 )
@@ -182,7 +183,7 @@ CONTEXT_INPUT = TypeAdapter[ContextInput](ContextInput)
 CONTEXT_PACKET = TypeAdapter[ContextPacket](ContextPacket)
 
 
-def path(root: str | Path, rel: str) -> Path:
+def _validate_path(rel: str) -> None:
     if not (
         isinstance(rel, str)
         and rel
@@ -190,6 +191,10 @@ def path(root: str | Path, rel: str) -> Path:
         and (".." not in Path(rel).parts)
     ):
         raise ValueError("Invalid context path")
+
+
+def path(root: str | Path, rel: str, *, exists: bool = True) -> Path:
+    _validate_path(rel)
     root = Path(root).resolve()
     target = root / rel
     ensure(target.resolve().is_relative_to(root), "Context path escapes root")
@@ -200,8 +205,38 @@ def path(root: str | Path, rel: str) -> Path:
         ),
         "Symlink context path",
     )
-    ensure(target.is_file(), f"Missing context file: {rel}")
+    ensure(not exists or target.is_file(), f"Missing context file: {rel}")
     return target
+
+
+def accepted_path(config: Config, root: str | Path, rel: str, *, exists: bool = True) -> Path:
+    """Resolve an accepted path without inspecting its candidate replacement."""
+    _validate_path(rel)
+    target = Path(root) / rel
+    if str(target) in config.get("_documents", {}):
+        return target
+    return path(root, rel, exists=exists)
+
+
+def accepted_bytes(
+    config: Config, file: Path, fallback: Callable[[Path], bytes] = Path.read_bytes
+) -> bytes:
+    key = str(file)
+    pinned = config.get("_documents", {}).get(key)
+    expected = config.get("_project_documents", {}).get(key) or config["_files"].get(key)
+    recovery = (
+        f"Accepted document bytes unavailable or invalid: {file}. "
+        "Restore hash-matching bytes or explicitly re-intake this document."
+    )
+    try:
+        raw = pinned.encode("utf-8") if pinned is not None else fallback(file)
+    except FileNotFoundError as exc:
+        if expected is not None:
+            raise ValueError(recovery) from exc
+        raise
+    if expected is not None and hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError(recovery)
+    return raw
 
 
 def factory_files(config: Config) -> list[str]:
@@ -312,7 +347,7 @@ def _factory_materials(
 def coordinator_instructions(config: Config, root: Path) -> set[str]:
     """Resolve coordinator-only paths for every project-material entry point."""
     forbidden = {
-        str((root / p).resolve())
+        str(root / p)
         for p in [
             config["router"],
             config["orchestration"],
@@ -323,7 +358,7 @@ def coordinator_instructions(config: Config, root: Path) -> set[str]:
             "adapters/common.md",
         ]
     }
-    forbidden.update(str((root / a["instructions"]).resolve()) for a in config["adapters"].values())
+    forbidden.update(str(root / a["instructions"]) for a in config["adapters"].values())
     return forbidden
 
 
@@ -334,9 +369,9 @@ def _project_materials(
     forbidden = coordinator_instructions(config, root)
     selected = []
     for rel in (["AGENTS.md"] if include_agents else []) + reads:
-        file = path(workspace, rel)
+        file = accepted_path(config, workspace, rel)
         ensure(
-            str(file.resolve()) not in forbidden and file.name != "SKILL.md",
+            str(file) not in forbidden and file.name != "SKILL.md",
             "Coordinator instructions cannot be injected as worker reading; use scoped references",
         )
         selected.append((file, "mandatory project reading", "project"))
@@ -370,6 +405,30 @@ def _read_instructions(
     return result
 
 
+def _label_instructions(
+    config: Config,
+    policy_files: dict[str, str],
+    instructions: list[MaterialEntry],
+    selected: list[tuple[Path, Rule]],
+    active: bool,
+) -> None:
+    for entry in instructions:
+        rules = [rule for file, rule in selected if str(file) == entry["path"]]
+        if rules:
+            entry["rules"] = [
+                cast(Rule, {k: r[k] for k in ("id", "for", "usage") if k in r}) for r in rules
+            ]
+        expected = policy_files.get(entry["path"]) or config.get("_project_documents", {}).get(
+            entry["path"]
+        )
+        if expected is not None and entry["sha256"] != expected:
+            raise ValueError("Project policy changed during packet build")
+        if active and (expected is not None or entry["path"] in config["_files"]):
+            entry["reason"] = "accepted baseline: " + entry["reason"]
+        elif active:
+            entry["reason"] = "current assigned reading: " + entry["reason"]
+
+
 def build(
     config: Config,
     workspace: str | Path,
@@ -398,13 +457,14 @@ def build(
         ) from None
     profile, node, reads = _validate_assignment(config, profile_name, role, process, data)
     root, workspace = Path(config["_path"]).parent.resolve(), Path(workspace).resolve()
+    active = process == "implement" and "_project_documents" in config
     materials = [
-        (path(root, rel), reason, "worker")
+        ((accepted_path(config, root, rel) if active else path(root, rel)), reason, "worker")
         for rel, reason in _factory_materials(config, profile, role, process, node, data)
     ]
     if process == "implement":
         orchestrator_paths = {
-            str((root / rel).resolve())
+            str(root / rel)
             for rel in (
                 "roles/orchestrator.md",
                 "contracts/orchestrator.md",
@@ -413,7 +473,7 @@ def build(
         }
         for file, _, _ in materials:
             ensure(
-                str(file.resolve()) not in orchestrator_paths,
+                str(file) not in orchestrator_paths,
                 f"Coordinator instructions cannot be injected as worker material: "
                 f"{file.relative_to(root)}. Check adapter worker_instructions or role configuration.",
             )
@@ -433,44 +493,43 @@ def build(
         }
         selected = []
     else:
-        check_frozen(policy["files"])
-        check_frozen(config.get("_project_documents", {}))
+        if not active or "_documents" not in config:
+            check_frozen(policy["files"])
+            check_frozen(config.get("_project_documents", {}))
         selected = selected_materials(
             policy,
             workspace,
             process=process,
             audience="worker",
+            resolve=lambda root, rel: (
+                accepted_path(config, root, rel) if active else safe_path(root, rel)
+            ),
             role=role,
             stage=node.get("stage"),
             scope=scope,
         )
+    project_reading = _project_materials(
+        config, root, workspace, reads, include_agents=pinned is None
+    )
     forbidden = coordinator_instructions(config, root)
     for file, rule in selected:
         ensure(
-            str(file.resolve()) not in forbidden and file.name != "SKILL.md",
+            str(file) not in forbidden and file.name != "SKILL.md",
             "Coordinator instructions cannot be injected as project rules",
         )
         materials.append((file, "project profile: " + rule["id"], "project"))
-    materials.extend(
-        _project_materials(config, root, workspace, reads, include_agents=pinned is None)
-    )
-    instructions = _read_instructions(materials, read_bytes)
+    materials.extend(project_reading)
+
+    def packet_bytes(file: Path) -> bytes:
+        return accepted_bytes(config, file, read_bytes)
+
+    instructions = _read_instructions(materials, packet_bytes if active else read_bytes)
     if pinned is not None:
         accepted = review_materials(pinned, root, workspace, role=role, scope=scope)
         by_path = {entry["path"]: entry for entry in instructions}
         by_path.update({entry["path"]: entry for entry in accepted})
         instructions = list(by_path.values())
-    for entry in instructions:
-        rules = [rule for file, rule in selected if str(file) == entry["path"]]
-        if rules:
-            entry["rules"] = [
-                cast(Rule, {k: r[k] for k in ("id", "for", "usage") if k in r}) for r in rules
-            ]
-        expected = policy["files"].get(entry["path"]) or config.get("_project_documents", {}).get(
-            entry["path"]
-        )
-        if not (expected is None or entry["sha256"] == expected):
-            raise ValueError("Project policy changed during packet build")
+    _label_instructions(config, policy["files"], instructions, selected, active)
     packet = dict(data)
     packet.update(
         {

@@ -13,6 +13,7 @@ from factory.runtime.memory import read_evidence
 from factory.runtime.packet_io import PACKET_REFERENCE, delivery_state, receipt_path
 from factory.runtime.run_archive import read_member
 from factory.runtime.workflow import Ledger
+from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid, atomic_json
 from tests.factory.runtime import workflow_fixture
 
@@ -44,7 +45,11 @@ class FilePacketTests(unittest.TestCase):
 
     def test_complete_unicode_chunks_and_reserved_then_bound(self) -> None:
         # A large project instruction exercises chunking at non-ASCII boundaries.
-        (self.f.root / "AGENTS.md").write_text("Ж🙂" * 12000)
+        f = workflow_fixture.WorkflowFixture(self.addCleanup)
+        (f.root / "AGENTS.md").write_text("Ж🙂" * 12000)
+        f.init()
+        f.ledger.claim("write-label")
+        self.f = f
         b = self.prepare()
         self.assertEqual(b, self.prepare())
         diagnostics = self.f.ledger.prepare_packet("write-label", with_diagnostics=True)
@@ -177,13 +182,12 @@ class FilePacketTests(unittest.TestCase):
         self.assertTrue(chunk["content"].startswith("{"))
         self.assertIn("read-packet", b["read_command"])
 
-    def test_mandatory_workspace_instruction_drift_blocks_read_and_reprepare(self) -> None:
+    def test_workspace_instruction_edit_preserves_read_and_reprepare(self) -> None:
         b = self.prepare()
         (self.f.root / "AGENTS.md").write_text("Changed instructions")
-        with self.assertRaisesRegex(Invalid, "instruction drift"):
-            self.f.ledger.read_packet("write-label", self.meta(b), 1)
-        with self.assertRaisesRegex(Invalid, "instruction drift"):
-            self.prepare()
+        chunk = self.f.ledger.read_packet("write-label", self.meta(b), 1)
+        self.assertNotIn("Changed instructions", chunk["content"])
+        self.assertEqual(b, self.prepare())
 
     def test_windows_bootstrap_uses_powershell_and_native_launcher(self) -> None:
         b = self.prepare()
@@ -196,15 +200,15 @@ class FilePacketTests(unittest.TestCase):
         self.assertIn("bootstrap.py", result["read_command"])
         self.assertTrue(result["read_command"].startswith("& "))
 
-    def test_external_source_drift_blocks_read(self) -> None:
+    def test_external_source_edit_preserves_packet(self) -> None:
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         f.g["sources"]["request"] = f.external_source()
         f.init()
         f.ledger.claim("write-label")
         b = f.ledger.prepare_packet("write-label")
         (f.root / "external.md").write_text("Changed after approval")
-        with self.assertRaisesRegex(Invalid, "SOURCE_DRIFT"):
-            f.ledger.read_packet("write-label", self.meta(b), 1)
+        chunk = f.ledger.read_packet("write-label", self.meta(b), 1)
+        self.assertNotIn("Changed after approval", chunk["content"])
 
     def test_rejects_conflicting_ledger_role_and_workspace(self) -> None:
         b = self.prepare()
@@ -229,16 +233,19 @@ class FilePacketTests(unittest.TestCase):
             self.prepare()
         self.assertEqual("foreign", p.read_text())
 
-    def test_config_and_source_drift_reject_reads(self) -> None:
-        b = self.prepare()
-        # Avoid mutating the actual shared fixture: use a local profile file.
-        config_file = self.f.fixture_profile
+    def test_executable_config_drift_rejects_read(self) -> None:
+        f = workflow_fixture.WorkflowFixture(self.addCleanup)
+        config_file = f.config_file(lambda config: None)
+        f.config = load_config(config_file)
+        f.init()
+        f.ledger.claim("write-label")
+        b = f.ledger.prepare_packet("write-label")
         original = config_file.read_text()
         config_file.write_text(original + "# drift\n")
         with self.assertRaisesRegex(Invalid, "drift"):
-            self.f.ledger.read_packet("write-label", self.meta(b), 1)
+            f.ledger.read_packet("write-label", self.meta(b), 1)
         config_file.write_text(original)
-        self.f.ledger.read_packet("write-label", self.meta(b), 1)
+        f.ledger.read_packet("write-label", self.meta(b), 1)
 
     def test_cleanup_removes_only_owned_packet_after_saved_history(self) -> None:
         b = self.prepare()

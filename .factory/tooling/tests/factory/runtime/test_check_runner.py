@@ -606,15 +606,15 @@ class CheckRunnerTests(unittest.TestCase):
         self.assertEqual(("PASS", 0), (result["result"], result["exit_code"]))
         self.assertEqual(result, f.ledger.run_check("verify-label", "behavior", "interrupted"))
 
-    def test_source_change_during_command_is_blocked(self) -> None:
+    def test_source_path_change_during_command_keeps_accepted_source(self) -> None:
         (self.f.root / "request.md").write_text("original request")
         self.f.g["sources"]["request"].pop("text")
         self.f.g["sources"]["request"]["path"] = "request.md"
         f = self.ready("from pathlib import Path; Path('request.md').write_text('changed')")
         result = f.ledger.run_check("verify-label", "behavior")
-        self.assertEqual("BLOCKED", result["result"])
+        self.assertEqual("PASS", result["result"])
         self.assertEqual(
-            "SOURCE_DRIFT", f.ledger.read()["executions"][result["execution_id"]]["error"]
+            "original request", f.ledger.read()["graph"]["sources"]["request"]["snapshot"]
         )
 
     def test_unsafe_cwd_rejected_before_command(self) -> None:

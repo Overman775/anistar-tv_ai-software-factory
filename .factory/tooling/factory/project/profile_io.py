@@ -155,7 +155,10 @@ def profile_workspace(path: str | Path) -> Path:
 
 
 def load_profile(
-    path: str | Path, *, read_bytes: Callable[[Path], bytes] = Path.read_bytes
+    path: str | Path,
+    *,
+    read_bytes: Callable[[Path], bytes] = Path.read_bytes,
+    resolve: Callable[[str | Path, str], Path] = safe_path,
 ) -> Policy:
     """Read a profile, explicit gate/decision files and local rules once. Never run project code."""
     path = Path(path).absolute()
@@ -167,7 +170,7 @@ def load_profile(
     files = {str(path): sha(raw)}
 
     def read_definition(rel: str) -> bytes:
-        file = safe_path(path.parent, rel)
+        file = resolve(path.parent, rel)
         content = read_bytes(file)
         files[str(file)] = sha(content)
         return content
@@ -175,7 +178,7 @@ def load_profile(
     data, _ = compose_profile(raw, read_definition)
     local_paths = local_policy_files(data, profile_root)
     for rel in local_paths:
-        file = safe_path(path.parent, rel)
+        file = resolve(path.parent, rel)
         if str(file) not in files:
             files[str(file)] = sha(read_bytes(file))
     composition = {
@@ -193,17 +196,21 @@ def load_profile(
 
 
 def selected_materials(
-    policy: Policy, workspace: str | Path, **selection: Unpack[Selection]
+    policy: Policy,
+    workspace: str | Path,
+    *,
+    resolve: Callable[[str | Path, str], Path] = safe_path,
+    **selection: Unpack[Selection],
 ) -> list[tuple[Path, Rule]]:
     root = Path(policy["path"]).parent
     data = policy["data"]
     result = []
     for rule in select_rules(data, **selection):
         if "file" in rule:
-            file = safe_path(root, rule["file"])
+            file = resolve(root, rule["file"])
             result.append((file, rule))
         else:
-            result.extend((safe_path(workspace, rel), rule) for rel in document_paths(data, rule))
+            result.extend((resolve(workspace, rel), rule) for rel in document_paths(data, rule))
     return result
 
 
@@ -212,11 +219,12 @@ def material_entries(
     workspace: str | Path,
     *,
     read_bytes: Callable[[Path], bytes] = Path.read_bytes,
+    resolve: Callable[[str | Path, str], Path] = safe_path,
     **selection: Unpack[Selection],
 ) -> list[MaterialEntry]:
     """One read per file, all selection reasons retained; rule scope stays local."""
     entries: dict[str, MaterialEntry] = {}
-    for file, rule in selected_materials(policy, workspace, **selection):
+    for file, rule in selected_materials(policy, workspace, resolve=resolve, **selection):
         key = str(file)
         if key not in entries:
             raw = read_bytes(file)
@@ -237,11 +245,11 @@ def material_entries(
 def freeze_materials(
     policy: Policy, workspace: str | Path, selections: Iterable[Selection]
 ) -> dict[str, str]:
-    """Freeze normative inputs only; ordinary reference docs may be updated."""
+    """Fingerprint all selected documents once per file."""
     result = {}
     for selection in selections:
-        for file, rule in selected_materials(policy, workspace, **selection):
-            if rule.get("usage", "policy") == "policy" and str(file) not in result:
+        for file, _ in selected_materials(policy, workspace, **selection):
+            if str(file) not in result:
                 result[str(file)] = sha(file.read_bytes())
     return result
 

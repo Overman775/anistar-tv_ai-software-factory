@@ -88,7 +88,7 @@ class DecisionContractTests(unittest.TestCase):
         preserve_obligations(definitions, {"needed": answer(False)}, {"needed": answer(True)})
         preserve_obligations(definitions, {"needed": answer(True)}, {"needed": answer(True)})
 
-    def test_core_contract_and_validator_are_frozen_with_run(self) -> None:
+    def test_core_contract_uses_snapshot_and_validator_stays_fixed(self) -> None:
         for rel in [
             "contracts/common/decisions.md",
             "tooling/factory/decisions/decision_contract.py",
@@ -100,5 +100,11 @@ class DecisionContractTests(unittest.TestCase):
                 f.init()
                 f.ledger.claim("write-label")
                 (file.parent / rel).write_text("changed")
-                with self.assertRaisesRegex(Invalid, "drift"):
-                    f.ledger.packet("write-label")
+                if rel.endswith(".py"):
+                    with self.assertRaisesRegex(Invalid, "Executable configuration/tooling drift"):
+                        f.ledger.packet("write-label")
+                else:
+                    self.assertNotIn(
+                        "changed",
+                        [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
+                    )

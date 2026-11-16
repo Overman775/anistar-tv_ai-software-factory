@@ -183,18 +183,6 @@ def read_packet_bytes(
     for item in packet["dependency_results"].values():
         if "report_ref" in item:
             report_history.read(root, item["report_ref"])
-    for entry in packet.get("instructions", []):
-        if entry.get("reason") == "mandatory project reading":
-            path = Path(entry["path"])
-            require(
-                path.is_absolute() and path.is_relative_to(root),
-                "Packet instruction outside workspace",
-            )
-            current = relative(root, path.relative_to(root).as_posix())
-            require(
-                current.is_file() and digest(current.read_bytes()) == entry["sha256"],
-                "Packet mandatory instruction drift",
-            )
     return data
 
 

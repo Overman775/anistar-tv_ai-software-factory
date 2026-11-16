@@ -16,12 +16,13 @@ from typing import Any, Literal, cast
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
+from factory.context.context import accepted_bytes, accepted_path
 from factory.decisions.decision_contract import (
     preserve_obligations as preserve_obligations,
 )
 from factory.logging_config import event as log_event
 from factory.paths import FACTORY_ROOT as FACTORY_ROOT
-from factory.project.profile_io import load_profile, parse_yaml
+from factory.project.profile_io import check_frozen, load_profile
 from factory.project.profile_rules import boundary_gates as boundary_gates
 from factory.project.profile_rules import project_checks as project_checks
 from factory.runtime import acceptance as acceptance
@@ -79,6 +80,7 @@ from factory.runtime.workflow_config import (
     check_capabilities as check_capabilities,
 )
 from factory.runtime.workflow_config import check_config as check_config
+from factory.runtime.workflow_config import document_paths, reconcile_source_documents
 from factory.runtime.workflow_config import freeze_project as freeze_project
 from factory.runtime.workflow_config import load_config as load_config
 from factory.runtime.workflow_config import pool as pool
@@ -256,12 +258,7 @@ class Ledger:
 
     def check_sources(self, state: State, task: Task) -> None:
         src = state["graph"]["sources"][task["source"]]
-        if src.get("path"):
-            path = relative(self.root, src["path"])
-            require(
-                path.is_file() and digest(path.read_bytes()) == src["content_hash"],
-                "SOURCE_DRIFT",
-            )
+        require(digest(src["snapshot"].encode("utf-8")) == src["content_hash"], "SOURCE_DRIFT")
 
     def source_drifted(self, state: State, task: Task, outcome: str) -> bool:
         """Permit a terminal failure to record source drift; never hide other errors."""
@@ -278,6 +275,7 @@ class Ledger:
         graph = deepcopy(graph)
         validate_graph(graph, config, self.root)
         validate_assignment_lineage(graph, config)
+        acceptance_guard(check_frozen, config["_files"])
         config = freeze_project(config, graph, self.root)
         for task in graph["tasks"].values():
             for p in task["scope"]:
@@ -291,6 +289,7 @@ class Ledger:
                 **graph,
                 "sources": {k: lock_source(self.root, src) for k, src in graph["sources"].items()},
             }
+            reconcile_source_documents(config, self.root, locked_graph["sources"])
             state: State = {
                 "run_id": "run-" + uuid.uuid4().hex[:12],
                 "revision": 1,
@@ -1285,7 +1284,14 @@ class Ledger:
                     }
         self.save(s, "revised", reason=reason, previous_graph=old)
 
-    def reintake(self, graph: Graph | LockedGraph, reason: str, authorization: str) -> None:
+    def reintake(
+        self,
+        graph: Graph | LockedGraph,
+        reason: str,
+        authorization: str,
+        *,
+        documents: list[str] | None = None,
+    ) -> None:
         graph = parse_graph(graph)
         with self.locked():
             s = self.read()
@@ -1306,39 +1312,49 @@ class Ledger:
                 "New tasks/sources need a separate run",
             )
             require(not self.active_commands(s), "Unresolved project commands")
-            # Refresh only decision definitions, never arbitrary model, gate or security config.
             old_config = s["config"]
             old_policy = old_config["_project"]
-            new_policy = acceptance_guard(load_profile, old_policy["path"])
-            old_data, new_data = old_policy["data"], new_policy["data"]
-            require(
-                {k: v for k, v in old_data.items() if k != "decisions"}
-                == {k: v for k, v in new_data.items() if k != "decisions"},
-                "Only decision policy changes can be refreshed in re-intake",
-            )
-            raw = acceptance_guard(parse_yaml, Path(old_policy["path"]).read_bytes())
-            allowed = {old_policy["path"]} | {
-                str(Path(old_policy["path"]).parent / rel) for rel in raw.get("decision_files", [])
-            }
-            require(
-                set(old_policy["files"]) == set(new_policy["files"])
-                and all(
-                    old_policy["files"][p] == new_policy["files"][p]
-                    for p in old_policy["files"]
-                    if p not in allowed
-                ),
-                "Only existing decision policy files can change in re-intake",
-            )
+            old_data = old_policy["data"]
             new_config = deepcopy(old_config)
-            new_config["_project"] = new_policy
-            new_config["_files"].update(new_policy["files"])
+            contents = new_config.setdefault("_documents", {})
+            hashes = new_config.setdefault("_project_documents", {})
+            requested = {str(relative(self.root, name)) for name in documents or []}
+            documents_in_config = document_paths(old_config)
+            executable = old_config["_files"].keys() - documents_in_config
             require(
-                freeze_project(new_config, s["graph"], self.root)["_project_documents"]
-                == old_config["_project_documents"],
-                "Project document drift requires separate reconciliation",
+                requested <= (contents.keys() | hashes.keys() | documents_in_config) - executable,
+                "Only existing accepted documents may be refreshed",
             )
+            replacements = {name: Path(name).read_bytes() for name in sorted(requested)}
+            structured = requested & old_policy["files"].keys()
+            if structured:
+                # Compose only from explicitly authorized replacements and accepted bytes.
+                new_policy = acceptance_guard(
+                    load_profile,
+                    old_policy["path"],
+                    resolve=lambda root, rel: accepted_path(new_config, root, rel),
+                    read_bytes=lambda path: (
+                        replacements[str(path)]
+                        if str(path) in replacements
+                        else accepted_bytes(old_config, path)
+                    ),
+                )
+                new_data = new_policy["data"]
+                require(
+                    {k: v for k, v in old_data.items() if k != "decisions"}
+                    == {k: v for k, v in new_data.items() if k != "decisions"}
+                    and old_policy["files"].keys() == new_policy["files"].keys(),
+                    "Only decision definitions or prose may be refreshed within this run",
+                )
+                new_config["_project"] = new_policy
+            for name, raw in replacements.items():
+                contents[name] = raw.decode("utf-8")
+                if name in new_config["_files"]:
+                    new_config["_files"][name] = digest(raw)
+                if name in hashes:
+                    hashes[name] = digest(raw)
             s["config"] = freeze_project(new_config, graph, self.root)
-            check_config(s, graph=graph)
+            check_config(s)
             for tid, before in s["graph"]["tasks"].items():
                 after = graph["tasks"][tid]
                 try:
@@ -1356,6 +1372,7 @@ class Ledger:
                 k: lock_source(self.root, src, check_expected=False)
                 for k, src in graph["sources"].items()
             }
+            reconcile_source_documents(s["config"], self.root, refreshed_sources, refresh=True)
             locked_graph: LockedGraph = {**graph, "sources": refreshed_sources}
             validate_graph(locked_graph, s["config"], self.root)
             validate_assignment_change(s, graph)

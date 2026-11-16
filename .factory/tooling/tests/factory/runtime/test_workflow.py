@@ -19,7 +19,7 @@ from factory.runtime import report_history
 from factory.runtime.contracts import FindingRecord
 from factory.runtime.memory import read_task, resolve_evidence
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, digest, read_json, snapshot
+from factory.runtime.workflow_core import Invalid, atomic_json, digest, read_json, snapshot
 from factory.runtime.workflow_graph import diagram, validate_graph
 from factory.runtime.workflow_sources import lock_source
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
@@ -260,7 +260,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
                 with self.assertRaisesRegex(Invalid, "router"):
                     load_config(path)
 
-    def test_configured_router_reaches_dispatch_and_drift_blocks_it(self) -> None:
+    def test_configured_router_is_accepted_coordinator_reading(self) -> None:
         path = self.config_file(lambda c: c.update(router="workflow/alternate-router.md"))
         policy = path.parent / "workflow/alternate-router.md"
         policy.write_text("Distinct router policy")
@@ -272,8 +272,24 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             any(f["content"] == "Distinct router policy" for f in packet["instructions"])
         )
         policy.write_text("Changed router policy")
-        with self.assertRaisesRegex(Invalid, "drift"):
-            self.ledger.packet("write-label")
+        self.assertEqual(packet, self.ledger.packet("write-label"))
+
+    def test_active_coordinator_reads_accepted_factory_and_project_text(self) -> None:
+        path = self.config_file(lambda c: c.update(router="workflow/alternate-router.txt"))
+        policy = path.parent / "workflow/alternate-router.txt"
+        policy.write_text("Accepted router")
+        self.config = load_config(path)
+        self.init()
+        policy.unlink()
+        (self.root / "AGENTS.md").write_text("Candidate instructions")
+        command = [sys.executable, str(_TOOLS / "workflow.py"), "--workspace", str(self.root)]
+        for args, accepted in (
+            (["read-instructions", "-", "workflow/alternate-router.txt"], "Accepted router"),
+            (["read-project"], "Fixture workspace."),
+        ):
+            result = subprocess.run(command + args, capture_output=True, text=True, check=True)
+            self.assertIn(accepted, result.stdout)
+            self.assertNotIn("Candidate instructions", result.stdout)
 
     def test_configuration_has_two_separate_caps(self) -> None:
         self.assertEqual(self.config["_limits"], {"native": 3, "acpx:zcode": 3})
@@ -316,7 +332,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         with self.assertRaisesRegex(Invalid, "Dependencies"):
             self.ledger.claim("verify-label")
 
-    def test_source_drift_stops_writer(self) -> None:
+    def test_source_path_edit_keeps_original_writer_source(self) -> None:
         (self.root / "request.md").write_text("source")
         self.g["sources"]["request"] = {
             "path": "request.md",
@@ -324,8 +340,28 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         }
         self.init()
         (self.root / "request.md").write_text("different source")
-        with self.assertRaisesRegex(Invalid, "SOURCE_DRIFT"):
-            self.ledger.claim("write-label")
+        self.ledger.claim("write-label")
+        self.assertEqual("source", self.ledger.packet("write-label")["source"]["snapshot"])
+
+    def test_reintake_refreshes_source_also_used_as_reading(self) -> None:
+        self.g["sources"]["request"]["path"] = "request.md"
+        self.g["sources"]["request"].pop("text")
+        self.g["nodes"][0]["read"] = ["request.md"]
+        (self.root / "request.md").write_text("Original source")
+        self.init()
+        self.start("write-label")
+        self.ledger.finish("write-label", self.report("write-label"))
+        before = self.ledger.read()
+        (self.root / "request.md").write_text("Authorized new source")
+        self.ledger.reintake(before["graph"], "Revised requirement", "user message")
+        after = self.ledger.read()
+        self.assertEqual("pending", after["nodes"]["write-label"]["status"])
+        self.assertEqual(before["run_id"], after["run_id"])
+        self.ledger.claim("write-label")
+        packet = self.ledger.packet("write-label")
+        self.assertEqual("Authorized new source", packet["source"]["snapshot"])
+        self.assertIn("Authorized new source", [i["content"] for i in packet["instructions"]])
+        self.assertNotIn("Original source", [i["content"] for i in packet["instructions"]])
 
     def test_unverified_model_cannot_bind(self) -> None:
         self.init()
@@ -1069,16 +1105,18 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         with self.assertRaisesRegex(Invalid, "does not match"):
             lock_source(self.root, source, check_expected=False)
 
-    def test_external_plan_drift_blocks_dispatch_and_reintake(self) -> None:
+    def test_external_plan_edit_preserves_dispatch_and_needs_approval_for_reintake(self) -> None:
         self.g["sources"]["request"] = self.external_source()
         self.init()
         (self.root / "external.md").write_text("Changed after approval")
-        with self.assertRaisesRegex(Invalid, "SOURCE_DRIFT"):
-            self.ledger.claim("write-label")
         with self.assertRaisesRegex(Invalid, "does not match"):
             self.ledger.reintake(
                 deepcopy(self.ledger.read()["graph"]), "new content", "generic continue"
             )
+        self.ledger.claim("write-label")
+        self.assertNotEqual(
+            "Changed after approval", self.ledger.packet("write-label")["source"]["snapshot"]
+        )
 
     def test_external_route_cannot_bypass_canonical_plan(self) -> None:
         source = self.external_source()
@@ -1129,7 +1167,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         }
         self.init()
         self.start("write-label")
-        (self.root / "request.md").write_text("changed")
+        state = self.ledger.read()
+        state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
+        atomic_json(self.ledger.path, state)
         self.ledger.finish("write-label", self.report("write-label", "BLOCKED"))
         node = self.ledger.read()["nodes"]["write-label"]
         self.assertEqual(node["status"], "blocked")
@@ -1143,7 +1183,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         }
         self.init()
         self.start("write-label")
-        (self.root / "request.md").write_text("changed")
+        state = self.ledger.read()
+        state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
+        atomic_json(self.ledger.path, state)
         for outcome in ("FAIL", "BLOCKED"):
             draft = self.report("write-label", outcome)
             draft.pop("files")

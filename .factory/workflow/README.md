@@ -111,6 +111,7 @@ sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py unknown write
 # Reconcile actual runtime/files first; evidence below must be real.
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py retry write-label recovery "Reason" "Proof old writer stopped"
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py revise /path/to/revised-graph.json "Reason for technical change"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py reintake /path/to/revised-graph.json "User changed the baseline" "Reference to actual authorization" --document docs/development.md
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py replace-session author "Reason" "Proof old session stopped" "Handoff summary"
 ```
 
@@ -122,8 +123,24 @@ They may extend verification file scope, strengthen risk/review, and reassign
 steps after quiescing the run. Affected completed evidence is invalidated and
 retained in events. Failed nodes stay blocked until a budgeted retry. Outcome or
 source changes use `reintake GRAPH REASON AUTHORIZATION_EVIDENCE`; it relocks and
-revalidates sources without resetting counters. Explicit selected plan scope is
-part of source identity. The parent must establish real authorization first.
+revalidates every source supplied in the graph without resetting counters.
+Confirm that authorization covers those source versions. Add `--document PATH` for each
+already accepted, workspace-relative document whose replacement the user
+authorized as a baseline for this run. Named prose and existing decision
+definitions may be refreshed. Structural project policy changes take effect at
+the next intake. Re-intake retains previous snapshots and evidence in history,
+returns all nonblocked nodes to pending, and keeps blocked nodes and counters.
+Explicit selected plan scope is part of source identity. The parent establishes
+real authorization before re-intake.
+
+During an active run, `read-instructions - PATH...` reads accepted factory
+instructions and `read-project` returns accepted coordinator policy and
+instructions. Workers receive accepted source and instruction snapshots in both
+native and ACP packets. Candidate edits may proceed inside ownership and remain
+subject to current scope and command-input checks. Changing executable tooling
+or runtime settings requires compatible tooling for the run. For a legacy
+hash-only document, restore bytes matching the recorded digest, or explicitly
+authorize a replacement through re-intake where supported.
 Do not reset budgets by moving the same failure into another stage/run.
 
 A stale workflow.lock is not automatically stolen. Confirm its process stopped

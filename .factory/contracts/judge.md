@@ -21,7 +21,12 @@ Common reading, missing-input handling and handoff follow Worker Rules.
 ## Input and ownership
 
 Require current run/task/node/dispatch IDs, source hash, assigned output path,
-locked source, final diff and exact task scope. On review additionally require matching verification evidence
+locked source, final diff and exact task scope. Apply packet entries marked
+`accepted baseline` according to their purpose. Apply project rules with
+`usage: policy` (the default) within their selectors and use `usage: reference`
+as background. Inspect current files and the final diff for candidate changes,
+including edits or deletions of accepted documents.
+On review additionally require matching verification evidence
 from TestWriter or Generalist, from DocWriter for documentation-only work, or
 from its own preceding final-integration verification assignment. Verify SHA-256 bytes (`DELETED` for absent paths)
 and required direct commands/exit codes. Reject missing, failed or stale evidence.

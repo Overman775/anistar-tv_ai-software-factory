@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from factory.context.context import accepted_bytes, accepted_path
 from factory.logging_config import (
     error_code,
     event,
@@ -16,10 +17,11 @@ from factory.logging_config import (
     read_journal,
 )
 from factory.paths import FACTORY_ROOT
+from factory.project.profile_io import material_entries
 from factory.runtime import command_worker, report_history
 from factory.runtime.workflow import Ledger
-from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, digest, read_json, relative
+from factory.runtime.workflow_config import RUNTIME_CONFIG, check_config, load_config
+from factory.runtime.workflow_core import Invalid, digest, read_json, require
 from factory.runtime.workflow_graph import (
     diagram,
     validate_assignment_lineage,
@@ -41,8 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostic.add_argument("--limit", type=int, default=30)
     sub.add_parser("config")
     instructions = sub.add_parser("read-instructions")
-    instructions.add_argument("pin")
+    instructions.add_argument("pin", help="Config JSON or - for the active run")
     instructions.add_argument("paths", nargs="+")
+    sub.add_parser("read-project")
     for name in ("validate", "init"):
         parser = sub.add_parser(name)
         parser.add_argument("graph")
@@ -77,10 +80,16 @@ def build_parser() -> argparse.ArgumentParser:
     rev = sub.add_parser("revise")
     rev.add_argument("graph")
     rev.add_argument("reason")
-    intake = sub.add_parser("reintake")
+    intake = sub.add_parser(
+        "reintake",
+        description="Refresh all sources in the authorized graph and any named documents.",
+    )
     intake.add_argument("graph")
     intake.add_argument("reason")
     intake.add_argument("authorization")
+    intake.add_argument(
+        "--document", action="append", help="Authorized workspace-relative replacement"
+    )
     rep = sub.add_parser("replace-session")
     rep.add_argument("agent")
     rep.add_argument("reason")
@@ -154,25 +163,61 @@ def _dispatch_setup(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, obj
     if args.action == "config":
         result = load_config(args.config)
     elif args.action == "read-instructions":
-        pin = read_json(args.pin)
-        c = load_config(args.config)
-        if not (
-            isinstance(pin, dict)
-            and pin.get("ok") is True
-            and isinstance(pin.get("result"), dict)
-            and pin["result"].get("_path") == c["_path"]
-            and isinstance(pin["result"].get("_files"), dict)
-        ):
-            raise Invalid("Invalid instruction snapshot")
-        expected = pin["result"]["_files"]
+        if args.pin == "-":
+            state = ledger.read()
+            require(state["status"] == "active", "Run is not active")
+            check_config(state)
+            c = state["config"]
+        else:
+            pin = read_json(args.pin)
+            if not (
+                isinstance(pin, dict)
+                and pin.get("ok") is True
+                and isinstance(pin.get("result"), dict)
+            ):
+                raise Invalid("Invalid instruction snapshot")
+            c = RUNTIME_CONFIG.validate_python(pin["result"])
+            require(c["_path"] == str(Path(args.config).resolve()), "Invalid instruction snapshot")
         instruction_entries: list[dict[str, str]] = []
         for name in args.paths:
-            file = relative(Path(c["_path"]).parent, name)
-            raw = file.read_bytes()
-            if expected.get(str(file)) != digest(raw):
-                raise Invalid("Instruction changed since snapshot; reload instructions")
+            file = accepted_path(c, Path(c["_path"]).parent, name)
+            require(str(file) in c["_files"], "Document is outside the accepted configuration")
+            if args.pin != "-":
+                require(
+                    c["_files"][str(file)] == digest(file.read_bytes()),
+                    "Instruction changed since snapshot; reload instructions",
+                )
+            raw = accepted_bytes(c, file)
             instruction_entries.append({"path": str(file), "content": raw.decode("utf-8")})
         result = instruction_entries
+    elif args.action == "read-project":
+        state = ledger.read()
+        require(state["status"] == "active", "Run is not active")
+        check_config(state)
+        c = state["config"]
+        task_scope = sorted({p for t in state["graph"]["tasks"].values() for p in t["scope"]})
+        instructions = material_entries(
+            c["_project"],
+            ledger.root,
+            process="implement",
+            audience="coordinator",
+            scope=task_scope,
+            resolve=lambda root, rel: accepted_path(c, root, rel),
+            read_bytes=lambda file: accepted_bytes(c, file),
+        )
+        agents = accepted_path(c, ledger.root, "AGENTS.md")
+        raw = accepted_bytes(c, agents)
+        if all(entry["path"] != str(agents) for entry in instructions):
+            instructions.append(
+                dict(
+                    path=str(agents),
+                    content=raw.decode("utf-8"),
+                    sha256=digest(raw),
+                    reason="accepted project instructions",
+                    audience="coordinator",
+                )
+            )
+        result = {"policy": c["_project"]["data"], "instructions": instructions}
     elif args.action in {"init", "validate"}:
         c, g = load_config(args.config), read_json(args.graph)
         if args.action == "init" and args.config_pin:
@@ -223,7 +268,9 @@ def _dispatch_workflow(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, 
         ledger.revise(read_json(args.graph), args.reason)
         result = None
     elif args.action == "reintake":
-        ledger.reintake(read_json(args.graph), args.reason, args.authorization)
+        ledger.reintake(
+            read_json(args.graph), args.reason, args.authorization, documents=args.document
+        )
         result = None
     elif args.action == "replace-session":
         ledger.replace_session(args.agent, args.reason, args.terminal_evidence, args.handoff)
@@ -319,7 +366,7 @@ def main() -> None:
     failed = False
     result: object
     try:
-        if args.action in {"config", "read-instructions", "init", "validate"}:
+        if args.action in {"config", "read-instructions", "read-project", "init", "validate"}:
             done, result = _dispatch_setup(args, ledger)
         elif args.action in {
             "correct",

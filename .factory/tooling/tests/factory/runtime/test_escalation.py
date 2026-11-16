@@ -14,7 +14,7 @@ from factory.adapters.acpx_adapter import prepare_prompt
 from factory.runtime import escalation
 from factory.runtime.contracts import agent_key
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid
+from factory.runtime.workflow_core import Invalid, atomic_json
 from tests.factory.runtime import workflow_fixture
 
 _TOOLS = Path(__file__).resolve().parents[3] / "bin"
@@ -219,6 +219,9 @@ class EscalationTests(unittest.TestCase):
         f.init()
         f.start("write-label")
         (f.root / "task.md").write_text("Changed authorized request")
+        state = f.ledger.read()
+        state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
+        atomic_json(f.ledger.path, state)
         draft = f.report("write-label", "BLOCKED")
         draft.pop("files")
         report = f.ledger.prepare_report("write-label", draft, [])

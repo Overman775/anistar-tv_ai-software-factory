@@ -322,6 +322,8 @@ class Config(Settings):
     # Declarative project data is composed and validated by the profile boundary.
     _project: Policy
     _project_documents: NotRequired[dict[str, str]]
+    _documents: NotRequired[dict[str, str]]
+    _binary_dependencies: NotRequired[list[str]]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))

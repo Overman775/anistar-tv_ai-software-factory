@@ -37,7 +37,7 @@ from factory.project.profile_rules import (
 )
 from factory.project.project import review_snapshot
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid
+from factory.runtime.workflow_core import Invalid, atomic_json
 from factory.tasks.contracts import TaskSelection
 from tests.factory.runtime import workflow_fixture
 
@@ -585,12 +585,45 @@ class ProjectIntegrationTests(unittest.TestCase):
         packet = f.ledger.packet("write-label")
         self.assertIn("Original normative input", [x["content"] for x in packet["instructions"]])
         (f.root / "norm.md").write_text("Weakened normative input")
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.packet("write-label")
+        self.assertEqual(packet, f.ledger.packet("write-label"))
 
-    def test_reintake_selects_new_scoped_document_and_rejects_existing_drift(self) -> None:
+    def test_legacy_document_hash_resumes_with_matching_bytes_or_authorized_replacement(
+        self,
+    ) -> None:
+        f = self.f
+        norm = f.root / "norm.md"
+        norm.write_text("Accepted rules")
+        self.install_policy(
+            {"id": "fixture", "rules": {"worker": [{"id": "norm", "project_file": "norm.md"}]}}
+        )
+        f.init()
+        state = f.ledger.read()
+        state["config"].pop("_documents")
+        atomic_json(f.ledger.path, state)
+        f.ledger.claim("write-label")
+        self.assertIn(
+            "Accepted rules",
+            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
+        )
+        atomic_json(f.ledger.path, state)
+        norm.write_text("Candidate rules")
+        with self.assertRaisesRegex(Invalid, "Accepted document bytes unavailable"):
+            f.ledger.claim("write-label")
+        f.ledger.reintake(
+            state["graph"], "Adopt specific replacement", "user evidence", documents=["norm.md"]
+        )
+        f.ledger.claim("write-label")
+        self.assertIn(
+            "Candidate rules",
+            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
+        )
+
+    def test_reintake_selects_new_scoped_document_and_refreshes_only_authorized_documents(
+        self,
+    ) -> None:
         f = self.f
         (f.root / "base.md").write_text("Existing policy")
+        (f.root / "background.md").write_text("Existing background")
         (f.root / "additional.md").write_text("Additional scoped policy")
         (f.root / "extra").mkdir()
         (f.root / "extra/new.py").write_text("new")
@@ -604,6 +637,7 @@ class ProjectIntegrationTests(unittest.TestCase):
                 "rules": {
                     "worker": [
                         {"id": "base", "documents": ["base"]},
+                        {"id": "background", "project_file": "background.md", "usage": "reference"},
                         {
                             "id": "additional",
                             "for": {"paths_any": ["extra/**"]},
@@ -617,17 +651,75 @@ class ProjectIntegrationTests(unittest.TestCase):
         graph = deepcopy(f.ledger.read()["graph"])
         graph["tasks"]["label"]["scope"].append("extra/new.py")
         (f.root / "base.md").write_text("Changed policy")
+        (f.root / "background.md").write_text("Changed background")
         before = f.ledger.read()
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.reintake(deepcopy(graph), "scope extension", "user authorization")
+        with self.assertRaisesRegex(Invalid, "Only existing accepted"):
+            f.ledger.reintake(
+                graph, "scope extension", "user authorization", documents=["additional.md"]
+            )
         self.assertEqual(before, f.ledger.read())
-        (f.root / "base.md").write_text("Existing policy")
-        f.ledger.reintake(graph, "scope extension", "user authorization")
+        f.ledger.reintake(
+            graph, "scope extension", "user authorization", documents=["base.md", "background.md"]
+        )
         f.ledger.claim("write-label")
-        packet = f.ledger.packet("write-label")
-        self.assertIn("Additional scoped policy", [x["content"] for x in packet["instructions"]])
         (f.root / "additional.md").write_text("Changed scoped policy")
-        with self.assertRaisesRegex(Invalid, "drift"):
+        (f.root / "background.md").write_text("Another candidate edit")
+        packet = f.ledger.packet("write-label")
+        instructions = [x["content"] for x in packet["instructions"]]
+        self.assertIn("Additional scoped policy", instructions)
+        self.assertIn("Changed policy", instructions)
+        self.assertIn("Changed background", instructions)
+
+    def test_decompose_executable_dependency_cannot_be_refreshed_as_document(self) -> None:
+        f = self.f
+        script = "decompose-check.tool"
+        (f.root / script).write_text("executable gate input")
+        guide = "guide.md"
+        (f.root / guide).write_text("Accepted guide")
+        binary = "check-input.bin"
+        (f.root / binary).write_bytes(b"\xff\0")
+        self.install_policy(
+            {
+                "id": "fixture",
+                "gates": [
+                    {
+                        "id": "task-structure",
+                        "at": ["decompose.complete"],
+                        "checks": [
+                            {
+                                "id": "custom",
+                                "kind": "static",
+                                "level": "slice",
+                                "method": "Check project tasks.",
+                                "execution": {
+                                    "argv": ["{python}", script],
+                                    "cwd": ".",
+                                    "timeout_seconds": 1,
+                                    "inputs": [script, guide, binary],
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+        f.g["nodes"][0]["read"] = [script, guide]
+        state = f.init()
+        with self.assertRaisesRegex(Invalid, "Only existing accepted documents"):
+            f.ledger.reintake(state["graph"], "Change gate", "user evidence", documents=[script])
+        self.assertNotIn(str(f.root / binary), state["config"]["_documents"])
+        (f.root / guide).write_text("Candidate guide")
+        f.ledger.claim("write-label")
+        self.assertIn(
+            "Accepted guide",
+            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
+        )
+        (f.root / binary).write_bytes(b"\xfd\0")
+        with self.assertRaisesRegex(Invalid, "Executable configuration/tooling drift"):
+            f.ledger.packet("write-label")
+        (f.root / binary).write_bytes(b"\xff\0")
+        (f.root / script).write_text("changed executable gate input")
+        with self.assertRaisesRegex(Invalid, "Executable configuration/tooling drift"):
             f.ledger.packet("write-label")
 
     def test_actual_worker_packets_preserve_joint_scope_and_distinct_permissions(self) -> None:
@@ -702,20 +794,84 @@ class ProjectIntegrationTests(unittest.TestCase):
         self.assertNotIn("Candidate disables review", content)
         self.assertNotIn("Candidate changes instructions", content)
 
-    def test_policy_drift_after_verification_blocks_acceptance(self) -> None:
+    def test_document_deliverables_use_accepted_rules_and_candidate_evidence(self) -> None:
         f = self.f
         (f.root / "norm.md").write_text("Original requirement")
+        (f.root / "background.md").write_text("Original background")
         self.install_policy(
-            {"id": "fixture", "rules": {"worker": [{"id": "norm", "project_file": "norm.md"}]}}
+            {
+                "id": "fixture",
+                "rules": {
+                    "worker": [
+                        {"id": "norm", "project_file": "norm.md"},
+                        {"id": "norm-background", "project_file": "norm.md", "usage": "reference"},
+                        {"id": "background", "project_file": "background.md", "usage": "reference"},
+                    ]
+                },
+            }
         )
+        documents = {
+            "norm.md": ("Original requirement", "Updated requirement for next intake"),
+            "background.md": ("Original background", "Updated background for next intake"),
+        }
+        f.g["tasks"]["label"]["scope"].extend(documents)
+        f.g["nodes"][0]["owns"].extend(documents)
+        f.require_fixture_review()
         f.init()
         f.start("write-label")
+        for name, (original, updated) in documents.items():
+            path = (f.root / name).resolve()
+            path.write_text(updated)
+            for deleted in (False, True):
+                if deleted:
+                    path.unlink()
+                packet = f.ledger.packet("write-label")
+                baseline = next(x for x in packet["instructions"] if x["path"] == str(path))
+                self.assertEqual(original, baseline["content"])
+                self.assertTrue(baseline["reason"].startswith("accepted baseline: "))
+            path.write_text(updated)
         f.ledger.finish("write-label", f.report("write-label"))
         f.start("verify-label")
+        packet = f.ledger.packet("verify-label")
+        self.assertTrue(
+            {original for original, _ in documents.values()}
+            <= {x["content"] for x in packet["instructions"]}
+        )
         f.ledger.finish("verify-label", f.report("verify-label"))
-        (f.root / "norm.md").write_text("Relaxed requirement")
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.accept("accept-label")
+        f.start("review-label", "independent-judge")
+        judge = f.ledger.packet("review-label")
+        by_path = {x["path"]: x for x in judge["instructions"]}
+        for name, (original, updated) in documents.items():
+            path = (f.root / name).resolve()
+            baseline = by_path[str(path)]
+            self.assertTrue(baseline["reason"].startswith("accepted baseline: "))
+            self.assertEqual(original, baseline["content"])
+            self.assertEqual(updated, path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [{"id": "norm"}, {"id": "norm-background", "usage": "reference"}],
+            by_path[str((f.root / "norm.md").resolve())]["rules"],
+        )
+        self.assertEqual(
+            [{"id": "background", "usage": "reference"}],
+            by_path[str((f.root / "background.md").resolve())]["rules"],
+        )
+        f.ledger.finish("review-label", f.report("review-label", verdict="APPROVE"))
+        for name, (_, updated) in documents.items():
+            path = (f.root / name).resolve()
+            path.write_text("Unverified candidate")
+            with self.assertRaisesRegex(Invalid, "Runner evidence invalidated"):
+                f.ledger.accept("accept-label")
+            path.write_text(updated)
+        f.ledger.accept("accept-label")
+        f.ledger.archive("completed", "accepted documentation change")
+        f.ledger.clean()
+        f.init()
+        f.ledger.claim("write-label")
+        packet = f.ledger.packet("write-label")
+        self.assertTrue(
+            {updated for _, updated in documents.values()}
+            <= {x["content"] for x in packet["instructions"]}
+        )
 
     def test_missing_required_project_document_blocks_intake(self) -> None:
         data = {
@@ -727,24 +883,6 @@ class ProjectIntegrationTests(unittest.TestCase):
             self.f.init()
         self.assertFalse(self.f.ledger.path.exists())
 
-    def test_reference_doc_update_does_not_replace_frozen_policy(self) -> None:
-        f = self.f
-        (f.root / "output.md").write_text("Prior documentation")
-        data = {
-            "id": "fixture",
-            "rules": {
-                "worker": [{"id": "output", "project_file": "output.md", "usage": "reference"}]
-            },
-        }
-        self.install_policy(data)
-        f.init()
-        f.start("write-label")
-        (f.root / "output.md").write_text("Updated documentation")
-        self.assertIn(
-            "Updated documentation",
-            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
-        )
-
     def test_acp_delivers_same_project_rule_as_native(self) -> None:
         from factory.adapters.acpx_adapter import prepare_prompt
 
@@ -753,8 +891,11 @@ class ProjectIntegrationTests(unittest.TestCase):
         self.install_policy(
             {"id": "fixture", "rules": {"worker": [{"id": "norm", "project_file": "norm.md"}]}}
         )
+        f.fake_acp()
+        active = f.init()
+        (f.root / "norm.md").write_text("Candidate policy must not leak into packets")
         native = context.build(
-            f.config,
+            active["config"],
             f.root,
             "generalist",
             "generalist",
@@ -765,8 +906,6 @@ class ProjectIntegrationTests(unittest.TestCase):
                 "node": {"stage": "work", "resources": []},
             },
         )
-        f.fake_acp()
-        f.init()
         f.ledger.claim("write-label")
         text = Path(prepare_prompt(f.ledger, "write-label")["prompt"]).read_text(encoding="utf-8")
         entry = next(i for i in native["instructions"] if i["path"].endswith("/norm.md"))

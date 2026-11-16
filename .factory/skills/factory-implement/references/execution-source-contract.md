@@ -21,7 +21,7 @@ revise, or reapprove an `approved_plan` inside Factory Implement.
 Source kind is provenance, not execution mode:
 
 - `direct`: current user request;
-- `local_task`: local Markdown or other immutable task artifact;
+- `local_task`: local Markdown or other persisted task artifact;
 - `factory_decompose_task`: published or local Factory Decompose task;
 - `approved_plan`: approved plan artifact embedded in or referenced by another
   source.
@@ -170,8 +170,8 @@ scope and exact user directive. `hash` is SHA-256 of a deterministic JSON object
 containing normalized content, kind, mode, selected scope and directive.
 Normalize CRLF/CR to LF, strip trailing whitespace on each line and terminal
 blank whitespace. No semantic claims or approval content are removed.
-`content_hash` separately records SHA-256 of raw bytes for conservative drift
-checking. `snapshot` preserves source text. Hashes serve different purposes;
+`content_hash` separately records SHA-256 of raw bytes to verify the accepted snapshot
+and detect changed source bytes before intake. `snapshot` preserves source text. Hashes serve different purposes;
 reports use the semantic `hash`, not the content checksum.
 
 Approved-plan sources require `kind: approved_plan`, `execution_mode:
@@ -194,35 +194,24 @@ Lock these semantic claims at intake:
 
 Reality Check may correct technical guidance such as affected files, layers,
 classes, existing helpers, exact tests, and edit order while preserving locked
-claims. Source files, Factory Decompose tasks, and approved plans remain
-read-only during execution.
+claims. The accepted snapshot remains fixed during execution. Edit a source file
+only within assigned ownership and applicable publication rules.
 
 Apply the shared information-lifetime rule: only checkout-current paths,
 symbols, patterns, edit order, and commands enter the execution brief.
 
-## Mutable Source and Drift
+## Accepted Source and Re-intake
 
-For a mutable source, including a local task or referenced plan:
+Use the source snapshot and criterion registry supplied with the assignment.
+Editing a task or plan file leaves those accepted bytes and criteria in force.
+Review the revised file as a candidate when it belongs to the assigned scope.
+A later intake validates the current file and its approval.
 
-1. read at intake and record semantic `hash`, raw `content_hash`, source snapshot and selected scope;
-2. re-read immediately before every Developer production-write pass;
-3. compare raw content hash; any byte drift requires conservative re-intake;
-4. stop before writes when it differs.
-
-Return:
-
-```text
-SOURCE_DRIFT
-Source: {source_ref}
-Old: {source timestamp and hash}
-Current: {source timestamp and hash}
-Changed semantic claims: {summary or unknown pending re-intake}
-Production writes: none in current pass
-```
-
-Re-intake current source. If it remains self-contained, start a fresh source
-lock and brief. If it creates a semantic-gap candidate, apply exact directive
-routing and the Material Semantic Gap Gate.
+When the user changes current requirements, quiesce the run and use authorized
+`reintake` to validate and capture the new source and update the execution brief.
+Apply exact directive routing and the Material Semantic Gap Gate to the proposed
+requirements. Never replace a stored hash to repair missing or corrupt snapshot
+bytes. If the accepted source fails its integrity check, report `SOURCE_DRIFT`.
 
 ## Execution Brief
 

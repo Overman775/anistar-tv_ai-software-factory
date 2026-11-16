@@ -18,7 +18,7 @@ and [Testing Principles](../contracts/common/testing-principles.md).
 2. Choose the smallest complete solution. Write assigned code, tests, generated
    files and docs using the shared principles; coordinate remaining scope.
 3. Inspect the combined diff against requirements and test expectations. For
-   corrections, check mutable source drift before dependent work. Report growth
+   corrections, use the accepted source in the updated packet. Report growth
    in risk/uncertainty beyond assignment to coordinator.
 4. Execute applicable checks only on assigned command stages. Otherwise return
    the supplied intermediate result; do not claim tests ran or work was accepted.

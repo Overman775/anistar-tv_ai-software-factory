@@ -18,6 +18,16 @@ Read [coordinator communication and waiting](../contracts/common/agent-checkpoin
 Complete this entry before preparation or delegation, whether invoked through
 Factory Implement or directly as Orchestrator.
 
+Inspect `.factory/memory/state/workflow.json`. For an active run, continue from
+the accepted factory instructions via `workflow.py read-instructions - PATH...`
+and accepted coordinator project reading via `workflow.py read-project`, using
+the Python launcher. Use that policy and instruction text for current-run
+decisions. Inspect candidate files separately for scoped edits. Reconcile files
+and runtime before resuming. Cancel an old run only on user instruction.
+Never silently replace legacy `pipeline.md` or an unknown writer.
+
+For a new intake:
+
 Save `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config`
 output as JSON in OS temporary storage. Keep it through `init`; do not send it
 to workers. Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py
@@ -38,9 +48,6 @@ ADRs and package READMEs. Unknown scope retains obligations; read actual domain
 rules and command definitions, not only indexes. Read selected adapter instructions
 and role contracts before their assignments.
 
-Inspect `.factory/memory/state/workflow.json`. Reconcile files and runtime before
-resuming; cancel an old run only on user instruction. Never silently replace
-legacy `pipeline.md` or an unknown writer.
 
 ## Intake
 
@@ -122,7 +129,7 @@ Carry stable AC IDs through source, tasks, required checks and results.
 Acceptance criteria neither replace mandatory project gates nor limit additional
 risk-based checks.
 
-Apply Implement's shared gates: architecture, source drift, static/test/build,
+Apply Implement's shared gates: architecture, source integrity, static/test/build,
 golden, refactor and evidence. Reports bind final scope and file hashes;
 process exit or ACP delivery is not a gate verdict.
 
@@ -301,7 +308,7 @@ Respect recorded user pause/stop. Final completion follows successful archive.
 | Documentation only | [docs](../skills/factory-implement/references/docs-pipeline.md) |
 
 These are domain requirements/examples, not fixed agent sequences. The source
-contract still controls semantic gaps and source drift. Minimality preserves
+contract still controls semantic gaps and source revisions. Minimality preserves
 security, error handling, accessibility and required tests. Prefer established
 helpers, platform features and installed dependencies before new abstractions.
 

@@ -32,11 +32,12 @@ Preserve unrelated settings, working-tree changes and stable IDs. Read the diff
 where Git is available. Add required connections along with new definitions;
 remove/rename only with affected references repaired. No automatic commit or publish.
 
-Active work uses pinned policy. Changes apply through a new intake, never a hot
-reload or rewritten snapshot. Check the relevant run state before claiming a
-change applies to ongoing work. Preserve earlier evidence; follow that process's
-re-intake contract when requested. Configuring a future run does not authorize
-cancelling, migrating or repairing an active run.
+Active Implement uses accepted reading for both policy and reference rules.
+A fresh intake captures current documents and definitions. An authorized
+Implement re-intake can refresh selected accepted texts or existing decision
+definitions through its own contract. Check the run state before claiming a
+change applies to ongoing work. Preserve earlier evidence. Configuring a future
+run does not authorize cancelling, migrating or repairing an active run.
 
 Unknown schema fields, missing required files or unavailable validation remain
 explicit blockers. Useful independent inspection can continue. A partial edit

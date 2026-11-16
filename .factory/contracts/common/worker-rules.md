@@ -1,7 +1,8 @@
 # Worker Rules
 
-Read the current assignment, your role/contract, supplied worker adapter, AGENTS.md
-and actual mandatory project documents before dependent work. Report missing inputs.
+Read the current assignment, your role/contract, supplied worker adapter,
+AGENTS.md and mandatory project documents before dependent work. Implement
+supplies accepted copies of mandatory reading in the packet. Report missing inputs.
 Include concrete paths of project documents actually read in the handoff.
 Follow [Project discovery](code-discovery.md) to find task-specific material.
 Distinguish current requirements, authorized changes and history.
@@ -17,7 +18,9 @@ not mandatory worker reading. Material uncertainty returns evidence, unresolved
 choice, impact and directive mode as a semantic_gap_candidate to the coordinator.
 Stop only dependent writes; preserve authorized work. Missing facts/tools are not
 automatically a planning gap. The coordinator chooses planning/continuation.
-Mutable source drift blocks dependent work; never refresh its hash yourself.
+For Implement, use the accepted source and instruction text in the packet. Report
+missing or invalid snapshots to the coordinator. Candidate documents can be read
+and edited as assigned deliverables. They do not redefine current requirements.
 
 Follow [communication](communication.md) for language and style.
 
@@ -61,6 +64,8 @@ Use the actual host tool catalog and input schema for each call. Missing require
 tools are a blocker; do not invent them from their names or request provider keys
 in a task report. Server credentials remain in the harness configuration.
 
-Project profile rules arrive in the packet with scope/provenance. Apply them within
-their selectors; they never expand your role permissions. For standalone Review,
-use accepted policy bytes from the packet; candidate policy changes are review data.
+Project profile rules arrive with selectors and provenance. Apply `usage: policy`
+(the default) within its selector. Use `usage: reference` as background. A second
+rule for the same document preserves the first rule's obligations and scope.
+In Implement and standalone Review, use accepted document text from the packet
+as baseline context. Read current files when inspecting the candidate.

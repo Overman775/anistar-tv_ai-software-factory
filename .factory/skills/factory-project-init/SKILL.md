@@ -24,7 +24,8 @@ Set factory.yaml.project relative to .factory; preserve other runtime settings.
 Use [project.example.yaml](../../project/project.example.yaml) as a shape reference.
 Copy only applicable entries and their required files. Replace illustrative paths,
 commands and requirements with observed project values. No placeholder gates,
-invented requirements or copied example confidence thresholds.
+invented requirements or copied example confidence thresholds. Mark background
+as `usage: reference` and use the default `usage: policy` for requirements.
 An empty application may start with a valid project ID alone; report absent domain
 requirements. Missing optional catalogs/rules/gates/decisions do not require scaffolds.
 

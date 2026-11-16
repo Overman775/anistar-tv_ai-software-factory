@@ -22,7 +22,8 @@ One request may need a rule, gate and decision together. Finish their connection
 and checks as one change; do not leave a half-connected requirement as complete.
 For renamed/removed definitions, repair affected references and check consumers.
 
-Use source-backed project requirements. A rule's prose and a formal check serve
+Use source-backed project requirements. Set `usage: reference` for background.
+The default `usage: policy` marks requirements. A rule's prose and a formal check serve
 different purposes; add either or both when the requested behavior needs them.
 Do not make a new decision merely because a path selector answers the question.
 Runtime grants, model routing and common factory contracts remain outside project policy.

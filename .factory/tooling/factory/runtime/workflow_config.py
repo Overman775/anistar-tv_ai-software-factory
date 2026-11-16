@@ -14,17 +14,19 @@ from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_confi
 from factory.context import context
 from factory.project.contracts import Selection
 from factory.project.profile_io import (
-    freeze_materials,
     load_profile,
     parse_yaml,
     safe_path,
+    selected_materials,
 )
+from factory.project.profile_rules import rule_groups
 from factory.runtime import escalation
 from factory.runtime.contracts import (
     Adapter,
     Alias,
     Config,
     GraphTopology,
+    LockedSource,
     Node,
     Profile,
     ProfileCommon,
@@ -251,6 +253,7 @@ def load_config(path: str | Path) -> Config:
     for dependency in dependencies:
         if str(dependency) not in files:
             files[str(dependency)] = digest(dependency.read_bytes())
+    _capture_config_documents(c)
     return c
 
 
@@ -271,22 +274,98 @@ def check_capabilities(profile: Profile, node: Node | None = None) -> None:
         )
 
 
-def check_config(state: State, *, graph: GraphTopology | None = None) -> None:
-    for path, expected in state["config"]["_files"].items():
-        require(
-            Path(path).is_file() and digest(Path(path).read_bytes()) == expected,
-            "Config/instructions drift; reconcile explicitly",
+def _decompose_command_files(config: Config) -> tuple[set[str], set[str]]:
+    policy = config["_project"]
+    workspace = Path(policy["workspace"])
+    scripts = set()
+    inputs: set[str] = set()
+    for gate in policy["data"].get("gates", []):
+        if "decompose.complete" not in gate["at"]:
+            continue
+        for check in gate["checks"]:
+            if check["kind"] != "observation":
+                execution = check["execution"]
+                scripts.add(str(workspace / execution["argv"][1]))
+                inputs.update(str(workspace / name) for name in execution["inputs"])
+    return scripts, inputs - scripts
+
+
+def _factory_instruction_paths(config: Config) -> set[str]:
+    root = Path(config["_path"]).parent
+    configured = {config["router"], config["orchestration"]}
+    for adapter in config["adapters"].values():
+        configured.update((adapter["instructions"], adapter["worker_instructions"]))
+    for profile in config["profiles"].values():
+        configured.update((profile["role"], profile["contract"]))
+    return {str(root / name) for name in configured}
+
+
+def document_paths(config: Config) -> set[str]:
+    """Identify prose by configured purpose and project policy by its composed inventory."""
+    root = Path(config["_path"]).parent
+    gate_scripts, _ = _decompose_command_files(config)
+    executable = (
+        gate_scripts
+        | {p for p in config["_files"] if Path(p).suffix.lower() in {".py", ".sh", ".cmd"}}
+        | {config["_path"], str(root / "tooling/requirements.txt")}
+    )
+    return (
+        (
+            config["_project"]["files"].keys()
+            | _factory_instruction_paths(config)
+            | {path for path in config["_files"] if Path(path).suffix.lower() == ".md"}
         )
-    actual = acceptance_guard(
-        freeze_materials,
-        state["config"]["_project"],
-        state["workspace"],
-        graph_selections(graph if graph is not None else state["graph"]),
+        - executable
+        - set(config.get("_binary_dependencies", []))
     )
-    require(
-        actual == state["config"].get("_project_documents", {}),
-        "Project document/scope drift; reconcile explicitly",
+
+
+def _capture_config_documents(config: Config) -> None:
+    contents = config.setdefault("_documents", {})
+    _, auxiliary = _decompose_command_files(config)
+    policy = config["_project"]
+    policy_root = Path(policy["path"]).parent
+    declared = (
+        {
+            str(policy_root / rule["file"])
+            for rules in rule_groups(policy["data"]).values()
+            for rule in rules
+            if "file" in rule
+        }
+        | {policy["path"]}
+        | _factory_instruction_paths(config)
     )
+    optional_text = auxiliary - declared
+    paths = document_paths(config) | config.get("_project_documents", {}).keys()
+    for path in sorted(paths - contents.keys()):
+        raw = acceptance_guard(context.accepted_bytes, config, Path(path))
+        if path in optional_text and (not _is_utf8(raw) or b"\0" in raw):
+            config.setdefault("_binary_dependencies", []).append(path)
+        else:
+            contents[path] = raw.decode("utf-8")
+
+
+def _is_utf8(raw: bytes) -> bool:
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def check_config(state: State) -> None:
+    config = state["config"]
+    documents = document_paths(config)
+    for path, expected in config["_files"].items():
+        if path in documents:
+            acceptance_guard(context.accepted_bytes, config, Path(path))
+        else:
+            require(
+                Path(path).is_file() and digest(Path(path).read_bytes()) == expected,
+                "Executable configuration/tooling drift; reconcile explicitly",
+            )
+    for path in config.get("_project_documents", {}):
+        acceptance_guard(context.accepted_bytes, config, Path(path))
 
 
 def graph_selections(graph: GraphTopology) -> Iterator[Selection]:
@@ -304,13 +383,61 @@ def graph_selections(graph: GraphTopology) -> Iterator[Selection]:
 
 
 def freeze_project(config: Config, graph: GraphTopology, workspace: str | Path) -> Config:
-    from copy import deepcopy
-
+    """Retain accepted documents and capture newly assigned reading."""
     result = deepcopy(config)
-    result["_project_documents"] = acceptance_guard(
-        freeze_materials, config["_project"], workspace, graph_selections(graph)
-    )
+    _capture_config_documents(result)
+    contents = result["_documents"]
+    hashes = result.setdefault("_project_documents", {})
+    policy = result["_project"]
+    documents = document_paths(result)
+    paths = {
+        str(file)
+        for selection in graph_selections(graph)
+        for file, _ in acceptance_guard(
+            selected_materials,
+            policy,
+            workspace,
+            resolve=lambda root, rel: context.accepted_path(result, root, rel),
+            **selection,
+        )
+    }
+    paths.add(str(acceptance_guard(context.accepted_path, result, workspace, "AGENTS.md")))
+    for name in {p for node in graph["nodes"] for p in node.get("read", [])}:
+        file = acceptance_guard(context.accepted_path, result, workspace, name, exists=False)
+        if str(file) in contents or file.is_file():
+            paths.add(str(file))
+    executable = result["_files"].keys() - documents
+    for path in sorted(paths - contents.keys() - executable):
+        raw = Path(path).read_bytes()
+        hashes[path], contents[path] = digest(raw), raw.decode("utf-8")
     return result
+
+
+def reconcile_source_documents(
+    config: Config,
+    workspace: str | Path,
+    sources: dict[str, LockedSource],
+    *,
+    refresh: bool = False,
+) -> None:
+    """A document used as both approved source and instruction has one accepted text."""
+    contents = config.get("_documents", {})
+    for source in sources.values():
+        if not source.get("path"):
+            continue
+        path = str(Path(workspace) / source["path"])
+        if path not in contents or contents[path] == source["snapshot"]:
+            continue
+        require(
+            refresh
+            and path not in config["_project"]["files"]
+            and (path not in config["_files"] or path in document_paths(config)),
+            "Accepted source and instruction snapshots differ",
+        )
+        contents[path] = source["snapshot"]
+        for inventory in (config["_files"], config.get("_project_documents", {})):
+            if path in inventory:
+                inventory[path] = source["content_hash"]
 
 
 def pool(config: Config, profile: str) -> str:

@@ -132,15 +132,17 @@ class ContextTests(unittest.TestCase):
                         expected.add(f"gates/roles/{role}.md")
                     self.assertEqual(expected, selected)
 
-    def test_role_gate_drift_blocks_existing_assignment(self) -> None:
+    def test_role_gate_edit_preserves_existing_assignment(self) -> None:
         f = self.f
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
         f.init()
         f.ledger.claim("write-label")
         (file.parent / "gates/roles/generalist.md").write_text("Weakened completion gate")
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.packet("write-label")
+        self.assertNotIn(
+            "Weakened completion gate",
+            [i["content"] for i in f.ledger.packet("write-label")["instructions"]],
+        )
 
     def test_every_supported_role_receives_own_contract_without_coordinator(self) -> None:
         for process, roles in context.PROCESS_ROLES.items():
@@ -315,13 +317,21 @@ class ContextTests(unittest.TestCase):
             with self.subTest(role=role, process=process), self.assertRaises(ValueError):
                 self.packet(role, process, profile=profile)
 
-    def test_missing_project_document_blocks_packet(self) -> None:
+    def test_explicit_read_can_be_generated_after_intake(self) -> None:
         f = self.f
         f.g["nodes"][0]["read"] = ["missing.md"]
         f.init()
         f.ledger.claim("write-label")
         with self.assertRaisesRegex(Invalid, "Missing context file"):
             f.ledger.packet("write-label")
+        (f.root / "missing.md").write_text("Generated execution brief")
+        entry = next(
+            x
+            for x in f.ledger.packet("write-label")["instructions"]
+            if x["path"].endswith("missing.md")
+        )
+        self.assertEqual("Generated execution brief", entry["content"])
+        self.assertIn("current assigned reading", entry["reason"])
 
     def test_project_reading_is_included_with_provenance(self) -> None:
         f = self.f
@@ -340,17 +350,19 @@ class ContextTests(unittest.TestCase):
         with self.assertRaises(Invalid):
             load_config(file)
 
-    def test_worker_adapter_drift_blocks_existing_run(self) -> None:
+    def test_worker_adapter_edit_preserves_existing_run(self) -> None:
         f = self.f
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
         f.init()
         f.ledger.claim("write-label")
         (file.parent / "adapters/worker/codex.md").write_text("Changed worker permissions")
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.packet("write-label")
+        self.assertNotIn(
+            "Changed worker permissions",
+            [i["content"] for i in f.ledger.packet("write-label")["instructions"]],
+        )
 
-    def test_communication_drift_blocks_existing_assignment(self) -> None:
+    def test_communication_edit_preserves_existing_assignment(self) -> None:
         f = self.f
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
@@ -359,10 +371,12 @@ class ContextTests(unittest.TestCase):
         (file.parent / "contracts/common/communication.md").write_text(
             "Changed communication policy"
         )
-        with self.assertRaisesRegex(Invalid, "drift"):
-            f.ledger.packet("write-label")
+        self.assertNotIn(
+            "Changed communication policy",
+            [i["content"] for i in f.ledger.packet("write-label")["instructions"]],
+        )
 
-    def test_shared_policy_drift_blocks_existing_assignment(self) -> None:
+    def test_shared_policy_edit_preserves_existing_assignment(self) -> None:
         for name in [
             "coding-principles",
             "testing-principles",
@@ -383,8 +397,10 @@ class ContextTests(unittest.TestCase):
                         else "gates/common/verification-rules.md"
                     )
                 ).write_text("Changed policy")
-                with self.assertRaisesRegex(Invalid, "drift"):
-                    f.ledger.packet("write-label")
+                self.assertNotIn(
+                    "Changed policy",
+                    [i["content"] for i in f.ledger.packet("write-label")["instructions"]],
+                )
 
     def test_missing_testing_principles_blocks_context(self) -> None:
         f = self.f
@@ -479,7 +495,8 @@ class ContextTests(unittest.TestCase):
         worker_path = Path(normal.config["_path"]).parent / worker_file
         self.assertTrue(
             any(
-                entry["reason"] == "worker environment" and Path(entry["path"]) == worker_path
+                entry["reason"] == "accepted baseline: worker environment"
+                and Path(entry["path"]) == worker_path
                 for entry in packet["instructions"]
             )
         )
@@ -496,6 +513,11 @@ class ContextTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "worker_instructions"):
             invalid.ledger.prepare_packet("write-label")
         self.assertNotIn("packet_file", invalid.ledger.read()["nodes"]["write-label"])
+        skill = config.parent / "skills/factory-implement/SKILL.md"
+        skill.unlink()
+        skill.symlink_to(config.parent / "roles/generalist.md")
+        with self.assertRaisesRegex(Invalid, "worker_instructions"):
+            invalid.ledger.prepare_packet("write-label")
 
     def test_context_cli_keeps_nonimplement_process_out_of_ledger(self) -> None:
         f = self.f

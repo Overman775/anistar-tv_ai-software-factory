@@ -29,6 +29,12 @@ Project setup/editing/visualization share the existing project and gate tools.
 Read [configuration verification](../skills/factory-project-configure/references/verification.md)
 for profile validation, recipient previews, check selection and evidence limits.
 
+Implement uses accepted source and instruction snapshots throughout a run.
+Use `workflow.py read-instructions - PATH...` and `workflow.py read-project`
+for active coordinator context. Candidate edits remain subject to verification
+on current scope and command inputs. For authorized changes to the active
+baseline, see [re-intake](../workflow/README.md#configuration-and-preparation).
+
 ## Python setup
 
 Factory tools use the standard project venv `.factory/.venv/`. No activation,

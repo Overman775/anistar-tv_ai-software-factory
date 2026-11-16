@@ -18,9 +18,11 @@ Ownership and delivery: [project policy](../../../contracts/common/project-polic
   or path_regex, never both. * stays in a directory; ** crosses directories.
 - Conditions use existing process/role/stage identities. Backend scope does not
   imply a backend role; a vertical slice can require several domains' materials.
-- usage defaults to policy: pinned normative material. reference is background,
-  not a way to make mutable acceptance requirements. Unknown scope includes path rules
-  conservatively; preview exact affected paths before claiming targeted delivery.
+- Set `usage: reference` for background and use `usage: policy` (the default) for
+  requirements. Both values follow the same capture and reading rules. When both
+  apply to one file, preserve each rule's selector and applicable obligations.
+- Unknown scope includes path rules conservatively. Preview exact affected paths
+  before claiming targeted delivery.
 
 file paths start at the profile directory. documents.path and project_file start
 at application root. Declared files are local: no absolute paths, .. escape or

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from factory.paths import BIN, TOOLING_ROOT
 from factory.runtime import command_worker
-from factory.runtime.workflow_core import Invalid
+from factory.runtime.workflow_core import Invalid, atomic_json
 from tests.factory.runtime import workflow_fixture
 
 CLI = BIN / "workflow.py"
@@ -94,7 +94,9 @@ class JournalCliTests(unittest.TestCase):
             "acceptance": fixture.g["sources"]["request"]["acceptance"],
         }
         fixture.init()
-        (fixture.root / "request.md").write_text("changed secret-canary")
+        state = fixture.ledger.read()
+        state["graph"]["sources"]["request"]["snapshot"] = "changed secret-canary"
+        atomic_json(fixture.ledger.path, state)
         result = subprocess.run(
             [sys.executable, str(CLI), "--workspace", str(fixture.root), "claim", "write-label"],
             capture_output=True,
@@ -134,7 +136,9 @@ class JournalCliTests(unittest.TestCase):
         fixture.start(node)
         report = fixture.report(node)
         report_path = fixture.root / "report.json"
-        source.write_text("changed source")
+        state = fixture.ledger.read()
+        state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
+        atomic_json(fixture.ledger.path, state)
 
         report_path.write_text(json.dumps({**report, "dispatch_id": "0" * 32}))
         stale = self.cli("finish", node, str(report_path), workspace=fixture.root)

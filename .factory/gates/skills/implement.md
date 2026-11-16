@@ -16,8 +16,9 @@ independence, findings, verdict and final acceptance rules still apply.
 
 Use [source sufficiency](../../skills/factory-implement/references/execution-source-contract.md#source-sufficiency-gate)
 and [material gap](../../skills/factory-implement/references/execution-source-contract.md#material-semantic-gap-gate) per
-source. Re-read mutable sources before every writer/correction and acceptance.
-Drift stops dependent work for re-intake; do not update the hash to hide it.
+source. Use the accepted source snapshot before each writer, correction and
+acceptance. Candidate file changes require current file evidence when in scope.
+An authorized re-intake is required to change the acceptance baseline.
 `no plan` forbids formal planning; delegated planning allows the Planning
 handoff, never invented facts or missing external approvals.
 
@@ -74,7 +75,7 @@ in-scope technical fix or a Planning handoff.
 
 Update affected docs/specs automatically. Small updates belong to author; broad
 updates to DocWriter. Verify links, examples and described behavior. A spec is
-not rewritten to justify buggy code; approved source remains immutable. If no
+not rewritten to justify buggy code. The approved snapshot remains fixed. If no
 update is needed, record why. After any correction refresh affected test/static,
 docs and review evidence against final bytes before acceptance.
 

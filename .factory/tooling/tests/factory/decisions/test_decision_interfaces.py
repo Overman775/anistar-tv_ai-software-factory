@@ -190,7 +190,12 @@ class DecisionInterfaceTests(unittest.TestCase):
         revised["tasks"]["label"]["policy_decisions"]["choice"] = answer(
             choice="b", probabilities={"a": 0.1, "b": 0.8, "c": 0.1}, confidence=0.7
         )
-        fixture.ledger.reintake(revised, "Policy threshold changed", "user authorized")
+        fixture.ledger.reintake(
+            revised,
+            "Policy threshold changed",
+            "user authorized",
+            documents=[fixture.fixture_profile.name],
+        )
         state = fixture.ledger.read()
         self.assertEqual(revised_policy, state["config"]["_project"]["data"]["decisions"])
         self.assertNotEqual(
@@ -200,8 +205,13 @@ class DecisionInterfaceTests(unittest.TestCase):
         fixture.fixture_profile.write_text(
             yaml.safe_dump({"id": "different", "decisions": revised_policy})
         )
-        with self.assertRaisesRegex(Invalid, "Only decision policy"):
-            fixture.ledger.reintake(revised, "Unrelated policy change", "user authorized")
+        with self.assertRaisesRegex(Invalid, "Only decision definitions"):
+            fixture.ledger.reintake(
+                revised,
+                "Unrelated policy change",
+                "user authorized",
+                documents=[fixture.fixture_profile.name],
+            )
 
     def test_ledger_revision_uses_pinned_definitions_and_retains_raw_estimates(self) -> None:
         fixture = self.workflow()

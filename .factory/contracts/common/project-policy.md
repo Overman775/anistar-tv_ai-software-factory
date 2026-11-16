@@ -6,7 +6,8 @@ local `project` YAML. That profile owns project documents, additional rules,
 commands, conditional review gates and optional skill-specific instructions/checks. Runtime model,
 adapter and tool grants remain in factory.yaml; project text grants no authority.
 
-Before dependent work, the coordinator runs:
+For a new Implement intake or another process, the coordinator resolves project
+inputs before dependent work:
 
 ```bash
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process PROCESS --audience coordinator --scope PATH
@@ -15,9 +16,13 @@ sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --proc
 Repeat `--scope` for every affected path. No scope means unknown: conservatively
 include conditional rules, then resolve scope before dependent writes/checks.
 Read actual documents named by selected rules; an index is navigation only.
-Preserve the output with the process evidence. Missing files, unknown fields or
-applicability, duplicate IDs and drift block dependent work. The command only
-reads; it neither starts Implement nor invokes project commands.
+Preserve the output with the process evidence. The command rejects missing files,
+invalid fields and duplicate IDs. Apply the process's own freshness rules.
+It reads project inputs without starting Implement or running project commands.
+
+After Implement intake, use the same launcher with `workflow.py read-project`.
+Apply its accepted policy and instruction text. Read edited files directly when
+inspecting the candidate.
 
 Worker context.py resolves the same profile for process, role, stage and scope.
 Deliver its full packet. Rule selectors remain visible: a server rule does not
@@ -35,7 +40,10 @@ selects one group via `--audience`; it does not merge recipients.
 
 Optional documents catalog: ID -> {path, category?}; rule.documents lists exact
 IDs. Category is metadata, never a loading target. No catalog is valid when no
-rule references it. Missing selected files block; unrelated entries are not read.
+rule references it. Selected documents must exist at intake. Unrelated entries
+are not read. Treat `usage: policy` (the default) as normative within its
+selector and `usage: reference` as background. A file may have both annotations.
+Apply each selected rule within its selector, including any policy obligations.
 
 Do not derive required reading from review gate selectors. Select domain documents
 from the task and source evidence; pass exact paths through read.
@@ -79,11 +87,15 @@ enforces declared order under the shared project-checks reservation.
 Profile execution.inputs are a minimum: add exact files read by each command outside
 task scope. Command identity stays fixed; required inputs cannot be removed.
 
-Profile, connected gate files and rule bytes are frozen with configuration. Applicable normative
-project documents are frozen at Implement intake; missing/drifted policy stops
-dependent work. Reference documents marked `usage: reference` remain evidence,
-not mutable acceptance rules. Their packet hash records the bytes actually read.
-Changing policy needs explicit re-intake with preserved history, never hot reload.
+Implement captures project policy, selected project reading and factory
+instructions. All selected documents share the same capture and reading rules,
+regardless of `usage`. Use captured text, including AGENTS.md and explicit
+assignment reads already available at intake. An assigned artifact created
+later is labeled current reading in the packet. Verify and review the current
+candidate, including document edits or deletions, against the accepted snapshot.
+A fresh intake selects current policy. Within a run, only authorized re-intake
+can refresh accepted prose or existing decision definitions. Structural policy
+changes such as gate, check and selector changes apply at the next intake.
 
 Standalone review pins `project_policy` from the accepted base before reading
 candidate policy. Capture it with `project.py --workspace ROOT review-policy

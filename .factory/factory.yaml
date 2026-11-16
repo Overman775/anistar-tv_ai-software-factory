@@ -99,13 +99,7 @@ profiles:
     default: generalist
     variants:
       generalist:
-        model: glm-5-3
-        adapter: opencode
-      generalist-deepseek:
         model: deepseek-flash-1017
-        adapter: opencode
-      generalist-glm:
-        model: glm-5-3
         adapter: opencode
 
   judge:

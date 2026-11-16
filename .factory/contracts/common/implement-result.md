@@ -15,8 +15,8 @@ author fields and any observation checks,
 but no `files` field. The helper checks the bound dispatch, adds selected current
 required receipts, derives task_id and slice_id, and captures scope files. PASS
 requires passed receipts; FAIL/BLOCKED may include authentic fresh FAIL/BLOCKED
-receipts without relabeling them. A changed source permits a FAIL/BLOCKED handoff;
-PASS remains blocked and finish records observed drift. Save its `result` as the report. The coordinator
+receipts without relabeling them. An invalid source snapshot permits a FAIL/BLOCKED handoff. PASS requires an
+intact snapshot, and finish records observed drift for a terminal failure. Save its `result` as the report. The coordinator
 must not use this helper to refresh a returned report or manufacture a fresh handoff; request
 a new author handoff instead. `finish` still checks freshness. Existing reports remain valid.
 Failed/blocked work is preserved. ACP/CLI transport success is not work success.

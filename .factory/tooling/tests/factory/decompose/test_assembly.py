@@ -191,6 +191,26 @@ class AssemblyTest(unittest.TestCase):
             assemble.assemble(self.args)
         self.assertFalse((self.fixture.root / "docs/tasks/orders").exists())
 
+    def test_changed_selected_reference_invalidates_approval(self) -> None:
+        f = self.fixture
+        profile = Path(self.args.config).parent / "project/project.yaml"
+        with profile.open("a", encoding="utf-8") as stream:
+            stream.write(
+                "\n    - id: decompose-background\n"
+                "      for:\n"
+                "        processes: [decompose]\n"
+                "      project_file: docs/README.md\n"
+                "      usage: reference\n"
+            )
+        lock = json.loads(f.source_lock.read_text())
+        lock["project_policy_sha256"] = load_profile(profile)["hash"]
+        f.source_lock.write_text(json.dumps(lock))
+        self.approve()
+        (f.root / "docs/README.md").write_text("Changed selected background")
+        with self.assertRaisesRegex(ValueError, "stale"):
+            assemble.assemble(self.args)
+        self.assertFalse((f.root / "docs/tasks/orders").exists())
+
     def test_source_identity_must_match_intake(self) -> None:
         path = self.fixture.source_lock
         lock = json.loads(path.read_text())
