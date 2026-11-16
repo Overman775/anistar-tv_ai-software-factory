@@ -188,12 +188,15 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
         digest(
             {
                 "policy": manifest.get("project_policy"),
-                "validators": {p.name: p.read_text() for p in Path(__file__).parent.glob("*.py")},
+                "validators": {
+                    p.name: p.read_text(encoding="utf-8")
+                    for p in Path(__file__).parent.glob("*.py")
+                },
             }
         ),
         digest(
             {
-                str(p): Path(p).read_text() if Path(p).is_file() else "MISSING"
+                str(p): Path(p).read_text(encoding="utf-8") if Path(p).is_file() else "MISSING"
                 for p in [args.manifest, args.qa_output, *args.lens_output, *args.tool_result]
             }
         ),

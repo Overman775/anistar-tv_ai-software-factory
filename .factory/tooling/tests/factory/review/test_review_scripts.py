@@ -773,7 +773,9 @@ class CurrentProtocolScenarios(unittest.TestCase):
                     self.assertEqual(result["findings"], [])
                     finding["evidence"] = [deepcopy(fixture.evidence)]
                     diff_path = Path(fixture.manifest["diff_file"])
-                    diff_path.write_text(diff_path.read_text() + "\n")
+                    diff_path.write_text(
+                        diff_path.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+                    )
                     completed, result, _ = fixture.execute()
                     self.assertEqual(completed.returncode, 2)
                     self.assertEqual(result["findings"], [])
@@ -797,7 +799,7 @@ class CurrentProtocolScenarios(unittest.TestCase):
                     self.assertEqual(result["findings"], [])
         temp, fixture = self.fixture(mode="branch", path="scripts/start.sh", diff_kind="mode")
         with temp:
-            parsed = parse_diff(Path(fixture.manifest["diff_file"]).read_text())
+            parsed = parse_diff(Path(fixture.manifest["diff_file"]).read_text(encoding="utf-8"))
             for evidence in (source_evidence(fixture.path), binary_evidence(fixture.path)):
                 valid, _ = validate_evidence(evidence, fixture.manifest, parsed, {})
                 self.assertFalse(valid)
@@ -850,7 +852,7 @@ class CurrentProtocolScenarios(unittest.TestCase):
             self.assertEqual(parsed["new"], set())
             self.assertEqual(parsed["old"], set())
             diff_path = Path(fixture.manifest["diff_file"])
-            diff_path.write_text(diff)
+            diff_path.write_text(diff, encoding="utf-8")
             fixture.manifest["diff_sha256"] = hashlib.sha256(diff.encode()).hexdigest()
             fixture.manifest["scope_hash"] = canonical_scope_hash(fixture.manifest)
             for artifact in [*fixture.tools, *fixture.lenses, fixture.qa]:

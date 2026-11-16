@@ -145,7 +145,7 @@ class EscalationTests(unittest.TestCase):
         s["nodes"]["write-label"]["profile"] = "middle-test-writer-zcode"
         with patch.object(f.ledger, "read", return_value=s):
             prepared = prepare_prompt(f.ledger, "write-label")
-        prompt = Path(prepared["prompt"]).read_text()
+        prompt = Path(prepared["prompt"]).read_text(encoding="utf-8")
         envelope = json.loads(prompt)
         self.assertEqual(packet["correction"], envelope["correction"])
         self.assertNotIn("escalation", envelope["profile"])

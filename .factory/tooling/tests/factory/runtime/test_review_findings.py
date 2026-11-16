@@ -269,7 +269,9 @@ class ReviewFindingTests(unittest.TestCase):
         }
         atomic_json(other.ledger.path, state)
         other.ledger.claim("write-label")
-        prompt = Path(prepare_prompt(other.ledger, "write-label")["prompt"]).read_text()
+        prompt = Path(prepare_prompt(other.ledger, "write-label")["prompt"]).read_text(
+            encoding="utf-8"
+        )
         envelope = json.loads(prompt)
         self.assertEqual(["REV-1"], list(envelope["review_findings"]))
         self.assertNotIn("history", envelope["review_findings"]["REV-1"])

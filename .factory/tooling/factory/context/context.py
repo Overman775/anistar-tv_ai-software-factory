@@ -543,7 +543,7 @@ def main() -> None:
             args.profile,
             args.role,
             args.process,
-            json.loads(Path(args.assignment).read_text()),
+            json.loads(Path(args.assignment).read_text(encoding="utf-8")),
         )
         print(json.dumps(packet, ensure_ascii=False, indent=2))
     except (ValueError, KeyError, OSError) as exc:

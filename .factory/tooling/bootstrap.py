@@ -98,7 +98,7 @@ def check() -> None:
         raise RuntimeError(
             "Use the factory project venv via tooling/bin/python.sh or tooling/bin/python.cmd"
         )
-    marker = json.loads(MARKER.read_text()) if MARKER.is_file() else {}
+    marker = json.loads(MARKER.read_text(encoding="utf-8")) if MARKER.is_file() else {}
     if not marker or marker != identity(marker.get("development", False)):
         raise RuntimeError("Factory environment missing/stale/moved; rerun bootstrap.py setup")
     import yaml
@@ -116,7 +116,10 @@ def setup(development: bool = False) -> None:
             "Python 3.11+ required; install a supported Python using official OS instructions"
         )
     state = AGENTS.parent / ".factory/memory/state/workflow.json"
-    if state.exists() and json.loads(state.read_text()).get("status") != "completed":
+    if (
+        state.exists()
+        and json.loads(state.read_text(encoding="utf-8")).get("status") != "completed"
+    ):
         raise RuntimeError("Stop/archive the active workflow before changing Python dependencies")
     lock = AGENTS / ".venv.setup.lock"
     try:
@@ -206,7 +209,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if not Path(yaml.__file__).resolve().is_relative_to(ENV.resolve()):
                 raise RuntimeError("PyYAML must be installed in the factory venv")
             check_bundle()
-            MARKER.write_text(json.dumps(identity("--dev" in args)) + "\n")
+            MARKER.write_text(json.dumps(identity("--dev" in args)) + "\n", encoding="utf-8")
             # Setup still owns its lock; ordinary run/check is blocked until release.
             return 0
         if not args or args[0] != "run":

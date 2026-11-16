@@ -279,7 +279,7 @@ def _execute_operation(
     argv, effort_argv = attempt_context.argv, attempt_context.effort_argv
     out, err = attempt_context.out, attempt_context.err
     try:
-        with out.open("w") as stdout, err.open("w") as stderr:
+        with out.open("w", encoding="utf-8") as stdout, err.open("w", encoding="utf-8") as stderr:
             result = (
                 run(effort_argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
                 if effort_argv

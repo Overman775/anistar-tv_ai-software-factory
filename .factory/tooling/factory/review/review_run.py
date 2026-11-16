@@ -32,7 +32,7 @@ REVIEW_ASSIGNMENT = TypeAdapter[ReviewAssignment](ReviewAssignment)
 
 
 def read(path: str | Path) -> dict[str, Any]:
-    value = json.loads(Path(path).read_text())
+    value = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError("Review artifact must be a JSON object")
     return value
@@ -40,7 +40,7 @@ def read(path: str | Path) -> dict[str, Any]:
 
 def write(path: str | Path, data: object) -> None:
     # Immutable attempt files; callers may never replace a healthy result.
-    with Path(path).open("x") as f:
+    with Path(path).open("x", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
@@ -174,7 +174,7 @@ def initialize(request: Path, run: Path) -> dict[str, Any]:
                 "diff differs from reviewed Git comparison; capture canonical git diff"
             )
     for p, value in manifest["source_evidence"].items():
-        if not Path(p).is_file() or Path(p).read_text() != value["content"]:
+        if not Path(p).is_file() or Path(p).read_text(encoding="utf-8") != value["content"]:
             raise ValueError("source evidence does not match reviewed checkout")
     paths = list(manifest["scope_files"]) + list(manifest["source_evidence"])
     for c in manifest["checks"]:

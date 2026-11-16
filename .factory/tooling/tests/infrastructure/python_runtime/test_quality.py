@@ -67,7 +67,9 @@ class QualityTests(unittest.TestCase):
         self.assertNotEqual(0, code)
         result = json.loads((self.reports / "result.json").read_text())
         self.assertEqual(["FAIL", "PASS"], [stage["status"] for stage in result["stages"]])
-        self.assertIn("F821", (self.reports / "lint.log").read_text())
+        lint_log = (self.reports / "lint.log").read_text(encoding="utf-8")
+        self.assertRegex(lint_log, r"F821|undefined-name")
+        self.assertIn("Undefined name", lint_log)
         self.assertEqual(before, self.source.read_bytes())
         self.assertTrue(result["source_unchanged"])
 

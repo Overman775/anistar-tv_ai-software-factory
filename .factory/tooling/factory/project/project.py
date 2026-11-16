@@ -146,7 +146,7 @@ def main() -> None:
                 args.policy_snapshot,
                 "standalone review needs --policy-snapshot from accepted baseline",
             )
-            pinned = json.loads(Path(args.policy_snapshot).read_text())
+            pinned = json.loads(Path(args.policy_snapshot).read_text(encoding="utf-8"))
             data = validate_snapshot(pinned)
             result = {
                 "project": data["id"],
@@ -171,7 +171,9 @@ def main() -> None:
             policy = load_profile(configured_profile(args.config))
             if args.action == "checks":
                 result = required_checks(
-                    policy["data"], json.loads(Path(args.task).read_text()), final=args.final
+                    policy["data"],
+                    json.loads(Path(args.task).read_text(encoding="utf-8")),
+                    final=args.final,
                 )
             else:
                 result = {

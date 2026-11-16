@@ -98,7 +98,8 @@ The default checker runs eight stages: Ruff lint, Ruff format check, mypy strict
 import-linter, YAML lint, YAML contracts, unittest with branch/subprocess coverage,
 and the safe dry run. `pyproject.toml` and `imports.ini`
 are explicit factory configuration; application configuration is not used.
-Every owned Python source, including hidden paths, tests and project gate examples,
+Ruff lint preview renders selected diagnostics by rule name (for example
+`undefined-name` for F821). Every owned Python source, including hidden paths, tests and project gate examples,
 is checked. Third-party skill code, venvs, caches and generated output are outside scope.
 Stable CLI wrappers with repeated basenames are type-checked separately, without exclusions.
 
@@ -117,6 +118,15 @@ retained logs contain full output. Existing test reports are not reused as a cur
 
 Coverage includes unexecuted modules and verifies a branch executed only through the
 real Unix/Windows launcher subprocess. No universal coverage percentage is imposed.
+The unittest stage checks relative Markdown links and heading/explicit anchors in factory
+skills, contracts, project rules and this README, including containment within the
+shipped src root. Markdown headings and HTML id/name anchors are checked; fragment
+targets must be Markdown or HTML. It runs in unittest so the existing test stage owns
+its regression fixtures and no additional checker entry point is required.
+External URLs are skipped. Selected documented dry-run command and linked example profile
+are exercised through the launcher and profile validator. These checks use the pinned
+markdown-it-py parser and run offline.
+
 Tests use temporary workspaces and pinned fixtures, not the consumer's current
 factory.yaml or project profile. Test discovery must find every expected suite.
 A dry-run PASS demonstrates preparation, not live model or application readiness.

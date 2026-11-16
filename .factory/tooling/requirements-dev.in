@@ -6,3 +6,4 @@ coverage
 pip-audit
 import-linter
 yamllint
+markdown-it-py

@@ -111,7 +111,7 @@ def inspect(
         source_errors.append("Project policy changed: new intake required")
     if lock is not None:
         try:
-            plan_text = Path(lock["plan_path"]).read_text()
+            plan_text = Path(lock["plan_path"]).read_text(encoding="utf-8")
             source_errors += [str(x) for x in validate_plan(plan_text, phase="approved")]
             metadata, _ = parse_metadata(plan_text)
             if metadata.get("plan_id") != lock["plan_id"] or metadata.get("revision") != str(
@@ -365,7 +365,7 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
                 raise ValueError("Missing task Markdown")
             shutil.copyfile(source_file, target / task["filename"])
         if len(tasks) > 1:
-            lock = json.loads(Path(args.source_lock).read_text())
+            lock = json.loads(Path(args.source_lock).read_text(encoding="utf-8"))
             listing = "\n".join(f"- [{task['id']}]({task['filename']})" for task in tasks.values())
             manifest = {
                 "kind": "epic",
@@ -377,7 +377,7 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
                     for t in tasks.values()
                 ],
             }
-            graph = (Path(args.evidence_dir) / "graph.md").read_text()
+            graph = (Path(args.evidence_dir) / "graph.md").read_text(encoding="utf-8")
             (target / "epic.md").write_text(
                 "# "
                 + args.bundle_id
@@ -391,7 +391,8 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
                 + graph
                 + "\n\n```json\n"
                 + json.dumps(manifest, ensure_ascii=False, indent=2)
-                + "\n```\n"
+                + "\n```\n",
+                encoding="utf-8",
             )
         if binding(args.config, args.staging_dir, args.source_lock)[1:] != (artifacts, policy_hash):
             raise ValueError("Inputs changed before final assembly")

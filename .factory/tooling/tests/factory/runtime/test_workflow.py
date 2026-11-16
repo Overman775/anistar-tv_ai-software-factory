@@ -243,7 +243,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.ledger.claim("write-label")
         result = prepare_prompt(self.ledger, "write-label")
-        content = Path(result["prompt"]).read_text()
+        content = Path(result["prompt"]).read_text(encoding="utf-8")
         self.assertIn("ACP worker adapter", content)
         self.assertNotIn("# Router", content)
         self.assertIn('"capabilities"', content)
@@ -683,7 +683,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.ledger.claim("write-label")
         prepared = prepare_prompt(self.ledger, "write-label")
-        self.assertIn("Test Writer Contract", Path(prepared["prompt"]).read_text())
+        self.assertIn("Test Writer Contract", Path(prepared["prompt"]).read_text(encoding="utf-8"))
         self.assertNotIn("--approve-all", prepared["prompt_argv"])
         self.assertIn("--non-interactive-permissions", prepared["prompt_argv"])
 
@@ -993,7 +993,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.claim("write-label")
         result = prepare_prompt(self.ledger, "write-label")
         self.assertNotIn(
-            "Distinct configured orchestration policy", Path(result["prompt"]).read_text()
+            "Distinct configured orchestration policy",
+            Path(result["prompt"]).read_text(encoding="utf-8"),
         )
 
     def test_approved_plan_cannot_be_downgraded_to_direct_mode(self) -> None:

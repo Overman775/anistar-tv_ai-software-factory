@@ -164,7 +164,9 @@ def main() -> int:
         change_kind=args.change_kind,
         change_evidence=args.change_evidence,
     )
-    policy_hash = digest({p.name: p.read_text() for p in Path(__file__).parent.glob("*.py")})
+    policy_hash = digest(
+        {p.name: p.read_text(encoding="utf-8") for p in Path(__file__).parent.glob("*.py")}
+    )
     records = [
         evidence(
             "plan-contract",

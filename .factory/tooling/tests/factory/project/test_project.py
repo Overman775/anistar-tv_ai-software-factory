@@ -768,7 +768,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         f.fake_acp()
         f.init()
         f.ledger.claim("write-label")
-        text = Path(prepare_prompt(f.ledger, "write-label")["prompt"]).read_text()
+        text = Path(prepare_prompt(f.ledger, "write-label")["prompt"]).read_text(encoding="utf-8")
         entry = next(i for i in native["instructions"] if i["path"].endswith("/norm.md"))
         self.assertIn(entry, json.loads(text)["instructions"])
 

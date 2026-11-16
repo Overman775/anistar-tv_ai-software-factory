@@ -93,7 +93,7 @@ class AssemblyTest(unittest.TestCase):
                 for k in assemble.REVIEW_CRITERIA
             ],
         )
-        Path(self.args.review).write_text(json.dumps(report))
+        Path(self.args.review).write_text(json.dumps(report), encoding="utf-8")
         return report
 
     def test_graph_validator_failure_blocks_project_checks(self) -> None:
@@ -156,7 +156,7 @@ class AssemblyTest(unittest.TestCase):
     def test_wrong_identity_and_blocking_finding(self) -> None:
         report = self.approve()
         report["reviewer_id"] = "author"
-        Path(self.args.review).write_text(json.dumps(report))
+        Path(self.args.review).write_text(json.dumps(report), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "identity"):
             assemble.assemble(self.args)
         report = self.approve()
@@ -168,7 +168,7 @@ class AssemblyTest(unittest.TestCase):
                 "evidence": ["plan.md"],
             }
         ]
-        Path(self.args.review).write_text(json.dumps(report))
+        Path(self.args.review).write_text(json.dumps(report), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "FAIL"):
             assemble.assemble(self.args)
 
@@ -358,7 +358,7 @@ class AssemblyTest(unittest.TestCase):
 
         def changing_copy(source: Path, target: Path) -> Path:
             result = copy(source, target)
-            Path(self.args.review).write_text("{}")
+            Path(self.args.review).write_text("{}", encoding="utf-8")
             return result
 
         with patch.object(shutil, "copyfile", side_effect=changing_copy):

@@ -41,7 +41,7 @@ SKILL_CHECK_RESULT = TypeAdapter[SkillCheckResult](SkillCheckResult)
 def artifact_hash(staging: str | Path, source_lock: str | Path) -> str:
     root = Path(staging)
     paths = sorted(p for p in root.rglob("*") if p.is_file()) + [Path(source_lock)]
-    lock = json.loads(Path(source_lock).read_text())
+    lock = json.loads(Path(source_lock).read_text(encoding="utf-8"))
     if lock.get("plan_path"):
         paths.append(Path(lock["plan_path"]))
     if any(p.is_symlink() for p in root.rglob("*")) or any(p.is_symlink() for p in paths):

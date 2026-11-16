@@ -47,8 +47,10 @@ runs with an updated factory is not automatic.
 ## Target checks
 
 - Ruff lint and format check: py311, line length 100, double quotes, spaces,
-  preview off. Rules: E4, E7, E9, F, I, B, UP, RUF100, PGH003, PGH004,
-  S307, S506, S602. Explain narrow exceptions. No automatic unsafe fixes.
+  formatter preview off; lint preview enabled only for explicitly selected rules.
+  Rules: E4, E7, E9, F, I, B, UP, RUF100, PGH003, PGH004, S307, S506,
+  S602, S110, S112, SIM107, RUF012, PLW1510, C901, PLW1514, RUF018.
+  Factory text artifacts use UTF-8. Explain narrow exceptions. No automatic unsafe fixes.
   Use `--no-cache` for direct Ruff commands; format only authorized paths.
 - Mypy: strict=true, python_version=3.11, disallow_any_unimported=true;
   include tests and compatible dependency stubs. Pin checker version.
