@@ -167,6 +167,50 @@ def _validate_acceptance_coverage(
             raise ValueError(f"Acceptance closer must depend on all contributors: {cid}")
 
 
+def _validate_coverage(
+    coverage: list[object],
+    relative_file: str,
+    messages: list[str],
+    coverage_by_capability: dict[str, object],
+    tasks: dict[str, LoadedTask],
+    covered_task_ids: set[str],
+) -> None:
+    for index, item in enumerate(coverage, start=1):
+        if not isinstance(item, dict):
+            messages.append(
+                f"🚨 File '{relative_file}': capability_coverage #{index} must be an object."
+            )
+            continue
+        capability_id = item.get("capability_id")
+        disposition = item.get("coverage")
+        task_ids = item.get("task_ids")
+        if not isinstance(capability_id, str) or CAPABILITY_ID_RE.fullmatch(capability_id) is None:
+            messages.append(f"🚨 File '{relative_file}': invalid capability_id '{capability_id}'.")
+            continue
+        if capability_id in coverage_by_capability:
+            messages.append(f"🚨 Capability '{capability_id}' has more than one disposition.")
+            continue
+        coverage_by_capability[capability_id] = disposition
+        if disposition not in VALID_COVERAGE:
+            messages.append(f"🚨 Capability '{capability_id}': unknown coverage '{disposition}'.")
+        if not isinstance(task_ids, list):
+            messages.append(f"🚨 Capability '{capability_id}': task_ids must be a list.")
+            continue
+        if disposition == "complete" and not task_ids:
+            messages.append(f"🚨 Capability '{capability_id}': complete requires task_ids.")
+        if disposition in {"external", "out_of_scope"} and task_ids:
+            messages.append(
+                f"🚨 Capability '{capability_id}': {disposition} must not reference tasks."
+            )
+        for task_id in task_ids:
+            if not _is_nonempty_text(task_id) or task_id not in tasks:
+                messages.append(
+                    f"🚨 Capability '{capability_id}' references missing task '{task_id}'."
+                )
+            elif disposition == "complete":
+                covered_task_ids.add(task_id)
+
+
 def validate_envelopes(
     envelopes: list[Envelope], tasks: dict[str, LoadedTask], source_lock: SourceLock | None
 ) -> list[str]:
@@ -193,8 +237,8 @@ def validate_envelopes(
             has_capability_lock = True
             expected_capabilities = set(capability_ids)
 
-    coverage_by_capability = {}
-    covered_task_ids = set()
+    coverage_by_capability: dict[str, object] = {}
+    covered_task_ids: set[str] = set()
     for envelope in envelopes:
         relative_file = envelope["relative_file"]
         source_plan = envelope.get("source_plan")
@@ -226,47 +270,9 @@ def validate_envelopes(
         if not isinstance(coverage, list):
             messages.append(f"🚨 File '{relative_file}': capability_coverage must be a list.")
             continue
-        for index, item in enumerate(coverage, start=1):
-            if not isinstance(item, dict):
-                messages.append(
-                    f"🚨 File '{relative_file}': capability_coverage #{index} must be an object."
-                )
-                continue
-            capability_id = item.get("capability_id")
-            disposition = item.get("coverage")
-            task_ids = item.get("task_ids")
-            if (
-                not isinstance(capability_id, str)
-                or CAPABILITY_ID_RE.fullmatch(capability_id) is None
-            ):
-                messages.append(
-                    f"🚨 File '{relative_file}': invalid capability_id '{capability_id}'."
-                )
-                continue
-            if capability_id in coverage_by_capability:
-                messages.append(f"🚨 Capability '{capability_id}' has more than one disposition.")
-                continue
-            coverage_by_capability[capability_id] = disposition
-            if disposition not in VALID_COVERAGE:
-                messages.append(
-                    f"🚨 Capability '{capability_id}': unknown coverage '{disposition}'."
-                )
-            if not isinstance(task_ids, list):
-                messages.append(f"🚨 Capability '{capability_id}': task_ids must be a list.")
-                continue
-            if disposition == "complete" and not task_ids:
-                messages.append(f"🚨 Capability '{capability_id}': complete requires task_ids.")
-            if disposition in {"external", "out_of_scope"} and task_ids:
-                messages.append(
-                    f"🚨 Capability '{capability_id}': {disposition} must not reference tasks."
-                )
-            for task_id in task_ids:
-                if not _is_nonempty_text(task_id) or task_id not in tasks:
-                    messages.append(
-                        f"🚨 Capability '{capability_id}' references missing task '{task_id}'."
-                    )
-                elif disposition == "complete":
-                    covered_task_ids.add(task_id)
+        _validate_coverage(
+            coverage, relative_file, messages, coverage_by_capability, tasks, covered_task_ids
+        )
 
     actual_capabilities = set(coverage_by_capability)
     if has_capability_lock and actual_capabilities != expected_capabilities:
@@ -306,7 +312,7 @@ def validate_markdown_files(tasks: dict[str, LoadedTask], envelopes: list[Envelo
         try:
             with open(markdown_file, encoding="utf-8") as file:
                 content = file.read()
-        except Exception as error:
+        except (OSError, UnicodeError) as error:
             messages.append(f"🚨 Task '{task_id}': Markdown cannot be read: {error}")
             continue
 

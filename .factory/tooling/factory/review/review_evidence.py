@@ -40,6 +40,26 @@ def command_outcome(
     ), invalid
 
 
+def _validate_binary_evidence(
+    path: str, manifest: dict[str, Any], diff: dict[str, Any]
+) -> tuple[bool, str]:
+    if manifest.get("mode") == "feature":
+        try:
+            content = Path(path).read_bytes()
+            is_binary = b"\x00" in content
+            if not is_binary:
+                content.decode("utf-8")
+        except UnicodeDecodeError:
+            is_binary = True
+        except OSError:
+            is_binary = False
+        if not is_binary:
+            return False, "feature binary evidence does not resolve to binary content"
+    if manifest.get("mode") != "feature" and path not in diff["binary"]:
+        return False, "binary evidence has no matching diff section"
+    return True, ""
+
+
 def validate_evidence(
     raw: object,
     manifest: dict[str, Any],
@@ -78,21 +98,7 @@ def validate_evidence(
             return False, "file operation evidence does not match authoritative diff metadata"
         return True, ""
     if evidence["kind"] == "binary":
-        if manifest.get("mode") == "feature":
-            try:
-                content = Path(path).read_bytes()
-                is_binary = b"\x00" in content
-                if not is_binary:
-                    content.decode("utf-8")
-            except UnicodeDecodeError:
-                is_binary = True
-            except OSError:
-                is_binary = False
-            if not is_binary:
-                return False, "feature binary evidence does not resolve to binary content"
-        if manifest.get("mode") != "feature" and path not in diff["binary"]:
-            return False, "binary evidence has no matching diff section"
-        return True, ""
+        return _validate_binary_evidence(path, manifest, diff)
     line, side = evidence["line"], evidence["side"]
     if manifest.get("mode") == "feature":
         try:

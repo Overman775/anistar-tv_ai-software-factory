@@ -16,6 +16,7 @@ from factory.project.profile_rules import (
 )
 from factory.runtime import acceptance, finish_requirements
 from factory.runtime.contracts import (
+    Agent,
     Config,
     Graph,
     GraphTopology,
@@ -187,6 +188,54 @@ def validate_task_topology(g: Graph, config: Config, nodes: dict[str, Node]) -> 
             )
 
 
+def _validate_nodes(
+    nodes: dict[str, Node],
+    tasks: dict[str, Task],
+    agents: dict[str, Agent],
+    config: Config,
+    workspace: Path,
+) -> None:
+    for n in nodes.values():
+        require(n["task"] in tasks, "Unknown task")
+        require(set(n["depends_on"]).issubset(nodes), "Unknown node dependency")
+        require(n["id"] not in n["depends_on"], "Self dependency")
+        if n["stage"] == "accept":
+            if n.get("agent") is not None:
+                raise Invalid("Acceptance belongs to orchestrator")
+        else:
+            require(n.get("agent") in agents, "Unknown agent")
+        for p in n.get("owns", []):
+            relative(workspace, p)
+        if n["stage"] in {"verify", "review", "accept", "explore"}:
+            require(not n.get("owns"), "Read/check node cannot own product writes")
+        if n["stage"] in {"verify", "review"}:
+            require(
+                "project-checks" in n.get("resources", []),
+                "Verification needs project-checks lock",
+            )
+        if n["stage"] != "accept":
+            acceptance_guard(
+                finish_requirements.requirements,
+                config["_project"]["data"],
+                n,
+                tasks[n["task"]],
+                agents[agent_key(n)]["role"],
+            )
+        if n["stage"] == "review":
+            require(agents[agent_key(n)]["role"] == "judge", "Integrated review needs Judge")
+        if n.get("owns"):
+            role = agents[agent_key(n)]["role"]
+            require(
+                role in {"developer", "test-writer", "generalist", "doc-writer"},
+                "Role cannot write product scope",
+            )
+            for path in n["owns"]:
+                require(
+                    any(overlaps([path], [p]) for p in tasks[n["task"]]["scope"]),
+                    "Ownership outside task scope",
+                )
+
+
 def validate_graph(
     raw: object, config: Config, workspace: str | Path | None = None
 ) -> dict[str, Node]:
@@ -264,45 +313,7 @@ def validate_graph(
             if ":" not in cid
         }
         require(assigned == set(criteria), "Unassigned source acceptance criteria")
-    for n in nodes.values():
-        require(n["task"] in tasks, "Unknown task")
-        require(set(n["depends_on"]).issubset(nodes), "Unknown node dependency")
-        require(n["id"] not in n["depends_on"], "Self dependency")
-        if n["stage"] == "accept":
-            if n.get("agent") is not None:
-                raise Invalid("Acceptance belongs to orchestrator")
-        else:
-            require(n.get("agent") in agents, "Unknown agent")
-        for p in n.get("owns", []):
-            relative(workspace, p)
-        if n["stage"] in {"verify", "review", "accept", "explore"}:
-            require(not n.get("owns"), "Read/check node cannot own product writes")
-        if n["stage"] in {"verify", "review"}:
-            require(
-                "project-checks" in n.get("resources", []),
-                "Verification needs project-checks lock",
-            )
-        if n["stage"] != "accept":
-            acceptance_guard(
-                finish_requirements.requirements,
-                config["_project"]["data"],
-                n,
-                tasks[n["task"]],
-                agents[agent_key(n)]["role"],
-            )
-        if n["stage"] == "review":
-            require(agents[agent_key(n)]["role"] == "judge", "Integrated review needs Judge")
-        if n.get("owns"):
-            role = agents[agent_key(n)]["role"]
-            require(
-                role in {"developer", "test-writer", "generalist", "doc-writer"},
-                "Role cannot write product scope",
-            )
-            for path in n["owns"]:
-                require(
-                    any(overlaps([path], [p]) for p in tasks[n["task"]]["scope"]),
-                    "Ownership outside task scope",
-                )
+    _validate_nodes(nodes, tasks, agents, config, workspace)
     # Kahn traversal avoids recursion into cycles.
     done: set[str] = set()
     while len(done) < len(nodes):

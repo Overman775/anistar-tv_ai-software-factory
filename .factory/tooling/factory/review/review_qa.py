@@ -28,6 +28,41 @@ MERGE = TypeAdapter[ManualMerge](ManualMerge)
 OVERRIDE = TypeAdapter[SeverityOverride](SeverityOverride)
 
 
+def _validate_added_findings(
+    added_findings: list[object],
+    gate_owners: dict[str, str],
+    errors: list[str],
+    registry: dict[str, list[str]],
+    manifest: dict[str, Any],
+    diff: dict[str, Any],
+    tool_commands: dict[str, int],
+    retained_ids: set[str],
+    valid_added: list[NormalizedFinding],
+) -> None:
+    for index, finding in enumerate(added_findings):
+        gate_id = finding.get("gate_id") if isinstance(finding, dict) else None
+        if gate_id is not None and not isinstance(gate_id, str):
+            errors.append(f"qa: added_finding[{index}] gate not in current registry")
+            continue
+        owner = gate_owners.get(gate_id) if gate_id is not None else next(iter(registry), None)
+        if owner is None:
+            errors.append(f"qa: added_finding[{index}] gate not in current registry")
+            continue
+        normalized, added_error = validate_finding(
+            finding, owner, set(registry[owner]), manifest, diff, tool_commands
+        )
+        if added_error:
+            errors.append(f"qa: added_finding[{index}] {added_error}")
+            continue
+        assert normalized is not None
+        if normalized["finding_id"] in retained_ids:
+            errors.append(f"qa: added_finding[{index}] finding_id collides with retained finding")
+            continue
+        normalized["found_by"] = ["qa"]
+        valid_added.append(normalized)
+        retained_ids.add(normalized["finding_id"])
+
+
 def apply_qa(
     raw: object,
     findings: list[NormalizedFinding],
@@ -62,28 +97,17 @@ def apply_qa(
     added_findings = qa.get("added_findings", [])
     valid_added: list[NormalizedFinding] = []
     retained_ids = {item["finding_id"] for item in findings}
-    for index, finding in enumerate(added_findings):
-        gate_id = finding.get("gate_id") if isinstance(finding, dict) else None
-        if gate_id is not None and not isinstance(gate_id, str):
-            errors.append(f"qa: added_finding[{index}] gate not in current registry")
-            continue
-        owner = gate_owners.get(gate_id) if gate_id is not None else next(iter(registry), None)
-        if owner is None:
-            errors.append(f"qa: added_finding[{index}] gate not in current registry")
-            continue
-        normalized, added_error = validate_finding(
-            finding, owner, set(registry[owner]), manifest, diff, tool_commands
-        )
-        if added_error:
-            errors.append(f"qa: added_finding[{index}] {added_error}")
-            continue
-        assert normalized is not None
-        if normalized["finding_id"] in retained_ids:
-            errors.append(f"qa: added_finding[{index}] finding_id collides with retained finding")
-            continue
-        normalized["found_by"] = ["qa"]
-        valid_added.append(normalized)
-        retained_ids.add(normalized["finding_id"])
+    _validate_added_findings(
+        added_findings,
+        gate_owners,
+        errors,
+        registry,
+        manifest,
+        diff,
+        tool_commands,
+        retained_ids,
+        valid_added,
+    )
     findings = [*findings, *valid_added]
 
     by_id = {item["finding_id"]: item for item in findings}

@@ -219,7 +219,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RuntimeError("Provide a script, -m module, or --check")
         safe_path = ["-P"] if args[1] in {"-m", "-c"} else []
         return subprocess.run(
-            [sys.executable, "-E", "-s", "-B", *safe_path, *args[1:]], env=clean_environment()
+            [sys.executable, "-E", "-s", "-B", *safe_path, *args[1:]],
+            env=clean_environment(),
+            check=False,
         ).returncode
     except (OSError, ValueError, RuntimeError, ImportError, subprocess.CalledProcessError) as exc:
         print(

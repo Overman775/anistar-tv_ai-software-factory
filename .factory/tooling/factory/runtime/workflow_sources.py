@@ -91,6 +91,7 @@ def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> L
                 ],
                 capture_output=True,
                 text=True,
+                check=False,
             )
             require(
                 check.returncode == 0,

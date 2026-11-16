@@ -54,6 +54,18 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _collect_failing_commands(
+    tools: dict[str, Any], failing_commands: list[dict[str, Any]]
+) -> None:
+    for tool_id, tool in tools.items():
+        commands = tool.get("commands")
+        if not isinstance(commands, list):
+            continue
+        for index, command in enumerate(commands):
+            if isinstance(command, dict) and command.get("exit_code") != 0:
+                failing_commands.append({"tool_id": tool_id, "command_index": index, **command})
+
+
 def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
     errors: list[str] = []
     try:
@@ -142,13 +154,7 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
     if verdict != "RETHINK":
         semantic_gap = None
     failing_commands: list[dict[str, Any]] = []
-    for tool_id, tool in tools.items():
-        commands = tool.get("commands")
-        if not isinstance(commands, list):
-            continue
-        for index, command in enumerate(commands):
-            if isinstance(command, dict) and command.get("exit_code") != 0:
-                failing_commands.append({"tool_id": tool_id, "command_index": index, **command})
+    _collect_failing_commands(tools, failing_commands)
     result = {
         field: manifest.get(field)
         for field in ("schema_version", "review_id", "mode", "base_sha", "head_sha", "scope_hash")

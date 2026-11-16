@@ -96,6 +96,31 @@ class AssemblyTest(unittest.TestCase):
         Path(self.args.review).write_text(json.dumps(report))
         return report
 
+    def test_graph_validator_failure_blocks_project_checks(self) -> None:
+        for code, status in ((1, "FAIL"), (2, "BLOCKED")):
+            with self.subTest(code=code):
+                completed = subprocess.CompletedProcess(
+                    ["validator"], code, "graph stdout\n", "graph stderr\n"
+                )
+                with (
+                    patch("factory.decompose.assemble.subprocess.run", return_value=completed),
+                    patch("factory.decompose.assemble.check_decomposition_gates") as project_checks,
+                ):
+                    *_, records = assemble.inspect(
+                        self.args.config,
+                        self.args.staging_dir,
+                        self.args.source_lock,
+                        self.args.evidence_dir,
+                    )
+                by_id = {record["id"]: record for record in records}
+                self.assertEqual(status, by_id["graph"]["status"])
+                self.assertEqual("BLOCKED", by_id["project-checks"]["status"])
+                project_checks.assert_not_called()
+                self.assertEqual(
+                    "graph stdout\ngraph stderr\n",
+                    (Path(self.args.evidence_dir) / "graph.log").read_text(),
+                )
+
     def test_assembly_creates_only_local_tasks_and_retains_staging(self) -> None:
         self.approve()
         result = assemble.assemble(self.args)

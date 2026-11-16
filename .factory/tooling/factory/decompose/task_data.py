@@ -143,111 +143,111 @@ def load_tasks(staging_dir: str | Path) -> LoadResult:
         try:
             with open(filepath, encoding="utf-8") as file:
                 data = json.load(file)
-            if not isinstance(data, dict):
-                load_violations.append(f"🚨 File '{relative_file}': envelope must be an object.")
-                continue
-            try:
-                TASK_ENVELOPE.validate_python(data)
-            except ValidationError as error:
-                load_violations.append(
-                    validation_message(f"File '{relative_file}'", error, TASK_ENVELOPE)
-                )
-            # Keep partial identities and links to diagnose graph errors in the same run.
-            tasks_list = data.get("tasks")
-            if not isinstance(tasks_list, list):
-                load_violations.append(f"🚨 File '{relative_file}': field tasks must be a list.")
-                continue
-            if not tasks_list:
-                load_violations.append(f"🚨 File '{relative_file}': field tasks must not be empty.")
-            envelopes.append(
-                {
-                    "file": filepath,
-                    "relative_file": relative_file,
-                    "source_plan": data.get("source_plan"),
-                    "capability_coverage": data.get("capability_coverage"),
-                    "summary": data.get("summary"),
-                    "total_min_hours": data.get("total_min_hours"),
-                    "total_max_hours": data.get("total_max_hours"),
-                }
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            load_violations.append(f"🚨 File '{relative_file}': failed to read task JSON: {error}")
+            continue
+        if not isinstance(data, dict):
+            load_violations.append(f"🚨 File '{relative_file}': envelope must be an object.")
+            continue
+        try:
+            TASK_ENVELOPE.validate_python(data)
+        except ValidationError as error:
+            load_violations.append(
+                validation_message(f"File '{relative_file}'", error, TASK_ENVELOPE)
             )
+        # Keep partial identities and links to diagnose graph errors in the same run.
+        tasks_list = data.get("tasks")
+        if not isinstance(tasks_list, list):
+            load_violations.append(f"🚨 File '{relative_file}': field tasks must be a list.")
+            continue
+        if not tasks_list:
+            load_violations.append(f"🚨 File '{relative_file}': field tasks must not be empty.")
+        envelopes.append(
+            {
+                "file": filepath,
+                "relative_file": relative_file,
+                "source_plan": data.get("source_plan"),
+                "capability_coverage": data.get("capability_coverage"),
+                "summary": data.get("summary"),
+                "total_min_hours": data.get("total_min_hours"),
+                "total_max_hours": data.get("total_max_hours"),
+            }
+        )
 
-            for task_index, task in enumerate(tasks_list):
-                if not isinstance(task, dict):
+        for task_index, task in enumerate(tasks_list):
+            if not isinstance(task, dict):
+                load_violations.append(
+                    f"🚨 File '{relative_file}': item tasks #{task_index + 1} must be an object."
+                )
+                continue
+            source_task_id = task.get("id")
+            if _is_nonempty_text(source_task_id):
+                task_id = source_task_id
+                if task_id in all_tasks:
+                    first_file = os.path.relpath(all_tasks[task_id]["file"], staging_dir)
                     load_violations.append(
-                        f"🚨 File '{relative_file}': item tasks #{task_index + 1} "
-                        "must be an object."
+                        f"🚨 Task '{task_id}': ID is duplicated in "
+                        f"'{first_file}' and '{relative_file}'."
                     )
                     continue
-                source_task_id = task.get("id")
-                if _is_nonempty_text(source_task_id):
-                    task_id = source_task_id
-                    if task_id in all_tasks:
-                        first_file = os.path.relpath(all_tasks[task_id]["file"], staging_dir)
-                        load_violations.append(
-                            f"🚨 Task '{task_id}': ID is duplicated in "
-                            f"'{first_file}' and '{relative_file}'."
-                        )
-                        continue
-                else:
-                    task_id = f"<invalid-id:{relative_file.replace(os.sep, ':')}#{task_index + 1}>"
+            else:
+                task_id = f"<invalid-id:{relative_file.replace(os.sep, ':')}#{task_index + 1}>"
 
-                purpose = task.get("purpose")
-                affected_layers = task.get("affected_layers")
-                dependency_value = task.get("depends_on")
-                blocked_by = task.get("blocked_by")
-                estimate_label, estimate_min, estimate_max = normalize_estimate(task)
-                deferred = task.get("deferred")
-                if "deferred" not in task or deferred is None:
-                    deferred = []
-                scope = task.get("scope")
-                parent_task = task.get("parent_task")
+            purpose = task.get("purpose")
+            affected_layers = task.get("affected_layers")
+            dependency_value = task.get("depends_on")
+            blocked_by = task.get("blocked_by")
+            estimate_label, estimate_min, estimate_max = normalize_estimate(task)
+            deferred = task.get("deferred")
+            if "deferred" not in task or deferred is None:
+                deferred = []
+            scope = task.get("scope")
+            parent_task = task.get("parent_task")
 
-                structural_errors = []
-                try:
-                    TASK_RECORD.validate_python(task)
-                except ValidationError as error:
-                    structural_errors.append(
-                        validation_message(f"Task '{task_id}'", error, TASK_RECORD)
-                    )
-                estimate_value = task.get("estimate")
-                all_tasks[task_id] = {
-                    "id": task_id,
-                    "source_id": source_task_id,
-                    "acceptance_ids": task.get("acceptance_ids"),
-                    "contributes_to_acceptance_ids": task.get("contributes_to_acceptance_ids", []),
-                    "local_acceptance_criteria": task.get("local_acceptance_criteria", []),
-                    "filename": task.get("filename"),
-                    "title": task.get("title"),
-                    "name": task.get("title") or task.get("outcome") or "Untitled",
-                    "outcome": task.get("outcome"),
-                    "scope": scope,
-                    "affected_layers": affected_layers,
-                    "contract_type": task.get("contract_type"),
-                    "purpose": purpose,
-                    "implemented": task.get("implemented"),
-                    "consumers": task.get("consumers"),
-                    "research_question": task.get("research_question"),
-                    "timebox_hours": task.get("timebox_hours"),
-                    "expected_result": task.get("expected_result"),
-                    "estimate_raw": estimate_value,
-                    "structural_errors": structural_errors,
-                    "estimate": estimate_label,
-                    "estimate_min_hours": estimate_min,
-                    "estimate_max_hours": estimate_max,
-                    "depends_on": dependency_value,
-                    "blocked_by": blocked_by,
-                    "parent_task": parent_task,
-                    "deferred": deferred,
-                    "file": filepath,
-                    "markdown_file": find_markdown_file(task, filepath),
-                }
-                if all_tasks[task_id]["markdown_file"] is None:
-                    load_violations.append(
-                        f"🚨 Task '{task_id}': Markdown-file from the filename field "
-                        f"not found next to '{relative_file}'."
-                    )
-        except Exception as error:
-            load_violations.append(f"🚨 File '{relative_file}': failed to read task JSON: {error}")
+            structural_errors = []
+            try:
+                TASK_RECORD.validate_python(task)
+            except ValidationError as error:
+                structural_errors.append(
+                    validation_message(f"Task '{task_id}'", error, TASK_RECORD)
+                )
+            estimate_value = task.get("estimate")
+            all_tasks[task_id] = {
+                "id": task_id,
+                "source_id": source_task_id,
+                "acceptance_ids": task.get("acceptance_ids"),
+                "contributes_to_acceptance_ids": task.get("contributes_to_acceptance_ids", []),
+                "local_acceptance_criteria": task.get("local_acceptance_criteria", []),
+                "filename": task.get("filename"),
+                "title": task.get("title"),
+                "name": task.get("title") or task.get("outcome") or "Untitled",
+                "outcome": task.get("outcome"),
+                "scope": scope,
+                "affected_layers": affected_layers,
+                "contract_type": task.get("contract_type"),
+                "purpose": purpose,
+                "implemented": task.get("implemented"),
+                "consumers": task.get("consumers"),
+                "research_question": task.get("research_question"),
+                "timebox_hours": task.get("timebox_hours"),
+                "expected_result": task.get("expected_result"),
+                "estimate_raw": estimate_value,
+                "structural_errors": structural_errors,
+                "estimate": estimate_label,
+                "estimate_min_hours": estimate_min,
+                "estimate_max_hours": estimate_max,
+                "depends_on": dependency_value,
+                "blocked_by": blocked_by,
+                "parent_task": parent_task,
+                "deferred": deferred,
+                "file": filepath,
+                "markdown_file": find_markdown_file(task, filepath),
+            }
+            if all_tasks[task_id]["markdown_file"] is None:
+                load_violations.append(
+                    f"🚨 Task '{task_id}': Markdown-file from the filename field "
+                    f"not found next to '{relative_file}'."
+                )
 
     return {"tasks": all_tasks, "envelopes": envelopes, "errors": load_violations}
 

@@ -44,6 +44,22 @@ def decode_git_path(value: str) -> str:
     return output.decode("utf-8")
 
 
+def _read_operation_metadata(line: str, metadata: dict[str, str]) -> None:
+    for field in ("old mode", "new mode", "rename from", "rename to"):
+        if line.startswith(field + " "):
+            if field in metadata:
+                raise ValueError("diff: duplicate operation metadata")
+            value = line[len(field) + 1 :]
+            if field.startswith("rename"):
+                if value.startswith('"'):
+                    if not value.endswith('"'):
+                        raise ValueError("diff: malformed quoted rename path")
+                    value = value[1:-1]
+                value = decode_git_path(value)
+            metadata[field] = value
+            break
+
+
 def parse_diff(diff: str) -> dict[str, Any]:
     paths: list[str] = []
     added: set[tuple[str, int]] = set()
@@ -109,19 +125,7 @@ def parse_diff(diff: str) -> dict[str, Any]:
         if current is None:
             continue
         if old_line is None and new_line is None:
-            for field in ("old mode", "new mode", "rename from", "rename to"):
-                if line.startswith(field + " "):
-                    if field in metadata:
-                        raise ValueError("diff: duplicate operation metadata")
-                    value = line[len(field) + 1 :]
-                    if field.startswith("rename"):
-                        if value.startswith('"'):
-                            if not value.endswith('"'):
-                                raise ValueError("diff: malformed quoted rename path")
-                            value = value[1:-1]
-                        value = decode_git_path(value)
-                    metadata[field] = value
-                    break
+            _read_operation_metadata(line, metadata)
         if line.startswith("Binary files ") or line == "GIT binary patch":
             binary.add(current)
             continue

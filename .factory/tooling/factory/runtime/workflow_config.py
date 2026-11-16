@@ -21,6 +21,7 @@ from factory.project.profile_io import (
 )
 from factory.runtime import escalation
 from factory.runtime.contracts import (
+    Adapter,
     Alias,
     Config,
     GraphTopology,
@@ -101,6 +102,21 @@ def _expand_profiles(groups: ProfileGroups) -> tuple[dict[str, Profile], dict[st
     return profiles, defaults
 
 
+def _validate_adapters(
+    adapters: dict[str, Adapter], limits: dict[str, int], path: Path, files: dict[str, str]
+) -> None:
+    for adapter in adapters.values():
+        if adapter["runner"] == "acpx":
+            require(f"acpx:{adapter.get('connection')}" in limits, "Unknown connection")
+        else:
+            require(adapter["harness"] in {"codex", "claude"}, "Unsupported runner/harness mapping")
+            require("connection" not in adapter, "Native adapter cannot have ACP connection")
+        for name in (adapter["instructions"], adapter["worker_instructions"]):
+            f = relative(path.parent, name)
+            require(f.is_file(), f"Missing adapter instruction: {name}")
+            files[str(f)] = digest(f.read_bytes())
+
+
 def load_config(path: str | Path) -> Config:
     if yaml is None:
         raise Invalid("Install .factory/tooling/requirements.txt in a virtualenv")
@@ -139,16 +155,7 @@ def load_config(path: str | Path) -> Config:
 
     files = {str(path): digest(raw), **policy["files"]}
     adapters = settings["adapters"]
-    for adapter in adapters.values():
-        if adapter["runner"] == "acpx":
-            require(f"acpx:{adapter.get('connection')}" in limits, "Unknown connection")
-        else:
-            require(adapter["harness"] in {"codex", "claude"}, "Unsupported runner/harness mapping")
-            require("connection" not in adapter, "Native adapter cannot have ACP connection")
-        for name in (adapter["instructions"], adapter["worker_instructions"]):
-            f = relative(path.parent, name)
-            require(f.is_file(), f"Missing adapter instruction: {name}")
-            files[str(f)] = digest(f.read_bytes())
+    _validate_adapters(adapters, limits, path, files)
     for p in profiles.values():
         require(p["adapter"] in adapters, "Profile needs known adapter")
         require(p["model"] in models, "Unknown model alias")

@@ -106,6 +106,85 @@ def _show(argv: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
     return subprocess.run(argv, capture_output=True, text=True, check=True, timeout=timeout)
 
 
+def _session_command(
+    argv: list[str], operation: str, config: Config
+) -> tuple[str, str, str, str] | None:
+    try:
+        cwd = argv[argv.index("--cwd") + 1]
+        if operation == "create":
+            alias, name = argv[-5], argv[-1]
+            if argv[-4:-1] != ["sessions", "new", "--name"]:
+                return None
+        elif operation in {"show", "close"}:
+            alias, name = argv[-4], argv[-1]
+            if argv[-3:-1] != ["sessions", operation]:
+                return None
+        elif operation in {"prompt", "cancel", "status"}:
+            marker = -6 if operation == "prompt" else -4
+            alias, name = argv[marker], argv[marker + 3]
+            if argv[marker + 1 : marker + 3] != [operation, "-s"]:
+                return None
+        else:
+            return None
+        acpx = config.get("acpx")
+        if acpx is None or alias not in acpx["connections"]:
+            return None
+        command = acpx["command"]
+        if "/" in command or "\\" in command:
+            executable = Path(command).expanduser()
+            command = str(
+                executable
+                if executable.is_absolute()
+                else Path(config["_path"]).parent / executable
+            )
+        return cwd, alias, name, command
+    except (ValueError, IndexError):
+        return None
+
+
+def _collect_session_usage(
+    sessions: dict[tuple[str, str, str], Session], commands: dict[tuple[str, str, str], str]
+) -> None:
+    deadline = time.monotonic() + 10.0
+    for key, session in sessions.items():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            response = _show(
+                [
+                    commands[key],
+                    "--cwd",
+                    session.cwd,
+                    "--format",
+                    "json",
+                    session.connection,
+                    "sessions",
+                    "show",
+                    session.name,
+                ],
+                timeout=min(2.0, remaining),
+            )
+            record = Record.model_validate_json(response.stdout)
+            if record.name != session.name or Path(record.cwd) != Path(session.cwd):
+                continue
+            session.acpx_record_id = record.acpxRecordId
+            session.acp_session_id = record.acpSessionId
+            session.agent_session_id = record.agentSessionId
+            if record.request_token_usage is not None:
+                session.request_token_usage = {
+                    key: Usage.model_validate(value.model_dump(exclude_unset=True))
+                    for key, value in record.request_token_usage.items()
+                }
+            if record.cumulative_cost is not None:
+                session.cumulative_cost = Cost.model_validate(
+                    record.cumulative_cost.model_dump(exclude_unset=True)
+                )
+            session.collection = "ok"
+        except (OSError, subprocess.SubprocessError, ValidationError, ValueError, UnicodeError):
+            continue
+
+
 def collect(state: State) -> dict[str, object]:
     """Capture observed sessions once each, with 2 s per call and 10 s total."""
     dispatches = _dispatches(state)
@@ -134,37 +213,10 @@ def collect(state: State) -> dict[str, object]:
         if event["event"] != "transport_requested" or not node:
             continue
         argv = event.get("argv", [])
-        try:
-            cwd = argv[argv.index("--cwd") + 1]
-            operation = event["operation"]
-            if operation == "create":
-                alias, name = argv[-5], argv[-1]
-                if argv[-4:-1] != ["sessions", "new", "--name"]:
-                    continue
-            elif operation in {"show", "close"}:
-                alias, name = argv[-4], argv[-1]
-                if argv[-3:-1] != ["sessions", operation]:
-                    continue
-            elif operation in {"prompt", "cancel", "status"}:
-                marker = -6 if operation == "prompt" else -4
-                alias, name = argv[marker], argv[marker + 3]
-                if argv[marker + 1 : marker + 3] != [operation, "-s"]:
-                    continue
-            else:
-                continue
-            acpx = config.get("acpx")
-            if acpx is None or alias not in acpx["connections"]:
-                continue
-            command = acpx["command"]
-            if "/" in command or "\\" in command:
-                executable = Path(command).expanduser()
-                command = str(
-                    executable
-                    if executable.is_absolute()
-                    else Path(config["_path"]).parent / executable
-                )
-        except (ValueError, IndexError):
+        parsed = _session_command(argv, event["operation"], config)
+        if parsed is None:
             continue
+        cwd, alias, name, command = parsed
         if cwd != state["workspace"]:
             continue
         key = (cwd, alias, name)
@@ -222,44 +274,7 @@ def collect(state: State) -> dict[str, object]:
             bound_key = (attempt.dispatch_id, session.name)
             if bound_key in bound_models:
                 attempt.effective_model = bound_models[bound_key]
-    deadline = time.monotonic() + 10.0
-    for key, session in sessions.items():
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            break
-        try:
-            response = _show(
-                [
-                    commands[key],
-                    "--cwd",
-                    session.cwd,
-                    "--format",
-                    "json",
-                    session.connection,
-                    "sessions",
-                    "show",
-                    session.name,
-                ],
-                timeout=min(2.0, remaining),
-            )
-            record = Record.model_validate_json(response.stdout)
-            if record.name != session.name or Path(record.cwd) != Path(session.cwd):
-                continue
-            session.acpx_record_id = record.acpxRecordId
-            session.acp_session_id = record.acpSessionId
-            session.agent_session_id = record.agentSessionId
-            if record.request_token_usage is not None:
-                session.request_token_usage = {
-                    key: Usage.model_validate(value.model_dump(exclude_unset=True))
-                    for key, value in record.request_token_usage.items()
-                }
-            if record.cumulative_cost is not None:
-                session.cumulative_cost = Cost.model_validate(
-                    record.cumulative_cost.model_dump(exclude_unset=True)
-                )
-            session.collection = "ok"
-        except (OSError, subprocess.SubprocessError, ValidationError, ValueError, UnicodeError):
-            continue
+    _collect_session_usage(sessions, commands)
     return ArchiveUsage(
         run_id=state["run_id"],
         project_id=state["config"]["_project"]["data"]["id"],

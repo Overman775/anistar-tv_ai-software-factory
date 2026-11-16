@@ -143,7 +143,7 @@ def inspect(
         str(output_dir / "graph.md"),
         "--core-only",
     ]
-    completed = subprocess.run(command, capture_output=True, text=True)
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
     atomic_write_text(output_dir / "graph.log", completed.stdout + completed.stderr)
     graph_record = evidence(
         "graph",

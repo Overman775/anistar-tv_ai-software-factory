@@ -149,6 +149,153 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _dispatch_setup(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
+    result: object = None
+    if args.action == "config":
+        result = load_config(args.config)
+    elif args.action == "read-instructions":
+        pin = read_json(args.pin)
+        c = load_config(args.config)
+        if not (
+            isinstance(pin, dict)
+            and pin.get("ok") is True
+            and isinstance(pin.get("result"), dict)
+            and pin["result"].get("_path") == c["_path"]
+            and isinstance(pin["result"].get("_files"), dict)
+        ):
+            raise Invalid("Invalid instruction snapshot")
+        expected = pin["result"]["_files"]
+        instruction_entries: list[dict[str, str]] = []
+        for name in args.paths:
+            file = relative(Path(c["_path"]).parent, name)
+            raw = file.read_bytes()
+            if expected.get(str(file)) != digest(raw):
+                raise Invalid("Instruction changed since snapshot; reload instructions")
+            instruction_entries.append({"path": str(file), "content": raw.decode("utf-8")})
+        result = instruction_entries
+    elif args.action in {"init", "validate"}:
+        c, g = load_config(args.config), read_json(args.graph)
+        if args.action == "init" and args.config_pin:
+            pin = read_json(args.config_pin)
+            if not (
+                isinstance(pin, dict)
+                and pin.get("ok") is True
+                and isinstance(pin.get("result"), dict)
+                and pin["result"].get("_path") == c["_path"]
+                and pin["result"].get("_files") == c["_files"]
+            ):
+                raise Invalid("Config/instructions changed since snapshot; reload instructions")
+        if args.action == "init":
+            result = ledger.init(g, c)
+        else:
+            result = list(validate_graph(g, c, ledger.root))
+            validate_assignment_lineage(g, c)
+    return False, result
+
+
+def _dispatch_workflow(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
+    result: object = None
+    if args.action == "correct":
+        result = ledger.correct(args.node, read_json(args.decision))
+    elif args.action == "resume-task":
+        ledger.resume_task(args.task, args.evidence)
+        result = None
+    elif args.action in {"next", "status"}:
+        result = ledger.next_actions(args.after)
+    elif args.action in {"pause", "resume"}:
+        ledger.set_paused(args.reason if args.action == "pause" else None)
+        result = None
+    elif args.action == "ack-result":
+        ledger.acknowledge_result(args.node, args.dispatch_id)
+        result = None
+    elif args.action == "show":
+        result = ledger.read()
+    elif args.action == "diagram":
+        print(diagram(ledger.read()))
+        return True, None
+    elif args.action == "resume-approved":
+        ledger.resume_approved(args.node, args.request_id, args.evidence)
+        result = None
+    elif args.action == "expand-scope":
+        ledger.expand_scope(args.task, args.paths, args.reason)
+        result = None
+    elif args.action == "revise":
+        ledger.revise(read_json(args.graph), args.reason)
+        result = None
+    elif args.action == "reintake":
+        ledger.reintake(read_json(args.graph), args.reason, args.authorization)
+        result = None
+    elif args.action == "replace-session":
+        ledger.replace_session(args.agent, args.reason, args.terminal_evidence, args.handoff)
+        result = None
+    elif args.action in {"claim", "accept", "packet"}:
+        result = getattr(ledger, args.action)(args.node)
+    return False, result
+
+
+def _dispatch_packets_checks(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
+    result: object = None
+    if args.action == "prepare-packet":
+        result = ledger.prepare_packet(args.node, with_diagnostics=args.with_diagnostics)
+    elif args.action in {"read-packet", "confirm-packet"}:
+        bootstrap = {
+            "node_id": args.node,
+            "path": args.path,
+            "sha256": args.sha256,
+            "run_id": args.run_id,
+            "dispatch_id": args.dispatch_id,
+            "source_hash": args.source_hash,
+            "revision": args.revision,
+        }
+        if args.action == "read-packet":
+            result = ledger.read_packet(args.node, bootstrap, args.chunk, args.ack)
+        else:
+            ledger.confirm_packet(args.node, bootstrap, args.ack, args.materials)
+            result = None
+    elif args.action == "bind":
+        ledger.bind(args.node, args.handle, args.model)
+        result = None
+    elif args.action == "run-check":
+        result = ledger.run_check(
+            args.node, args.check_id, args.request, expected_dispatch=args.dispatch
+        )
+    elif args.action == "reconcile-check":
+        result = ledger.reconcile_check(args.execution_id, args.abandon_unstarted)
+    elif args.action == "check-results":
+        result = ledger.check_results(args.execution_id)
+    elif args.action == "_check-worker":
+        command_worker.supervise(ledger, args.execution_id)
+        return True, None
+    elif args.action == "read-report":
+        result = report_history.read(ledger.root, read_json(args.reference))
+    elif args.action == "prepare-report":
+        draft = json.load(sys.stdin) if args.report == "-" else read_json(args.report)
+        result = ledger.prepare_report(args.node, draft, args.receipt_ids)
+    return False, result
+
+
+def _dispatch_completion(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
+    result: object = None
+    if args.action == "finish":
+        ledger.finish(args.node, read_json(args.report))
+        result = None
+    elif args.action == "unknown":
+        ledger.unknown(args.node, args.reason)
+        result = None
+    elif args.action == "resolve":
+        ledger.resolve(args.node, args.status, args.evidence)
+        result = None
+    elif args.action == "retry":
+        ledger.retry(args.node, args.stage, args.reason, args.terminal_evidence)
+        result = None
+    elif args.action == "archive":
+        result = ledger.archive(args.outcome, args.summary)
+    else:
+        ledger.clean()
+        result = None
+    return False, result
+
+
 def main() -> None:
     p = build_parser()
     args = p.parse_args()
@@ -172,133 +319,45 @@ def main() -> None:
     failed = False
     result: object
     try:
-        if args.action == "config":
-            result = load_config(args.config)
-        elif args.action == "read-instructions":
-            pin = read_json(args.pin)
-            c = load_config(args.config)
-            if not (
-                isinstance(pin, dict)
-                and pin.get("ok") is True
-                and isinstance(pin.get("result"), dict)
-                and pin["result"].get("_path") == c["_path"]
-                and isinstance(pin["result"].get("_files"), dict)
-            ):
-                raise Invalid("Invalid instruction snapshot")
-            expected = pin["result"]["_files"]
-            instruction_entries: list[dict[str, str]] = []
-            for name in args.paths:
-                file = relative(Path(c["_path"]).parent, name)
-                raw = file.read_bytes()
-                if expected.get(str(file)) != digest(raw):
-                    raise Invalid("Instruction changed since snapshot; reload instructions")
-                instruction_entries.append({"path": str(file), "content": raw.decode("utf-8")})
-            result = instruction_entries
-        elif args.action in {"init", "validate"}:
-            c, g = load_config(args.config), read_json(args.graph)
-            if args.action == "init" and args.config_pin:
-                pin = read_json(args.config_pin)
-                if not (
-                    isinstance(pin, dict)
-                    and pin.get("ok") is True
-                    and isinstance(pin.get("result"), dict)
-                    and pin["result"].get("_path") == c["_path"]
-                    and pin["result"].get("_files") == c["_files"]
-                ):
-                    raise Invalid("Config/instructions changed since snapshot; reload instructions")
-            if args.action == "init":
-                result = ledger.init(g, c)
-            else:
-                result = list(validate_graph(g, c, ledger.root))
-                validate_assignment_lineage(g, c)
-        elif args.action == "correct":
-            result = ledger.correct(args.node, read_json(args.decision))
-        elif args.action == "resume-task":
-            ledger.resume_task(args.task, args.evidence)
-            result = None
-        elif args.action in {"next", "status"}:
-            result = ledger.next_actions(args.after)
-        elif args.action in {"pause", "resume"}:
-            ledger.set_paused(args.reason if args.action == "pause" else None)
-            result = None
-        elif args.action == "ack-result":
-            ledger.acknowledge_result(args.node, args.dispatch_id)
-            result = None
-        elif args.action == "show":
-            result = ledger.read()
-        elif args.action == "diagram":
-            print(diagram(ledger.read()))
-            return
-        elif args.action == "resume-approved":
-            ledger.resume_approved(args.node, args.request_id, args.evidence)
-            result = None
-        elif args.action == "expand-scope":
-            ledger.expand_scope(args.task, args.paths, args.reason)
-            result = None
-        elif args.action == "revise":
-            ledger.revise(read_json(args.graph), args.reason)
-            result = None
-        elif args.action == "reintake":
-            ledger.reintake(read_json(args.graph), args.reason, args.authorization)
-            result = None
-        elif args.action == "replace-session":
-            ledger.replace_session(args.agent, args.reason, args.terminal_evidence, args.handoff)
-            result = None
-        elif args.action in {"claim", "accept", "packet"}:
-            result = getattr(ledger, args.action)(args.node)
-        elif args.action == "prepare-packet":
-            result = ledger.prepare_packet(args.node, with_diagnostics=args.with_diagnostics)
-        elif args.action in {"read-packet", "confirm-packet"}:
-            bootstrap = {
-                "node_id": args.node,
-                "path": args.path,
-                "sha256": args.sha256,
-                "run_id": args.run_id,
-                "dispatch_id": args.dispatch_id,
-                "source_hash": args.source_hash,
-                "revision": args.revision,
-            }
-            if args.action == "read-packet":
-                result = ledger.read_packet(args.node, bootstrap, args.chunk, args.ack)
-            else:
-                ledger.confirm_packet(args.node, bootstrap, args.ack, args.materials)
-                result = None
-        elif args.action == "bind":
-            ledger.bind(args.node, args.handle, args.model)
-            result = None
-        elif args.action == "run-check":
-            result = ledger.run_check(
-                args.node, args.check_id, args.request, expected_dispatch=args.dispatch
-            )
-        elif args.action == "reconcile-check":
-            result = ledger.reconcile_check(args.execution_id, args.abandon_unstarted)
-        elif args.action == "check-results":
-            result = ledger.check_results(args.execution_id)
-        elif args.action == "_check-worker":
-            command_worker.supervise(ledger, args.execution_id)
-            return
-        elif args.action == "read-report":
-            result = report_history.read(ledger.root, read_json(args.reference))
-        elif args.action == "prepare-report":
-            draft = json.load(sys.stdin) if args.report == "-" else read_json(args.report)
-            result = ledger.prepare_report(args.node, draft, args.receipt_ids)
-        elif args.action == "finish":
-            ledger.finish(args.node, read_json(args.report))
-            result = None
-        elif args.action == "unknown":
-            ledger.unknown(args.node, args.reason)
-            result = None
-        elif args.action == "resolve":
-            ledger.resolve(args.node, args.status, args.evidence)
-            result = None
-        elif args.action == "retry":
-            ledger.retry(args.node, args.stage, args.reason, args.terminal_evidence)
-            result = None
-        elif args.action == "archive":
-            result = ledger.archive(args.outcome, args.summary)
+        if args.action in {"config", "read-instructions", "init", "validate"}:
+            done, result = _dispatch_setup(args, ledger)
+        elif args.action in {
+            "correct",
+            "resume-task",
+            "next",
+            "status",
+            "pause",
+            "resume",
+            "ack-result",
+            "show",
+            "diagram",
+            "resume-approved",
+            "expand-scope",
+            "revise",
+            "reintake",
+            "replace-session",
+            "claim",
+            "accept",
+            "packet",
+        }:
+            done, result = _dispatch_workflow(args, ledger)
+        elif args.action in {
+            "prepare-packet",
+            "read-packet",
+            "confirm-packet",
+            "bind",
+            "run-check",
+            "reconcile-check",
+            "check-results",
+            "_check-worker",
+            "read-report",
+            "prepare-report",
+        }:
+            done, result = _dispatch_packets_checks(args, ledger)
         else:
-            ledger.clean()
-            result = None
+            done, result = _dispatch_completion(args, ledger)
+        if done:
+            return
         print(json.dumps({"ok": True, "result": result}, ensure_ascii=False, indent=2))
     except BaseException as exc:
         failed = True

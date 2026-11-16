@@ -92,34 +92,17 @@ def validate_finding(
     return normalized_finding, None
 
 
-def validate_lens(
-    value: dict[str, Any],
+def _validate_gates(
+    gates: list[LensGate],
+    expected: set[str],
+    errors: list[str],
+    lens: str,
+    gate_status: dict[str, str],
     manifest: dict[str, Any],
+    universal: set[str],
     diff: dict[str, Any],
     tool_commands: dict[str, int],
-    registry: dict[str, list[str]],
-) -> tuple[str | None, list[NormalizedFinding], list[str], list[str]]:
-    try:
-        result = LENS_RESULT.validate_python(value)
-    except ValidationError as exc:
-        return None, [], [validation_message("Invalid lens result", exc, LENS_RESULT)], []
-    lens = result["lens"]
-    errors = identity_errors(result, manifest, f"lens {lens}")
-    identity_valid = not errors
-    gates = []
-    for raw_gate in result["gates"]:
-        try:
-            gates.append(LENS_GATE.validate_python(raw_gate))
-        except ValidationError as exc:
-            errors.append(validation_message(f"Invalid lens {lens} gate", exc, LENS_GATE))
-    findings = result["findings"]
-    expected = set(registry[lens])
-    universal = set(UNIVERSAL_GATES[lens])
-    gate_status: dict[str, str] = {}
-    gate_ids = [gate["gate_id"] for gate in gates]
-    duplicates = {gate_id for gate_id, count in Counter(gate_ids).items() if count > 1}
-    if duplicates:
-        errors.append(f"lens {lens}: duplicate gates {sorted(str(item) for item in duplicates)}")
+) -> None:
     for gate in gates:
         gate_id, status = gate["gate_id"], gate["status"]
         if gate_id not in expected:
@@ -150,6 +133,39 @@ def validate_lens(
             ok, reason = validate_evidence(item, manifest, diff, tool_commands)
             if not ok:
                 errors.append(f"lens {lens}: gate {gate_id}: {reason}")
+
+
+def validate_lens(
+    value: dict[str, Any],
+    manifest: dict[str, Any],
+    diff: dict[str, Any],
+    tool_commands: dict[str, int],
+    registry: dict[str, list[str]],
+) -> tuple[str | None, list[NormalizedFinding], list[str], list[str]]:
+    try:
+        result = LENS_RESULT.validate_python(value)
+    except ValidationError as exc:
+        return None, [], [validation_message("Invalid lens result", exc, LENS_RESULT)], []
+    lens = result["lens"]
+    errors = identity_errors(result, manifest, f"lens {lens}")
+    identity_valid = not errors
+    gates = []
+    for raw_gate in result["gates"]:
+        try:
+            gates.append(LENS_GATE.validate_python(raw_gate))
+        except ValidationError as exc:
+            errors.append(validation_message(f"Invalid lens {lens} gate", exc, LENS_GATE))
+    findings = result["findings"]
+    expected = set(registry[lens])
+    universal = set(UNIVERSAL_GATES[lens])
+    gate_status: dict[str, str] = {}
+    gate_ids = [gate["gate_id"] for gate in gates]
+    duplicates = {gate_id for gate_id, count in Counter(gate_ids).items() if count > 1}
+    if duplicates:
+        errors.append(f"lens {lens}: duplicate gates {sorted(str(item) for item in duplicates)}")
+    _validate_gates(
+        gates, expected, errors, lens, gate_status, manifest, universal, diff, tool_commands
+    )
     missing = sorted(expected - set(gate_ids))
     if missing:
         errors.append(f"lens {lens}: missing gates {missing}")

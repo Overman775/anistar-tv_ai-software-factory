@@ -11,6 +11,8 @@ from unittest.mock import patch
 
 from factory.decompose import generate_task_graph as graph
 from factory.decompose.metadata import apply, project
+from factory.decompose.task_data import load_tasks
+from factory.decompose.task_validation import validate_markdown_files
 from factory.paths import FACTORY_ROOT
 from tests.factory.decompose.fixture_task_graph import TaskGraphFixture
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
@@ -21,6 +23,25 @@ SCRIPT_PATH = FACTORY_ROOT / "gates/skills/decompose/generate_task_graph.py"
 class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
     def setUp(self) -> None:
         TaskGraphFixture.__init__(self, self.addCleanup)
+
+    def test_markdown_unreadable_after_load(self) -> None:
+        for mutation in ("remove", "invalid encoding"):
+            with self.subTest(mutation=mutation):
+                task = self.task()
+                tasks = self.write_tasks([task])
+                envelopes = load_tasks(self.tasks_dir)["envelopes"]
+                path = self.tasks_dir / "generated" / task["filename"]
+                if mutation == "remove":
+                    path.unlink()
+                else:
+                    path.write_bytes(b"\xff")
+                errors = validate_markdown_files(tasks, envelopes)
+                self.assertTrue(
+                    any(
+                        task["id"] in error and "Markdown cannot be read" in error
+                        for error in errors
+                    )
+                )
 
     def test_metadata_projection_derives_totals_without_writing_inputs(self) -> None:
         labels = (
