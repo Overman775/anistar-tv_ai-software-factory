@@ -264,6 +264,7 @@ class RetryBudgets(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class ExecutionPolicy(TypedDict):
+    workspace: NotRequired[Literal["shared", "worktree", "container"]]
     retry_budgets: RetryBudgets
     on_budget_exhausted: Literal["human"]
 
@@ -555,6 +556,15 @@ class ExecutionReceipt(TypedDict, total=False):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class TestRetry(TypedDict):
+    node: Nonblank
+    attempt: Positive
+    failed_dispatch: Nonblank
+    diagnosis_dispatch: Nonblank
+    repair_node: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class LedgerEvent(TypedDict):
     at: float
     event: Nonblank
@@ -583,6 +593,7 @@ class LedgerEvent(TypedDict):
     decision: NotRequired[str]
     target: NotRequired[str]
     retry_cause: NotRequired[str]
+    test_retry: NotRequired[TestRetry]
     request_id: NotRequired[str]
     added_scope: NotRequired[list[str]]
     session: NotRequired[str]

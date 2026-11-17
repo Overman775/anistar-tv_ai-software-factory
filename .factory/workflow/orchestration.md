@@ -26,7 +26,14 @@ decisions. Inspect candidate files separately for scoped edits. Reconcile files
 and runtime before resuming. Cancel an old run only on user instruction.
 Never silently replace legacy `pipeline.md` or an unknown writer.
 
-For a new intake:
+For a new Implement intake (route a planning-only request to Planning first):
+
+Run `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py prepare-workspace`.
+Use the returned workspace and config for all remaining steps, including coordinator
+reads, native and ACP workers, checks and handoff. Switch command cwd explicitly.
+If the native host cannot place a worker in that checkout, report a blocker.
+Keep the path and branch in the handoff so continuation opens the same checkout.
+See [workspace selection](README.md#workspace-selection) for setup and failure modes.
 
 Save `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config`
 output as JSON in OS temporary storage. Keep it through `init`; do not send it
@@ -161,6 +168,11 @@ Retry budgets belong to stable task+cause and come from `execution.retry_budgets
 Initial work is separate from retries; integration uses feature review budget
 when the fixed batch contains a feature. Session/profile/graph changes never
 reset counters. Requirements, project gates and additional checks stay intact.
+
+If an accepted BugHunter diagnosis attributes a blocked TestWriter failure to
+production code, use [revise with a test retry](README.md#repair-revision-and-recovery)
+before the Developer edits. Point to the failed dispatch and diagnosis in the
+decision. Dispatch TestWriter again after accepting the repair.
 
 For profiles with escalation, use `workflow.py correct NODE DECISION_JSON` after
 reviewing terminal failed/blocked evidence. NODE identifies the responsible

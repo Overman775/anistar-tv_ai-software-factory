@@ -68,12 +68,14 @@ own dispatch/staging; a context packet alone does not provide an ACP session dri
    validates role evidence and calls workflow finish.
 
 The bridge's filesystem access is not limited by an instruction-owned-path list.
-Use the consumer's actual sandbox/worktree permissions. No permission expansion
-or provider authentication is fabricated by this adapter. The shipped
+The adapter uses the [Implement workspace](../workflow/README.md#workspace-selection)
+prepared by the coordinator. Permission mode remains a separate connection setting.
 `approve-reads` + noninteractive `fail` blocks writes requiring interactive
-approval. For unattended writers deliberately configure `approve-all` only in
-an explicitly authorized isolated workspace, or supply an appropriate supported
-policy after verifying its semantics. Do not silently add that flag on failure.
+approval. `approve-all` requires an explicit `execution.workspace` choice.
+Select `worktree` for a separate checkout or explicitly select `shared` to allow
+writes in the current checkout. Verify actual backend permissions before starting
+work. Neither mode limits what the bridge process can access outside its working
+directory. Do not silently add `approve-all` on failure.
 
 ## Status, cancellation and uncertain outcomes
 

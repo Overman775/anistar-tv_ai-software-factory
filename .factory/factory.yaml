@@ -16,6 +16,8 @@ orchestrator:
 
 # Shared task retry budgets; changing the worker does not reset the counter.
 execution:
+  # Implement working directory: shared, worktree, or container (reserved).
+  workspace: worktree
   retry_budgets:
     static: 2
     tests: 2

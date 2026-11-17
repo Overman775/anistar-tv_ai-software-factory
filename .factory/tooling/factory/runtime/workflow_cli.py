@@ -27,6 +27,7 @@ from factory.runtime.workflow_graph import (
     validate_assignment_lineage,
     validate_graph,
 )
+from factory.runtime.workspace import prepare_workspace
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostic.add_argument("--cursor", type=int, default=0)
     diagnostic.add_argument("--limit", type=int, default=30)
     sub.add_parser("config")
+    sub.add_parser("prepare-workspace")
     instructions = sub.add_parser("read-instructions")
     instructions.add_argument("pin", help="Config JSON or - for the active run")
     instructions.add_argument("paths", nargs="+")
@@ -80,6 +82,12 @@ def build_parser() -> argparse.ArgumentParser:
     rev = sub.add_parser("revise")
     rev.add_argument("graph")
     rev.add_argument("reason")
+    rev.add_argument(
+        "--retry-tests",
+        nargs=4,
+        metavar=("TEST_NODE", "FAILED_DISPATCH", "DIAGNOSIS_NODE", "REPAIR_NODE"),
+        help="Reopen a failed TestWriter node after the diagnosed Developer repair",
+    )
     intake = sub.add_parser(
         "reintake",
         description="Refresh all sources in the authorized graph and any named documents.",
@@ -265,7 +273,11 @@ def _dispatch_workflow(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, 
         ledger.expand_scope(args.task, args.paths, args.reason)
         result = None
     elif args.action == "revise":
-        ledger.revise(read_json(args.graph), args.reason)
+        retry_tests = None
+        if args.retry_tests is not None:
+            tests, failed_dispatch, diagnosis, repair = args.retry_tests
+            retry_tests = (tests, failed_dispatch, diagnosis, repair)
+        ledger.revise(read_json(args.graph), args.reason, retry_tests=retry_tests)
         result = None
     elif args.action == "reintake":
         ledger.reintake(
@@ -346,6 +358,13 @@ def _dispatch_completion(args: argparse.Namespace, ledger: Ledger) -> tuple[bool
 def main() -> None:
     p = build_parser()
     args = p.parse_args()
+    if args.action == "prepare-workspace":
+        try:
+            selected = prepare_workspace(Path(args.workspace).resolve(), load_config(args.config))
+            print(json.dumps({"ok": True, "result": selected}, ensure_ascii=False, indent=2))
+        except (Invalid, OSError, ValueError) as exc:
+            p.exit(1, f"BLOCKED: {exc}\n")
+        return
     if args.action == "diagnostics":
         try:
             key, value = next(

@@ -46,6 +46,7 @@ from factory.runtime.workflow_core import (
     require,
 )
 from factory.runtime.workflow_core import relative as relative
+from factory.runtime.workspace import check_workspace
 
 
 class TransportResult(Protocol):
@@ -106,6 +107,16 @@ def assignment(state: State, node_id: str) -> tuple[Node, Profile, Connection, s
     return node, profile, conn, session
 
 
+def _check_dispatch_workspace(ledger: Ledger, state: State, conn: Connection) -> None:
+    require(Path(state["workspace"]) == ledger.root, "ACP workspace differs from the run checkout")
+    config = state["config"]
+    check_workspace(ledger.root, config)
+    require(
+        conn.get("permissions") != "approve-all" or "workspace" in config["execution"],
+        "ACP approve-all requires an explicit execution.workspace",
+    )
+
+
 def build_command(
     state: State, node_id: str, operation: str, prompt: str | Path | None = None
 ) -> list[str]:
@@ -151,7 +162,8 @@ def prepare_prompt(ledger: Ledger, node_id: str) -> dict[str, Any]:
     with ledger.locked():
         s = ledger.read()
         n, v = ledger.packet_dispatch(s, node_id, runner="acpx")
-        _, _, _, session = assignment(s, node_id)
+        _, _, conn, session = assignment(s, node_id)
+        _check_dispatch_workspace(ledger, s, conn)
         require(not v.get("prompt_submitted"), "Prompt already submitted")
         meta = freeze_packet(ledger.root, ledger.dir, s, n, v)
         p = ledger.root / meta["path"]
@@ -191,6 +203,8 @@ def _prepare_operation(ledger: Ledger, node_id: str, operation: str) -> Transpor
         if operation in {"create", "prompt"}:
             check_config(s)
         n, profile, conn, session = assignment(s, node_id)
+        if operation in {"create", "prompt"}:
+            _check_dispatch_workspace(ledger, s, conn)
         v = s["nodes"][node_id]
         expected_run, expected_dispatch = s["run_id"], v["dispatch_id"]
         require(

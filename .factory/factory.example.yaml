@@ -18,6 +18,9 @@ orchestrator:
 
 # Shared task retry budgets; changing the worker does not reset the counter.
 execution:
+  # shared uses the current checkout; worktree creates a separate Git checkout.
+  # container is reserved and blocks runs until a runtime is implemented.
+  workspace: worktree
   retry_budgets:
     static: 2
     tests: 2

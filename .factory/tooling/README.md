@@ -30,6 +30,8 @@ Read [configuration verification](../skills/factory-project-configure/references
 for profile validation, recipient previews, check selection and evidence limits.
 
 Implement uses accepted source and instruction snapshots throughout a run.
+Prepare the [Implement workspace](../workflow/README.md#workspace-selection)
+before taking the first snapshot.
 Use `workflow.py read-instructions - PATH...` and `workflow.py read-project`
 for active coordinator context. Candidate edits remain subject to verification
 on current scope and command inputs. For authorized changes to the active

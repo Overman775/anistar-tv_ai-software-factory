@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import unittest
 from collections.abc import Callable
 from copy import deepcopy
@@ -110,6 +112,118 @@ class EscalationTests(unittest.TestCase):
         changed = dict(request, cause="review")
         with self.assertRaisesRegex(Invalid, "Conflicting"):
             f.ledger.correct("write-label", changed)
+
+    def test_revision_retries_failed_tests_after_diagnosed_developer_repair(self) -> None:
+        f = self.f
+        f.g["agents"].update(
+            tester=dict(role="test-writer", profile="middle-test-writer"),
+            diagnostician=dict(role="bug-hunter", profile="bug-hunter"),
+        )
+        f.g["tasks"]["label"]["scope"].append("lib/example_test.dart")
+        f.g["nodes"].extend(
+            [
+                dict(
+                    id="test-label",
+                    task="label",
+                    stage="work",
+                    agent="tester",
+                    depends_on=[],
+                    owns=["lib/example_test.dart"],
+                    resources=["project-checks"],
+                ),
+                dict(
+                    id="diagnose-label",
+                    task="label",
+                    stage="explore",
+                    agent="diagnostician",
+                    depends_on=[],
+                    owns=[],
+                    resources=[],
+                ),
+            ]
+        )
+        f.g["nodes"][0].update(
+            depends_on=["test-label", "diagnose-label"], resources=["project-checks"]
+        )
+        f.init()
+        f.start("test-label", "tester")
+        failed = f.report("test-label", "FAIL", stage_result="FAIL_TEST", checks=[])
+        f.ledger.finish("test-label", failed)
+        f.start("diagnose-label", "diagnostician")
+        diagnosis = f.report("diagnose-label", stage_result="ROOT_CAUSE_FOUND")
+        f.ledger.finish("diagnose-label", diagnosis)
+
+        graph = f.ledger.read()["graph"]
+        nodes = {node["id"]: node for node in graph["nodes"]}
+        nodes["write-label"]["depends_on"] = ["diagnose-label"]
+        nodes["test-label"]["depends_on"] = ["write-label"]
+        nodes["verify-label"]["depends_on"] = ["test-label"]
+        reason = "BugHunter traced the failing assertion to the production label"
+        retry = ("test-label", failed["dispatch_id"], "diagnose-label", "write-label")
+        before = f.ledger.read()
+        production = f.root / "lib/example.dart"
+        production.write_text("edited too early")
+        with self.assertRaisesRegex(Invalid, "Test retry evidence is stale"):
+            f.ledger.revise(graph, reason, retry_tests=retry)
+        production.write_text("before")
+        with (
+            patch("factory.runtime.workflow.atomic_json", side_effect=OSError("disk full")),
+            self.assertRaisesRegex(OSError, "disk full"),
+        ):
+            f.ledger.revise(graph, reason, retry_tests=retry)
+        self.assertEqual(before, f.ledger.read())
+
+        path = f.root / "revised.json"
+        atomic_json(path, graph)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(_TOOLS / "workflow.py"),
+                "--workspace",
+                str(f.root),
+                "revise",
+                str(path),
+                reason,
+                "--retry-tests",
+                *retry,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        revised = f.ledger.read()
+        self.assertEqual({"label:tests": 1}, revised["counters"])
+        self.assertEqual(
+            diagnosis["dispatch_id"], revised["events"][-1]["test_retry"]["diagnosis_dispatch"]
+        )
+        self.assertNotIn("corrections", revised)
+        with self.assertRaisesRegex(Invalid, "current blocked test dispatch"):
+            f.ledger.revise(graph, reason, retry_tests=retry)
+        without_repair = deepcopy(graph)
+        candidate = {node["id"]: node for node in without_repair["nodes"]}
+        candidate["test-label"]["depends_on"] = []
+        candidate["verify-label"]["depends_on"] = ["test-label", "write-label"]
+        with self.assertRaisesRegex(Invalid, "Keep the Developer repair dependency"):
+            f.ledger.revise(without_repair, "try to remove the repair prerequisite")
+        self.assertEqual(revised, f.ledger.read())
+
+        with self.assertRaisesRegex(Invalid, "Dependencies not complete"):
+            f.ledger.claim("test-label")
+        f.start("write-label")
+        production.write_text("after")
+        f.ledger.finish("write-label", f.report("write-label", stage_result="IMPLEMENTED"))
+        f.start("test-label", "tester")
+        with self.assertRaisesRegex(Invalid, "Stale report identity"):
+            f.ledger.finish("test-label", failed)
+        passed = f.report("test-label", stage_result="PASS")
+        f.ledger.finish("test-label", passed)
+        final = f.ledger.read()
+        self.assertEqual({"label:tests": 1}, final["counters"])
+        self.assertEqual("done", final["nodes"]["test-label"]["status"])
+        self.assertIn(failed["dispatch_id"], final["report_index"])
+        self.assertIn(passed["dispatch_id"], final["report_index"])
+        self.assertIn("verify-label", f.ledger.next_actions()["runnable"])
 
     def test_failed_save_leaves_original_state_and_retry_is_safe(self) -> None:
         f = self.f

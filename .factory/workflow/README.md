@@ -13,6 +13,35 @@ inside the Lab snapshot, which has no AniStar source or Flutter toolchain.
 Executable helpers and tests live in [`../tooling/`](../tooling/README.md).
 This directory contains process instructions and the operation reference.
 
+## Workspace selection
+
+For a new Implement run, the coordinator calls this before taking a config
+snapshot, preparing the graph or starting any worker:
+
+```bash
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py prepare-workspace
+```
+
+`execution.workspace: shared` uses the current checkout and is the default when
+omitted. `worktree` creates a sibling Git worktree on a new
+`worktree/factory-...` branch at the current commit. It requires committed factory
+settings and task inputs, with no tracked changes or nonignored untracked files.
+It does not copy ignored files or install anything. Use the returned directory
+and config for every Implement participant and command, applying regular
+[Python setup](../tooling/README.md#python-setup) and the selected adapter setup
+there as necessary. If a nondefault config was selected, keep passing the returned
+config path. Initialize project dependencies there according to project rules.
+
+`container` is reserved and blocks before intake. There is no fallback to another
+mode. The setting applies to the whole Implement run, including mixed ACP and
+native assignments; other processes use their own checkout rules.
+
+To resume, reopen the existing run's worktree. Repeating preparation from that
+worktree returns it. The original checkout does not receive edits automatically.
+Keep the worktree and branch for review and delivery; do not merge, remove or
+discard them as a side effect of the run. A worktree separates working files and
+index; Git data are shared and process access is governed by the actual host.
+
 ## Configuration and preparation
 
 ```bash
@@ -132,6 +161,23 @@ the next intake. Re-intake retains previous snapshots and evidence in history,
 returns all nonblocked nodes to pending, and keeps blocked nodes and counters.
 Explicit selected plan scope is part of source identity. The parent establishes
 real authorization before re-intake.
+
+When BugHunter traces a blocked TestWriter failure to production code, submit
+the revision and the test retry together, before Developer edits the files:
+
+```bash
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py revise /path/to/revised-graph.json "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
+```
+
+Identify the exact failure in the diagnosis and explain the owner's responsibility
+in the reason. The revised graph orders the accepted BugHunter diagnosis, then
+the Developer repair, then TestWriter. The helper checks both reports against
+current source, files and checks. It spends one task `tests` retry and reopens
+only the named failure in the same save as the revision. Other blocked nodes
+stay blocked. The original report remains in history. Claim a fresh test dispatch
+after the repair finishes and submit current evidence. Keep the repair as a
+test prerequisite until that dispatch. This transition does not count toward
+profile escalation.
 
 During an active run, `read-instructions - PATH...` reads accepted factory
 instructions and `read-project` returns accepted coordinator policy and

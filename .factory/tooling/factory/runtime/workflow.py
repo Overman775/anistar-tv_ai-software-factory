@@ -51,6 +51,7 @@ from factory.runtime.contracts import (
     PacketRef,
     PendingCheck,
     Report,
+    TestRetry,
 )
 from factory.runtime.contracts import Config as Config
 from factory.runtime.contracts import Dispatch as Dispatch
@@ -101,6 +102,7 @@ from factory.runtime.workflow_graph import (
 )
 from factory.runtime.workflow_graph import validate_graph as validate_graph
 from factory.runtime.workflow_sources import lock_source as lock_source
+from factory.runtime.workspace import check_workspace
 from factory.tasks.contracts import Task as Task
 from factory.validation import validation_message
 
@@ -271,6 +273,7 @@ class Ledger:
         return False
 
     def init(self, graph: Graph, config: Config) -> State:
+        check_workspace(self.root, config)
         input_graph = graph
         graph = deepcopy(graph)
         validate_graph(graph, config, self.root)
@@ -1176,11 +1179,24 @@ class Ledger:
                     integration["scope"] = list(dict.fromkeys([*integration["scope"], *paths]))
             self._revise(state, graph, reason)
 
-    def revise(self, graph: Graph | LockedGraph, reason: str) -> None:
+    def revise(
+        self,
+        graph: Graph | LockedGraph,
+        reason: str,
+        *,
+        retry_tests: tuple[str, str, str, str] | None = None,
+    ) -> None:
         with self.locked():
-            self._revise(self.read(), graph, reason)
+            self._revise(self.read(), graph, reason, retry_tests=retry_tests)
 
-    def _revise(self, s: State, graph: Graph | LockedGraph, reason: str) -> None:
+    def _revise(
+        self,
+        s: State,
+        graph: Graph | LockedGraph,
+        reason: str,
+        *,
+        retry_tests: tuple[str, str, str, str] | None = None,
+    ) -> None:
         require(not s.get("pause_reason"), "Run is paused by user")
         require(
             s["status"] == "active" and reason,
@@ -1192,10 +1208,11 @@ class Ledger:
         )
         require(not self.active_commands(s), "Unresolved project commands")
         check_config(s)
-        validate_graph(graph, s["config"], self.root)
+        new_nodes = validate_graph(graph, s["config"], self.root)
         old = s["graph"]
-        if graph == old:
+        if graph == old and retry_tests is None:
             return
+        self._preserve_test_retry_dependencies(s, new_nodes)
         validate_assignment_change(s, graph)
         require(
             graph["sources"] == old["sources"] and set(graph["tasks"]) == set(old["tasks"]),
@@ -1228,7 +1245,6 @@ class Ledger:
             preserve_task_guards(before, after)
             if before != after:
                 strengthened.add(tid)
-        new_nodes = {n["id"]: n for n in graph["nodes"]}
         invalidate = set()
         for n in old["nodes"]:
             require(
@@ -1245,6 +1261,12 @@ class Ledger:
             ):
                 invalidate.add(n["id"])
         invalidate |= {k for k in new_nodes if ancestors(new_nodes, k) & invalidate}
+        test_retry = None
+        if retry_tests is not None:
+            test_retry = self._prepare_test_retry(s, graph, new_nodes, retry_tests, invalidate)
+            invalidate |= {test_retry["node"]} | {
+                k for k in new_nodes if test_retry["node"] in ancestors(new_nodes, k)
+            }
         for a, old_assignment in old["agents"].items():
             if a in s["sessions"]:
                 require(
@@ -1282,7 +1304,106 @@ class Ledger:
                         "status": "pending",
                         "attempt": prev["attempt"],
                     }
-        self.save(s, "revised", reason=reason, previous_graph=old)
+        details: dict[str, object] = {}
+        if test_retry is not None:
+            tests = test_retry["node"]
+            key = new_nodes[tests]["task"] + ":tests"
+            s["counters"][key] = s["counters"].get(key, 0) + 1
+            s["nodes"][tests] = {"status": "pending", "attempt": test_retry["attempt"]}
+            details["test_retry"] = test_retry
+        self.save(s, "revised", reason=reason, previous_graph=old, **details)
+
+    def _prepare_test_retry(
+        self,
+        state: State,
+        graph: Graph | LockedGraph,
+        nodes: dict[str, Node],
+        request: tuple[str, str, str, str],
+        invalidate: set[str],
+    ) -> TestRetry:
+        tests, failed_dispatch, diagnose, repair = request
+        current = state["nodes"]
+        require(
+            {tests, diagnose, repair} <= nodes.keys()
+            and {tests, diagnose, repair} <= current.keys(),
+            "Test retry needs existing test, diagnosis and repair nodes",
+        )
+        task_id = nodes[tests]["task"]
+        task = graph["tasks"][task_id]
+        require(
+            nodes[diagnose]["task"] == nodes[repair]["task"] == task_id
+            and graph["agents"][agent_key(nodes[tests])]["role"] == "test-writer"
+            and graph["agents"][agent_key(nodes[diagnose])]["role"] == "bug-hunter"
+            and graph["agents"][agent_key(nodes[repair])]["role"] == "developer"
+            and diagnose in ancestors(nodes, repair)
+            and repair in ancestors(nodes, tests),
+            "Test retry needs a BugHunter diagnosis before Developer repair before TestWriter",
+        )
+        require(
+            current[tests]["status"] == "blocked"
+            and current[tests].get("dispatch_id") == failed_dispatch,
+            "Test retry needs the current blocked test dispatch",
+        )
+        diagnosis_dispatch = current[diagnose].get("dispatch_id")
+        require(
+            current[diagnose]["status"] == "done"
+            and diagnosis_dispatch is not None
+            and diagnose not in invalidate,
+            "Test retry needs an accepted diagnosis retained by the revision",
+        )
+        assert diagnosis_dispatch is not None
+        require(
+            current[repair]["status"] == "pending"
+            or (current[repair]["status"] == "done" and repair in invalidate),
+            "Test retry needs pending Developer repair",
+        )
+        self.check_sources(state, state["graph"]["tasks"][task_id])
+        files = snapshot(self.root, task["scope"])
+        source_hash = state["graph"]["sources"][task["source"]]["hash"]
+        for node, dispatch_id, outcome, results in (
+            (tests, failed_dispatch, "FAIL", {"FAIL_TEST", "FAIL_CODE"}),
+            (diagnose, diagnosis_dispatch, "PASS", {"ROOT_CAUSE_FOUND"}),
+        ):
+            saved = report_history.historical(self.root, state, node, dispatch_id)
+            report, assignment = saved["report"], saved["assignment"]
+            require(
+                report["terminal"]
+                and report["outcome"] == outcome
+                and report["stage_result"] in results
+                and report["task_id"] == task_id
+                and assignment["agent"]["role"] == graph["agents"][agent_key(nodes[node])]["role"],
+                "Test retry needs terminal TestWriter failure and BugHunter root-cause reports",
+            )
+            require(
+                not report.get("observed_source_drift")
+                and report["source_hash"] == source_hash
+                and report["files"] == files
+                and task["required_checks"] == assignment["task"]["required_checks"],
+                "Test retry evidence is stale for current source, files or checks",
+            )
+        acceptance_guard(escalation.guard, state, task_id)
+        used = state["counters"].get(task_id + ":tests", 0)
+        require(used < escalation.limits(state, task_id)["tests"], "RETRY_BUDGET_EXHAUSTED")
+        return {
+            "node": tests,
+            "attempt": current[tests]["attempt"],
+            "failed_dispatch": failed_dispatch,
+            "diagnosis_dispatch": diagnosis_dispatch,
+            "repair_node": repair,
+        }
+
+    def _preserve_test_retry_dependencies(self, state: State, nodes: dict[str, Node]) -> None:
+        for event in state["events"]:
+            retry = event.get("test_retry")
+            if retry is None:
+                continue
+            tests = retry["node"]
+            current = state["nodes"][tests]
+            if current["status"] == "pending" and current["attempt"] == retry["attempt"]:
+                require(
+                    tests in nodes and retry["repair_node"] in ancestors(nodes, tests),
+                    "Keep the Developer repair dependency for the pending test retry",
+                )
 
     def reintake(
         self,
@@ -1374,7 +1495,8 @@ class Ledger:
             }
             reconcile_source_documents(s["config"], self.root, refreshed_sources, refresh=True)
             locked_graph: LockedGraph = {**graph, "sources": refreshed_sources}
-            validate_graph(locked_graph, s["config"], self.root)
+            new_nodes = validate_graph(locked_graph, s["config"], self.root)
+            self._preserve_test_retry_dependencies(s, new_nodes)
             validate_assignment_change(s, graph)
             for a in s["sessions"]:
                 require(

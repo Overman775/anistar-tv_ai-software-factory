@@ -11,7 +11,8 @@ runtime dependencies.
 factory.yaml.project selects one YAML relative to .factory. Follow that pointer;
 do not assume the bundled AniStar profile describes the consuming application.
 Project profile owns documents, rules, gates and decision definitions. factory.yaml
-owns models, adapters and tool grants. Only Init's requested profile connection
+owns models, adapters, tool grants and [Implement workspace selection](../../../workflow/README.md#workspace-selection).
+Only Init's requested profile connection
 needs a project-pointer edit. Common roles/processes/acceptance remain factory-owned.
 
 Project instructions and requirements supply policy. Examples supply syntax and

@@ -723,6 +723,28 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertNotIn("--approve-all", prepared["prompt_argv"])
         self.assertIn("--non-interactive-permissions", prepared["prompt_argv"])
 
+    def test_approve_all_requires_explicit_choice_of_workspace(self) -> None:
+        self.fake_acp()
+        self.config["acpx"]["connections"]["zcode"]["permissions"] = "approve-all"
+        install_connection(self.config, self.root, "zcode")
+        self.init()
+        self.ledger.claim("write-label")
+        with self.assertRaisesRegex(Invalid, "requires an explicit execution.workspace"):
+            prepare_prompt(self.ledger, "write-label")
+        with self.assertRaisesRegex(Invalid, "requires an explicit execution.workspace"):
+            run_operation(self.ledger, "write-label", "create", run=self.transport)
+        self.assertNotIn("acp_created", self.ledger.read())
+
+    def test_approve_all_allows_explicit_shared_workspace(self) -> None:
+        self.fake_acp()
+        self.config["acpx"]["connections"]["zcode"]["permissions"] = "approve-all"
+        self.config["execution"]["workspace"] = "shared"
+        self.init()
+        self.ledger.claim("write-label")
+        argv = prepare_prompt(self.ledger, "write-label")["prompt_argv"]
+        self.assertIn("--approve-all", argv)
+        self.assertEqual(argv[argv.index("--cwd") + 1], str(self.ledger.root))
+
     def test_prompt_return_never_marks_node_passed(self) -> None:
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
