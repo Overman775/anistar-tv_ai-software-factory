@@ -173,7 +173,7 @@ class MediaCard extends StatelessWidget {
         children: [
           ExcludeSemantics(child: _image()),
           Positioned(left: 0, right: 0, bottom: 0, child: MediaCardCaptionUnderlay(child: _copy(context))),
-          if (selected || busy || leading != null)
+          if (busy || leading != null)
             Positioned(
               top: inset,
               left: inset,
@@ -182,7 +182,6 @@ class MediaCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   spacing: markPadding,
                   children: [
-                    if (selected) _EpisodeMark(color: AppPalette.primary, padding: markPadding, glyph: markGlyph),
                     ?leading,
                     if (busy) const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                   ],

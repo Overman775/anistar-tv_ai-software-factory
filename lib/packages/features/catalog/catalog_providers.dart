@@ -13,7 +13,7 @@ final catalogBrowseRepositoryProvider = Provider<CatalogBrowseRepository>(
 );
 
 final genresProvider = FutureProvider<List<CatalogFilter>>(retry: (_, _) => null, (ref) async {
-  final result = await ref.watch(catalogBrowseRepositoryProvider).getGenres();
+  final result = await ref.watch(catalogBrowseRepositoryProvider).getGenres(refresh: ref.isRefresh);
 
   return result.when(success: (items) => items, failure: (failure) => throw failure);
 });

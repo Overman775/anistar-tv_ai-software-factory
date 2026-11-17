@@ -6,7 +6,9 @@ Unit/widget и architecture tests используют fixtures и fakes для 
 
 ## 1. Окружение и запуск
 
-Для Android нужны **FVM**, Flutter **3.47.7** из `.fvmrc`, Dart **3.13.5**, JDK **17**, Android SDK и устройство/эмулятор. Для iOS Simulator нужны macOS и Xcode.
+Для Android нужны **FVM**, Flutter **3.50.0** из `.fvmrc`, Dart **3.14.0**, JDK **17**, Android SDK и устройство/эмулятор. Для iOS Simulator нужны macOS и Xcode.
+
+Android использует Gradle 9.5.0, AGP 9.3.1 и Kotlin Gradle Plugin 2.4.21. Настройка `android.builtInKotlin=false` сохраняет общий режим Kotlin для приложения и `share_plus`. Переключать её следует после миграции плагинов по [руководству Flutter](https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin).
 
 Для Android и iOS fixture E2E нужен Python **3.10 или новее**. Melos автоматически выбирает доступный совместимый interpreter. Override задайте через `ANISTAR_PYTHON`. Для прямых scripts настройте PATH. Их tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
 

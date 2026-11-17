@@ -68,7 +68,7 @@ final class FakeAnistarClient implements AnistarClient {
       _reply('favorites', () => pageResult ?? AnistarCatalogPageDto(items: [], page: page, hasNext: false));
 
   @override
-  Future<List<AnistarCatalogFilterDto>> genres() => _reply('genres', () => genreResult);
+  Future<List<AnistarCatalogFilterDto>> genres({bool refresh = false}) => _reply('genres', () => genreResult);
 
   @override
   Future<AnistarAnimeDetailsDto> details(String slug) async {

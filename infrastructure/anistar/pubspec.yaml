@@ -5,14 +5,14 @@ publish_to: none
 resolution: workspace
 
 environment:
-  sdk: ^3.13.0
+  sdk: ^3.14.0
 
 dependencies:
   cookie_jar: ^4.0.9
   core:
     path: ../core
   dio: ^5.11.1
-  flutter_riverpod: ^3.4.3
+  flutter_riverpod: ^3.5.0
   html: ^0.15.7
   json5: ^0.8.2
   networking:

@@ -133,7 +133,7 @@ abstract final class AppTypography {
     final text = Theme.of(context).textTheme;
     if (!AppLayoutScope.isTvOf(context)) return text.bodyLarge?.copyWith(fontSize: 16);
 
-    return text.bodyMedium?.copyWith(fontFamily: fontFamily, fontSize: _tvSp(13, 14, 16), height: 1.3);
+    return text.bodyMedium?.copyWith(fontFamily: fontFamily, fontSize: _tvSp(13, 14, 16), height: 1.5);
   }
 
   static TextStyle? searchFieldOf(BuildContext context) {

@@ -146,15 +146,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 149));
     final copy = find.byType(CatalogInspectorCopy);
     expect(tester.widget<CatalogInspectorCopy>(copy).anime.id, 1);
-    final disabled = find.descendant(
-      of: copy,
-      matching: find.byWidgetPredicate((widget) => widget is IgnorePointer && widget.ignoring),
-    );
-    expect(disabled, findsWidgets);
     final action = find.byKey(const ValueKey('favorite-button-2'));
+    expect(action.hitTestable(), findsNothing);
     await tester.tapAt(tester.getCenter(action));
     await tester.pump();
     expect(repository.writes, isEmpty);

@@ -39,10 +39,16 @@ class AppNetworkImage extends StatelessWidget {
   final String? semanticLabel;
   final double? width;
 
-  bool _hasValidUrl(String? value) {
+  static bool _hasValidUrl(String? value) {
     final uri = Uri.tryParse(value ?? '');
 
     return uri != null && (uri.scheme == 'https' || uri.scheme == 'http') && uri.host.isNotEmpty;
+  }
+
+  /// Builds the cache provider for surfaces that need a decoded image before showing it.
+  static ImageProvider<Object>? providerFor(String? url, {int? cacheHeight}) {
+    if (url == null || !_hasValidUrl(url)) return null;
+    return ResizeImage.resizeIfNeeded(null, cacheHeight, CachedNetworkImageProvider(url));
   }
 
   @override

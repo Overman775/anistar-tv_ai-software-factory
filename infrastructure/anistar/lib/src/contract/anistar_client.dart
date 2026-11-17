@@ -23,7 +23,7 @@ abstract interface class AnistarClient {
 
   Future<AnistarCatalogPageDto> catalog(int page, {String? filterPath, AnistarCatalogSort? sort});
   Future<AnistarCatalogPageDto> search(String query, {int page = 1, RequestCancellation? cancellation});
-  Future<List<AnistarCatalogFilterDto>> genres();
+  Future<List<AnistarCatalogFilterDto>> genres({bool refresh = false});
   Future<AnistarAnimeDetailsDto> details(String slug);
   Future<AnistarCatalogPageDto> favorites(int page);
   Future<bool> favoriteStatus({required int animeId, required String slug});

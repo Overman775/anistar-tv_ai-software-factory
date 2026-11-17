@@ -59,7 +59,7 @@ final class HtmlAnistarClient implements AnistarProfileClient {
       _safe(() => _source.search(query, page: page, cancellation: cancellation));
 
   @override
-  Future<List<AnistarCatalogFilterDto>> genres() => _safe(_source.genres);
+  Future<List<AnistarCatalogFilterDto>> genres({bool refresh = false}) => _safe(() => _source.genres(refresh: refresh));
 
   @override
   Future<AnistarAnimeDetailsDto> details(String slug) => _safe(() => _source.details(slug));

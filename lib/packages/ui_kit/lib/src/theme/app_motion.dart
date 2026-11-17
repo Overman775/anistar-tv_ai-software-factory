@@ -12,7 +12,7 @@ abstract final class AppMotion {
   static const focusBorderExit = Duration(milliseconds: 180);
   static const focusExit = focusBorderExit;
   static const inspectorDwell = Duration(milliseconds: 150);
-  static const inspectorContent = page;
+  static const inspectorContent = Duration(milliseconds: 220);
   static const shimmer = Duration(milliseconds: 1100);
   static const enterCurve = Cubic(0.215, 0.61, 0.355, 1);
   static const exitCurve = Cubic(0.55, 0.055, 0.675, 0.19);

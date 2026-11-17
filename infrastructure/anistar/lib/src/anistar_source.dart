@@ -21,6 +21,9 @@ final class AnistarSource {
   final Dio _dio;
   final AnistarSearchSource _search;
   final int Function()? _accessGeneration;
+  int? _catalogAccess;
+  List<AnistarCatalogFilterDto>? _genreMenu;
+  ({Future<String> response, bool refresh})? _catalogRequest;
 
   AnistarSource(this._dio, {int Function()? accessGeneration})
     : baseUri = Uri.parse(_dio.options.baseUrl),
@@ -43,16 +46,59 @@ final class AnistarSource {
     final requestedSort = sort ?? defaultAuthorSort;
     final parameters = requestedSort == null ? null : HtmlCatalogParameters(requestedSort);
     final path = (filterPath ?? '/anime/').substring(1);
-    final source = await _html(
-      page == 1 ? path : '${path}page/$page/',
-      sortCookies: parameters?.cookies(filterPath ?? '/anime/'),
-    );
+    final homePage = page == 1 && path == 'anime/' && parameters == null;
+    final access = homePage ? _accessGeneration?.call() : null;
+    final source = homePage
+        ? await _catalogHome(access)
+        : await _html(
+            page == 1 ? path : '${path}page/$page/',
+            sortCookies: parameters?.cookies(filterPath ?? '/anime/'),
+          );
+    _verifyAccess(access);
     parameters?.verify(source);
 
     return AnistarHtmlParser(baseUri).catalog(source, page, filterPath: filterPath);
   }
 
-  Future<List<AnistarCatalogFilterDto>> genres() async => AnistarHtmlParser(baseUri).genres(await _html('anime/'));
+  Future<List<AnistarCatalogFilterDto>> genres({bool refresh = false}) async {
+    final access = _accessGeneration?.call();
+    _syncCatalogAccess(access);
+    final menu = _genreMenu;
+    if (!refresh && menu != null) return menu;
+
+    final source = await _catalogHome(access, refresh: refresh);
+    _verifyAccess(access);
+    return AnistarHtmlParser(baseUri).genres(source);
+  }
+
+  void _syncCatalogAccess(int? access) {
+    if (_catalogAccess == access) return;
+    _catalogAccess = access;
+    _genreMenu = null;
+    _catalogRequest = null;
+  }
+
+  Future<String> _catalogHome(int? access, {bool refresh = false}) async {
+    _syncCatalogAccess(access);
+    final pending = _catalogRequest;
+    if (pending != null && (!refresh || pending.refresh)) return pending.response;
+    if (refresh) _genreMenu = null;
+    final response = _html('anime/', expectedAccess: access).then((source) {
+      _verifyAccess(access);
+      return source;
+    });
+    _catalogRequest = (response: response, refresh: refresh);
+    try {
+      final source = await response;
+      if (identical(_catalogRequest?.response, response)) {
+        final menu = AnistarHtmlParser(baseUri).genreMenu(source);
+        _genreMenu = menu.isEmpty ? null : menu;
+      }
+      return source;
+    } finally {
+      if (identical(_catalogRequest?.response, response)) _catalogRequest = null;
+    }
+  }
 
   Future<AnistarAnimeDetailsDto> details(String slug) => _details(slug);
 

@@ -68,8 +68,42 @@ void main() {
     expect(field.readOnly, isTrue);
     expect(field.controller?.text, 'Наруто');
     expect(field.focusNode?.hasFocus, isTrue);
+
+    const back = LogicalKeyboardKey.goBack;
+    final focusManager = FocusManager.instance;
+    KeyEventResult interceptRelease(KeyEvent event) =>
+        event is KeyUpEvent && event.logicalKey == back ? KeyEventResult.handled : KeyEventResult.ignored;
+
+    for (final interruptRelease in [false, true]) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await settle();
+      expect(tester.widget<TextField>(query).readOnly, isFalse);
+      final downHandled = await tester.sendKeyDownEvent(back, physicalKey: PhysicalKeyboardKey.escape);
+      await settle();
+      // Update the physical key state without delivering this release to the form.
+      if (interruptRelease) focusManager.addEarlyKeyEventHandler(interceptRelease);
+      try {
+        final upHandled = await tester.sendKeyUpEvent(back, physicalKey: PhysicalKeyboardKey.escape);
+        if (!upHandled) await tester.binding.handlePopRoute();
+        expect(upHandled, isTrue);
+      } finally {
+        if (interruptRelease) focusManager.removeEarlyKeyEventHandler(interceptRelease);
+      }
+      await settle();
+      final afterHardwareBack = tester.widget<TextField>(query);
+      expect(afterHardwareBack.readOnly, isTrue);
+      expect(afterHardwareBack.controller?.text, 'Наруто');
+      expect(afterHardwareBack.focusNode?.hasFocus, isTrue);
+      expect(downHandled, isTrue);
+    }
+
+    expect(await tester.sendKeyDownEvent(back, physicalKey: PhysicalKeyboardKey.escape), isFalse);
+    expect(await tester.sendKeyUpEvent(back, physicalKey: PhysicalKeyboardKey.escape), isFalse);
+    await tester.binding.handlePopRoute();
+    await settle();
+    expect(focusedControlLabel(tester), 'Поиск');
     expect(tester.takeException(), isNull);
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
   testWidgets(
     'new TV search entry attaches its input client before requesting IME and keeps arrows out of navigation',

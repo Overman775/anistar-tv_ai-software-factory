@@ -75,6 +75,7 @@ class HomeRoute extends GoRouteData with $HomeRoute {
   @override
   Widget build(BuildContext context, GoRouterState state) => Consumer(
     builder: (context, ref, _) => HomeScreen(
+      shellController: TvRouteShellScope.maybeOf(context),
       destination: destination,
       onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
       accountName: ref.watch(authAccessProvider).account,
@@ -147,6 +148,7 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
 }
 
 class PlayerRoute extends GoRouteData with $PlayerRoute {
+  static final $parentNavigatorKey = GlobalKey<NavigatorState>();
   final HomeDestination destination;
   final int animeId;
   final int episodeNumber;
@@ -298,14 +300,22 @@ Future<void> _openEpisode(
   String title, {
   AnimeSummary? summary,
   ValueChanged<int>? onEpisodeChanged,
-}) => PlayerRoute(
-  animeId: animeId,
-  episodeNumber: episode.number,
-  destination: destination,
-  slug: slug,
-  title: title,
-  $extra: (summary: summary, onEpisodeChanged: onEpisodeChanged),
-).push<void>(context);
+}) async {
+  final shell = TvRouteShellScope.maybeOf(context);
+  if (shell != null) shell.playerVisible.value = true;
+  try {
+    await PlayerRoute(
+      animeId: animeId,
+      episodeNumber: episode.number,
+      destination: destination,
+      slug: slug,
+      title: title,
+      $extra: (summary: summary, onEpisodeChanged: onEpisodeChanged),
+    ).push<void>(context);
+  } finally {
+    if (context.mounted && shell != null) shell.playerVisible.value = false;
+  }
+}
 
 void _watchAnime(BuildContext context, WidgetRef ref, AnimeSummary anime, HomeDestination destination) {
   if (ModalRoute.isCurrentOf(context) == false) return;
@@ -319,7 +329,7 @@ void _watchAnime(BuildContext context, WidgetRef ref, AnimeSummary anime, HomeDe
     return;
   }
   final history = watchedEpisodesProvider(anime.id);
-  final loaded = access.canUseAccount && ref.exists(history) ? ref.read(history) : null;
+  final loaded = access.canUseAccount && ref.read(history.exists) ? ref.read(history) : null;
   final watched = loaded != null && !loaded.isLoading ? loaded.asData?.value : null;
   final choice = selectAnimeWatchAction(available, watched ?? const {}, includeEpisodeMarks: access.canUseAccount);
   if (choice.episode case final episode?) {
@@ -372,22 +382,97 @@ class _RouteShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => AppLayoutScope.isTvOf(context)
-      ? TvRouteShell(
-          destination: destination,
-          accountName: ref.watch(authAccessProvider).account,
-          accountImageUrl: _accountImageUrl(ref),
-          onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
-          onSignOut: ref.watch(authAccessProvider).canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
-          onSignIn: ref.watch(authAccessProvider).canUseAccount
-              ? null
-              : ref.read(authControllerProvider.notifier).requestSignIn,
-          onOpenLogs: _logsAction(context),
-          builder: builder,
-        )
+      ? _tvContent(context)
       : _AppMobileRouteShell(
           destination: destination,
           title: title,
           content: builder(null),
           showContextTitle: showMobileContextTitle,
         );
+
+  Widget _tvContent(BuildContext context) {
+    final controller = TvRouteShellScope.maybeOf(context);
+    if (controller == null) return builder(null);
+    return ValueListenableBuilder<bool>(
+      valueListenable: controller.expanded,
+      builder: (context, expanded, _) => PopScope(
+        canPop: !expanded,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && expanded) controller.closeNavigation?.call();
+        },
+        child: builder(controller.openNavigation),
+      ),
+    );
+  }
+}
+
+Widget buildAppRouteShell(BuildContext context, GoRouterState state, Widget navigator) =>
+    AppLayoutScope.isTvOf(context) ? _PersistentTvShell(state: state, navigator: navigator) : navigator;
+
+class _PersistentTvShell extends ConsumerStatefulWidget {
+  const _PersistentTvShell({required this.state, required this.navigator});
+
+  final GoRouterState state;
+  final Widget navigator;
+
+  @override
+  ConsumerState<_PersistentTvShell> createState() => _PersistentTvShellState();
+}
+
+class _PersistentTvShellState extends ConsumerState<_PersistentTvShell> {
+  final _controller = TvRouteShellController();
+
+  @override
+  void dispose() {
+    _controller.expanded.dispose();
+    _controller.playerVisible.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = widget.state.uri;
+    final destination =
+        HomeDestination.values.where((value) => value.name == uri.queryParameters['destination']).firstOrNull ??
+        (uri.path == '/browse' || uri.path == '/genres' ? HomeDestination.genres : HomeDestination.home);
+    final access = ref.watch(authAccessProvider);
+    final fullScreen = uri.path.endsWith('/player');
+
+    return Scaffold(
+      backgroundColor: AppPalette.background,
+      body: SafeArea(
+        top: !fullScreen,
+        bottom: !fullScreen,
+        left: !fullScreen,
+        right: !fullScreen,
+        child: TvRouteShell(
+          destination: destination,
+          accountName: access.account,
+          accountImageUrl: _accountImageUrl(ref),
+          onDestinationSelected: (value) => HomeRoute(destination: value).go(context),
+          onSignOut: access.canUseAccount ? () => unawaited(_signOut(context, ref)) : null,
+          onSignIn: access.canUseAccount ? null : ref.read(authControllerProvider.notifier).requestSignIn,
+          onOpenLogs: _logsAction(context),
+          onRootBack: supportsAppExit ? () => unawaited(confirmAppExit(context)) : null,
+          onActivateContent: () => _controller.focusFirst?.call(),
+          consumeBack: () => _controller.consumeBack?.call() ?? false,
+          root: uri.path == AppRoutes.home,
+          fullScreen: fullScreen,
+          restoreFocusOnDestinationChange: false,
+          onExpansionChanged: (expanded) => _controller.expanded.value = expanded,
+          controller: _controller,
+          builder: (openNavigation) {
+            _controller.openNavigation = openNavigation;
+            return TvRouteShellScope(
+              controller: _controller,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _controller.playerVisible,
+                builder: (context, playerVisible, _) => TickerMode(enabled: !playerVisible, child: widget.navigator),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
 }

@@ -206,6 +206,13 @@ Future<void> _runRedesignScene(
       );
     }
   } else {
+    final backdrop =
+        AppNetworkImage.providerFor(decodedFixtureUrl, cacheHeight: size.height.ceil()) ?? fail('Invalid fixture URL');
+    final backdropKey = await backdrop.obtainKey(ImageConfiguration.empty);
+    PaintingBinding.instance.imageCache.putIfAbsent(
+      backdropKey,
+      () => OneFrameImageStreamCompleter(Future.value(ImageInfo(image: decoded.clone()))),
+    );
     for (final width in [
       (size.height * 0.17).clamp(92, 232).ceil(),
       size.width.toInt() - 72,

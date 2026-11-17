@@ -12,7 +12,6 @@ import 'catalog_inspector_rating.dart';
 class CatalogInspectorCopy extends StatelessWidget {
   const CatalogInspectorCopy({
     required this.anime,
-    this.opacity = const AlwaysStoppedAnimation(1),
     this.actions,
     this.lastGenreFocus,
     this.onGenreTap,
@@ -24,7 +23,6 @@ class CatalogInspectorCopy extends StatelessWidget {
   });
 
   final AnimeSummary anime;
-  final Animation<double> opacity;
   final Widget? actions;
   final FocusNode? lastGenreFocus;
   final void Function(AnimeSummary, CatalogFilter)? onGenreTap;
@@ -54,54 +52,46 @@ class CatalogInspectorCopy extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                FadeTransition(
-                  opacity: opacity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: AppSpacing.sm,
-                    children: [
-                      Text(anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
-                      Wrap(
-                        spacing: AppSpacing.md,
-                        runSpacing: AppSpacing.xs,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (anime.rating != null) CatalogInspectorRating(rating: anime.rating),
-                          if (anime.seriesInfo case final value?) Text(value, style: secondary),
-                          if (anime.voiceover case final value?) Text(value, style: secondary),
-                          if (anime.publicationDate case final value?) Text(value, style: secondary),
-                        ],
-                      ),
-                      if (genres.isNotEmpty)
-                        Focus(
-                          canRequestFocus: false,
-                          onKeyEvent: (_, event) => _genreKey(event, nodes),
-                          child: Wrap(
-                            spacing: AppSpacing.sm,
-                            runSpacing: AppSpacing.xs,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: genres,
-                          ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: AppSpacing.sm,
+                  children: [
+                    Text(anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
+                    Wrap(
+                      spacing: AppSpacing.md,
+                      runSpacing: AppSpacing.xs,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (anime.rating != null) CatalogInspectorRating(rating: anime.rating),
+                        if (anime.seriesInfo case final value?) Text(value, style: secondary),
+                        if (anime.voiceover case final value?) Text(value, style: secondary),
+                        if (anime.publicationDate case final value?) Text(value, style: secondary),
+                      ],
+                    ),
+                    if (genres.isNotEmpty)
+                      Focus(
+                        canRequestFocus: false,
+                        onKeyEvent: (_, event) => _genreKey(event, nodes),
+                        child: Wrap(
+                          spacing: AppSpacing.sm,
+                          runSpacing: AppSpacing.xs,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: genres,
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
                 Expanded(
                   // Intrinsic height excludes the description so only mandatory rows can require scrolling.
                   child: SizedOverflowBox(
                     size: Size.zero,
-                    child: FadeTransition(
-                      opacity: opacity,
-                      child: _CatalogDescription(description: anime.description, style: secondary),
-                    ),
+                    child: _CatalogDescription(description: anime.description, style: secondary),
                   ),
                 ),
-                FadeTransition(
-                  opacity: opacity,
-                  child: update == null
-                      ? ExcludeSemantics(child: Text(' ', style: theme.bodyMedium))
-                      : Text(update, style: theme.bodyMedium),
-                ),
+                if (update == null)
+                  ExcludeSemantics(child: Text(' ', style: theme.bodyMedium))
+                else
+                  Text(update, style: theme.bodyMedium),
                 if (actions case final actions?) ...[const SizedBox(height: AppSpacing.sm), actions],
               ],
             ),
@@ -242,6 +232,7 @@ class _CatalogDescription extends StatelessWidget {
             text: TextSpan(text: description, style: resolvedStyle),
             textDirection: Directionality.of(context),
             textScaler: MediaQuery.textScalerOf(context),
+            hyphens: Hyphens.hidden,
           );
           final lines = (constraints.maxHeight / painter.preferredLineHeight).floor();
           if (lines < 1) {
@@ -255,7 +246,13 @@ class _CatalogDescription extends StatelessWidget {
 
           return Align(
             alignment: Alignment.topLeft,
-            child: Text(text, style: resolvedStyle, maxLines: lines, semanticsLabel: description),
+            child: Text(
+              text,
+              style: resolvedStyle,
+              maxLines: lines,
+              semanticsLabel: description,
+              hyphens: Hyphens.hidden,
+            ),
           );
         },
       ),

@@ -8,17 +8,22 @@ import '../../../../../support/test_app.dart';
 
 void main() {
   testWidgets('only watched episodes show a check; the semantic label includes status', (tester) async {
-    final check = find.byWidgetPredicate((widget) => widget is AppIcon && widget.color == AppPalette.success);
-    Widget card({bool watched = false, bool siteWatched = false}) => SizedBox(
+    final check = find.byWidgetPredicate(
+      (widget) => widget is AppIcon && (widget.color == AppPalette.success || widget.color == AppPalette.primary),
+    );
+    Widget card({bool watched = false, bool siteWatched = false, bool selected = false}) => SizedBox(
       width: 360,
       height: 220,
       child: EpisodeCard(
         episode: AnimeEpisode(number: 1, title: 'Серия 1', isWatched: siteWatched),
         isWatched: watched,
+        selected: selected,
         onTap: () => fail('No tap expected'),
       ),
     );
     await pumpTvApp(tester, card());
+    expect(check, findsNothing);
+    await pumpTvApp(tester, card(selected: true));
     expect(check, findsNothing);
     await pumpTvApp(tester, card(watched: true));
     expect(check, findsOneWidget);
@@ -26,8 +31,9 @@ void main() {
       find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Серия 1, просмотрена'),
       findsOneWidget,
     );
-    await pumpTvApp(tester, card(siteWatched: true));
+    await pumpTvApp(tester, card(siteWatched: true, selected: true));
     // Recheck the independently supplied HTML mark after replacing local status.
     expect(check, findsOneWidget);
+    expect(tester.getCenter(check).dx, greaterThan(tester.getCenter(find.byType(EpisodeCard)).dx));
   });
 }

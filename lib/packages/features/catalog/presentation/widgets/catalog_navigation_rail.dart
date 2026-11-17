@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show OverflowBoxFit, ScrollCacheExtent;
 import 'package:material_ui/material_ui.dart';
 import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -134,16 +134,28 @@ class CatalogNavigationRail extends StatelessWidget {
                                   child: Row(
                                     children: [
                                       AppIcon(_icon(item), size: iconExtent),
-                                      SizedBox(
-                                        width: progress * (tv ? AppSpacing.adaptiveTvControlGap : AppSpacing.md),
-                                      ),
                                       Expanded(
-                                        child: Opacity(
-                                          opacity: progress,
-                                          child: Text(
-                                            item.label,
-                                            maxLines: tv || MediaQuery.textScalerOf(context).scale(16) > 16 ? 2 : 1,
-                                            overflow: TextOverflow.ellipsis,
+                                        child: ClipRect(
+                                          child: OverflowBox(
+                                            fit: OverflowBoxFit.deferToChild,
+                                            alignment: Alignment.centerLeft,
+                                            minWidth: expandedSize - 4 * horizontal - iconExtent,
+                                            maxWidth: expandedSize - 4 * horizontal - iconExtent,
+                                            child: Opacity(
+                                              opacity: progress,
+                                              child: Padding(
+                                                padding: EdgeInsets.only(
+                                                  left: tv ? AppSpacing.adaptiveTvControlGap : AppSpacing.md,
+                                                ),
+                                                child: Text(
+                                                  item.label,
+                                                  maxLines: tv || MediaQuery.textScalerOf(context).scale(16) > 16
+                                                      ? 2
+                                                      : 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -159,7 +171,7 @@ class CatalogNavigationRail extends StatelessWidget {
                 ),
                 if (accountName case final name?)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md, left: AppSpacing.xs),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: ClipRect(
                       child: SizedBox(
                         height: 64,

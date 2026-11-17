@@ -26,6 +26,7 @@ class HomeScreen extends ConsumerStatefulWidget {
     this.onRootBack,
     this.destination = HomeDestination.home,
     this.onDestinationSelected,
+    this.shellController,
     super.key,
   });
 
@@ -41,6 +42,7 @@ class HomeScreen extends ConsumerStatefulWidget {
   final VoidCallback? onRootBack;
   final HomeDestination destination;
   final ValueChanged<HomeDestination>? onDestinationSelected;
+  final TvRouteShellController? shellController;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -57,6 +59,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _attachShell();
     _destination = widget.destination == HomeDestination.favorites && widget.onSignIn != null
         ? HomeDestination.home
         : widget.destination;
@@ -69,6 +72,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     }
   }
+
+  void _attachShell() {
+    widget.shellController
+      ?..owner = this
+      ..focusFirst = _focusFirst
+      ..consumeBack = _consumeBack;
+  }
+
+  bool _consumeBack() => _destination == HomeDestination.search && (_search.currentState?.finishEditing() ?? false);
 
   Widget _sections(VoidCallback? onNavigation) => IndexedStack(
     index: _destination.index,
@@ -168,6 +180,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void didUpdateWidget(covariant HomeScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.shellController != widget.shellController) {
+      oldWidget.shellController?.clear(this);
+      _attachShell();
+    }
     if (widget.destination == HomeDestination.favorites && widget.onSignIn != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -191,38 +207,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => !AppLayoutScope.isTvOf(context)
-      ? MobileHomeShell(
+  void dispose() {
+    widget.shellController?.clear(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppLayoutScope.isTvOf(context)) {
+      return MobileHomeShell(
+        accountName: widget.accountName,
+        accountImageUrl: widget.accountImageUrl,
+        destination: _destination,
+        onDestinationSelected: _select,
+        onOpenLogs: widget.onOpenLogs,
+        onSignOut: widget.onSignOut,
+        onSignIn: widget.onSignIn,
+        onRootBack: widget.onRootBack,
+        root: true,
+        showContextTitle: _destination != HomeDestination.genres,
+        content: Builder(builder: (_) => _sections(null)),
+      );
+    }
+    if (widget.shellController case final controller?) {
+      return _sections(controller.openNavigation);
+    }
+    return Scaffold(
+      backgroundColor: AppPalette.background,
+      body: SafeArea(
+        child: TvRouteShell(
+          destination: _destination,
           accountName: widget.accountName,
           accountImageUrl: widget.accountImageUrl,
-          destination: _destination,
           onDestinationSelected: _select,
-          onOpenLogs: widget.onOpenLogs,
           onSignOut: widget.onSignOut,
           onSignIn: widget.onSignIn,
+          onOpenLogs: widget.onOpenLogs,
           onRootBack: widget.onRootBack,
           root: true,
-          showContextTitle: _destination != HomeDestination.genres,
-          content: Builder(builder: (_) => _sections(null)),
-        )
-      : Scaffold(
-          backgroundColor: AppPalette.background,
-          body: SafeArea(
-            child: TvRouteShell(
-              destination: _destination,
-              accountName: widget.accountName,
-              accountImageUrl: widget.accountImageUrl,
-              onDestinationSelected: _select,
-              onSignOut: widget.onSignOut,
-              onSignIn: widget.onSignIn,
-              onOpenLogs: widget.onOpenLogs,
-              onRootBack: widget.onRootBack,
-              root: true,
-              onActivateContent: _focusFirst,
-              consumeBack: () =>
-                  _destination == HomeDestination.search && (_search.currentState?.finishEditing() ?? false),
-              builder: _sections,
-            ),
-          ),
-        );
+          onActivateContent: _focusFirst,
+          consumeBack: _consumeBack,
+          builder: _sections,
+        ),
+      ),
+    );
+  }
 }

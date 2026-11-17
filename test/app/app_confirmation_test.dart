@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:anistar_tv/app/app_confirmation.dart';
+import 'package:anistar_tv/app/app_router.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/home_screen.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
+import 'package:app_logging/app_logging.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,6 +17,99 @@ import '../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../support/test_app.dart';
 
 void main() {
+  for (final finishExpansion in [false, true]) {
+    testWidgets('router Left Left Back keeps exit confirmation open, expanded=$finishExpansion', (tester) async {
+      var exits = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'SystemNavigator.pop') exits++;
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      final router = AppRouter(AppLogger.logger);
+      addTearDown(router.dispose);
+      await pumpTvApp(
+        tester,
+        MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
+        wrapInScaffold: false,
+        overrides: [
+          authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        ],
+      );
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      if (finishExpansion) await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Выйти из приложения?'), findsOneWidget);
+      expect(focusedControlLabel(tester), 'Отмена подтверждения');
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pumpAndSettle();
+      expect(find.text('Выйти из приложения?'), findsOneWidget);
+      expect(exits, 0);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Выйти из приложения?'), findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('Выйти из приложения?'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+      expect(exits, 1);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  }
+
+  testWidgets('Android hardware Back and its system dispatch change only one route', (tester) async {
+    final router = AppRouter(AppLogger.logger);
+    addTearDown(router.dispose);
+    await pumpTvApp(
+      tester,
+      MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+      ],
+    );
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+
+    final title = find.text('Выйти из приложения?');
+    const back = LogicalKeyboardKey.goBack;
+    expect(focusedControlLabel(tester), 'Главная');
+
+    Future<void> pressNativeBack({required bool opensDialog}) async {
+      final keyDownHandled = await tester.sendKeyDownEvent(back, physicalKey: PhysicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      final dialogsOnKeyDown = title.evaluate().length;
+      final keyUpHandled = await tester.sendKeyUpEvent(back, physicalKey: PhysicalKeyboardKey.escape);
+      // Android can receive a redispatched key-up after the focused Flutter
+      // route changes. Its default Back action then arrives through popRoute.
+      if (!keyUpHandled) await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(title, opensDialog ? findsOneWidget : findsNothing);
+      expect(dialogsOnKeyDown, opensDialog ? 0 : 1);
+      expect(keyDownHandled, isFalse);
+      expect(keyUpHandled, isFalse);
+    }
+
+    await pressNativeBack(opensDialog: true);
+    expect(focusedControlLabel(tester), 'Отмена подтверждения');
+    await tester.pump(const Duration(seconds: 2));
+    expect(title, findsOneWidget);
+    await pressNativeBack(opensDialog: false);
+    expect(focusedControlLabel(tester), 'Главная');
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
     testWidgets('$platform root exit preserves account and requires Android confirmation', (tester) async {
       var exits = 0;
