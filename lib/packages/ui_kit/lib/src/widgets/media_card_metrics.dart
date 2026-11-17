@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../theme/app_spacing.dart';
+import '../theme/app_sizes.dart';
 
 /// Measures the copy area inside an episode card.
 ///

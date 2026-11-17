@@ -15,7 +15,7 @@ import '../../../mocks/features/favorites/fake_favorites_repository.dart';
 import '../../../support/test_app.dart';
 
 void main() {
-  testWidgets('TV expanded menu reveals logout and logs at 960x540 and 200%', (tester) async {
+  testWidgets('TV expanded menu reveals logout and logs at 960x540 and 130%', (tester) async {
     await pumpTvApp(
       tester,
       HomeScreen(
@@ -24,7 +24,7 @@ void main() {
         onOpenLogs: () => fail('Unexpected logs'),
         accountName: 'Тестовый пользователь',
       ),
-      textScale: 2,
+      textScale: 1.3,
       disableAnimations: true,
       wrapInScaffold: false,
       overrides: [

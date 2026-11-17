@@ -28,9 +28,13 @@ abstract final class AppFocusStyle {
     boxShadow: focused ? const [BoxShadow(color: AppPalette.focusGlow, blurRadius: AppSizes.focusBlur)] : const [],
   );
 
-  static ButtonStyle button({bool selected = false, BorderRadius radius = AppRadii.medium}) =>
+  static ButtonStyle button({
+    bool selected = false,
+    BorderRadius radius = AppRadii.medium,
+    double controlExtent = AppSizes.tvControl,
+  }) =>
       TextButton.styleFrom(
-        minimumSize: const Size(AppSizes.tvControl, AppSizes.tvControl),
+        minimumSize: Size(controlExtent, controlExtent),
         foregroundColor: selected ? AppPalette.primary : AppPalette.textPrimary,
         disabledForegroundColor: AppPalette.textSecondary.withValues(alpha: 0.45),
         backgroundColor: Colors.transparent,

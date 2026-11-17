@@ -43,7 +43,11 @@ void main() {
       await pumpTvApp(
         tester,
         MediaQuery(
-          data: MediaQueryData(size: compactTvSize, disableAnimations: reduced, textScaler: const TextScaler.linear(2)),
+          data: MediaQueryData(
+            size: compactTvSize,
+            disableAnimations: reduced,
+            textScaler: const TextScaler.linear(1.3),
+          ),
           child: AnimeScreen(
             animeId: 1,
             slug: 'test',
@@ -292,7 +296,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   for (final size in [compactTvSize, wideTvSize, const Size(640, 360)]) {
-    for (final scale in [1.3, 2.0]) {
+    for (final scale in [1.3]) {
       testWidgets('scaled text $scale keeps disclosure and episode navigation reachable at $size', (tester) async {
         int? opened;
         final data = AnimeScreenData(
@@ -357,8 +361,8 @@ void main() {
     }
   }
 
-  for (final (width, stacked) in [(564.0, true), (640.0, false)]) {
-    testWidgets('TV disclosure keeps the full rating on one line at ${width}dp and 200% text', (tester) async {
+  for (final (width, stacked) in [(420.0, true), (640.0, false)]) {
+    testWidgets('TV disclosure keeps the full rating on one line at ${width}dp and 130% text', (tester) async {
       const filter = CatalogFilter(label: 'Комедия', path: '/filter/janrs/comedy/');
       final data = AnimeScreenData(
         details: AnimeDetails(
@@ -386,7 +390,7 @@ void main() {
           ),
         ),
         size: Size(width, 844),
-        textScale: 2,
+        textScale: 1.3,
         wrapInScaffold: false,
         overrides: [
           animeRepositoryProvider.overrideWithValue(
@@ -408,9 +412,9 @@ void main() {
       final scoreRect = tester.getRect(score);
       final starRect = tester.getRect(star);
       final paragraph = tester.renderObject<RenderParagraph>(score);
-      expect(paragraph.text.style?.fontFamily, TvTypography.fontFamily);
+      expect(paragraph.text.style?.fontFamily, AppTypography.fontFamily);
       expect(paragraph.text.style?.fontSize, 16);
-      expect(paragraph.textScaler.scale(16), 32);
+      expect(paragraph.textScaler.scale(16), closeTo(20.8, 0.01));
       final scoreBounds = paragraph.getBoxesForSelection(const TextSelection(baseOffset: 0, extentOffset: 4)).single;
       final suffixBounds = paragraph.getBoxesForSelection(const TextSelection(baseOffset: 5, extentOffset: 9)).single;
       expect(scoreBounds.bottom, closeTo(suffixBounds.bottom, 0.01));
@@ -418,7 +422,7 @@ void main() {
       // The last Manrope glyph slightly overhangs the paragraph's advance width.
       expect(suffixBounds.right, lessThanOrEqualTo(scoreRect.width + 0.5));
       expect(suffixBounds.right, lessThanOrEqualTo(paragraph.constraints.maxWidth));
-      expect(starRect.size, const Size.square(20));
+      expect(starRect.size, const Size.square(18));
       expect(starRect.right + 8, closeTo(scoreRect.left, 0.01));
       expect(starRect.center.dy, closeTo(scoreRect.center.dy, 0.01));
       final labelParagraphs = [

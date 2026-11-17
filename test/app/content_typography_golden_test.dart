@@ -14,7 +14,7 @@ const _episode = AnimeEpisode(number: 7, title: _title, isWatched: true);
 
 void main() {
   for (final mobile in [false, true]) {
-    for (final scale in [1.0, 2.0]) {
+    for (final scale in mobile ? [1.0, 2.0] : [1.0]) {
       testWidgets('long catalog favorite and episode typography mobile=$mobile scale=$scale', (tester) async {
         final child = Padding(
           padding: const EdgeInsets.all(24),

@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 /// A playback control shares the UI Kit input path on TV and touch devices.
@@ -26,12 +27,12 @@ class PlayerControlButton extends StatelessWidget {
     final tv = AppLayoutScope.isTvOf(context);
     final extent = switch ((primary, tv)) {
       (true, false) => AppSizes.touchControl + AppSpacing.md,
-      (_, true) => AppSizes.tvControl,
+      (_, true) => AppSizes.adaptiveTvControl,
       _ => AppSizes.touchControl,
     };
     final glyphSize = switch ((primary, tv)) {
       (true, false) => 36.0,
-      (_, true) => 30.0,
+      (_, true) => 4.17.vmin.clamp(24.0, 30.0),
       _ => 26.0,
     };
 
@@ -55,7 +56,7 @@ class PlayerControlButton extends StatelessWidget {
         duration: AppMotion.durationOf(context, state.focused ? AppMotion.fast : AppMotion.focusExit),
         curve: state.focused ? AppMotion.enterCurve : AppMotion.exitCurve,
         constraints: BoxConstraints(minWidth: extent, minHeight: extent),
-        padding: const EdgeInsets.all(AppSpacing.sm),
+        padding: EdgeInsets.all(tv ? 1.12.h.clamp(6.0, 8.0) : AppSpacing.sm),
         decoration: AppFocusStyle.decoration(
           focused: active,
           pressed: state.pressed,
@@ -66,7 +67,8 @@ class PlayerControlButton extends StatelessWidget {
           child: IconTheme(
             data: IconThemeData(color: foreground, size: glyphSize),
             child: DefaultTextStyle.merge(
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: foreground, fontWeight: FontWeight.w600),
+              style: (tv ? AppTypography.metadataControlTextOf(context) : Theme.of(context).textTheme.titleSmall)
+                  ?.copyWith(color: foreground, fontWeight: FontWeight.w600),
               child: Center(widthFactor: 1, heightFactor: 1, child: ExcludeSemantics(child: child)),
             ),
           ),

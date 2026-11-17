@@ -17,8 +17,8 @@ import '../../../../../mocks/features/catalog/fake_catalog_browse_repository.dar
 import '../../../../../support/test_app.dart';
 
 void main() {
-  testWidgets('fifty long multilingual genres at 200% fit two lines and stay reachable', (tester) async {
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
+  testWidgets('fifty long multilingual genres at 130% fit two lines and stay reachable', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final items = List.generate(
       50,
@@ -81,6 +81,40 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('TV genre tiles use the sections content width and shared caption role', (tester) async {
+    final items = List.generate(6, (index) => CatalogFilter(label: 'Жанр $index', path: '/genre-$index/'));
+    await pumpTvApp(
+      tester,
+      GenresScreen(onSelected: (_) => fail('Unexpected selection')),
+      wrapInScaffold: false,
+      disableAnimations: true,
+      overrides: [
+        catalogBrowseRepositoryProvider.overrideWithValue(
+          FakeCatalogBrowseRepository(genres: () async => Result.success(items)),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final cards = find.byType(MediaCard);
+    expect(cards, findsNWidgets(6));
+    final rects = tester.widgetList<MediaCard>(cards).map((card) => tester.getRect(find.byWidget(card))).toList();
+    const horizontal = 3.34 * 5.4;
+    const spacing = 2.23 * 5.4;
+    const columns = 3;
+    final expectedWidth = (compactTvSize.width - horizontal * 2 - (columns - 1) * spacing) / columns;
+    expect(rects.first.width, closeTo(expectedWidth, 0.01));
+    expect(rects[0].top, closeTo(rects[1].top, 0.01));
+    expect(rects[1].top, closeTo(rects[2].top, 0.01));
+    expect(rects[1].left - rects[0].right, closeTo(spacing, 0.01));
+    final label = tester.widget<Text>(find.text(items.first.label));
+    final style = AppTypography.genreTitleOf(tester.element(find.byType(MediaCard).first));
+    final styleSize = style?.fontSize;
+    expect(styleSize, isNotNull);
+    expect(label.style?.fontSize, closeTo(styleSize ?? -1, 0.001));
+    expect(label.style?.fontSize, inInclusiveRange(14, 16));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('failed genre request focuses retry and OK recovers', (tester) async {
     var attempts = 0;

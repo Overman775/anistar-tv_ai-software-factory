@@ -5,6 +5,7 @@ import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../catalog_providers.dart';
@@ -115,6 +116,7 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
         actionFocusNode: _retry,
         autofocusAction: _shouldFocusContent,
         onAction: _reload,
+        adaptiveTv: true,
       ),
     );
   }
@@ -187,6 +189,7 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
 
                   return LayoutBuilder(
                     builder: (context, constraints) {
+                      final tv = AppLayoutScope.isTvOf(context);
                       final textScale = MediaQuery.textScalerOf(context).scale(19) / 19;
                       _columns = switch (constraints.maxWidth / textScale) {
                         < 300 => 1,
@@ -194,15 +197,21 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
                         < 1100 => 3,
                         _ => 4,
                       };
-                      final width = (constraints.maxWidth - 48 - (_columns - 1) * 16) / _columns;
-                      final style = Theme.of(context).textTheme.titleMedium;
+                      final horizontal = tv ? 3.34.h.clamp(18.0, 24.0) : 24.0;
+                      final spacing = tv ? 2.23.h.clamp(12.0, 16.0) : 16.0;
+                      final width = (constraints.maxWidth - horizontal * 2 - (_columns - 1) * spacing) / _columns;
+                      final style = tv ? AppTypography.genreTitleOf(context) : Theme.of(context).textTheme.titleMedium;
                       final lineHeight =
                           MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 19) * (style?.height ?? 1.5);
 
-                      final tv = AppLayoutScope.isTvOf(context);
                       final content = SingleChildScrollView(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + (tv ? 0 : MediaQuery.paddingOf(context).bottom)),
+                        padding: EdgeInsets.fromLTRB(
+                          horizontal,
+                          horizontal,
+                          horizontal,
+                          horizontal + (tv ? 0 : MediaQuery.paddingOf(context).bottom),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -214,8 +223,8 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
                               const SizedBox(height: AppSpacing.lg),
                             ],
                             Wrap(
-                              spacing: 16,
-                              runSpacing: 16,
+                              spacing: spacing,
+                              runSpacing: spacing,
                               children: [
                                 for (final item in items)
                                   SizedBox(
@@ -225,6 +234,7 @@ class GenresScreenState extends ConsumerState<GenresScreen> {
                                       builder: (tileContext) => MediaCard(
                                         variant: MediaCardVariant.landscape,
                                         label: item.label,
+                                        titleStyle: tv ? style : null,
                                         imageUrl: item.imageUri?.toString(),
                                         focusNode: _nodes.putIfAbsent(
                                           item.path,

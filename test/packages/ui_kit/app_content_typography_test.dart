@@ -20,7 +20,7 @@ void main() {
             (AppContentTypography.episodeTitleOf(context), mobile ? text.bodyLarge : text.titleMedium),
             (AppContentTypography.episodeCaptionOf(context), mobile ? text.bodyMedium : text.labelMedium),
           ];
-          for (final (role, base) in roles) {
+          for (final (index, (role, base)) in roles.indexed) {
             if (role == null || base == null) {
               fail('Production theme must provide every content role');
             }
@@ -30,8 +30,17 @@ void main() {
               fail('Content roles must have an explicit logical font size');
             }
             expect(size, greaterThanOrEqualTo(14));
-            expect(baseSize - size, inInclusiveRange(0, 2));
-            expect(role.copyWith(fontSize: base.fontSize), base, reason: 'only the local size may change');
+            if (mobile) {
+              expect(baseSize - size, inInclusiveRange(0, 2));
+            } else {
+              final bounds = [(15, 15), (15, 15), (22, 26), (22, 26), (16, 18), (20, 24), (16, 18), (14, 16)];
+              expect(size, inInclusiveRange(bounds[index].$1, bounds[index].$2));
+            }
+            var expectedHeight = base.height;
+            if (!mobile && (index == 2 || index == 3)) expectedHeight = 1.16;
+            if (!mobile && index == 4) expectedHeight = 1.5;
+            expect(role.height, expectedHeight);
+            expect(role.copyWith(fontSize: base.fontSize, height: base.height), base);
             if (base.fontSize == 14) {
               expect(size, 14, reason: 'existing minimum-size roles must remain unchanged');
             }

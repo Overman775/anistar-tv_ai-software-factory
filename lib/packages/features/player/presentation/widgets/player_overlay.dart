@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
@@ -168,13 +169,20 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
     final selectedQuality = widget.session.selectedQuality;
     final value = widget.value;
     final durationMs = playerSliderMaximum(value.duration);
     final position = widget.previewPosition ?? value.position;
     final positionMs = playerSliderPosition(position, value.duration);
     final time = '${formatPlayerTime(position)} / ${formatPlayerTime(value.duration)}';
+    final pad = 4.45.h.clamp(24.0, 32.0);
+    final gap = AppSpacing.adaptiveTvControlGap;
+    final groupGap = 2.23.h.clamp(12.0, 16.0);
+    final glyph = 4.17.vmin.clamp(24.0, 30.0);
+    final titleStyle = AppTypography.playerTitleOf(context)?.copyWith(color: AppPalette.playerText);
+    final episodeStyle = AppTypography.playerEpisodeOf(context)?.copyWith(color: AppPalette.playerMuted);
+    final timeStyle = AppTypography.playerTimeOf(context)
+        ?.copyWith(color: AppPalette.playerText, fontFeatures: const [FontFeature.tabularFigures()]);
 
     return Focus(
       canRequestFocus: false,
@@ -189,7 +197,7 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
           ),
         ),
         child: SafeArea(
-          minimum: const EdgeInsets.all(AppSpacing.xl),
+          minimum: EdgeInsets.all(pad),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -201,28 +209,20 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                       label: 'К сериям',
                       focusNode: widget.backFocusNode ?? _back,
                       onPressed: widget.onBack,
-                      child: const AppIcon(AppIconType.arrowLeft),
+                      child: AppIcon(AppIconType.arrowLeft, size: glyph),
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: groupGap),
                   ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: textTheme.headlineMedium?.copyWith(
-                            color: AppPalette.playerText,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle),
                         Text(
                           'Серия ${widget.episodeNumber}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: textTheme.bodyLarge?.copyWith(color: AppPalette.playerMuted),
+                          style: episodeStyle,
                         ),
                       ],
                     ),
@@ -238,107 +238,131 @@ class _PlayerOverlayState extends State<PlayerOverlay> {
                   child: ExcludeFocus(
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(
-                        trackHeight: _timelineFocused ? 6 : 3,
+                        trackHeight: _timelineFocused ? 0.84.h.clamp(4.0, 6.0) : 0.42.h.clamp(2.0, 3.0),
                         activeTrackColor: AppPalette.primary,
                         inactiveTrackColor: AppPalette.playerMuted.withValues(alpha: 0.3),
                         secondaryActiveTrackColor: AppPalette.playerMuted.withValues(alpha: 0.6),
                         thumbColor: AppPalette.primary,
-                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: _timelineFocused ? 9 : 5),
-                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                        thumbShape: RoundSliderThumbShape(
+                          enabledThumbRadius: _timelineFocused ? 1.25.vmin.clamp(7.0, 9.0) : 0.7.vmin.clamp(4.0, 5.0),
+                        ),
+                        overlayShape: RoundSliderOverlayShape(overlayRadius: 2.23.vmin.clamp(12.0, 16.0)),
                         padding: EdgeInsets.zero,
                       ),
-                      child: Slider(
-                        key: const ValueKey('player-timeline'),
-                        value: positionMs.toDouble(),
-                        max: durationMs.toDouble(),
-                        secondaryTrackValue: _bufferedPosition.toDouble(),
-                        onChanged: value.duration.inMilliseconds > 0 ? _onSliderChanged : null,
-                        semanticFormatterCallback: _formatSliderPosition,
+                      child: SizedBox(
+                        height: 48,
+                        child: Slider(
+                          key: const ValueKey('player-timeline'),
+                          value: positionMs.toDouble(),
+                          max: durationMs.toDouble(),
+                          secondaryTrackValue: _bufferedPosition.toDouble(),
+                          onChanged: value.duration.inMilliseconds > 0 ? _onSliderChanged : null,
+                          semanticFormatterCallback: _formatSliderPosition,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  PlayerControlButton(
-                    buttonKey: 'player-play',
-                    label: value.isPlaying ? 'Пауза' : 'Воспроизвести',
-                    focusNode: widget.playFocusNode ?? _play,
-                    onPressed: widget.onPlayPause,
-                    primary: true,
-                    child: AppIcon(value.isPlaying ? AppIconType.pause : AppIconType.play),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  PlayerControlButton(
-                    buttonKey: 'player-rewind',
-                    label: 'Назад на 10 секунд',
-                    focusNode: _rewind,
-                    onPressed: _seekBackward,
-                    child: const AppIcon(AppIconType.rotateCcw),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  PlayerControlButton(
-                    buttonKey: 'player-forward',
-                    label: 'Вперёд на 10 секунд',
-                    focusNode: _forward,
-                    onPressed: _seekForward,
-                    child: const AppIcon(AppIconType.rotateCw),
-                  ),
-                  if (widget.onPreviousEpisode != null) ...[
-                    const SizedBox(width: AppSpacing.sm),
+              SizedBox(height: groupGap),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final largeText = MediaQuery.textScalerOf(context).scale(16) > 24;
+                  final split = constraints.maxWidth < 900 || largeText;
+                  final transport = <Widget>[
                     PlayerControlButton(
-                      buttonKey: 'player-previous-episode',
-                      label: 'Предыдущая серия',
-                      focusNode: _previousEpisode,
-                      onPressed: widget.onPreviousEpisode,
-                      child: const AppIcon(AppIconType.skipBack),
+                      buttonKey: 'player-play',
+                      label: value.isPlaying ? 'Пауза' : 'Воспроизвести',
+                      focusNode: widget.playFocusNode ?? _play,
+                      onPressed: widget.onPlayPause,
+                      primary: true,
+                      child: AppIcon(value.isPlaying ? AppIconType.pause : AppIconType.play, size: glyph),
                     ),
-                  ],
-                  if (widget.onNextEpisode != null) ...[
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: gap),
                     PlayerControlButton(
-                      buttonKey: 'player-next-episode',
-                      label: 'Следующая серия',
-                      focusNode: _nextEpisode,
-                      onPressed: widget.onNextEpisode,
-                      child: const AppIcon(AppIconType.skipForward),
+                      buttonKey: 'player-rewind',
+                      label: 'Назад на 10 секунд',
+                      focusNode: _rewind,
+                      onPressed: _seekBackward,
+                      child: AppIcon(AppIconType.rotateCcw, size: glyph),
                     ),
-                  ],
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Text(
-                      time,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyLarge?.copyWith(
-                        color: AppPalette.playerText,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    SizedBox(width: gap),
+                    PlayerControlButton(
+                      buttonKey: 'player-forward',
+                      label: 'Вперёд на 10 секунд',
+                      focusNode: _forward,
+                      onPressed: _seekForward,
+                      child: AppIcon(AppIconType.rotateCw, size: glyph),
+                    ),
+                    if (widget.onPreviousEpisode != null) ...[
+                      SizedBox(width: gap),
+                      PlayerControlButton(
+                        buttonKey: 'player-previous-episode',
+                        label: 'Предыдущая серия',
+                        focusNode: _previousEpisode,
+                        onPressed: widget.onPreviousEpisode,
+                        child: AppIcon(AppIconType.skipBack, size: glyph),
                       ),
-                    ),
-                  ),
-                  if (widget.onSelectEpisode != null) ...[
-                    const SizedBox(width: AppSpacing.md),
-                    PlayerControlButton(
-                      buttonKey: 'player-episodes',
-                      label: 'Серии',
-                      focusNode: _episodes,
-                      onPressed: widget.onSelectEpisode,
-                      child: const AppIcon(AppIconType.listVideo),
-                    ),
-                  ],
-                  if (widget.onSelectQuality != null) ...[
-                    const SizedBox(width: AppSpacing.sm),
-                    PlayerControlButton(
-                      buttonKey: 'player-quality',
-                      label: 'Качество: ${selectedQuality.label}',
-                      focusNode: _quality,
-                      onPressed: widget.onSelectQuality,
-                      child: Text(selectedQuality.shortLabel),
-                    ),
-                  ],
-                ],
+                    ],
+                    if (widget.onNextEpisode != null) ...[
+                      SizedBox(width: gap),
+                      PlayerControlButton(
+                        buttonKey: 'player-next-episode',
+                        label: 'Следующая серия',
+                        focusNode: _nextEpisode,
+                        onPressed: widget.onNextEpisode,
+                        child: AppIcon(AppIconType.skipForward, size: glyph),
+                      ),
+                    ],
+                  ];
+                  final timer = Text(time, maxLines: 1, softWrap: false, style: timeStyle);
+                  final tools = <Widget>[
+                    if (widget.onSelectEpisode != null)
+                      PlayerControlButton(
+                        buttonKey: 'player-episodes',
+                        label: 'Серии',
+                        focusNode: _episodes,
+                        onPressed: widget.onSelectEpisode,
+                        child: AppIcon(AppIconType.listVideo, size: glyph),
+                      ),
+                    if (widget.onSelectEpisode != null && widget.onSelectQuality != null) SizedBox(width: gap),
+                    if (widget.onSelectQuality != null)
+                      PlayerControlButton(
+                        buttonKey: 'player-quality',
+                        label: 'Качество: ${selectedQuality.label}',
+                        focusNode: _quality,
+                        onPressed: widget.onSelectQuality,
+                        child: Text(selectedQuality.shortLabel),
+                      ),
+                  ];
+
+                  if (split) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: transport),
+                        SizedBox(height: gap),
+                        Row(
+                          children: [
+                            Expanded(child: timer),
+                            SizedBox(width: groupGap),
+                            ...tools,
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      ...transport,
+                      SizedBox(width: groupGap),
+                      Expanded(child: timer),
+                      SizedBox(width: groupGap),
+                      ...tools,
+                    ],
+                  );
+                },
               ),
             ],
           ),

@@ -113,7 +113,15 @@ class _CatalogPosterRailState extends State<CatalogPosterRail> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(padding: EdgeInsets.fromLTRB(anchor, 16, anchor, 8), child: widget.heading),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            anchor,
+            CatalogLayout.headingTopPadding,
+            anchor,
+            CatalogLayout.headingBottomPadding,
+          ),
+          child: widget.heading,
+        ),
         SizedBox(
           key: _viewport,
           height: height + CatalogLayout.railTopPadding + CatalogLayout.railBottomPadding,
@@ -159,20 +167,23 @@ class _CatalogPosterRailState extends State<CatalogPosterRail> {
                       }
                       final selected = widget.selectedId == anime.id;
 
-                      return Align(
+                      return _RetainedPoster(
                         key: ValueKey(anime.id),
-                        alignment: Alignment.centerLeft,
-                        child: AnimatedScale(
-                          scale: selected ? 1.08 : 0.94,
-                          duration: AppMotion.durationOf(
-                            context,
-                            selected ? AppMotion.focusBorderEnter : AppMotion.focusBorderExit,
-                          ),
-                          curve: selected ? AppMotion.enterCurve : AppMotion.exitCurve,
-                          child: SizedBox(
-                            width: width,
-                            height: height,
-                            child: widget.itemBuilder(context, anime, index, step),
+                        selected: selected,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedScale(
+                            scale: selected ? 1.08 : 0.94,
+                            duration: AppMotion.durationOf(
+                              context,
+                              selected ? AppMotion.focusBorderEnter : AppMotion.focusBorderExit,
+                            ),
+                            curve: selected ? AppMotion.enterCurve : AppMotion.exitCurve,
+                            child: SizedBox(
+                              width: width,
+                              height: height,
+                              child: widget.itemBuilder(context, anime, index, step),
+                            ),
                           ),
                         ),
                       );
@@ -195,4 +206,31 @@ class _CatalogPosterRailState extends State<CatalogPosterRail> {
             decoration: BoxDecoration(color: AppPalette.surfaceElevated, borderRadius: AppRadii.large),
           ),
   );
+}
+
+class _RetainedPoster extends StatefulWidget {
+  const _RetainedPoster({required this.selected, required this.child, super.key});
+
+  final bool selected;
+  final Widget child;
+
+  @override
+  State<_RetainedPoster> createState() => _RetainedPosterState();
+}
+
+class _RetainedPosterState extends State<_RetainedPoster> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => widget.selected;
+
+  @override
+  void didUpdateWidget(covariant _RetainedPoster oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) updateKeepAlive();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
 }

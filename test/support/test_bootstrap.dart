@@ -12,7 +12,7 @@ import 'offline_http_overrides.dart';
 Future<void> runTestSuite(FutureOr<void> Function() testMain) async {
   TestWidgetsFlutterBinding.ensureInitialized();
   AppLogger.initForTest();
-  final fontLoader = FontLoader(TvTypography.fontFamily)
+  final fontLoader = FontLoader(AppTypography.fontFamily)
     ..addFont(rootBundle.load(Assets.fonts.manrope400))
     ..addFont(rootBundle.load(Assets.fonts.manrope500))
     ..addFont(rootBundle.load(Assets.fonts.manrope600))

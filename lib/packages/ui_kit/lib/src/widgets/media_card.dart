@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 
 import '../theme/app_content_typography.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_typography.dart';
 import 'app_icon.dart';
+import 'app_layout_scope.dart';
 import 'app_metadata_badge.dart';
 import 'app_network_image.dart';
 import 'media_card_bookmark.dart';
@@ -22,6 +25,7 @@ class MediaCard extends StatelessWidget {
     this.caption,
     this.showCaption = true,
     this.showBookmark = false,
+    this.titleStyle,
     this.ratingLabel,
     this.isWatched = false,
     this.showEpisodeTrailing = false,
@@ -50,6 +54,9 @@ class MediaCard extends StatelessWidget {
   final String? caption;
   final bool showCaption;
   final bool showBookmark;
+
+  /// Overrides the visual title/caption role without changing the accessible label.
+  final TextStyle? titleStyle;
 
   /// A localized score, without its scale. The caller decides where it is shown.
   final String? ratingLabel;
@@ -110,9 +117,10 @@ class MediaCard extends StatelessWidget {
   }
 
   TextStyle? _titleStyle(BuildContext context) =>
-      (variant == MediaCardVariant.episode
-              ? AppContentTypography.episodeTitleOf(context)
-              : AppContentTypography.cardTitleOf(context))
+      (titleStyle ??
+              (variant == MediaCardVariant.episode
+                  ? AppContentTypography.episodeTitleOf(context)
+                  : AppContentTypography.cardTitleOf(context)))
           ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600);
 
   Widget _copy(BuildContext context, {int titleLines = 2, bool compact = false}) => Column(
@@ -144,14 +152,18 @@ class MediaCard extends StatelessWidget {
   Widget _episode() => LayoutBuilder(
     builder: (context, constraints) {
       final width = constraints.hasBoundedWidth ? constraints.maxWidth : AppSizes.sideSheet;
+      final tv = AppLayoutScope.isTvOf(context);
+      final inset = tv ? 1.12.h.clamp(6.0, 8.0) : AppSpacing.sm;
+      final markPadding = tv ? 0.56.h.clamp(3.0, 4.0) : AppSpacing.xs;
+      final markGlyph = tv ? 2.78.vmin.clamp(16.0, 20.0) : 20.0;
+      final trailingGlyph = tv ? 3.34.vmin.clamp(20.0, 24.0) : 24.0;
       final metrics = MediaCardMetrics(
         width: width,
         label: label,
         caption: caption,
         showCaption: showCaption,
         minimumHeight: episodeHeight,
-        titleStyle: AppContentTypography.episodeTitleOf(context)
-            ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w600),
+        titleStyle: _titleStyle(context),
         captionStyle: AppContentTypography.episodeCaptionOf(context)?.copyWith(color: AppPalette.textSecondary),
         textScaler: MediaQuery.textScalerOf(context),
         direction: Directionality.of(context),
@@ -163,14 +175,14 @@ class MediaCard extends StatelessWidget {
           Positioned(left: 0, right: 0, bottom: 0, child: MediaCardCaptionUnderlay(child: _copy(context))),
           if (selected || busy || leading != null)
             Positioned(
-              top: AppSpacing.sm,
-              left: AppSpacing.sm,
+              top: inset,
+              left: inset,
               child: ExcludeSemantics(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  spacing: AppSpacing.xs,
+                  spacing: markPadding,
                   children: [
-                    if (selected) const _EpisodeMark(color: AppPalette.primary),
+                    if (selected) _EpisodeMark(color: AppPalette.primary, padding: markPadding, glyph: markGlyph),
                     ?leading,
                     if (busy) const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2)),
                   ],
@@ -179,22 +191,22 @@ class MediaCard extends StatelessWidget {
             ),
           if (isWatched || badges.isNotEmpty)
             Positioned(
-              top: AppSpacing.sm,
-              right: AppSpacing.sm,
+              top: inset,
+              right: inset,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
-                spacing: AppSpacing.xs,
+                spacing: markPadding,
                 children: [
-                  if (isWatched) const _EpisodeMark(color: AppPalette.success),
+                  if (isWatched) _EpisodeMark(color: AppPalette.success, padding: markPadding, glyph: markGlyph),
                   ...badges,
                 ],
               ),
             ),
           if (showEpisodeTrailing)
             Positioned(
-              right: AppSpacing.sm,
-              bottom: AppSpacing.sm,
-              child: ExcludeSemantics(child: trailing ?? const AppIcon(AppIconType.play, size: 24)),
+              right: inset,
+              bottom: inset,
+              child: ExcludeSemantics(child: trailing ?? AppIcon(AppIconType.play, size: trailingGlyph)),
             ),
         ],
       );
@@ -242,6 +254,18 @@ class MediaCard extends StatelessWidget {
         return _episode();
       }
 
+      final tv = AppLayoutScope.isTvOf(context);
+      final badgeInset = tv ? 0.63.w.clamp(6.0, 8.0) : AppSpacing.sm;
+      final bookmarkInset = tv ? 1.25.w.clamp(12.0, 16.0) : AppSpacing.md;
+      final ratingIcon = tv ? 2.23.vmin.clamp(14.0, 16.0) : 16.0;
+      final ratingText = tv
+          ? AppTypography.metadataControlTextOf(context)
+                ?.copyWith(color: AppPalette.textPrimary, fontWeight: FontWeight.w700)
+          : null;
+      final bookmarkWidth = tv ? 2.82.w.clamp(30.0, 36.0) : 36.0;
+      final bookmarkHeight = tv ? 6.67.h.clamp(40.0, 48.0) : 48.0;
+      final bookmarkGlyph = tv ? 3.89.vmin.clamp(22.0, 28.0) : 28.0;
+
       return AspectRatio(
         aspectRatio: variant == MediaCardVariant.poster ? AppSizes.posterRatio : AppSizes.landscapeRatio,
         child: Stack(
@@ -249,7 +273,7 @@ class MediaCard extends StatelessWidget {
           children: [
             ExcludeSemantics(child: _image()),
             CustomMultiChildLayout(
-              delegate: _PosterOverlayLayout(),
+              delegate: _PosterOverlayLayout(badgeInset: badgeInset, bookmarkInset: bookmarkInset),
               children: [
                 LayoutId(id: _PosterOverlay.caption, child: _posterCaption()),
                 if (busy || ratingLabel != null || badges.isNotEmpty)
@@ -261,7 +285,12 @@ class MediaCard extends StatelessWidget {
                       children: [
                         if (ratingLabel case final rating?)
                           Flexible(
-                            child: AppMetadataBadge(icon: Icons.grade_rounded, label: rating),
+                            child: AppMetadataBadge(
+                              icon: Icons.grade_rounded,
+                              label: rating,
+                              iconSize: ratingIcon,
+                              textStyle: ratingText,
+                            ),
                           ),
                         for (final badge in badges) Flexible(child: badge),
                         if (busy)
@@ -269,7 +298,25 @@ class MediaCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                if (showBookmark) LayoutId(id: _PosterOverlay.bookmark, child: const MediaCardBookmark()),
+                if (showBookmark)
+                  LayoutId(
+                    id: _PosterOverlay.bookmark,
+                    child: MediaCardBookmark(
+                      width: bookmarkWidth,
+                      height: bookmarkHeight,
+                      iconSize: bookmarkGlyph,
+                      inset: tv ? bookmarkWidth * 0.11 : 4,
+                      notch: bookmarkHeight * 0.125,
+                      padding: tv
+                          ? EdgeInsets.fromLTRB(
+                              bookmarkWidth * 0.11,
+                              bookmarkHeight * 0.17,
+                              bookmarkWidth * 0.11,
+                              bookmarkHeight * 0.25,
+                            )
+                          : const EdgeInsets.fromLTRB(4, 8, 4, 12),
+                    ),
+                  ),
               ],
             ),
           ],
@@ -285,9 +332,14 @@ enum MediaCardVariant { poster, landscape, episode }
 enum _PosterOverlay { caption, badges, bookmark }
 
 class _PosterOverlayLayout extends MultiChildLayoutDelegate {
+  _PosterOverlayLayout({required this.badgeInset, required this.bookmarkInset});
+
+  final double badgeInset;
+  final double bookmarkInset;
+
   @override
   void performLayout(Size size) {
-    const badgeOffset = Offset(AppSpacing.sm, AppSpacing.sm);
+    final badgeOffset = Offset(badgeInset, badgeInset);
     final loose = BoxConstraints.loose(size);
     var badgeSize = Size.zero;
     if (hasChild(_PosterOverlay.badges)) {
@@ -301,7 +353,7 @@ class _PosterOverlayLayout extends MultiChildLayoutDelegate {
     var captionTop = 0.0;
     if (hasChild(_PosterOverlay.bookmark)) {
       final bookmark = layoutChild(_PosterOverlay.bookmark, loose);
-      final left = size.width - AppSpacing.md - bookmark.width;
+      final left = size.width - bookmarkInset - bookmark.width;
       final overlaps = badgeSize.width > 0 && badgeOffset.dx + badgeSize.width > left;
       final top = overlaps ? badgeOffset.dy + badgeSize.height + AppSpacing.xs : 0.0;
       positionChild(_PosterOverlay.bookmark, Offset(left, top));
@@ -320,20 +372,23 @@ class _PosterOverlayLayout extends MultiChildLayoutDelegate {
   }
 
   @override
-  bool shouldRelayout(covariant _PosterOverlayLayout oldDelegate) => false;
+  bool shouldRelayout(covariant _PosterOverlayLayout oldDelegate) =>
+      oldDelegate.badgeInset != badgeInset || oldDelegate.bookmarkInset != bookmarkInset;
 }
 
 class _EpisodeMark extends StatelessWidget {
-  const _EpisodeMark({required this.color});
+  const _EpisodeMark({required this.color, required this.padding, required this.glyph});
 
   final Color color;
+  final double padding;
+  final double glyph;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: const BoxDecoration(color: AppPalette.badge, borderRadius: AppRadii.small),
     child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      child: AppIcon(AppIconType.check, color: color, size: 20),
+      padding: EdgeInsets.all(padding),
+      child: AppIcon(AppIconType.check, color: color, size: glyph),
     ),
   );
 }

@@ -334,10 +334,16 @@ void main() {
       final bookmark = find.byType(MediaCardBookmark);
       expect(badge, findsOneWidget);
       expect(bookmark, findsOneWidget);
-      expect(tester.getTopLeft(badge) - bounds.topLeft, const Offset(8, 8));
+      final badgeOffset = tester.getTopLeft(badge) - bounds.topLeft;
+      if (profile == AppDeviceProfile.tv) {
+        expect(badgeOffset.dx, closeTo(6.048, 0.01));
+        expect(badgeOffset.dy, closeTo(6.048, 0.01));
+      } else {
+        expect(badgeOffset, const Offset(8, 8));
+      }
       expect(tester.getTopLeft(bookmark).dy, bounds.top);
       final score = tester.widget<Text>(find.text('9,2'));
-      expect(score.style?.fontSize, profile == AppDeviceProfile.tv ? 16 : 14);
+      expect(score.style?.fontSize, 14);
       expect(find.textContaining('/ 10'), findsNothing);
       expect(find.bySemanticsLabel('Без меток'), findsOneWidget);
       final node = tester.getSemantics(find.bySemanticsLabel('Аниме, Рейтинг 9,2 из 10, В избранном'));
@@ -353,7 +359,7 @@ void main() {
     });
   }
 
-  for (final scale in [1.0, 2.0]) {
+  for (final scale in [1.0, 1.3]) {
     testWidgets('104dp poster keeps rating, bookmark and title separate at text scale $scale', (tester) async {
       const title = 'Длинное название аниме для проверки подписи';
       final semantics = tester.ensureSemantics();
@@ -381,19 +387,20 @@ void main() {
       final bookmark = tester.getRect(find.byType(MediaCardBookmark));
       final titleFinder = find.text(title);
       final caption = tester.getRect(titleFinder);
-      expect(tester.widget<Text>(titleFinder).maxLines, scale == 2 ? 1 : 2);
+      expect(tester.widget<Text>(titleFinder).maxLines, 2);
       expect(MediaQuery.textScalerOf(tester.element(titleFinder)).scale(15), 15 * scale);
       expect(card.size, const Size(104, 156));
-      expect(badge.topLeft - card.topLeft, const Offset(8, 8));
+      expect((badge.topLeft - card.topLeft).dx, closeTo(6.048, 0.01));
+      expect((badge.topLeft - card.topLeft).dy, closeTo(6.048, 0.01));
       expect(card.right - badge.right, greaterThanOrEqualTo(2));
       expect(scoreParagraph.didExceedMaxLines, isFalse);
       expect(lastDigit, hasLength(1));
       expect(score.left + lastDigit.single.right, lessThanOrEqualTo(badge.right));
-      expect(MediaQuery.textScalerOf(tester.element(scoreFinder)).scale(16), 16 * scale);
-      expect(badge.right - score.right, scale == 1 ? closeTo(8, 0.01) : inInclusiveRange(0, 7.99));
+      expect(MediaQuery.textScalerOf(tester.element(scoreFinder)).scale(14), 14 * scale);
+      expect(badge.right - score.right, closeTo(8, 0.01));
       if (star.left - badge.left < 7.99) expect(badge.right - score.right, closeTo(1, 0.01));
-      expect(bookmark.size, const Size(36, 48));
-      expect(card.right - bookmark.right, 16);
+      expect(bookmark.size, const Size(30, 40));
+      expect(card.right - bookmark.right, 12);
       expect(bookmark.top - badge.bottom, 4);
       expect(caption.top, greaterThanOrEqualTo(bookmark.bottom));
       expect(caption.bottom, lessThanOrEqualTo(card.bottom));

@@ -278,7 +278,7 @@ void decodedPosterTests() {
       final settle = tester.pumpAndSettle;
       final resizedKey = await const ResizeImage(
         CachedNetworkImageProvider(url),
-        width: 104,
+        width: 92,
       ).obtainKey(ImageConfiguration.empty);
       final cache = PaintingBinding.instance.imageCache
         ..putIfAbsent(

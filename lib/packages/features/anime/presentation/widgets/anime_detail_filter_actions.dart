@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../catalog/domain/models/catalog_filter.dart';
@@ -25,10 +26,16 @@ class AnimeDetailFilterActions extends StatelessWidget {
   final RatingPresentation? rating;
 
   static const _labelWidth = 96.0;
-  static const _starSize = 20.0;
+
+  static double _starSizeOf(BuildContext context) =>
+      AppLayoutScope.isTvOf(context) ? 2.78.vmin.clamp(18.0, 20.0) : 20.0;
+
+  static TextStyle? _valueStyle(BuildContext context) => AppLayoutScope.isTvOf(context)
+      ? AppTypography.metadataTextOf(context)
+      : Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16);
 
   static TextSpan _ratingSpan(BuildContext context, RatingPresentation rating) => TextSpan(
-    style: DefaultTextStyle.of(context).style.merge(Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16)),
+    style: DefaultTextStyle.of(context).style.merge(_valueStyle(context)),
     children: [
       TextSpan(
         text: rating.label,
@@ -42,7 +49,7 @@ class AnimeDetailFilterActions extends StatelessWidget {
   );
 
   static TextStyle? _headingStyle(BuildContext context) =>
-      Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16, color: AppPalette.textSecondary);
+      _valueStyle(context)?.copyWith(color: AppPalette.textSecondary);
 
   static double _textWidth(BuildContext context, TextSpan span) {
     final painter = TextPainter(
@@ -73,7 +80,7 @@ class AnimeDetailFilterActions extends StatelessWidget {
     final value = rating;
     final ratingWidth = value == null
         ? 0.0
-        : _starSize + AppSpacing.sm + _textWidth(context, _ratingSpan(context, value));
+        : _starSizeOf(context) + AppSpacing.sm + _textWidth(context, _ratingSpan(context, value));
 
     return _labelWidthOf(context) + AppSpacing.sm + math.max(minimumValueWidth, ratingWidth);
   }
@@ -97,7 +104,7 @@ class AnimeDetailFilterActions extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: AppSpacing.sm,
                   children: [
-                    const AppIcon(AppIconType.star, size: _starSize, color: AppPalette.secondary),
+                    AppIcon(AppIconType.star, size: _starSizeOf(context), color: AppPalette.secondary),
                     Text.rich(_ratingSpan(context, value), softWrap: false),
                   ],
                 ),

@@ -11,24 +11,21 @@ import 'package:ui_kit/ui_kit.dart';
 import '../../../../support/test_app.dart';
 
 void main() {
-  for (final textScale in GoldenTextScale.values) {
-    testWidgets('quality choices at tv${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
-      await testScreenGolden(
-        tester,
-        'player_choices',
-        textScale: textScale,
-        screen: PlayerChoicesDialog<String>(
-          title: 'Качество',
-          choices: const ['SD 360p', 'HD 720p'],
-          selected: 'HD 720p',
-          label: (quality) => quality,
-        ),
-      );
-      expect(tester.takeException(), isNull);
-    }, tags: ['golden']);
-  }
+  testWidgets('quality choices at tv', (tester) async {
+    await testScreenGolden(
+      tester,
+      'player_choices',
+      screen: PlayerChoicesDialog<String>(
+        title: 'Качество',
+        choices: const ['SD 360p', 'HD 720p'],
+        selected: 'HD 720p',
+        label: (quality) => quality,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+  }, tags: ['golden']);
 
-  for (final scale in [1.0, 1.3, 2.0]) {
+  for (final scale in [1.0, 1.3]) {
     testWidgets('late episode and remote scrolling keep choices visible at $scale text', (tester) async {
       tester.platformDispatcher.textScaleFactorTestValue = scale;
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);

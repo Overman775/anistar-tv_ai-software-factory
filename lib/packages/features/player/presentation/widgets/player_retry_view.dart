@@ -52,6 +52,7 @@ class _PlayerRetryViewState extends State<PlayerRetryView> {
       actionLabel: 'Повторить',
       actionFocusNode: _focusNode,
       onAction: widget.onRetry,
+      adaptiveTv: true,
     );
     if (AppLayoutScope.isTvOf(context) || widget.onBack == null) {
       return state;

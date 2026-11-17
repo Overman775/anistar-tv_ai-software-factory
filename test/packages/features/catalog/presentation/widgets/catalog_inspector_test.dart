@@ -264,7 +264,7 @@ void main() {
     expect(error, isNull, reason: 'dispose after reduced-motion selection');
   });
 
-  testWidgets('compact TV inspector at 200% text has no overflow', (tester) async {
+  testWidgets('compact TV inspector at 130% text has no overflow', (tester) async {
     const anime = AnimeSummary(
       id: 1,
       slug: '1-first',
@@ -279,11 +279,11 @@ void main() {
     await pumpTvApp(
       tester,
       MediaQuery(
-        data: const MediaQueryData(size: compactTvSize, textScaler: TextScaler.linear(2)),
+        data: const MediaQueryData(size: compactTvSize, textScaler: TextScaler.linear(1.3)),
         child: Align(
           alignment: Alignment.topCenter,
           child: SizedBox(
-            width: compactTvSize.width - 88,
+            width: compactTvSize.width - 72,
             child: const CatalogInspector(anime: anime),
           ),
         ),

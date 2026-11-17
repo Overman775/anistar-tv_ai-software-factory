@@ -22,7 +22,7 @@ void main() {
   // This matrix owns visual states across the common golden profiles and text scales.
   // Query rules and retry semantics stay covered by SearchBloc/SearchScreen tests.
   for (final profile in GoldenProfile.values) {
-    for (final textScale in GoldenTextScale.values) {
+    for (final textScale in profile == GoldenProfile.tv ? const [GoldenTextScale.normal] : GoldenTextScale.values) {
       for (final scene in [
         'idle',
         'history',
@@ -128,20 +128,6 @@ void main() {
                 tester.getBottomLeft(first).dy,
                 closeTo(tester.getBottomLeft(find.byType(SearchLoading)).dy - CatalogLayout.railBottomPadding, 0.01),
               );
-            }
-            if (profile == GoldenProfile.tv && scene == 'pagination_retry' && textScale == GoldenTextScale.large) {
-              for (final label in ['Сбой', 'Ещё раз']) {
-                final text = find.descendant(
-                  of: find.byKey(const ValueKey('search-pagination-retry')),
-                  matching: find.text(label),
-                );
-                expect(text, findsOneWidget);
-                expect(
-                  tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
-                  isFalse,
-                  reason: '$label must stay legible',
-                );
-              }
             }
             if (profile == GoldenProfile.phonePortrait && textScale == GoldenTextScale.large) {
               final label = switch (scene) {

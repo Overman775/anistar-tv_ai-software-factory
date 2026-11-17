@@ -122,7 +122,7 @@ void main() {
       expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).filter?.path, comedyFilter.path);
       final sortText = tester.element(find.text('Фильтр'));
       final inheritedStyle = DefaultTextStyle.of(sortText).style;
-      expect(inheritedStyle.fontFamily, TvTypography.fontFamily);
+      expect(inheritedStyle.fontFamily, AppTypography.fontFamily);
       expect(inheritedStyle.decoration ?? TextDecoration.none, TextDecoration.none);
       final cardFocus = FocusManager.instance.primaryFocus;
       expect(

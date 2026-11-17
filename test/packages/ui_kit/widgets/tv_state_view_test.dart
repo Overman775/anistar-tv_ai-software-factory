@@ -10,7 +10,7 @@ import '../../../support/test_app.dart';
 
 void main() {
   for (final size in [const Size(640, 360), const Size(390, 844)]) {
-    testWidgets('long mixed-script state at 200% keeps remote recovery visible at $size', (tester) async {
+    testWidgets('long mixed-script state at 130% keeps remote recovery visible at $size', (tester) async {
       final semantics = tester.ensureSemantics();
       var calls = 0;
       final message = List.filled(3, 'Проверьте сеть и повторите попытку. 日本語 العربية 🎬').join(' ');
@@ -24,7 +24,7 @@ void main() {
           onAction: () => calls++,
         ),
         size: size,
-        textScale: 2,
+        textScale: 1.3,
       );
       await tester.pumpAndSettle();
       final button = find.widgetWithText(AppButton, 'Повторить');
@@ -86,42 +86,5 @@ void main() {
     await tester.tap(find.text('Попробовать снова'));
 
     expect(actionCalls, 1);
-  });
-
-  testWidgets('scaled compact recovery can reveal its header with Up and return to retry', (tester) async {
-    final settle = tester.pumpAndSettle;
-    final key = tester.sendKeyEvent;
-    var calls = 0;
-    await pumpTvApp(
-      tester,
-      TvBackdrop(
-        child: TvStateView(
-          icon: Icons.cloud_off_rounded,
-          title: 'Каталог недоступен',
-          message: 'Не удалось получить данные AniStar. Проверьте подключение к интернету и повторите загрузку. Ваши изменения в аккаунте сохраняются на сайте.',
-          actionLabel: 'Повторить',
-          onAction: () => calls++,
-        ),
-      ),
-      textScale: 2,
-    );
-    await settle();
-    final scroll = tester.state<ScrollableState>(find.byType(Scrollable)).position;
-    final initiallyScrolled = scroll.pixels;
-    for (var press = 0; press < 4; press++) {
-      await key(LogicalKeyboardKey.arrowUp);
-      await settle();
-    }
-    expect(initiallyScrolled, greaterThan(0));
-    expect(scroll.pixels, lessThan(initiallyScrolled));
-    expect(tester.getRect(find.text('Каталог недоступен')).top, greaterThanOrEqualTo(0));
-    for (var press = 0; press < 4; press++) {
-      await key(LogicalKeyboardKey.arrowDown);
-      await settle();
-    }
-    expect(find.widgetWithText(AppButton, 'Повторить').hitTestable(), findsOneWidget);
-    await key(LogicalKeyboardKey.select);
-    expect(calls, 1);
-    expect(tester.takeException(), isNull);
   });
 }

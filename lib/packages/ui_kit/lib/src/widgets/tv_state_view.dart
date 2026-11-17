@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 
 import '../theme/app_palette.dart';
+import '../theme/app_typography.dart';
 import 'app_button.dart';
 import 'app_icon.dart';
 import 'app_layout_scope.dart';
@@ -23,6 +25,7 @@ class TvStateView extends StatelessWidget {
     this.autofocusAction = true,
     this.actionBusy = false,
     this.actionEnabled = true,
+    this.adaptiveTv = false,
   });
 
   final FocusNode? actionFocusNode;
@@ -36,6 +39,8 @@ class TvStateView extends StatelessWidget {
   final String? message;
   final String? actionLabel;
   final VoidCallback? onAction;
+
+  final bool adaptiveTv;
 
   KeyEventResult _scrollFeedback(BuildContext context, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
@@ -106,6 +111,15 @@ class TvStateView extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     final actionText = actionLabel;
     final messageText = message;
+    final adaptive = adaptiveTv && AppLayoutScope.isTvOf(context);
+    final iconExtent = adaptive ? 4.73.vmin.clamp(28.0, 34.0) : 34.0;
+    final iconFrame = adaptive ? iconExtent * 2.12 : 72.0;
+    final vertical = adaptive ? 3.34.h.clamp(18.0, 24.0) : AppSpacing.xl;
+    final gap = adaptive ? 3.34.h.clamp(18.0, 24.0) : AppSpacing.lg;
+    final titleStyle = adaptive ? AppTypography.stateTitleOf(context) : theme.textTheme.headlineSmall;
+    final bodyStyle = adaptive
+        ? AppTypography.stateBodyOf(context)?.copyWith(color: AppPalette.textSecondary)
+        : theme.textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary);
 
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
@@ -121,7 +135,7 @@ class TvStateView extends StatelessWidget {
                   child: Container(
                     padding: EdgeInsets.symmetric(
                       horizontal: headingInsetOf(context, title, constraints.maxWidth.clamp(0.0, 520.0) - 2),
-                      vertical: AppSpacing.xl,
+                      vertical: vertical,
                     ),
                     decoration: BoxDecoration(
                       color: AppPalette.surface.withValues(alpha: 0.84),
@@ -133,35 +147,31 @@ class TvStateView extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          width: 72,
-                          height: 72,
+                          width: iconFrame,
+                          height: iconFrame,
                           decoration: BoxDecoration(
                             color: colorScheme.primary.withValues(alpha: 0.14),
                             shape: BoxShape.circle,
                             border: Border.all(color: colorScheme.primary.withValues(alpha: 0.36)),
                           ),
-                          child: AppIcon.fromMaterial(icon, size: 34, color: colorScheme.primary),
+                          child: AppIcon.fromMaterial(icon, size: iconExtent, color: colorScheme.primary),
                         ),
-                        const SizedBox(height: AppSpacing.lg),
+                        SizedBox(height: gap),
                         Semantics(
                           liveRegion: true,
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(title, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),
+                              Text(title, style: titleStyle, textAlign: TextAlign.center),
                               if (messageText != null) ...[
                                 const SizedBox(height: AppSpacing.sm),
-                                Text(
-                                  messageText,
-                                  style: theme.textTheme.bodyLarge?.copyWith(color: AppPalette.textSecondary),
-                                  textAlign: TextAlign.center,
-                                ),
+                                Text(messageText, style: bodyStyle, textAlign: TextAlign.center),
                               ],
                             ],
                           ),
                         ),
                         if (actionText != null && onAction != null) ...[
-                          const SizedBox(height: AppSpacing.lg),
+                          SizedBox(height: gap),
                           Builder(
                             builder: (actionContext) => Focus(
                               canRequestFocus: false,
@@ -170,6 +180,7 @@ class TvStateView extends StatelessWidget {
                                 key: actionKey,
                                 autofocus: autofocusAction,
                                 focusNode: actionFocusNode,
+                                adaptiveTv: adaptive,
                                 onPressed: () => onAction?.call(),
                                 enabled: actionEnabled,
                                 busy: actionBusy,

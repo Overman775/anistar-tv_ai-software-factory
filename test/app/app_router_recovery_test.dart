@@ -36,20 +36,20 @@ void main() {
     await tester.pumpAndSettle();
     final rail = find.byType(CatalogNavigationRail);
     final frame = find.byKey(const ValueKey('catalog-navigation-rail'));
-    expect(tester.getSize(frame).width, 88);
+    expect(tester.getSize(frame).width, 72);
     final homeButton = find.byKey(const ValueKey('catalog-tab-false'));
     final homeIcon = find.descendant(of: homeButton, matching: find.byType(AppIcon));
-    expect(tester.getSize(homeButton).height, 56);
-    expect(tester.getSize(homeIcon), const Size(24, 24));
+    expect(tester.getSize(homeButton).height, 48);
+    expect(tester.getSize(homeIcon), const Size(20, 20));
     final iconAxis = tester.getCenter(homeIcon).dx;
     final selectedContent = FocusManager.instance.primaryFocus;
     expect(selectedContent?.context?.findAncestorWidgetOfExactType<AnimeCard>(), isNotNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
-    expect(tester.getSize(frame).width, inExclusiveRange(88, 264));
+    expect(tester.getSize(frame).width, inExclusiveRange(72, 216));
     await tester.pumpAndSettle();
-    expect(tester.getSize(frame).width, 264);
+    expect(tester.getSize(frame).width, 216);
     expect(tester.getCenter(homeIcon).dx, closeTo(iconAxis, 0.01));
     expect(find.text('viewer'), findsOneWidget);
     final home = tester
@@ -67,7 +67,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(tester.getSize(frame).width, 88);
+    expect(tester.getSize(frame).width, 72);
     expect(FocusManager.instance.primaryFocus, same(selectedContent));
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();

@@ -1165,7 +1165,7 @@ packages:
     source: hosted
     version: "3.0.0"
   sizer:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sizer
       sha256: "9963c89e4d30d7c2108de3eafc0a7e6a4a8009799376ea6be5ef0a9ad87cfbad"

@@ -27,7 +27,7 @@ void main() {
       for (var x = 0; x < width; x += 5) {
         canvas.drawRect(
           Rect.fromLTWH(x.toDouble(), 0, 5, height.toDouble()),
-          Paint()..color = x % 10 == 0 ? light : dark,
+          Paint()..color = x % 10 < 5 ? light : dark,
         );
       }
       final picture = recorder.endRecording();
@@ -67,7 +67,20 @@ void main() {
       snapshot.dispose();
       final pixels = data ?? (throw StateError('No captured card pixels'));
       const overlay = Color(0xA3101214);
-      for (final (x, y, source) in [(12, 13, light), (17, 13, dark), (132, 5, light), (137, 5, dark)]) {
+      final cardRect = tester.getRect(find.byKey(frame));
+      final badgeRect = tester.getRect(find.byType(AppMetadataBadge));
+      final bookmarkRect = tester.getRect(find.byType(MediaCardBookmark));
+      final badgeX = (badgeRect.left - cardRect.left).round() + 6;
+      final badgeY = (badgeRect.top - cardRect.top).round() + 2;
+      final bookmarkX = (bookmarkRect.left - cardRect.left).round() + 2;
+      final bookmarkY = (bookmarkRect.top - cardRect.top).round() + 3;
+      for (final (x, y) in [
+        (badgeX, badgeY),
+        (badgeX + 1, badgeY),
+        (bookmarkX, bookmarkY),
+        (bookmarkX + 1, bookmarkY),
+      ]) {
+        final source = x % 10 < 5 ? light : dark;
         final index = (y * width + x) * 4;
         final expected = Color.alphaBlend(overlay, source);
         final expectedRgb = expected.toARGB32();
@@ -205,7 +218,7 @@ void main() {
       ),
     );
 
-    expect(style?.fontFamily, TvTypography.fontFamily);
+    expect(style?.fontFamily, AppTypography.fontFamily);
     final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<Object?>;
     final families = manifest.whereType<Map<String, Object?>>();
     expect(families.map((entry) => entry['family']), contains(style?.fontFamily));

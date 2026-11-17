@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_part.dart';
@@ -39,7 +40,10 @@ class AnimeWatchOrder extends StatelessWidget {
                   final current = id == currentId;
                   final label = '${part.label}${current ? ', Открыто' : ''}';
                   final open = onSelected;
-                  final style = Theme.of(partContext).textTheme.bodyLarge?.copyWith(fontSize: 16);
+                  final tv = AppLayoutScope.isTvOf(context);
+                  final style = tv
+                      ? AppTypography.metadataTextOf(partContext)
+                      : Theme.of(partContext).textTheme.bodyLarge?.copyWith(fontSize: 16);
                   if (id == null || !part.canOpen || open == null) return Text(label, style: style);
 
                   return TvFocusable(
@@ -58,13 +62,18 @@ class AnimeWatchOrder extends StatelessWidget {
                           borderRadius: AppRadii.medium,
                         ),
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(minHeight: AppSizes.touchControl),
+                          constraints: BoxConstraints(
+                            minHeight: tv ? AppSizes.adaptiveTvControl : AppSizes.touchControl,
+                          ),
                           child: Align(
                             alignment: Alignment.centerLeft,
                             widthFactor: 1,
                             heightFactor: 1,
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: tv ? 1.25.w.clamp(12.0, 16.0) : AppSpacing.sm,
+                                vertical: tv ? 1.12.h.clamp(6.0, 8.0) : AppSpacing.xs,
+                              ),
                               child: ExcludeSemantics(child: Text(label, style: style)),
                             ),
                           ),

@@ -7,24 +7,26 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
+import '../../../../../support/test_app.dart';
+
 void main() {
   testWidgets('nullable poster retains TV and mobile placeholders Hero and actions', (tester) async {
     const anime = AnimeSummary(id: 1, slug: '1-anime', title: 'Anime');
     var taps = 0;
     for (final mobile in [false, true]) {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 220,
-              height: 330,
-              child: mobile
-                  ? MobileAnimeCard(anime: anime, onTap: () => taps++, onActions: () => taps++)
-                  : AnimeCard(anime: anime, autofocus: true, onTap: () => taps++),
-            ),
-          ),
-        ),
+      final card = SizedBox(
+        width: 220,
+        height: 330,
+        child: mobile
+            ? MobileAnimeCard(anime: anime, onTap: () => taps++, onActions: () => taps++)
+            : AnimeCard(anime: anime, autofocus: true, onTap: () => taps++),
       );
+      if (mobile) {
+        await pumpMobileApp(tester, card);
+      } else {
+        await pumpTvApp(tester, card);
+      }
+      await tester.pumpAndSettle();
       final hero = tester.widget<TvPosterHero>(find.byType(TvPosterHero));
       expect(hero.imageUrl, isNull);
       expect(hero.tag, 'anime-poster-1');
@@ -43,20 +45,17 @@ void main() {
     var opens = 0;
     var actions = 0;
     final focusChanges = <bool>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 220,
-            height: 330,
-            child: AnimeCard(
-              anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime'),
-              autofocus: true,
-              onTap: () => opens++,
-              onLongPressed: () => actions++,
-              onFocusChanged: focusChanges.add,
-            ),
-          ),
+    await pumpTvApp(
+      tester,
+      SizedBox(
+        width: 220,
+        height: 330,
+        child: AnimeCard(
+          anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime'),
+          autofocus: true,
+          onTap: () => opens++,
+          onLongPressed: () => actions++,
+          onFocusChanged: focusChanges.add,
         ),
       ),
     );
@@ -74,18 +73,15 @@ void main() {
   testWidgets('mobile poster tap and long press each activate exactly once', (tester) async {
     var opens = 0;
     var actions = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 220,
-            height: 330,
-            child: MobileAnimeCard(
-              anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime', isFavorite: true),
-              onTap: () => opens++,
-              onActions: () => actions++,
-            ),
-          ),
+    await pumpMobileApp(
+      tester,
+      SizedBox(
+        width: 220,
+        height: 330,
+        child: MobileAnimeCard(
+          anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime', isFavorite: true),
+          onTap: () => opens++,
+          onActions: () => actions++,
         ),
       ),
     );
@@ -109,18 +105,15 @@ void main() {
     final semantics = tester.ensureSemantics();
     var opens = 0;
     var actions = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 220,
-            height: 330,
-            child: MobileAnimeCard(
-              anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime'),
-              onTap: () => opens++,
-              onActions: () => actions++,
-            ),
-          ),
+    await pumpMobileApp(
+      tester,
+      SizedBox(
+        width: 220,
+        height: 330,
+        child: MobileAnimeCard(
+          anime: const AnimeSummary(id: 1, slug: 'anime', title: 'Anime'),
+          onTap: () => opens++,
+          onActions: () => actions++,
         ),
       ),
     );
@@ -145,17 +138,15 @@ void main() {
       posterUri: Uri(),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 220,
-            height: 330,
-            child: AnimeCard(anime: anime, autofocus: true, onTap: () => taps++),
-          ),
-        ),
+    await pumpTvApp(
+      tester,
+      SizedBox(
+        width: 220,
+        height: 330,
+        child: AnimeCard(anime: anime, autofocus: true, onTap: () => taps++),
       ),
     );
+    await tester.pumpAndSettle();
 
     expect(find.text('Красивое аниме'), findsOneWidget);
     expect(find.text('2026'), findsOneWidget);

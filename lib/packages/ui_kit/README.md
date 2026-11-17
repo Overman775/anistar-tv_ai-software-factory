@@ -85,9 +85,21 @@ MediaCard(
 
 `MediaCard.showCaption` по умолчанию показывает подпись; при `false` скрывается только её текстовая плашка поверх изображения. Изображение, метки и семантическое имя карточки сохраняются.
 
-`AppTypography` задаёт типографику Manrope и общие роли TV/mobile. `AppContentTypography` предоставляет роли текста каталога и полной карточки: `cardTitleOf`, `cardCaptionOf`, `detailTitleOf`, `descriptionOf`, `sectionTitleOf`, `episodeTitleOf` и `episodeCaptionOf`. Контентные роли сохраняют системный `TextScaler`; они не меняют типографику кнопок и остальных контролов. `TvTypography` остаётся публичным compatibility export.
+`AppTypography` задаёт типографику Manrope и общие роли TV/mobile. `AppContentTypography` предоставляет роли текста каталога и полной карточки: `cardTitleOf`, `cardCaptionOf`, `detailTitleOf`, `descriptionOf`, `sectionTitleOf`, `episodeTitleOf` и `episodeCaptionOf`. Контентные роли сохраняют системный `TextScaler`; они не меняют типографику кнопок и остальных контролов.
 
-`AppSpacing` и `AppRadii` содержат отступы и радиусы. `AppSizes` содержит размеры контролов и пропорции карточек. Длительности и кривые находятся отдельно в `AppMotion`; `durationOf` возвращает нулевую длительность при выключенных системных анимациях или включённой accessible navigation.
+`AppSpacing` и `AppRadii` содержат отступы и радиусы. `AppSizes` содержит размеры контролов и пропорции карточек. Общие ТВ-токены находятся в [`app_sizes.dart`](lib/src/theme/app_sizes.dart): например, фиксированный `AppSizes.posterRatio` и вычисляемый `AppSizes.adaptiveTvControl`. Длительности и кривые находятся отдельно в `AppMotion`; `durationOf` возвращает нулевую длительность при выключенных системных анимациях или включённой accessible navigation.
+
+### Sizer и адаптивные ТВ-размеры
+
+Корневой `AppResponsiveRoot` создаёт один `Sizer` для приложения, маршрутов и модальных поверхностей. Виджеты читают Sizer только во время построения под этим корнем.
+
+- `.w`, `.h` и `.vmin` задают геометрию от логического окна.
+- `.sp` задаёт базовый размер текста с учётом DPR и пропорций окна; Flutter дополнительно применяет системный `TextScaler`.
+- Стиль текста принадлежит `AppTypography`, общие размеры контролов — `AppSizes` и `AppSpacing`, геометрия конкретного элемента — его виджету UIKit или feature.
+
+Пример роли кнопки плеера: `AppSizes.adaptiveTvControl` задаёт внешний минимум 48–56, `PlayerControlButton` вычисляет глиф через `4.17.vmin.clamp(24, 30)`, а подпись берёт из `AppTypography`.
+
+Адаптивный вариант общих контролов включается явно (`AppButton.adaptiveTv`, `TvChoiceTile.adaptiveTv`) только на назначенных ТВ-поверхностях. Остальные вызовы сохраняют базовые метрики.
 
 `AppInputFrame` оформляет переданное поле ввода общей рамкой фокуса. Он принимает необязательный `focusNode` и `hasError`; controller, validation и клавиатурное поведение остаются у caller. `AppSectionHeader` объявляет заголовок через Semantics и располагает необязательный trailing content рядом с заголовком на широкой области или ниже него на узкой. `TvSectionHeader` делегирует этому компоненту.
 
@@ -103,7 +115,7 @@ MediaCard(
 fvm flutter test test/packages/ui_kit
 ```
 
-Проверяем typography, image fallback, skeleton, состояния и клавиатурный focus. Размеры компонентных снимков задаёт их сцена. Экранная TV golden-матрица: 960×540, 1280×720 и 1920×1080 logical pixels при DPR 1; 640×360 используется дополнительно для адаптации и overflow.
+Проверяем typography, image fallback, skeleton, состояния и клавиатурный focus. Размеры компонентных снимков задаёт их сцена. Экранный ТВ-эталон `GoldenProfile.tv` снимается в 960×540 logical pixels при DPR 1. Увеличенный ТВ-текст проверяется при 130%. Окно 1280×720 и оба значения DPR проверяются целевыми widget-тестами, а 640×360 — на адаптацию и overflow.
 
 ---
 

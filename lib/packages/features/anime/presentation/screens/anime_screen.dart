@@ -6,6 +6,7 @@ import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../auth/auth_providers.dart';
@@ -315,6 +316,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
       actionFocusNode: _retryFocus,
       autofocusAction: false,
       onAction: _retry,
+      adaptiveTv: true,
     );
     if (AppLayoutScope.isTvOf(context)) return error;
 
@@ -403,92 +405,96 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
     );
   }
 
-  Widget _tvBody(BuildContext context, AnimeScreenData data, Widget? favorite, Widget disclosure, Set<int> watched) =>
-      CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
-            sliver: SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                spacing: AppSpacing.lg,
-                children: [
-                  Semantics(
-                    header: true,
-                    child: Text(data.details.title, style: AppContentTypography.detailTitleOf(context)),
-                  ),
-                  Wrap(
-                    spacing: AppSpacing.sm,
-                    runSpacing: AppSpacing.sm,
-                    children: [
-                      Semantics(
-                        expanded: _expanded,
-                        child: AppButton(
-                          label: 'Подробнее',
-                          variant: AppButtonVariant.neutral,
-                          focusNode: _detailsFocus,
-                          icon: RotatedBox(
-                            quarterTurns: _expanded ? 3 : 1,
-                            child: const AppIcon(AppIconType.chevronRight, size: 20),
-                          ),
-                          onPressed: _toggleDetails,
+  Widget _tvBody(BuildContext context, AnimeScreenData data, Widget? favorite, Widget disclosure, Set<int> watched) {
+    final horizontal = AnimeLayout.horizontalInset;
+    final vertical = AnimeLayout.verticalInset;
+
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: horizontal, vertical: vertical),
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.lg,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(data.details.title, style: AppContentTypography.detailTitleOf(context)),
+                ),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    Semantics(
+                      expanded: _expanded,
+                      child: AppButton(
+                        label: 'Подробнее',
+                        variant: AppButtonVariant.neutral,
+                        focusNode: _detailsFocus,
+                        adaptiveTv: true,
+                        icon: RotatedBox(
+                          quarterTurns: _expanded ? 3 : 1,
+                          child: AppIcon(AppIconType.chevronRight, size: 2.78.vmin.clamp(18.0, 20.0)),
                         ),
+                        onPressed: _toggleDetails,
                       ),
-                      ?favorite,
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    ?favorite,
+                  ],
+                ),
+              ],
             ),
           ),
-          SliverToBoxAdapter(child: disclosure),
-          const SliverPadding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.lg, AppSpacing.xxl, AppSpacing.sm),
-            sliver: SliverToBoxAdapter(child: AppSectionHeader(title: 'Серии')),
+        ),
+        SliverToBoxAdapter(child: disclosure),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(horizontal, vertical, horizontal, AppSpacing.sm),
+          sliver: SliverToBoxAdapter(
+            child: AppSectionHeader(title: 'Серии', titleStyle: AppContentTypography.sectionTitleOf(context)),
           ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.xxl, AppSpacing.sm, AppSpacing.xxl, 72),
-            sliver: SliverLayoutBuilder(
-              builder: (context, constraints) {
-                _episodeColumns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
-                _episodeHeight = AnimeLayout.episodeHeight(context, constraints.crossAxisExtent);
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(horizontal, AppSpacing.sm, horizontal, 72),
+          sliver: SliverLayoutBuilder(
+            builder: (context, constraints) {
+              _episodeColumns = AnimeLayout.episodeColumns(constraints.crossAxisExtent);
+              _episodeHeight = AnimeLayout.episodeHeight(context, constraints.crossAxisExtent);
 
-                return SliverGrid.builder(
-                  key: _episodeGrid,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: _episodeColumns,
-                    mainAxisSpacing: AppSpacing.xl,
-                    crossAxisSpacing: AppSpacing.lg,
-                    mainAxisExtent: _episodeHeight,
-                  ),
-                  itemCount: data.episodes.length,
-                  findChildIndexCallback: _episodeIndexForKey,
-                  itemBuilder: (context, index) {
-                    final episode = data.episodes[index];
+              return SliverGrid.builder(
+                key: _episodeGrid,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _episodeColumns,
+                  mainAxisSpacing: AnimeLayout.rowGapOf(context),
+                  crossAxisSpacing: AnimeLayout.columnGapOf(context),
+                  mainAxisExtent: _episodeHeight,
+                ),
+                itemCount: data.episodes.length,
+                findChildIndexCallback: _episodeIndexForKey,
+                itemBuilder: (context, index) {
+                  final episode = data.episodes[index];
 
-                    return Builder(
-                      key: ValueKey(episode.number),
-                      builder: (episodeContext) => EpisodeCard(
-                        focusNode: _episodeFocus.putIfAbsent(
-                          episode.number,
-                          () => FocusNode(debugLabel: episode.title),
-                        ),
-                        episode: episode,
-                        episodeHeight: _episodeHeight,
-                        selected: _selectedEpisode == episode.number,
-                        isWatched: watched.contains(episode.number),
-                        onFocusChanged: (focused) => _revealIfFocused(episodeContext, focused, alignment: 0.58),
-                        onTap: () => _openEpisode(episode),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                  return Builder(
+                    key: ValueKey(episode.number),
+                    builder: (episodeContext) => EpisodeCard(
+                      focusNode: _episodeFocus.putIfAbsent(episode.number, () => FocusNode(debugLabel: episode.title)),
+                      episode: episode,
+                      episodeHeight: _episodeHeight,
+                      selected: _selectedEpisode == episode.number,
+                      isWatched: watched.contains(episode.number),
+                      onFocusChanged: (focused) => _revealIfFocused(episodeContext, focused, alignment: 0.58),
+                      onTap: () => _openEpisode(episode),
+                    ),
+                  );
+                },
+              );
+            },
           ),
-        ],
-      );
+        ),
+      ],
+    );
+  }
 
   int? _episodeIndexForKey(Key key) {
     final index = key is ValueKey<int> ? _episodeNumbers.indexOf(key.value) : -1;
@@ -675,7 +681,7 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
     } else {
       final rowDelta = to ~/ _episodeColumns - from ~/ _episodeColumns;
       final position = _scrollController.position;
-      final offset = (position.pixels + rowDelta * (_episodeHeight + AppSpacing.xl)).clamp(
+      final offset = (position.pixels + rowDelta * (_episodeHeight + AnimeLayout.rowGapOf(context))).clamp(
         position.minScrollExtent,
         position.maxScrollExtent,
       );

@@ -192,7 +192,7 @@ fvm dart run melos run generate
 
 FlutterGen настроен в `lib/packages/ui_kit/pubspec.yaml`. Он создаёт `lib/src/generate/assets.gen.dart` и `fonts.gen.dart`. Публичный импорт: `package:ui_kit/assets.dart`. Этот файл также экспортируется через `ui_kit.dart`.
 
-Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.manrope`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. `FontFamily.manrope` уже содержит пакетный префикс. `AppTypography` использует его как основное семейство; `TvTypography` сохраняется совместимым API. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
+Используйте `Assets.images.anistarLauncher.image(...)` и `FontFamily.manrope`. При ручном создании Image/AssetImage передавайте `package: Assets.package`. `FontFamily.manrope` уже содержит пакетный префикс. `AppTypography` использует его как основное семейство. Generated-файлы сохраняются в Git. Не редактируйте их вручную.
 
 ---
 
@@ -275,7 +275,7 @@ expect(tester.takeException(), isNull);
 `test/support/test_app.dart`. Профиль фиксирует логический размер окна и DPR 1.
 Масштаб текста задаётся отдельным аргументом и по умолчанию равен 100%
 (`GoldenTextScale.normal`), а `GoldenTextScale.large` задаёт 200% через
-`TextScaler`, не меняя параметры окна.
+`TextScaler`, не меняя параметры окна. Вариант 200% используется для мобильных сценариев; ТВ-текст проверяется при 130% в widget-тестах.
 
 | Профиль | Логический размер | DPR |
 | --- | --- | --- |
@@ -300,8 +300,8 @@ await testScreenGolden(
 // Отдельный визуальный сценарий с текстом 200%:
 await testScreenGolden(
   tester,
-  'anime_ready',
-  profile: GoldenProfile.tv,
+  'mobile_anime_ready',
+  profile: GoldenProfile.phonePortrait,
   textScale: GoldenTextScale.large,
   screen: animeFixture,
   overrides: animeOverrides,
@@ -310,10 +310,10 @@ await testScreenGolden(
 
 Полные примеры с fake repositories есть в
 [тестах каталога](../test/packages/features/catalog/presentation/screens/catalog_screen_golden_test.dart) и
-[тестах карточки](../test/packages/features/anime/presentation/screens/anime_screen_golden_test.dart).
+[тестах мобильной карточки](../test/packages/features/anime/presentation/screens/mobile_anime_screen_test.dart).
 
 Итоговые эталоны: `goldens/catalog_loading.phonePortrait.png` и
-`goldens/anime_ready.tv.largeText.png`. Хелпер не принимает произвольный размер
+`goldens/mobile_anime_ready.phonePortrait.largeText.png`. Хелпер не принимает произвольный размер
 или DPR. Когда тест строит сцену сам или снимает несколько эталонов, используйте
 `pumpScreenGolden` и `expectScreenGolden` с теми же аргументами.
 
@@ -377,7 +377,7 @@ HTTPS fixture в выбранный Simulator и оставляет его та�
 
 Если нужны другие существующие AVD, задайте `ANISTAR_TV_AVD` / `ANISTAR_MOBILE_AVD`. Для конкретного запущенного экземпляра передайте `emulator-<port>` аргументом соответствующему скрипту. Скрипты не создают и не стирают AVD. Если нужное устройство отсутствует, скрипт показывает доступные экземпляры и команду запуска. В VS Code есть отдельные задачи **Flutter: TV E2E**, **Flutter: Mobile E2E**, **Flutter: TV and Mobile E2E**.
 
-Оба набора запускают настоящий runner с нативным определением профиля и реальным viewport эмулятора. Тесты не принуждают UI к TV/mobile-профилю или условному размеру. Так тест обнаруживает ошибку выбора интерфейса или системного поворота. TV-набор проверяет D-pad/focus и правые панели. Телефонный набор использует touch, нижние панели и фактический поворот Android. Unit/widget/golden проверки искусственных размеров и текста 200% остаются отдельным уровнем.
+Оба набора запускают настоящий runner с нативным определением профиля и реальным viewport эмулятора. Тесты не принуждают UI к TV/mobile-профилю или условному размеру. Так тест обнаруживает ошибку выбора интерфейса или системного поворота. TV-набор проверяет D-pad/focus и правые панели. Телефонный набор использует touch, нижние панели и фактический поворот Android. Unit/widget/golden проверки искусственных размеров, мобильного текста 200% и ТВ-текста 130% остаются отдельным уровнем.
 
 ### TV-сценарии
 

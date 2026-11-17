@@ -42,9 +42,9 @@ class AnimeHero extends StatelessWidget {
 
   Widget _content(BuildContext context, {double inset = 0, Widget? tvPosterAndMetadata}) {
     final details = data.details;
-    final theme = Theme.of(context).textTheme;
     final description = details.description?.trim();
     final publication = [details.updateMessage, details.publicationDate, details.seriesInfo, details.voiceover];
+    final tv = AppLayoutScope.isTvOf(context);
 
     return Padding(
       padding: EdgeInsets.only(top: AppSpacing.lg, left: inset, right: inset),
@@ -77,10 +77,11 @@ class AnimeHero extends StatelessWidget {
                   if (field case final text? when text.trim().isNotEmpty)
                     Text(
                       text,
-                      style: theme.bodyLarge?.copyWith(
-                        fontSize: index == 1 ? 14 : 16,
-                        color: index == 1 ? AppPalette.textSecondary : null,
-                      ),
+                      style:
+                          (tv
+                                  ? AppTypography.metadataTextOf(context)
+                                  : Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: index == 1 ? 14 : 16))
+                              ?.copyWith(color: index == 1 ? AppPalette.textSecondary : null),
                     ),
               ],
             ),

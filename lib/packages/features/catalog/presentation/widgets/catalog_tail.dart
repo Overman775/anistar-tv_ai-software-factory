@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 class CatalogTail extends StatelessWidget {
@@ -19,6 +20,9 @@ class CatalogTail extends StatelessWidget {
         child: Center(child: CircularProgressIndicator()),
       );
     }
+
+    final tv = AppLayoutScope.isTvOf(context);
+    final style = tv ? AppTypography.metadataTextOf(context) : null;
 
     return TvFocusable(
       focusNode: focusNode,
@@ -44,13 +48,15 @@ class CatalogTail extends StatelessWidget {
               final dense = constraints.maxWidth < 180 && largeText;
               final compact = constraints.maxHeight < 180 || dense;
               var retryLabel = compact ? 'Повторить' : 'Нажмите OK, чтобы повторить';
-              if (dense) retryLabel = 'Ещё раз';
+              if (dense || tv && compact) retryLabel = 'Ещё раз';
+              final compactIcon = tv ? 3.34.vmin.clamp(18.0, 24.0) : 24.0;
+              final fullIcon = tv ? 5.28.vmin.clamp(28.0, 38.0) : 38.0;
               final retry = Text(
                 retryLabel,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppPalette.textSecondary),
+                style: (style ?? const TextStyle()).copyWith(color: AppPalette.textSecondary),
               );
 
               final errorText = Semantics(
@@ -60,7 +66,7 @@ class CatalogTail extends StatelessWidget {
                   maxLines: dense ? 1 : 4,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppPalette.warning),
+                  style: (style ?? const TextStyle()).copyWith(color: AppPalette.warning),
                 ),
               );
 
@@ -71,7 +77,11 @@ class CatalogTail extends StatelessWidget {
                   spacing: compact ? AppSpacing.xs : AppSpacing.sm,
                   children: [
                     if (!dense)
-                      AppIcon.fromMaterial(Icons.refresh_rounded, color: AppPalette.warning, size: compact ? 24 : 38),
+                      AppIcon.fromMaterial(
+                        Icons.refresh_rounded,
+                        color: AppPalette.warning,
+                        size: compact ? compactIcon : fullIcon,
+                      ),
                     if (dense) errorText else Flexible(child: errorText),
                     if (compact) Flexible(child: retry) else retry,
                   ],

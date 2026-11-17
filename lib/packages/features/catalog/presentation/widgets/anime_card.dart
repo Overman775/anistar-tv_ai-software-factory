@@ -35,6 +35,7 @@ class AnimeCard extends StatelessWidget {
   Widget build(BuildContext context) => MediaCard(
     label: anime.title,
     caption: rail ? null : anime.year,
+    titleStyle: rail ? AppTypography.railCardTitleOf(context) : null,
     imageUrl: anime.posterUri?.toString(),
     heroTag: rail ? null : 'anime-poster-${anime.id}',
     focusNode: focusNode,

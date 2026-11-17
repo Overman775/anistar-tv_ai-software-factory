@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../common/presentation/rating_presentation.dart';
@@ -14,7 +15,7 @@ class CatalogInspectorRating extends StatelessWidget {
     if (value == null) {
       return const SizedBox.shrink();
     }
-    final textTheme = Theme.of(context).textTheme;
+    final style = AppTypography.metadataTextOf(context);
 
     return Semantics(
       label: value.semanticLabel,
@@ -22,11 +23,11 @@ class CatalogInspectorRating extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const AppIcon(AppIconType.star, size: 20),
+            AppIcon(AppIconType.star, size: 2.78.vmin.clamp(18.0, 20.0)),
             const SizedBox(width: AppSpacing.xs),
-            Text(value.label, style: textTheme.titleMedium),
+            Text(value.label, style: style?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(width: AppSpacing.xs),
-            Text('/ 10', style: textTheme.bodyMedium?.copyWith(color: AppPalette.textSecondary)),
+            Text('/ 10', style: style?.copyWith(color: AppPalette.textSecondary)),
           ],
         ),
       ),

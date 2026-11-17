@@ -9,7 +9,10 @@ class AnimeDescription extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = AppContentTypography.descriptionOf(context)?.copyWith(fontSize: 16, color: AppPalette.textSecondary);
+    final base = AppContentTypography.descriptionOf(context);
+    final style = (AppLayoutScope.isTvOf(context) ? base : base?.copyWith(fontSize: 16))?.copyWith(
+      color: AppPalette.textSecondary,
+    );
     final lineHeight = MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 18) * (style?.height ?? 1.45);
 
     return LayoutBuilder(
@@ -17,7 +20,7 @@ class AnimeDescription extends StatelessWidget {
         alignment: Alignment.topLeft,
         heightFactor: 1,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: TvTypography.proseMaxWidth),
+          constraints: const BoxConstraints(maxWidth: AppTypography.proseMaxWidth),
           child: Text(
             description,
             maxLines: constraints.hasBoundedHeight ? (constraints.maxHeight / lineHeight).floor().clamp(1, 7) : null,

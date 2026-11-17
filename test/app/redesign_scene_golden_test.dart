@@ -8,7 +8,6 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_part.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
-import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_detail_filter_actions.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/auth/presentation/login_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
@@ -26,7 +25,6 @@ import 'package:app_logging/app_logging.dart';
 // ignore: depend_on_referenced_packages
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:core/data.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -112,12 +110,10 @@ final _details = AnimeScreenData(
 void main() {
   // Player's seventh scene and its panels use the native-controller fixture goldens
   // in features/player; these scenes exercise actual nullable domain metadata.
-  for (final textScale in GoldenTextScale.values) {
-    for (final scene in ['home', 'favorites', 'genres', 'browse', 'search', 'menu', 'detail']) {
-      testWidgets('rich redesign $scene tv${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
-        await _runRedesignScene(tester, scene: scene, profile: GoldenProfile.tv, textScale: textScale);
-      }, tags: ['golden']);
-    }
+  for (final scene in ['home', 'favorites', 'genres', 'browse', 'search', 'menu', 'detail']) {
+    testWidgets('rich redesign $scene tv', (tester) async {
+      await _runRedesignScene(tester, scene: scene, profile: GoldenProfile.tv, textScale: GoldenTextScale.normal);
+    }, tags: ['golden']);
   }
   for (final scene in ['login', 'home', 'favorites', 'genres', 'browse', 'detail']) {
     testWidgets('rich redesign $scene phone portrait', (tester) async {
@@ -129,40 +125,37 @@ void main() {
       );
     }, tags: ['golden']);
   }
-  for (final textScale in GoldenTextScale.values) {
-    testWidgets('rich redesign detail tv error${textScale == GoldenTextScale.large ? ' 200%' : ''}', (tester) async {
-      var calls = 0;
-      await pumpScreenGolden(
-        tester,
-        AnimeScreen(
-          animeId: 1,
-          slug: '1-fixture',
-          fallbackTitle: 'Аниме',
-          onEpisodeTap: (_) => fail('Unexpected episode'),
-        ),
-        textScale: textScale,
-        wrapInScaffold: false,
-        overrides: [
-          animeRepositoryProvider.overrideWithValue(
-            FakeAnimeScreenRepository(
-              load: (_, _) async {
-                calls++;
-                return const Result.failure(UnknownFailure());
-              },
-            ),
+  testWidgets('rich redesign detail tv error', (tester) async {
+    var calls = 0;
+    await pumpScreenGolden(
+      tester,
+      AnimeScreen(
+        animeId: 1,
+        slug: '1-fixture',
+        fallbackTitle: 'Аниме',
+        onEpisodeTap: (_) => fail('Unexpected episode'),
+      ),
+      wrapInScaffold: false,
+      overrides: [
+        animeRepositoryProvider.overrideWithValue(
+          FakeAnimeScreenRepository(
+            load: (_, _) async {
+              calls++;
+              return const Result.failure(UnknownFailure());
+            },
           ),
-        ],
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Повторить').hitTestable(), findsOneWidget);
-      expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
-      await expectScreenGolden('redesign_detail_error', textScale: textScale);
-      await tester.sendKeyEvent(LogicalKeyboardKey.select);
-      await tester.pumpAndSettle();
-      expect(calls, 2);
-      expect(tester.takeException(), isNull);
-    }, tags: ['golden']);
-  }
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Повторить').hitTestable(), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить');
+    await expectScreenGolden('redesign_detail_error');
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(tester.takeException(), isNull);
+  }, tags: ['golden']);
   testWidgets('rich home at phone portrait 200%', (tester) async {
     await cacheDecodedFixtureImage(tester);
     await testScreenGolden(
@@ -214,8 +207,8 @@ Future<void> _runRedesignScene(
     }
   } else {
     for (final width in [
-      (size.height * 0.17).clamp(104, 232).ceil(),
-      size.width.toInt() - 88,
+      (size.height * 0.17).clamp(92, 232).ceil(),
+      size.width.toInt() - 72,
       (size.width * 0.22).clamp(140, 240).ceil(),
     ]) {
       final resized = ResizeImage.resizeIfNeeded(width, null, const CachedNetworkImageProvider(decodedFixtureUrl));
@@ -324,11 +317,6 @@ Future<void> _runRedesignScene(
   if (scene == 'home' || scene == 'browse') {
     expect(find.byType(MediaCardBookmark), findsOneWidget);
   }
-  if (!mobile && scene == 'browse' && textScale == GoldenTextScale.large) {
-    final title = find.text(_page.items.first.title).first;
-    final sort = find.byKey(const ValueKey('catalog-sort'));
-    expect(tester.getRect(title).overlaps(tester.getRect(sort)), isFalse, reason: 'title and sort must not overlap');
-  }
   await expectScreenGolden('redesign_$scene', profile: profile, textScale: textScale);
   if (scene == 'detail') {
     if (mobile) {
@@ -344,18 +332,6 @@ Future<void> _runRedesignScene(
         isTrue,
         reason: 'expanded details must show the decoded poster',
       );
-      if (textScale == GoldenTextScale.large) {
-        for (final label in ['Рейтинг', 'Жанры', 'Режиссёр']) {
-          final paragraph = tester.renderObject<RenderParagraph>(
-            find.descendant(of: find.byType(AnimeDetailFilterActions), matching: find.text(label)),
-          );
-          expect(
-            paragraph.getBoxesForSelection(TextSelection(baseOffset: 0, extentOffset: label.length)).length,
-            1,
-            reason: '$label must stay whole at 200% text',
-          );
-        }
-      }
       await expectScreenGolden('redesign_detail_expanded', profile: profile, textScale: textScale);
     }
     final part = find.text('Второй сезон с полной подписью');

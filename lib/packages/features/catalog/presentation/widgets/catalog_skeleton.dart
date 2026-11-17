@@ -24,7 +24,7 @@ class CatalogSkeleton extends StatelessWidget {
         children: [
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(anchor, 16, anchor, 0),
+              padding: EdgeInsets.fromLTRB(anchor, CatalogLayout.inspectorTopPadding, anchor, 0),
               child: Align(
                 alignment: Alignment.topLeft,
                 child: FractionallySizedBox(
@@ -51,12 +51,17 @@ class CatalogSkeleton extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: EdgeInsets.fromLTRB(anchor, 16, anchor, 8),
+            padding: EdgeInsets.fromLTRB(
+              anchor,
+              CatalogLayout.headingTopPadding,
+              anchor,
+              CatalogLayout.headingBottomPadding,
+            ),
             child: Text(
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: AppTypography.railHeadingOf(context),
             ),
           ),
           SizedBox(

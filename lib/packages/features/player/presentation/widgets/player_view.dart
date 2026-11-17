@@ -1,4 +1,5 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 import 'package:video_player/video_player.dart';
 
@@ -189,14 +190,14 @@ class _PlayerViewState extends State<PlayerView> {
               child: Semantics(
                 label: 'Буферизация видео',
                 liveRegion: true,
-                child: const ExcludeSemantics(
+                child: ExcludeSemantics(
                   child: DecoratedBox(
-                    decoration: BoxDecoration(color: AppPalette.playerShadeTop, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: AppPalette.playerShadeTop, shape: BoxShape.circle),
                     child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.md),
+                      padding: const EdgeInsets.all(AppSpacing.md),
                       child: SizedBox.square(
-                        dimension: AppSizes.touchControl,
-                        child: CircularProgressIndicator(strokeWidth: 4),
+                        dimension: AppLayoutScope.isTvOf(context) ? 6.67.vmin.clamp(36.0, 48.0) : AppSizes.touchControl,
+                        child: const CircularProgressIndicator(strokeWidth: 4),
                       ),
                     ),
                   ),

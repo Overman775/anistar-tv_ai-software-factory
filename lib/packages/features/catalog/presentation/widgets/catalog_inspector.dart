@@ -156,7 +156,7 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
           children: [
             Expanded(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(inset, 16, inset, 0),
+                padding: EdgeInsets.fromLTRB(inset, CatalogLayout.inspectorTopPadding, inset, 0),
                 child: Align(
                   alignment: Alignment.topLeft,
                   child: LayoutBuilder(

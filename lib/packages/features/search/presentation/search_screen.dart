@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../auth/auth_providers.dart';
@@ -69,6 +70,8 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   bool _keyboardVisible = false;
   int? _selectedId;
   int? _pendingForward;
+  Size? _lastViewport;
+  bool _reanchorPending = false;
 
   bool get _resultsActive => mounted && widget.active && (ModalRoute.isCurrentOf(context) ?? true);
 
@@ -526,7 +529,11 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     liveRegion: true,
     child: Text(
       'Результаты для «${state.query}» · Найдено: ${state.items.length}',
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textSecondary),
+      maxLines: AppLayoutScope.isTvOf(context) ? 1 : null,
+      overflow: AppLayoutScope.isTvOf(context) ? TextOverflow.ellipsis : null,
+      style: AppLayoutScope.isTvOf(context)
+          ? AppTypography.railHeadingOf(context)
+          : Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppPalette.textSecondary),
     ),
   );
 
@@ -629,7 +636,8 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
           label: 'Смотреть',
           focusNode: _watch,
           minHeight: CatalogLayout.inspectorActionMinHeight,
-          icon: const AppIcon(AppIconType.play, size: 20),
+          adaptiveTv: true,
+          icon: AppIcon(AppIconType.play, size: 2.78.vmin.clamp(18.0, 20.0)),
           onPressed: _watchSelected,
         ),
         if (account)
@@ -737,9 +745,15 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   );
 
   Widget _recentHeader(BuildContext context) {
+    final tv = AppLayoutScope.isTvOf(context);
+    final control = tv ? AppSizes.adaptiveTvControl : AppSizes.touchControl;
     final title = Text('Последние запросы', style: Theme.of(context).textTheme.titleLarge);
-    final clear = TextButton(onPressed: () => _bloc.add(const SearchHistoryChanged()), child: const Text('Очистить'));
-    if (!AppLayoutScope.isTvOf(context) && MediaQuery.textScalerOf(context).scale(16) > 16) {
+    final clear = TextButton(
+      style: TextButton.styleFrom(minimumSize: Size(0, control)),
+      onPressed: () => _bloc.add(const SearchHistoryChanged()),
+      child: const Text('Очистить'),
+    );
+    if (!tv && MediaQuery.textScalerOf(context).scale(16) > 16) {
       return OverflowBar(
         alignment: MainAxisAlignment.spaceBetween,
         overflowSpacing: AppSpacing.xs,
@@ -755,44 +769,52 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
-  Widget _recent(SearchState state) => SingleChildScrollView(
-    controller: _scroll,
-    padding: const EdgeInsets.all(AppSpacing.lg),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _recentHeader(context),
-        for (var index = 0; index < state.history.length; index++)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Focus(
-                    canRequestFocus: false,
-                    onKeyEvent: (_, event) => _historyKey(event, index),
-                    child: AppButton(
-                      key: ValueKey('search-recent-$index'),
-                      focusNode: _history.putIfAbsent(state.history[index], FocusNode.new),
-                      variant: AppButtonVariant.neutral,
-                      label: state.history[index],
-                      onPressed: () => _search(state.history[index]),
+  Widget _recent(SearchState state) {
+    final tv = AppLayoutScope.isTvOf(context);
+    final control = tv ? AppSizes.adaptiveTvControl : AppSizes.touchControl;
+    final glyph = tv ? 2.78.vmin.clamp(18.0, 20.0) : 24.0;
+
+    return SingleChildScrollView(
+      controller: _scroll,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _recentHeader(context),
+          for (var index = 0; index < state.history.length; index++)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Focus(
+                      canRequestFocus: false,
+                      onKeyEvent: (_, event) => _historyKey(event, index),
+                      child: AppButton(
+                        key: ValueKey('search-recent-$index'),
+                        focusNode: _history.putIfAbsent(state.history[index], FocusNode.new),
+                        variant: AppButtonVariant.neutral,
+                        adaptiveTv: tv,
+                        label: state.history[index],
+                        onPressed: () => _search(state.history[index]),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButton(
-                  key: ValueKey('search-remove-$index'),
-                  tooltip: 'Удалить запрос ${state.history[index]}',
-                  onPressed: () => _bloc.add(SearchHistoryChanged(remove: state.history[index])),
-                  icon: const AppIcon(AppIconType.x),
-                ),
-              ],
+                  const SizedBox(width: AppSpacing.sm),
+                  IconButton(
+                    key: ValueKey('search-remove-$index'),
+                    tooltip: 'Удалить запрос ${state.history[index]}',
+                    constraints: BoxConstraints.tightFor(width: control, height: control),
+                    onPressed: () => _bloc.add(SearchHistoryChanged(remove: state.history[index])),
+                    icon: AppIcon(AppIconType.x, size: glyph),
+                  ),
+                ],
+              ),
             ),
-          ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   @override
   void didChangeDependencies() {
@@ -811,12 +833,39 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       _editing = false;
     }
     _keyboardVisible = visible;
+    final viewport = MediaQuery.sizeOf(context);
+    final resized = _lastViewport != null && _lastViewport != viewport;
+    _lastViewport = viewport;
+    if (resized && AppLayoutScope.isTvOf(context)) _reanchorPending = true;
+    if (_resultsActive && _reanchorPending) _reanchorSelected();
+  }
+
+  void _reanchorSelected() {
+    final state = _bloc.state;
+    if (state.items.isEmpty) {
+      _reanchorPending = false;
+      return;
+    }
+    final selected = state.items.where((item) => item.id == _selectedId).firstOrNull ?? state.items.first;
+    final index = state.items.indexOf(selected);
+    if (index < 0) return;
+    final bloc = _bloc;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_resultsActive || bloc != _bloc || _selectedId != selected.id || !_scroll.hasClients) return;
+      final position = _scroll.position;
+      if (position.axis != Axis.horizontal) return;
+      final step = CatalogPosterRail.stepOf(context);
+      final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+      _scroll.jumpTo(target);
+      _reanchorPending = false;
+    });
   }
 
   @override
   void didUpdateWidget(covariant SearchScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.active && !oldWidget.active) {
+      if (_reanchorPending && _resultsActive) _reanchorSelected();
       WidgetsBinding.instance.addPostFrameCallback((_) => _enterSearch());
     } else if (!widget.active && oldWidget.active) {
       _pendingForward = null;
@@ -853,8 +902,10 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     buildWhen: (previous, current) => _validationMessage(previous) != _validationMessage(current),
     builder: (context, state) {
       final message = _validationMessage(state);
-      final height = tv ? AppSizes.tvControl : AppSizes.touchControl;
-      final fieldStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16);
+      final height = tv ? AppSizes.adaptiveTvControl : AppSizes.touchControl;
+      final fieldStyle = AppTypography.searchFieldOf(context);
+      final gap = tv ? AppSpacing.adaptiveTvControlGap : AppSpacing.sm;
+      final glyph = tv ? 2.78.vmin.clamp(18.0, 20.0) : 20.0;
 
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -866,7 +917,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: AppSpacing.sm,
+                spacing: gap,
                 children: [
                   Expanded(
                     child: Semantics(
@@ -890,17 +941,19 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
                             focusedBorder: InputBorder.none,
                             contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                             hintText: _field.hasFocus ? null : 'Название аниме',
+                            suffixIconConstraints: tv ? BoxConstraints.tightFor(width: height, height: height) : null,
                             suffixIcon: IconButton(
                               key: const ValueKey('search-clear'),
                               focusNode: _clear,
                               tooltip: 'Очистить запрос',
+                              constraints: tv ? BoxConstraints.tightFor(width: height, height: height) : null,
                               onPressed: _query.text.isEmpty
                                   ? null
                                   : () {
                                       _query.clear();
                                       _field.requestFocus();
                                     },
-                              icon: const AppIcon(AppIconType.x, size: 20),
+                              icon: AppIcon(AppIconType.x, size: glyph),
                             ),
                           ),
                         ),
@@ -910,9 +963,10 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
                   AppButton(
                     key: const ValueKey('search-submit'),
                     focusNode: _submit,
-                    icon: const AppIcon(AppIconType.search, size: 20),
+                    icon: AppIcon(AppIconType.search, size: glyph),
                     label: 'Найти',
                     minHeight: height,
+                    adaptiveTv: tv,
                     onPressed: _search,
                   ),
                 ],
@@ -947,7 +1001,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (tv) ...[
-                Text('Поиск', style: Theme.of(context).textTheme.headlineSmall),
+                Text('Поиск', style: AppTypography.sectionTitleOf(context)),
                 const SizedBox(height: AppSpacing.md),
               ],
               _searchForm(tv),

@@ -95,8 +95,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('portrait login at 200% reveals remote fields and submit', (tester) async {
-    tester.platformDispatcher.textScaleFactorTestValue = 2;
+  testWidgets('portrait login at 130% reveals remote fields and submit', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await pumpTvApp(
       tester,

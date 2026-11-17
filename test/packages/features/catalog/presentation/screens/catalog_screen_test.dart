@@ -8,6 +8,9 @@ import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filte
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_copy.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_layout.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_poster_rail.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_tail.dart';
 import 'package:anistar_tv/packages/features/favorites/favorites_providers.dart';
@@ -127,7 +130,7 @@ void main() {
   testWidgets('unloaded slot in cache waits for real viewport intersection and makes one request', (tester) async {
     final pageTwo = Completer<Result<AnimePage, Failure>>();
     final requests = <int>[];
-    final items = List.generate(8, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Title ${i + 1}'));
+    final items = List.generate(10, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Title ${i + 1}'));
     await pumpTvApp(
       tester,
       CatalogScreen(onAnimeTap: (_) => fail('Unexpected activation')),
@@ -166,7 +169,7 @@ void main() {
 
   testWidgets('horizontal overlap alone does not load a vertically displaced slot', (tester) async {
     final requests = <int>[];
-    final items = List.generate(8, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Title ${i + 1}'));
+    final items = List.generate(10, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Title ${i + 1}'));
     await pumpTvApp(
       tester,
       CatalogScreen(onAnimeTap: (_) => fail('Unexpected activation')),
@@ -533,7 +536,7 @@ void main() {
     });
   }
 
-  testWidgets('960×540 at 200% reveals Watch, Favorite and genre while the poster rail stays fixed', (tester) async {
+  testWidgets('960×540 at 130% reveals Watch, Favorite and genre while the poster rail stays fixed', (tester) async {
     const genre = CatalogFilter(label: 'Фантастические приключения', path: '/anime/adventure/');
     final item = AnimeSummary.withGenreFilters(
       id: 1,
@@ -555,7 +558,7 @@ void main() {
     await pumpTvApp(
       tester,
       CatalogScreen(onAnimeTap: (anime) => opened.add(anime.id), onFilterSelected: filters.add),
-      textScale: 2,
+      textScale: 1.3,
       wrapInScaffold: false,
       overrides: [
         authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
@@ -577,7 +580,7 @@ void main() {
     final favorite = find.byKey(const ValueKey('favorite-button-1'));
     final genreButton = find.byKey(ValueKey(genre.path));
     expect(scroll.maxScrollExtent, greaterThan(0));
-    expect(MediaQuery.textScalerOf(tester.element(watch)).scale(16), 32);
+    expect(MediaQuery.textScalerOf(tester.element(watch)).scale(16), closeTo(20.8, 0.01));
     expect(_focusedAnimeId(), 1);
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
@@ -664,14 +667,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     final rail = find.byKey(const ValueKey('catalog-navigation-rail'));
-    expect(tester.getSize(rail).width, 88);
+    expect(tester.getSize(rail).width, 72);
     final card = FocusManager.instance.primaryFocus;
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 80));
-    expect(tester.getSize(rail).width, inExclusiveRange(88, 264));
+    expect(tester.getSize(rail).width, inExclusiveRange(72, 216));
     await tester.pumpAndSettle();
-    expect(tester.getSize(rail).width, 264);
+    expect(tester.getSize(rail).width, 216);
     final labels = <String?>[focusedControlLabel(tester)];
     for (var i = 0; i < 5; i++) {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
@@ -685,7 +688,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(FocusManager.instance.primaryFocus, same(card));
     // Check the final collapsed width after the return transition.
-    expect(tester.getSize(rail).width, 88);
+    expect(tester.getSize(rail).width, 72);
     expect(tester.takeException(), isNull);
   });
 
@@ -838,7 +841,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     await tester.pump();
-    expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 264);
+    expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 216);
     expect(tester.getRect(card), before);
     expect(tester.takeException(), isNull);
   });
@@ -887,7 +890,8 @@ void main() {
     final loadingPoster = find.descendant(of: loadingRail, matching: find.byType(TvSkeletonBox)).first;
     final loadingRect = tester.getRect(loadingPoster);
     final loadingRailRect = tester.getRect(loadingRail);
-    expect(loadingRect.size, const Size(104, 156));
+    expect(loadingRect.width, closeTo(92, 0.1));
+    expect(loadingRect.height, closeTo(92 / AppSizes.posterRatio, 0.1));
     expect(tester.widget<ListView>(loadingRail).scrollDirection, Axis.horizontal);
     await tester.pumpWidget(const SizedBox());
     await pumpTvApp(
@@ -901,7 +905,129 @@ void main() {
     expect(tester.widget<ListView>(_posters).scrollDirection, Axis.horizontal);
     expect(tester.getRect(_posters).bottom, compactTvSize.height);
     expect(tester.getRect(_posters), loadingRailRect);
-    expect(tester.getSize(find.byType(AnimeCard).first), loadingRect.size);
+    final readyCardSize = tester.getSize(find.byType(AnimeCard).first);
+    expect(readyCardSize.width, closeTo(loadingRect.width, 0.01));
+    expect(readyCardSize.height, closeTo(loadingRect.height, 0.01));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unloaded continuation slot uses the ready poster geometry', (tester) async {
+    final items = List.generate(
+      10,
+      (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}'),
+    );
+    await pumpTvApp(
+      tester,
+      CatalogScreen(onAnimeTap: (_) => fail('Unexpected activation')),
+      wrapInScaffold: false,
+      disableAnimations: true,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (_) async => Result.success(AnimePage(items: items, page: 1, hasNext: true)),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final posterSize = tester.getSize(find.byType(AnimeCard).first);
+    final firstItem = tester.getRect(find.byKey(const ValueKey(1)));
+    final slot = tester.getRect(find.byKey(const ValueKey('tv-catalog-unloaded-slot'), skipOffstage: false).first);
+    expect(slot.width, closeTo(posterSize.width, 0.01));
+    expect(slot.height, closeTo(posterSize.height, 0.01));
+    expect(slot.top, closeTo(firstItem.top, 0.01));
+    final step = CatalogPosterRail.stepOf(tester.element(find.byType(AnimeCard).first));
+    expect(slot.left - firstItem.left, closeTo(10 * step, 0.1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('selected poster stays anchored through TV window changes', (tester) async {
+    final items = List.generate(
+      24,
+      (index) => AnimeSummary(id: index + 1, slug: '${index + 1}-anime', title: 'Аниме ${index + 1}'),
+    );
+    await pumpTvApp(
+      tester,
+      Builder(
+        builder: (context) => HomeScreen(
+          onAnimeTap: (anime) {
+            expect(anime.id, 20);
+            unawaited(
+              Navigator.of(context)
+                  .push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('Detail 20')))),
+            );
+          },
+        ),
+      ),
+      size: wideTvSize,
+      wrapInScaffold: false,
+      disableAnimations: true,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (_) async => Result.success(AnimePage(items: items, page: 1, hasNext: false)),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    for (var index = 0; index < 19; index++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pumpAndSettle();
+    }
+    final selectedId = _focusedAnimeId();
+    expect(selectedId, 20);
+    final primary = FocusManager.instance.primaryFocus;
+    final oldOffset = _posterPosition(tester).pixels;
+    final id = selectedId;
+    if (id == null) throw TestFailure('The selected poster lost focus');
+    double anchorFor(Size size) =>
+        CatalogNavigationRail.collapsedWidth + CatalogLayout.horizontalInset(size.width) + CatalogLayout.focusGutter;
+    double visibleLeft() => tester.getRect(find.byKey(ValueKey(id))).left;
+    expect(visibleLeft(), closeTo(anchorFor(wideTvSize), 0.1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Detail 20'), findsOneWidget);
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(navigator.push<void>(MaterialPageRoute(builder: (_) => const Scaffold(body: Text('Player')))));
+    await tester.pumpAndSettle();
+    expect(find.text('Player'), findsOneWidget);
+    tester.view.physicalSize = compactTvSize;
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, same(primary));
+    expect(_focusedAnimeId(), 20);
+    expect(visibleLeft(), closeTo(anchorFor(compactTvSize), 0.1));
+
+    tester.view.physicalSize = wideTvSize;
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpAndSettle();
+    expect(_focusedAnimeId(), selectedId);
+    expect(visibleLeft(), closeTo(anchorFor(wideTvSize), 0.1));
+    expect(tester.getRect(find.byKey(ValueKey(id))).right, lessThanOrEqualTo(wideTvSize.width));
+
+    tester.view.physicalSize = compactTvSize;
+    tester.view.devicePixelRatio = 1;
+    await tester.pumpAndSettle();
+    expect(_focusedAnimeId(), selectedId);
+    expect(FocusManager.instance.primaryFocus, same(primary));
+    expect(_posterPosition(tester).pixels, isNot(closeTo(oldOffset, 0.1)));
+    expect(visibleLeft(), closeTo(anchorFor(compactTvSize), 0.1));
+    final menuFocus =
+        (tester.widget<TextButton>(find.byKey(const ValueKey('catalog-tab-false'))).focusNode ??
+              (throw TestFailure('Catalog menu must provide a focus node')))
+          ..requestFocus();
+    await tester.pumpAndSettle();
+    expect(menuFocus.hasPrimaryFocus, isTrue);
+    tester.view.physicalSize = wideTvSize;
+    await tester.pumpAndSettle();
+    expect(menuFocus.hasPrimaryFocus, isTrue);
     expect(tester.takeException(), isNull);
   });
 

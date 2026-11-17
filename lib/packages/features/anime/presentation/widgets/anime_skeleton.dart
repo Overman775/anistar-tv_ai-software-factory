@@ -11,7 +11,7 @@ class AnimeSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
+    padding: EdgeInsets.symmetric(horizontal: AnimeLayout.horizontalInset, vertical: AnimeLayout.verticalInset),
     child: LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
         child: Column(
@@ -29,7 +29,7 @@ class AnimeSkeleton extends StatelessWidget {
                     height: AnimeLayout.episodeHeight(context, constraints.maxWidth),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: AppSpacing.lg,
+                      spacing: AnimeLayout.columnGapOf(context),
                       children: [
                         for (var column = 0; column < AnimeLayout.episodeColumns(constraints.maxWidth); column++)
                           const Expanded(child: TvSkeletonBox(borderRadius: AppRadii.large)),

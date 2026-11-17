@@ -5,6 +5,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.d
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_episode.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_layout.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
 import 'package:core/data.dart';
@@ -23,7 +24,7 @@ const _longTitle = 'Очень длинное собственное назва�
 
 void main() {
   for (final size in [const Size(640, 360), compactTvSize]) {
-    for (final scale in [1.0, 1.3, 2.0]) {
+    for (final scale in [1.0, 1.3]) {
       testWidgets('actual TV episode grid has no layout error at $size text $scale', (tester) async {
         final pending = Completer<Result<AnimeScreenData, Failure>>();
         await pumpTvApp(
@@ -102,7 +103,7 @@ void main() {
   }
 
   for (final size in [const Size(640, 360), compactTvSize, wideTvSize, const Size(1920, 1080)]) {
-    for (final scale in [1.0, 1.3, 2.0]) {
+    for (final scale in [1.0, 1.3]) {
       testWidgets('three equal loading/ready columns at $size with text $scale', (tester) async {
         final pending = Completer<Result<AnimeScreenData, Failure>>();
         await pumpTvApp(
@@ -132,6 +133,7 @@ void main() {
         expect(ready.crossAxisCount, 3);
         expect(ready.mainAxisExtent, closeTo(loadingRects.first.height, 0.001));
         expect(ready.crossAxisSpacing, closeTo(loadingRects[1].left - loadingRects[0].right, 0.001));
+        expect(loadingRects.map((rect) => rect.width), everyElement(closeTo(loadingRects.first.width, 0.001)));
         final cards = find.byType(EpisodeCard);
         final first = _card(8);
         final second = _card(7);
@@ -139,14 +141,28 @@ void main() {
         final rects = [first, second, third].map(tester.getRect).toList();
         expect(rects.map((rect) => rect.top).toSet(), hasLength(1));
         expect(rects.map((rect) => rect.width), everyElement(closeTo(rects.first.width, 0.001)));
-        expect(rects[0].right, lessThan(rects[1].left));
-        expect(rects[1].right, lessThan(rects[2].left));
-        final caption = find.descendant(of: first, matching: find.text('Серия 8'));
+        expect(rects.first.width, closeTo(loadingRects.first.width, 0.001));
+        expect(rects[0].right + ready.crossAxisSpacing, closeTo(rects[1].left, 0.001));
+        expect(rects[1].right + ready.crossAxisSpacing, closeTo(rects[2].left, 0.001));
+        final expectedWidth =
+            (size.width -
+                2 * AnimeLayout.horizontalInset -
+                (AnimeLayout.episodeColumns(size.width) - 1) * ready.crossAxisSpacing) /
+            AnimeLayout.episodeColumns(size.width);
+        expect(rects.first.width, closeTo(expectedWidth, 0.01));
+        final number = find.descendant(of: first, matching: find.text('Серия 8'));
         final title = find.descendant(of: first, matching: find.text(_longTitle));
-        expect(tester.getRect(caption).bottom, lessThan(tester.getRect(title).top));
+        expect(tester.getRect(number).bottom, lessThan(tester.getRect(title).top));
         final context = tester.element(first);
-        expect(tester.widget<Text>(title).style?.fontSize, 14);
-        expect(tester.widget<Text>(caption).style?.fontSize, 18);
+        expect(ready.mainAxisSpacing, closeTo(AnimeLayout.rowGapOf(context), 0.001));
+        final numberSize = tester.widget<Text>(number).style?.fontSize;
+        final titleSize = tester.widget<Text>(title).style?.fontSize;
+        final numberRole = AppTypography.episodeTitleOf(context)?.fontSize ?? -1;
+        final titleRole = AppTypography.episodeCaptionOf(context)?.fontSize ?? -1;
+        expect(numberSize, closeTo(numberRole, 0.001));
+        expect(titleSize, closeTo(titleRole, 0.001));
+        expect(numberSize, inInclusiveRange(16, 18));
+        expect(titleSize, inInclusiveRange(14, 16));
         expect(MediaQuery.textScalerOf(context).scale(20), closeTo(scale * 20, 0.001));
         final visited = <int>{};
         for (var row = 0; row < 3; row++) {

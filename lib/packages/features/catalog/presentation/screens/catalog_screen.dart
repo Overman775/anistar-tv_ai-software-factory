@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../auth/auth_providers.dart';
@@ -82,6 +83,8 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   final _retryFocus = FocusNode(debugLabel: 'Повторить загрузку каталога');
   bool _routeActive = true;
   bool _returnToPoster = false;
+  Size? _lastViewport;
+  bool _reanchorPending = false;
   int? _replacementFocusId;
   int? _pendingNextFrom;
   late (Object, String?, bool) _sourceKey;
@@ -128,13 +131,43 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     final routeCurrent = ModalRoute.isCurrentOf(context) ?? true;
     final sectionEnabled = TickerMode.valuesOf(context).enabled;
     _routeActive = routeCurrent && sectionEnabled;
+    final viewport = MediaQuery.sizeOf(context);
+    final resized = _lastViewport != null && _lastViewport != viewport;
+    _lastViewport = viewport;
     if (!_tvActive) _clearContinuationIntent();
+    if (resized && AppLayoutScope.isTvOf(context)) _reanchorPending = true;
+    if (_tvActive && _reanchorPending) _reanchorSelected();
     if (_tvActive && !wasActive && _returnToPoster) {
       _returnToPoster = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_tvActive) focusFirst();
       });
     }
+  }
+
+  void _reanchorSelected() {
+    final state = _bloc.state;
+    final selected = _selected(state.items);
+    if (selected == null) {
+      _reanchorPending = false;
+      return;
+    }
+    final index = state.items.indexWhere((item) => item.id == selected.id);
+    if (index < 0) return;
+    final bloc = _bloc;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_tvActive ||
+          bloc != _bloc ||
+          _selected(_bloc.state.items)?.id != selected.id ||
+          !_scrollController.hasClients)
+        return;
+      final position = _scrollController.position;
+      if (position.axis != Axis.horizontal) return;
+      final step = CatalogPosterRail.stepOf(context);
+      final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+      _scrollController.jumpTo(target);
+      _reanchorPending = false;
+    });
   }
 
   void focusFirst() {
@@ -198,6 +231,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         message: state.message,
         actionLabel: 'Попробовать снова',
         onAction: _reload,
+        adaptiveTv: true,
       );
     }
     if (state.items.isEmpty) {
@@ -211,6 +245,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         onAction: widget.favoritesOnly && widget.onTabSelected != null ? () => widget.onTabSelected?.call(false) : null,
         actionIcon: Icons.video_library_outlined,
         autofocusAction: false,
+        adaptiveTv: true,
       );
     }
 
@@ -295,7 +330,8 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
           label: 'Смотреть',
           focusNode: _watchFocus,
           minHeight: CatalogLayout.inspectorActionMinHeight,
-          icon: const AppIcon(AppIconType.play, size: 20),
+          adaptiveTv: true,
+          icon: AppIcon(AppIconType.play, size: 2.78.vmin.clamp(18.0, 20.0)),
           onPressed: _openSelected,
         ),
         if (canUseAccount)
@@ -361,7 +397,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         _railTitle,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context).textTheme.headlineSmall,
+        style: AppTypography.railHeadingOf(context),
       ),
       items: state.items,
       selectedId: selected.id,
@@ -772,8 +808,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       }
       _pendingNextFrom = null;
       if (bloc.state.items.elementAtOrNull(index + 1)?.id != next.id) return;
-      final viewport = MediaQuery.sizeOf(context);
-      final step = CatalogLayout.posterWidth(viewport.height) + CatalogLayout.posterGap(viewport.width);
+      final step = CatalogPosterRail.stepOf(context);
       _moveCard(index + 1, step);
     });
   }
@@ -904,14 +939,15 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     spacing: AppSpacing.sm,
     runSpacing: AppSpacing.xs,
     children: [
-      const Text('Фильтр'),
+      Text('Фильтр', style: tv ? AppTypography.metadataTextOf(context) : null),
       AppButton(
         key: const ValueKey('catalog-sort'),
         autofocus: tv,
         focusNode: _sortFocus,
         label: catalogSortLabel(_confirmedSort),
         variant: AppButtonVariant.metadata,
-        icon: const AppIcon(AppIconType.listFilter, size: 16),
+        adaptiveTv: tv,
+        icon: AppIcon(AppIconType.listFilter, size: tv ? 2.23.vmin.clamp(14.0, 16.0) : 16),
         onPressed: () => unawaited(_chooseSort()),
       ),
     ],
@@ -956,6 +992,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   void didUpdateWidget(covariant CatalogScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.active) _clearContinuationIntent();
+    if (widget.active && !oldWidget.active && _reanchorPending && _tvActive) _reanchorSelected();
     if (oldWidget.favoritesOnly != widget.favoritesOnly || oldWidget.filter?.path != widget.filter?.path) {
       _replaceCatalog();
     }
@@ -1046,7 +1083,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
             ),
             if (widget.filter != null)
               Positioned(
-                top: 16,
+                top: CatalogLayout.headingTopPadding,
                 right: CatalogLayout.horizontalInset(MediaQuery.sizeOf(context).width),
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: _sortMaxWidth(context)),

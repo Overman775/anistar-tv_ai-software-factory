@@ -99,7 +99,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   Widget _buildFuture(BuildContext context, AsyncSnapshot<_PlayerData> snapshot) {
     if (snapshot.connectionState != ConnectionState.done) {
-      const progress = TvProgressView(label: 'Загружаем видео…');
+      const progress = TvProgressView(label: 'Загружаем видео…', adaptiveTv: true);
       if (_isTv) {
         return progress;
       }

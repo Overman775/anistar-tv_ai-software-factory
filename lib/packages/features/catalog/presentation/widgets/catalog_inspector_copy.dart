@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
@@ -35,10 +36,14 @@ class CatalogInspectorCopy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
-    final secondary = theme.bodyMedium?.copyWith(color: AppPalette.textSecondary);
+    final secondary = (AppTypography.metadataTextOf(context) ?? theme.bodyMedium)?.copyWith(
+      color: AppPalette.textSecondary,
+    );
     final update = anime.updateMessage;
     final nodes = <FocusNode>[];
-    final genres = _genres(secondary, nodes);
+    final genreIcon = 2.23.vmin.clamp(14.0, 16.0);
+    final genres = _genres(secondary, nodes, genreIcon);
+    final titleStyle = AppTypography.selectedTitleOf(context) ?? theme.headlineMedium;
 
     return LayoutBuilder(
       builder: (context, constraints) => SingleChildScrollView(
@@ -55,7 +60,7 @@ class CatalogInspectorCopy extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: AppSpacing.sm,
                     children: [
-                      Text(anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.headlineMedium),
+                      Text(anime.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: titleStyle),
                       Wrap(
                         spacing: AppSpacing.md,
                         runSpacing: AppSpacing.xs,
@@ -106,7 +111,7 @@ class CatalogInspectorCopy extends StatelessWidget {
     );
   }
 
-  List<Widget> _genres(TextStyle? style, List<FocusNode> nodes) {
+  List<Widget> _genres(TextStyle? style, List<FocusNode> nodes, double iconSize) {
     final labels = anime.genres;
     final onTap = onGenreTap;
     if (onTap == null || anime.genreFilters.isEmpty) {
@@ -121,7 +126,7 @@ class CatalogInspectorCopy extends StatelessWidget {
         if (filter == null)
           Text(labels[index], style: style)
         else
-          _genreButton(filter, onTap, _genreNode(filter, index, nodes, last: index == lastActive)),
+          _genreButton(filter, onTap, _genreNode(filter, index, nodes, last: index == lastActive), iconSize),
     ];
   }
 
@@ -190,7 +195,12 @@ class CatalogInspectorCopy extends StatelessWidget {
     return nearest;
   }
 
-  Widget _genreButton(CatalogFilter filter, void Function(AnimeSummary, CatalogFilter) onTap, FocusNode? focusNode) {
+  Widget _genreButton(
+    CatalogFilter filter,
+    void Function(AnimeSummary, CatalogFilter) onTap,
+    FocusNode? focusNode,
+    double iconSize,
+  ) {
     focusNode?.debugLabel = filter.label;
 
     return Builder(
@@ -199,7 +209,8 @@ class CatalogInspectorCopy extends StatelessWidget {
         focusNode: focusNode,
         label: filter.label,
         variant: AppButtonVariant.metadata,
-        icon: const AppIcon(AppIconType.listFilter, size: 16),
+        adaptiveTv: true,
+        icon: AppIcon(AppIconType.listFilter, size: iconSize),
         onFocusChanged: (focused) {
           if (focused) {
             unawaited(Scrollable.ensureVisible(context, duration: AppMotion.durationOf(context, AppMotion.fast)));

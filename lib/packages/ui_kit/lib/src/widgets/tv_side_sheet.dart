@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:sizer/sizer.dart';
 
 import '../theme/app_focus_style.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_typography.dart';
 
 /// A TV action surface with a stable right edge and its own focus scope.
 class TvSideSheet extends StatelessWidget {
@@ -11,6 +15,7 @@ class TvSideSheet extends StatelessWidget {
     required this.child,
     this.closeOnLeft = true,
     this.expandChild = false,
+    this.adaptiveTv = false,
     super.key,
   });
 
@@ -18,6 +23,8 @@ class TvSideSheet extends StatelessWidget {
   final Widget child;
   final bool closeOnLeft;
   final bool expandChild;
+
+  final bool adaptiveTv;
 
   ThemeData _theme(BuildContext context) {
     final style = AppFocusStyle.button();
@@ -49,40 +56,43 @@ class TvSideSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.centerRight,
-    child: SizedBox(
-      width: AppSizes.sideSheet,
-      height: double.infinity,
-      child: Theme(
-        data: _theme(context),
-        child: Focus(
-          canRequestFocus: false,
-          onKeyEvent: (_, event) => _handleKey(context, event),
-          child: Material(
-            color: AppPalette.backgroundElevated,
-            elevation: 16,
-            child: SafeArea(
-              minimum: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  if (expandChild) Expanded(child: child) else child,
-                ],
+  Widget build(BuildContext context) {
+    final width = adaptiveTv
+        ? math.min(34.38.w.clamp(320.0, 440.0), MediaQuery.sizeOf(context).width)
+        : AppSizes.sideSheet;
+    final inset = adaptiveTv ? 3.34.h.clamp(18.0, 24.0) : AppSpacing.lg;
+    final titleStyle = adaptiveTv ? AppTypography.sectionTitleOf(context) : Theme.of(context).textTheme.headlineSmall;
+
+    return Align(
+      alignment: Alignment.centerRight,
+      child: SizedBox(
+        width: width,
+        height: double.infinity,
+        child: Theme(
+          data: _theme(context),
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) => _handleKey(context, event),
+            child: Material(
+              color: AppPalette.backgroundElevated,
+              elevation: 16,
+              child: SafeArea(
+                minimum: EdgeInsets.all(inset),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(title, maxLines: 3, overflow: TextOverflow.ellipsis, style: titleStyle),
+                    SizedBox(height: inset),
+                    if (expandChild) Expanded(child: child) else child,
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 Future<T?> showTvSideSheet<T>({required BuildContext context, required WidgetBuilder builder}) =>

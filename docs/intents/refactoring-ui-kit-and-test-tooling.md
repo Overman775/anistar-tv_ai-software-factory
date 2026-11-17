@@ -212,8 +212,9 @@ Manrope отображается в TV/mobile и golden-сравнение не 
 
 ### U02. Собрать типографику TV/mobile в одном месте
 
-**Основание:** [TvTypography](../../lib/packages/ui_kit/lib/src/theme/tv_typography.dart)
-задаёт базовую шкалу, [AppTheme](../../lib/packages/ui_kit/lib/src/theme/app_theme.dart)
+**Основание:** [AppTypography](../../lib/packages/ui_kit/lib/src/theme/app_typography.dart)
+задаёт базовую шкалу; историческая совместимая обёртка `TvTypography` удалена,
+[AppTheme](../../lib/packages/ui_kit/lib/src/theme/app_theme.dart)
 содержит mobile-переопределения, [AppContentTypography](../../lib/packages/ui_kit/lib/src/theme/app_content_typography.dart)
 описывает роли контента. Вес текста карточек дополнительно меняется у потребителей.
 

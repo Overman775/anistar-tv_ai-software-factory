@@ -37,25 +37,28 @@ Future<void> pumpTvApp(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [loggerProvider.overrideWithValue(AppLogger.logger), ...overrides],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        navigatorObservers: [PlayerRouteObserver()],
-        theme: AppTheme.darkTheme,
-        builder: (context, content) {
-          final inherited = MediaQuery.of(context);
-          final media = textScale == null && disableAnimations == null
-              ? inherited
-              : inherited.copyWith(
-                  textScaler: textScale == null ? null : TextScaler.linear(viewport.textScale),
-                  disableAnimations: disableAnimations,
-                );
+      child: AppResponsiveRoot(
+        profile: AppDeviceProfile.tv,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          navigatorObservers: [PlayerRouteObserver()],
+          theme: AppTheme.darkTheme,
+          builder: (context, content) {
+            final inherited = MediaQuery.of(context);
+            final media = textScale == null && disableAnimations == null
+                ? inherited
+                : inherited.copyWith(
+                    textScaler: textScale == null ? null : TextScaler.linear(viewport.textScale),
+                    disableAnimations: disableAnimations,
+                  );
 
-          return MediaQuery(
-            data: media,
-            child: content ?? (throw StateError('MaterialApp did not provide a navigator')),
-          );
-        },
-        home: wrapInScaffold ? Scaffold(body: child) : child,
+            return MediaQuery(
+              data: media,
+              child: content ?? (throw StateError('MaterialApp did not provide a navigator')),
+            );
+          },
+          home: wrapInScaffold ? Scaffold(body: child) : child,
+        ),
       ),
     ),
   );

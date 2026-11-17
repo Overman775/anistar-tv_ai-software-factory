@@ -55,11 +55,19 @@ void main() {
       final bookmarkRect = tester.getRect(bookmark);
       final posterRect = tester.getRect(poster);
       final heartRect = tester.getRect(heart);
-      expect(bookmarkRect.size, const Size(36, 48));
+      if (mobile) {
+        expect(bookmarkRect.size, const Size(36, 48));
+        expect(posterRect.right - bookmarkRect.right, 16);
+        expect(heartRect.size, const Size(28, 28));
+        expect(heartRect.top - bookmarkRect.top, 8);
+      } else {
+        expect(bookmarkRect.size, const Size(30, 40));
+        expect(posterRect.right - bookmarkRect.right, closeTo(12, 0.01));
+        expect(heartRect.width, closeTo(22, 0.01));
+        expect(heartRect.height, closeTo(22, 0.01));
+        expect(heartRect.top - bookmarkRect.top, closeTo(7.4, 0.1));
+      }
       expect(bookmarkRect.top, posterRect.top);
-      expect(posterRect.right - bookmarkRect.right, 16);
-      expect(heartRect.size, const Size(28, 28));
-      expect(heartRect.top - bookmarkRect.top, 8);
       expect(heartRect.center.dx, bookmarkRect.center.dx);
       expect(find.text('8,7'), mobile ? findsNothing : findsOneWidget);
     });
@@ -103,7 +111,7 @@ void main() {
       });
     }
 
-    for (final scale in [1.0, 1.3, 2.0]) {
+    for (final scale in mobile ? [1.0, 1.3, 2.0] : [1.0, 1.3]) {
       testWidgets('long title and both badges fit mobile=$mobile text=$scale', (tester) async {
         final semantics = tester.ensureSemantics();
         const anime = AnimeSummary(

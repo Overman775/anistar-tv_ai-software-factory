@@ -1279,6 +1279,7 @@ void main() {
     expect(repo.calls, 2);
     expect(awakeCalls.last, isFalse);
     expect(find.text('Видео не запустилось'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Повторить видео');
     expect(native.disposed, [1, 2]);
     native.failInitialization = false;
     await tester.tap(find.text('Повторить'));

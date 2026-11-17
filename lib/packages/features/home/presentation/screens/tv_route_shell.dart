@@ -258,7 +258,7 @@ class _TvRouteShellState extends State<TvRouteShell> {
         child: Stack(
           children: [
             Positioned.fill(
-              left: CatalogNavigationRail.collapsedWidth,
+              left: CatalogNavigationRail.collapsedWidthOf(context),
               child: FocusScope(
                 node: _contentFocus,
                 onKeyEvent: _handleContentKey,
@@ -266,7 +266,7 @@ class _TvRouteShellState extends State<TvRouteShell> {
               ),
             ),
             Positioned.fill(
-              left: CatalogNavigationRail.collapsedWidth,
+              left: CatalogNavigationRail.collapsedWidthOf(context),
               child: IgnorePointer(
                 ignoring: !_expanded,
                 child: AnimatedOpacity(

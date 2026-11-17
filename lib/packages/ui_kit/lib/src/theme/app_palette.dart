@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 export 'app_motion.dart';
-export 'app_spacing.dart';
+export 'app_sizes.dart';
 
 /// Semantic colours shared by TV and touch surfaces.
 abstract final class AppPalette {

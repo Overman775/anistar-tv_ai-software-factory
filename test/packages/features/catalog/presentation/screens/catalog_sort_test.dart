@@ -83,7 +83,7 @@ void _expectUnsavedPopularityDraft(WidgetTester tester, FakeCatalogBrowseReposit
   expect(_sortChoiceSelected(tester, 'По популярности'), Tristate.isTrue);
   expect(tester.widget<TvChoiceTile>(_sortChoice('По убыванию')).selected, isTrue);
   expect(repository.requests, hasLength(1));
-  expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 88);
+  expect(tester.getSize(find.byKey(const ValueKey('catalog-navigation-rail'))).width, 72);
 }
 
 Future<void> _sendIgnoredHorizontalInput(

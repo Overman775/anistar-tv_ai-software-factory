@@ -60,7 +60,12 @@ class AnimeFilterRow extends StatelessWidget {
             if (value.filter case final filter?)
               _chip(filter, value.label, filterIndices[filter.path] ?? 0, constraints.maxWidth)
             else
-              Text(value.label, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16)),
+              Text(
+                value.label,
+                style: AppLayoutScope.isTvOf(context)
+                    ? AppTypography.metadataTextOf(context)
+                    : Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16),
+              ),
         ],
       ),
     );
