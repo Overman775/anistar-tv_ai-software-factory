@@ -34,6 +34,73 @@ import '../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../support/test_app.dart';
 
 void main() {
+  testWidgets('TV keeps one menu outside filter and anime page transitions', (tester) async {
+    final router = AppRouter(AppLogger.logger);
+    addTearDown(router.dispose);
+    await pumpTvApp(
+      tester,
+      MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
+        catalogBrowseRepositoryProvider.overrideWithValue(
+          FakeCatalogBrowseRepository(load: (_, page) => const FakeCatalogScreenRepository().getPage(page)),
+        ),
+        animeRepositoryProvider.overrideWithValue(
+          FakeAnimeScreenRepository(
+            load: (id, slug) async => Result.success(
+              AnimeScreenData(
+                details: AnimeDetails(id: id, slug: slug, title: 'Тест', genres: const [], isOngoing: true),
+                episodes: const [AnimeEpisode(number: 1, title: 'Серия 1')],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final rail = tester.element(find.byType(CatalogNavigationRail));
+    void expectSameRail() {
+      expect(find.byType(CatalogNavigationRail, skipOffstage: false), findsOneWidget);
+      expect(tester.element(find.byType(CatalogNavigationRail)), same(rail));
+    }
+
+    unawaited(const FilterRoute(path: '/anime/comedy/', title: 'Комедия').push<void>(rail));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expectSameRail();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(focusedControlLabel(tester), 'Жанры');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).filter?.path, '/anime/comedy/');
+    expectSameRail();
+    final catalog = tester.element(find.byType(CatalogScreen));
+    unawaited(const AnimeRoute(animeId: 1, slug: '1-test', title: 'Тест').push<void>(catalog));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expectSameRail();
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(AnimeScreen), findsOneWidget);
+    expectSameRail();
+    router.router.pop();
+    await tester.pump(const Duration(milliseconds: 80));
+    expectSameRail();
+    await tester.pumpAndSettle();
+    expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).filter?.path, '/anime/comedy/');
+    router.router.pop();
+    await tester.pumpAndSettle();
+    expectSameRail();
+    expect(tester.takeException(), isNull);
+  });
+
   for (final fromDetail in [true, false]) {
     testWidgets('filter from ${fromDetail ? 'detail' : 'left menu'} restores source and result focus after Back', (
       tester,

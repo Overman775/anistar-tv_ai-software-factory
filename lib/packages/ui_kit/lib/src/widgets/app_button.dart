@@ -21,6 +21,7 @@ class AppButton extends StatelessWidget {
     this.focusNode,
     this.onFocusChanged,
     this.minHeight,
+    this.restingColor,
     this.adaptiveTv = false,
     super.key,
   });
@@ -37,6 +38,8 @@ class AppButton extends StatelessWidget {
 
   /// Overrides the visual minimum for a specific layout role. Text may grow.
   final double? minHeight;
+
+  final Color? restingColor;
 
   final bool adaptiveTv;
 
@@ -66,7 +69,7 @@ class AppButton extends StatelessWidget {
         (true, _, _) => AppPalette.primary,
         (_, true, _) => AppPalette.surfaceElevated,
         (_, _, true) => AppPalette.focusSurface,
-        _ => AppPalette.surface,
+        _ => restingColor ?? AppPalette.surface,
       };
       final double extent;
       final double glyph;

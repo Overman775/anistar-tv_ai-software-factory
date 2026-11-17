@@ -39,7 +39,14 @@ RouteBase get $homeRoute => GoRouteData.$route(
       path: 'anime',
       hasOverriddenOnExit: false,
       factory: $AnimeRoute._fromState,
-      routes: [GoRouteData.$route(path: 'player', hasOverriddenOnExit: false, factory: $PlayerRoute._fromState)],
+      routes: [
+        GoRouteData.$route(
+          path: 'player',
+          hasOverriddenOnExit: false,
+          parentNavigatorKey: PlayerRoute.$parentNavigatorKey,
+          factory: $PlayerRoute._fromState,
+        ),
+      ],
     ),
   ],
 );

@@ -123,14 +123,16 @@ final class AnistarHtmlParser {
   }
 
   List<AnistarCatalogFilterDto> genres(String source) {
-    final document = _document(source);
-    final filters = _filters(document.querySelectorAll('.block-janrs a[href]'));
+    final filters = genreMenu(source);
     if (filters.isEmpty) {
       throw const AnistarFailure(message: 'Не удалось загрузить жанры AniStar. Попробуйте снова.');
     }
 
     return filters;
   }
+
+  List<AnistarCatalogFilterDto> genreMenu(String source) =>
+      _filters(_document(source).querySelectorAll('.block-janrs a[href]'));
 
   List<AnistarEpisodeDto> episodes(String source, {Map<String, String> httpHeaders = const {}}) =>
       List.unmodifiable(parsedEpisodes(source, httpHeaders: httpHeaders).map((item) => item.episode));

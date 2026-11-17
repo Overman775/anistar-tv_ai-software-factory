@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
@@ -21,6 +22,10 @@ class TvRouteShell extends StatefulWidget {
     this.consumeBack,
     this.onActivateContent,
     this.root = false,
+    this.fullScreen = false,
+    this.restoreFocusOnDestinationChange = true,
+    this.onExpansionChanged,
+    this.controller,
     super.key,
   });
 
@@ -36,6 +41,10 @@ class TvRouteShell extends StatefulWidget {
   final bool Function()? consumeBack;
   final VoidCallback? onActivateContent;
   final bool root;
+  final bool fullScreen;
+  final bool restoreFocusOnDestinationChange;
+  final ValueChanged<bool>? onExpansionChanged;
+  final TvRouteShellController? controller;
 
   @override
   State<TvRouteShell> createState() => _TvRouteShellState();
@@ -48,6 +57,12 @@ class _TvRouteShellState extends State<TvRouteShell> {
   final _logsFocus = FocusNode();
   FocusNode? _lastContentFocus;
   bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller?.closeNavigation = _focusContent;
+  }
 
   List<HomeDestination> get _destinations => homeDestinations(account: widget.onSignIn == null);
 
@@ -94,9 +109,15 @@ class _TvRouteShellState extends State<TvRouteShell> {
     });
   }
 
+  // Leave both edges of Android's hardware BACK to system route dispatch.
+  // Handling the down here can change focus before Android redispatches the up.
+  bool _isKeyboardBack(LogicalKeyboardKey key) =>
+      key == LogicalKeyboardKey.escape ||
+      (key == LogicalKeyboardKey.goBack && (kIsWeb || defaultTargetPlatform != TargetPlatform.android));
+
   KeyEventResult _handleMenuKey(FocusNode node, KeyEvent event) {
     final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
+    if (_isKeyboardBack(key)) {
       if (event is KeyDownEvent) {
         _onPopInvoked(false, null);
       }
@@ -192,8 +213,7 @@ class _TvRouteShellState extends State<TvRouteShell> {
   }
 
   KeyEventResult _handleContentKey(FocusNode node, KeyEvent event) {
-    if (widget.root &&
-        (event.logicalKey == LogicalKeyboardKey.escape || event.logicalKey == LogicalKeyboardKey.goBack)) {
+    if (widget.root && _isKeyboardBack(event.logicalKey)) {
       if (event is KeyDownEvent) {
         _onPopInvoked(false, null);
       }
@@ -222,17 +242,16 @@ class _TvRouteShellState extends State<TvRouteShell> {
   void _menuFocusChanged(bool focused) {
     if (_expanded != focused) {
       setState(() => _expanded = focused);
+      widget.onExpansionChanged?.call(focused);
     }
   }
 
   @override
   void didUpdateWidget(covariant TvRouteShell oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.destination != widget.destination) {
+    if (widget.restoreFocusOnDestinationChange && oldWidget.destination != widget.destination) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _focusContent(first: true);
-        }
+        if (mounted) _focusContent(first: true);
       });
     }
   }
@@ -250,7 +269,7 @@ class _TvRouteShellState extends State<TvRouteShell> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-    canPop: !widget.root && !_expanded,
+    canPop: widget.fullScreen || !widget.root && !_expanded,
     onPopInvokedWithResult: _onPopInvoked,
     child: TvBackdrop(
       child: Material(
@@ -258,39 +277,43 @@ class _TvRouteShellState extends State<TvRouteShell> {
         child: Stack(
           children: [
             Positioned.fill(
-              left: CatalogNavigationRail.collapsedWidthOf(context),
+              left: widget.fullScreen ? 0 : CatalogNavigationRail.collapsedWidthOf(context),
               child: FocusScope(
                 node: _contentFocus,
                 onKeyEvent: _handleContentKey,
                 child: widget.builder(_openNavigation),
               ),
             ),
-            Positioned.fill(
-              left: CatalogNavigationRail.collapsedWidthOf(context),
-              child: IgnorePointer(
-                ignoring: !_expanded,
-                child: AnimatedOpacity(
-                  opacity: _expanded ? 1 : 0,
-                  duration: AppMotion.durationOf(context, _expanded ? AppMotion.panelEnter : AppMotion.panelExit),
-                  child: GestureDetector(
-                    onTap: _focusContent,
-                    child: const ColoredBox(color: AppPalette.scrim),
+            if (!widget.fullScreen)
+              Positioned.fill(
+                left: CatalogNavigationRail.collapsedWidthOf(context),
+                child: IgnorePointer(
+                  ignoring: !_expanded,
+                  child: AnimatedOpacity(
+                    opacity: _expanded ? 1 : 0,
+                    duration: AppMotion.durationOf(context, _expanded ? AppMotion.panelEnter : AppMotion.panelExit),
+                    child: GestureDetector(
+                      onTap: _focusContent,
+                      child: const ColoredBox(color: AppPalette.scrim),
+                    ),
                   ),
                 ),
               ),
-            ),
             Positioned(
               left: 0,
               top: 0,
               bottom: 0,
-              child: Focus(
-                onFocusChange: _menuFocusChanged,
-                onKeyEvent: _handleMenuKey,
-                child: CatalogNavigationRail(
-                  expanded: _expanded,
-                  items: _items(),
-                  accountName: widget.accountName,
-                  accountImageUrl: widget.accountImageUrl,
+              child: Offstage(
+                offstage: widget.fullScreen,
+                child: Focus(
+                  onFocusChange: _menuFocusChanged,
+                  onKeyEvent: _handleMenuKey,
+                  child: CatalogNavigationRail(
+                    expanded: _expanded,
+                    items: _items(),
+                    accountName: widget.accountName,
+                    accountImageUrl: widget.accountImageUrl,
+                  ),
                 ),
               ),
             ),
@@ -299,4 +322,33 @@ class _TvRouteShellState extends State<TvRouteShell> {
       ),
     ),
   );
+}
+
+class TvRouteShellController {
+  VoidCallback? openNavigation;
+  VoidCallback? closeNavigation;
+  VoidCallback? focusFirst;
+  bool Function()? consumeBack;
+  Object? owner;
+  final expanded = ValueNotifier(false);
+  final playerVisible = ValueNotifier(false);
+
+  void clear(Object owner) {
+    if (!identical(this.owner, owner)) return;
+    this.owner = null;
+    focusFirst = null;
+    consumeBack = null;
+  }
+}
+
+class TvRouteShellScope extends InheritedWidget {
+  const TvRouteShellScope({required this.controller, required super.child, super.key});
+
+  final TvRouteShellController controller;
+
+  static TvRouteShellController? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TvRouteShellScope>()?.controller;
+
+  @override
+  bool updateShouldNotify(TvRouteShellScope oldWidget) => controller != oldWidget.controller;
 }

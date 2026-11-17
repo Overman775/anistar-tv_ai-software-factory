@@ -14,6 +14,7 @@ import '../../catalog/presentation/widgets/anime_card.dart';
 import '../../catalog/presentation/widgets/catalog_inspector.dart';
 import '../../catalog/presentation/widgets/catalog_layout.dart';
 import '../../catalog/presentation/widgets/catalog_poster_rail.dart';
+import '../../catalog/presentation/widgets/catalog_rail_motion.dart';
 import '../../catalog/presentation/widgets/catalog_tail.dart';
 import '../../favorites/favorite_catalog_status_provider.dart';
 import '../../favorites/favorites_providers.dart';
@@ -45,7 +46,7 @@ class SearchScreen extends ConsumerStatefulWidget {
   ConsumerState<SearchScreen> createState() => SearchScreenState();
 }
 
-class SearchScreenState extends ConsumerState<SearchScreen> {
+class SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerProviderStateMixin {
   late SearchBloc _bloc;
   late (SearchRepository, SearchHistoryRepository) _source;
   final _query = TextEditingController();
@@ -63,9 +64,11 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   double? _retryScrollOffset;
   bool _restoringRetryCard = false;
   final _scroll = ScrollController();
+  late final _railMotion = CatalogRailMotion(_scroll, this);
   final Map<int, FocusNode> _cards = {};
   final Map<String, FocusNode> _history = {};
   bool _editing = false;
+  PhysicalKeyboardKey? _editingBackKey;
   bool _keyboardRequestPending = false;
   bool _keyboardVisible = false;
   int? _selectedId;
@@ -73,7 +76,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   Size? _lastViewport;
   bool _reanchorPending = false;
 
-  bool get _resultsActive => mounted && widget.active && (ModalRoute.isCurrentOf(context) ?? true);
+  bool get _resultsActive => mounted && widget.active && _routeCurrent;
 
   @override
   void initState() {
@@ -92,6 +95,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _inputChanged() => setState(() => _retryCardId = null);
   void _fieldChanged() {
+    if (!_field.hasFocus) _editingBackKey = null;
     setState(() => _editing = _field.hasFocus && _editing);
   }
 
@@ -202,6 +206,9 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     _selectedId = null;
     _inspectImmediately = false;
     _pendingForward = null;
+    _railMotion
+      ..stop()
+      ..cancelFocus();
     if (_scroll.hasClients) {
       _scroll.jumpTo(0);
     }
@@ -239,8 +246,13 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
-    if (_editing &&
-        (!_keyboardRequestPending || key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack)) {
+    // Ending editing on key-down still owns this press through key-up.
+    if (_editingBackKey == event.physicalKey) {
+      if (event is! KeyRepeatEvent) _editingBackKey = null;
+      if (event is! KeyDownEvent) return KeyEventResult.handled;
+    }
+    final isBack = key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack;
+    if (_editing && (!_keyboardRequestPending || isBack)) {
       if (key == LogicalKeyboardKey.arrowDown) {
         if (event is KeyDownEvent) {
           finishEditing();
@@ -249,10 +261,11 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
 
         return KeyEventResult.handled;
       }
-      if (key != LogicalKeyboardKey.escape && key != LogicalKeyboardKey.goBack) {
+      if (!isBack) {
         return KeyEventResult.ignored;
       }
       if (event is KeyDownEvent) {
+        _editingBackKey = event.physicalKey;
         finishEditing();
       }
 
@@ -299,7 +312,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   void _focusRailCard(List<AnimeSummary> items, int index, double step) {
     final anime = items[index];
     _selectRailCard(anime, index, step);
-    _cardFocus(anime).requestFocus();
+    _railMotion.focusPoster(_cardFocus(anime));
   }
 
   void _selectRailCard(AnimeSummary anime, int index, double step) {
@@ -312,15 +325,11 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _scrollRailTo(int index, double step) {
-    if (!_scroll.hasClients) return;
-    final position = _scroll.position;
-    final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-    final duration = AppMotion.durationOf(context, CatalogLayout.railMotion);
-    if (duration == Duration.zero) {
-      _scroll.jumpTo(target);
-    } else if (target != position.pixels || position.isScrollingNotifier.value) {
-      unawaited(_scroll.animateTo(target, duration: duration, curve: Curves.easeOutCubic));
-    }
+    _railMotion.retarget(
+      index,
+      step,
+      animate: AppMotion.durationOf(context, CatalogLayout.railMotion) != Duration.zero,
+    );
   }
 
   KeyEventResult _railKey(KeyEvent event, double step) {
@@ -329,7 +338,9 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     final items = state.items;
     final focused = FocusManager.instance.primaryFocus;
     if (focused == _retry) return _retryKey(event);
-    final index = items.indexWhere((item) => _cards[item.id] == focused);
+    final focusedIndex = items.indexWhere((item) => _cards[item.id] == focused);
+    final selectedIndex = items.indexWhere((item) => item.id == _selectedId);
+    final index = focusedIndex < 0 || selectedIndex < 0 ? focusedIndex : selectedIndex;
     if (index < 0 ||
         (key != LogicalKeyboardKey.arrowUp &&
             key != LogicalKeyboardKey.arrowDown &&
@@ -339,10 +350,12 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     }
     if (event is KeyDownEvent || event is KeyRepeatEvent) {
       if (key == LogicalKeyboardKey.arrowUp) {
+        _railMotion.cancelFocus();
         _pendingForward = null;
         _focusWatch();
       } else if (key == LogicalKeyboardKey.arrowLeft) {
         if (index == 0) {
+          _railMotion.cancelFocus();
           widget.onOpenNavigation?.call();
         } else {
           _focusRailCard(items, index - 1, step);
@@ -439,6 +452,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       _restoringRetryCard = false;
       final offset = _retryScrollOffset;
       if (mounted && node.hasFocus && offset != null && _scroll.hasClients) {
+        _railMotion.stop();
         _scroll.jumpTo(offset.clamp(_scroll.position.minScrollExtent, _scroll.position.maxScrollExtent));
       }
     });
@@ -595,32 +609,37 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
               )
             : null,
         onKeyEvent: _railKey,
-        itemBuilder: (context, anime, index, step) => AnimeCard(
-          key: ValueKey('search-card-${anime.id}'),
-          anime: anime,
-          rail: true,
-          selected: anime.id == selected.id,
-          isFavorite: favorites.confirmedStatus(
-            anime.id,
-            reported: anime.isFavorite,
-            listed: favoriteIds.contains(anime.id),
-          ),
-          showFavorite: canUseAccount,
-          focusNode: _cardFocus(anime),
-          onFocusChanged: (focused) {
-            if (!focused) {
-              if (_pendingForward == anime.id) _pendingForward = null;
-            } else if (_resultsActive && !_restoringRetryCard) {
+        itemBuilder: (context, anime, index, step) {
+          final focus = _cardFocus(anime);
+          _railMotion.onPosterBuilt(focus, canFocus: () => _resultsActive && _selectedId == anime.id);
+
+          return AnimeCard(
+            key: ValueKey('search-card-${anime.id}'),
+            anime: anime,
+            rail: true,
+            selected: anime.id == selected.id,
+            isFavorite: favorites.confirmedStatus(
+              anime.id,
+              reported: anime.isFavorite,
+              listed: favoriteIds.contains(anime.id),
+            ),
+            showFavorite: canUseAccount,
+            focusNode: focus,
+            onFocusChanged: (focused) {
+              if (!focused) {
+                if (_pendingForward == anime.id) _pendingForward = null;
+              } else if (_resultsActive && !_restoringRetryCard) {
+                _selectRailCard(anime, index, step);
+              }
+            },
+            onTap: () {
               _selectRailCard(anime, index, step);
-            }
-          },
-          onTap: () {
-            _selectRailCard(anime, index, step);
-            _openAnime(anime);
-          },
-          onLongPressed: () =>
-              unawaited(showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title)),
-        ),
+              _openAnime(anime);
+            },
+            onLongPressed: () =>
+                unawaited(showFavoriteActions(context, animeId: anime.id, slug: anime.slug, title: anime.title)),
+          );
+        },
       ),
     );
   }
@@ -820,8 +839,13 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final wasCurrent = _routeCurrent;
-    _routeCurrent = ModalRoute.isCurrentOf(context) ?? true;
-    if (!_routeCurrent) _pendingForward = null;
+    _routeCurrent = (ModalRoute.isCurrentOf(context) ?? true) && TickerMode.valuesOf(context).enabled;
+    if (!_routeCurrent) {
+      _pendingForward = null;
+      _railMotion
+        ..stop()
+        ..cancelFocus();
+    }
     if (_routeCurrent && !wasCurrent && _returnToPoster) {
       _returnToPoster = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -856,6 +880,7 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       if (position.axis != Axis.horizontal) return;
       final step = CatalogPosterRail.stepOf(context);
       final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+      _railMotion.stop();
       _scroll.jumpTo(target);
       _reanchorPending = false;
     });
@@ -869,6 +894,9 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _enterSearch());
     } else if (!widget.active && oldWidget.active) {
       _pendingForward = null;
+      _railMotion
+        ..stop()
+        ..cancelFocus();
       _bloc.add(const SearchSuspended());
       if (_editing) {
         _editing = false;
@@ -890,6 +918,9 @@ class SearchScreenState extends ConsumerState<SearchScreen> {
     _watch.dispose();
     _favorite.dispose();
     _lastGenre.dispose();
+    _railMotion
+      ..cancelFocus()
+      ..dispose();
     _scroll.dispose();
     for (final node in _cards.values.followedBy(_history.values)) {
       node.dispose();

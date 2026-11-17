@@ -38,6 +38,48 @@ int? _focusedAnimeId() =>
     FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AnimeCard>()?.anime.id;
 
 void main() {
+  testWidgets('holding Right keeps a lazy poster rail moving and reverses without queued steps', (tester) async {
+    final items = List.generate(40, (i) => AnimeSummary(id: i + 1, slug: '${i + 1}-test', title: 'Title ${i + 1}'));
+    await pumpTvApp(
+      tester,
+      CatalogScreen(onAnimeTap: (_) => fail('Unexpected navigation')),
+      wrapInScaffold: false,
+      overrides: [
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (page) async => Result.success(AnimePage(items: items, page: page, hasNext: false)),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    final scroll = _posterPosition(tester);
+    const right = LogicalKeyboardKey.arrowRight;
+    await tester.sendKeyDownEvent(right);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    for (var id = 3; id <= 28; id++) {
+      final offset = scroll.pixels;
+      await tester.sendKeyRepeatEvent(right);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(scroll.pixels, greaterThan(offset), reason: 'step $id while the key is still down');
+      expect(_focusedAnimeId(), id);
+    }
+    await tester.sendKeyUpEvent(right);
+    const left = LogicalKeyboardKey.arrowLeft;
+    await tester.sendKeyDownEvent(left);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      await tester.sendKeyRepeatEvent(left);
+    }
+    await tester.sendKeyUpEvent(left);
+    await tester.pumpAndSettle();
+    expect(_focusedAnimeId(), 19);
+    final focusedPoster = find.byKey(const ValueKey(19));
+    expect(tester.getRect(_posters).contains(tester.getCenter(focusedPoster)), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('hidden source does not request continuation until activated', (tester) async {
     final active = ValueNotifier(false);
     addTearDown(active.dispose);
@@ -516,8 +558,11 @@ void main() {
       } else {
         await tester.pump(const Duration(milliseconds: 50));
       }
-      expect(tester.widget<CatalogInspectorCopy>(copy).opacity.value, inExclusiveRange(0, 1));
-      expect(tester.widget<CatalogInspectorCopy>(copy).anime.id, fadeIn ? 2 : 1);
+      final fading = tester
+          .widgetList<CatalogInspectorCopy>(copy)
+          .singleWhere((view) => view.anime.id == (fadeIn ? 2 : 1));
+      final scene = find.ancestor(of: find.byWidget(fading), matching: find.byType(FadeTransition)).first;
+      expect(tester.widget<FadeTransition>(scene).opacity.value, inExclusiveRange(0, 1));
       if (fadeIn) {
         await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
         await tester.pump();

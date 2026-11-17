@@ -21,7 +21,7 @@ Melos 7.8.1 — максимальная совместимая версия п�
 
 ## 1. Подготовка и быстрый запуск
 
-Для Android нужны FVM с Flutter SDK 3.47.7 из `.fvmrc`, JDK 17 и Android SDK. Для
+Для Android нужны FVM с Flutter SDK 3.50.0 из `.fvmrc`, JDK 17 и Android SDK. Для
 iOS Simulator нужны macOS и Xcode. DCM нужен
 для полной команды `check`. Для Python-задач требуется Python 3.10 или новее.
 Дополнительные инструменты нужны только для соответствующих операций:

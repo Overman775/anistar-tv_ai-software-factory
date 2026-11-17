@@ -23,7 +23,7 @@ class CatalogInspectorRating extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppIcon(AppIconType.star, size: 2.78.vmin.clamp(18.0, 20.0)),
+            AppIcon(AppIconType.star, color: AppPalette.primary, size: 2.78.vmin.clamp(18.0, 20.0)),
             const SizedBox(width: AppSpacing.xs),
             Text(value.label, style: style?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(width: AppSpacing.xs),

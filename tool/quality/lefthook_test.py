@@ -82,7 +82,12 @@ class LefthookTest(unittest.TestCase):
         files = {}
         for path in self.root.rglob("*"):
             relative = path.relative_to(self.root)
-            if ".git" in relative.parts or relative.parts[:2] == ("build", "quality"):
+            if (
+                ".git" in relative.parts
+                or relative.parts[:2] == ("build", "quality")
+                # Dart 3.14 rewrites the ignored executable snapshot dependency list.
+                or relative.parts[:3] == (".dart_tool", "dartdev", "bin")
+            ):
                 continue
             if path.is_symlink():
                 files[str(relative)] = ("symlink", os.readlink(path))

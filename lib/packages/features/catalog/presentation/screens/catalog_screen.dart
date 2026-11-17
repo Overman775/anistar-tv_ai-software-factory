@@ -27,6 +27,7 @@ import '../widgets/anime_card.dart';
 import '../widgets/catalog_inspector.dart';
 import '../widgets/catalog_layout.dart';
 import '../widgets/catalog_poster_rail.dart';
+import '../widgets/catalog_rail_motion.dart';
 import '../widgets/catalog_skeleton.dart';
 import '../widgets/catalog_sort_sheet.dart';
 import '../widgets/catalog_tail.dart';
@@ -57,7 +58,7 @@ class CatalogScreen extends ConsumerStatefulWidget {
   ConsumerState<CatalogScreen> createState() => CatalogScreenState();
 }
 
-class CatalogScreenState extends ConsumerState<CatalogScreen> {
+class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerProviderStateMixin {
   late CatalogBloc _bloc;
   final _disposed = Completer<void>();
   Future<void>? _mobileRefresh;
@@ -67,6 +68,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   CatalogSort _confirmedSort = defaultCatalogSort;
   bool _sortSheetOpen = false;
   final ScrollController _scrollController = ScrollController();
+  late final _railMotion = CatalogRailMotion(_scrollController, this);
   final _contentFocus = FocusScopeNode(debugLabel: 'Каталог');
   bool _pendingFirst = false;
   bool _initialFilteredLoad = true;
@@ -165,6 +167,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       if (position.axis != Axis.horizontal) return;
       final step = CatalogPosterRail.stepOf(context);
       final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
+      _railMotion.stop();
       _scrollController.jumpTo(target);
       _reanchorPending = false;
     });
@@ -210,6 +213,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _focusRail() {
+    _railMotion.cancelFocus();
     _pendingNextFrom = null;
     _replacementFocusId = null;
     if (widget.onOpenNavigation case final onOpenNavigation?) {
@@ -415,6 +419,8 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       onKeyEvent: _handleCatalogKey,
       itemBuilder: (context, anime, index, step) {
         final isSelected = selected.id == anime.id;
+        final focus = _focusFor(anime.id);
+        _railMotion.onPosterBuilt(focus, canFocus: () => _tvActive && _selectedId == anime.id);
 
         return AnimeCard(
           anime: anime,
@@ -422,7 +428,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
           selected: isSelected,
           isFavorite: isFavorite(anime),
           showFavorite: !widget.favoritesOnly && canUseAccount,
-          focusNode: _focusFor(anime.id),
+          focusNode: focus,
           autofocus: !_keepSortFocus && isSelected,
           onFocusChanged: (focused) => _onCardFocusChanged(anime.id, index, step, focused),
           onLongPressed: () => unawaited(_favoriteActions(anime)),
@@ -615,6 +621,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
+      _railMotion.cancelFocus();
       final selected = _selected(state.items)?.id;
       setState(() => _inspectImmediately = true);
       if (_watchFocus.canRequestFocus) {
@@ -649,7 +656,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     final anime = _bloc.state.items.elementAtOrNull(index);
     if (anime == null) return;
     _updateSelection(anime, index, step);
-    _focusFor(anime.id).requestFocus();
+    _railMotion.focusPoster(_focusFor(anime.id));
   }
 
   KeyEventResult _handleContentKey(FocusNode node, KeyEvent event) {
@@ -781,6 +788,9 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   void _clearContinuationIntent() {
+    _railMotion
+      ..stop()
+      ..cancelFocus();
     _pendingNextFrom = null;
     _replacementFocusId = null;
   }
@@ -843,15 +853,11 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       _selectedIndex = index;
       _inspectImmediately = false;
     });
-    if (!_scrollController.hasClients) return;
-    final position = _scrollController.position;
-    final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-    final duration = AppMotion.durationOf(context, CatalogLayout.railMotion);
-    if (duration == Duration.zero) {
-      _scrollController.jumpTo(target);
-    } else if (target != position.pixels || position.isScrollingNotifier.value) {
-      unawaited(_scrollController.animateTo(target, duration: duration, curve: Curves.easeOutCubic));
-    }
+    _railMotion.retarget(
+      index,
+      step,
+      animate: AppMotion.durationOf(context, CatalogLayout.railMotion) != Duration.zero,
+    );
   }
 
   Future<void> _chooseSort() async {
@@ -893,6 +899,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
       _lastCardFocus = null;
     });
     if (_scrollController.hasClients) {
+      _railMotion.stop();
       _scrollController.jumpTo(0);
     }
     bloc.add(CatalogStarted(repository: next));
@@ -946,6 +953,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
         focusNode: _sortFocus,
         label: catalogSortLabel(_confirmedSort),
         variant: AppButtonVariant.metadata,
+        restingColor: tv ? AppPalette.background.withValues(alpha: 0.64) : null,
         adaptiveTv: tv,
         icon: AppIcon(AppIconType.listFilter, size: tv ? 2.23.vmin.clamp(14.0, 16.0) : 16),
         onPressed: () => unawaited(_chooseSort()),
@@ -1023,6 +1031,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
   @override
   void dispose() {
     _disposed.complete();
+    _railMotion.cancelFocus();
     _watchFocus.dispose();
     _favoriteFocus.dispose();
     _lastGenreFocus.dispose();
@@ -1032,6 +1041,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     _sortFocus.dispose();
     _contentFocus.dispose();
+    _railMotion.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();

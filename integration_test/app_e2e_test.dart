@@ -41,6 +41,35 @@ void main() {
   setUp(() => fixture = E2eHarness());
   tearDown(() => fixture.close());
 
+  _tvTest('Left Left Back keeps the root exit prompt open until a separate Back', (tester) async {
+    await fixture.configure();
+    await fixture.launch(tester, autoLogin: false);
+    await RemoteControls.activate(
+      tester,
+      find.byKey(const ValueKey('intro_guest')),
+      step: 'enter guest',
+      direction: LogicalKeyboardKey.arrowDown,
+    );
+    await E2eHarness.waitFor(tester, () => find.byType(AnimeCard).evaluate().isNotEmpty, 'guest catalog');
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+
+    final menu = find.byType(CatalogNavigationRail);
+    expect(tester.widget<CatalogNavigationRail>(menu).expanded, isTrue);
+    await tester.binding.handlePopRoute();
+    final prompt = find.text('Выйти из приложения?');
+    await E2eHarness.waitFor(tester, () => prompt.evaluate().isNotEmpty, 'exit confirmation');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(prompt, findsOneWidget);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'Отмена подтверждения');
+
+    await tester.binding.handlePopRoute();
+    await E2eHarness.waitFor(tester, () => prompt.evaluate().isEmpty, 'exit confirmation dismissed');
+    expect(tester.widget<CatalogNavigationRail>(menu).expanded, isTrue);
+  });
+
   _tvTest('guest search native playback and cancelled login preserve public context', (tester) async {
     await fixture.configure();
     await fixture.launch(tester, autoLogin: false);
@@ -403,9 +432,13 @@ void main() {
       'encrypted session restoration',
     );
     expect(_events(await fixture.state()).where((event) => event['method'] == 'POST'), hasLength(postCount));
+    final catalogCount = _events(await fixture.state()).where((event) => event['path'] == '/anime/').length;
     await fixture.expireSession();
-    // A normal protected request must detect expiry without a refresh button.
+    // The cached genre menu opens locally. Its filtered catalog still checks the session.
     await _selectRail(tester, 'catalog-genres');
+    await _enterGenres(tester);
+    expect(_events(await fixture.state()).where((event) => event['path'] == '/anime/'), hasLength(catalogCount));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'expired session intro');
     // Verify the gate again after this separate session transition.
     expect(find.byType(CatalogScreen), findsNothing);

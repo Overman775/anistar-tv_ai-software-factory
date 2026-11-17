@@ -8,7 +8,7 @@ import 'app_routes.dart';
 
 /// Router configuration for the application
 class AppRouter {
-  final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<NavigatorState> rootNavigatorKey = PlayerRoute.$parentNavigatorKey;
 
   /// Router instance
   late final GoRouter router;
@@ -19,7 +19,14 @@ class AppRouter {
     router = GoRouter(
       initialLocation: AppRoutes.home,
       observers: [LoggingNavigatorObserver(_logger), PlayerRouteObserver()],
-      routes: $appRoutes,
+      routes: [
+        $logViewerRoute,
+        ShellRoute(
+          builder: buildAppRouteShell,
+          observers: [PlayerRouteObserver()],
+          routes: [$homeRoute, $genresRoute, $filterRoute],
+        ),
+      ],
       errorBuilder: (context, _) {
         _logger.e('Unable to open application route');
 

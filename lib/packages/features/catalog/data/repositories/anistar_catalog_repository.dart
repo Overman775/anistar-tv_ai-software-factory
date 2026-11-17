@@ -16,8 +16,9 @@ final class AnistarCatalogRepository extends BaseRepository implements CatalogRe
   AnistarCatalogRepository(this._client, [super.logger]);
 
   @override
-  Future<Result<List<CatalogFilter>, Failure>> getGenres() => makeApiCall(
-    () => mapAnistarErrors(() async => List.unmodifiable((await _client.genres()).map(mapCatalogFilter))),
+  Future<Result<List<CatalogFilter>, Failure>> getGenres({bool refresh = false}) => makeApiCall(
+    () =>
+        mapAnistarErrors(() async => List.unmodifiable((await _client.genres(refresh: refresh)).map(mapCatalogFilter))),
   );
 
   @override

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/rendering.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';

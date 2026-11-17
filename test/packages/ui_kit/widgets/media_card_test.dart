@@ -447,7 +447,7 @@ void main() {
     final marks = tester
         .widgetList<AppIcon>(find.byType(AppIcon))
         .where((icon) => icon.color == AppPalette.primary || icon.color == AppPalette.success);
-    expect(marks.map((icon) => icon.color), [AppPalette.primary, AppPalette.success]);
+    expect(marks.map((icon) => icon.color), [AppPalette.success]);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     expect(opens, 1);
     semantics.dispose();

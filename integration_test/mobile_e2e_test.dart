@@ -110,8 +110,12 @@ void main() {
     await launch(tester, login: false, resetSession: false);
     await _waitHome(tester);
     expect(_events(await fixture.state()).where((event) => event['method'] == 'POST'), hasLength(loginPosts));
+    final catalogCount = _events(await fixture.state()).where((event) => event['path'] == '/anime/').length;
     await fixture.expireSession();
     await MobileControls.tab(tester, 'Жанры');
+    await E2eHarness.waitFor(tester, () => find.text('Комедия').evaluate().isNotEmpty, 'cached mobile genres');
+    expect(_events(await fixture.state()).where((event) => event['path'] == '/anime/'), hasLength(catalogCount));
+    await MobileControls.tap(tester, find.text('Комедия'), 'filtered request detects expiry');
     await E2eHarness.waitFor(tester, () => find.byType(IntroScreen).evaluate().isNotEmpty, 'mobile expiry intro');
     await MobileControls.login(tester);
     await _waitHome(tester);

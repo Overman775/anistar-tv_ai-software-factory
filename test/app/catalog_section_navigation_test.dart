@@ -114,6 +114,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final poster = FocusManager.instance.primaryFocus;
+      final menu = tester.element(find.byType(CatalogNavigationRail));
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pumpAndSettle();
       expect(focusedControlLabel(tester), 'Смотреть');
@@ -137,12 +138,21 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.byType(PlayerScreen), findsOneWidget);
+      expect(find.byType(CatalogNavigationRail), findsNothing);
+      expect(tester.getRect(find.byType(PlayerScreen)).left, 0);
       final player = tester.widget<PlayerScreen>(find.byType(PlayerScreen));
       expect((player.animeId, player.episodeNumber), (1, target));
       expect(detailReads, 2, reason: 'Watch does not fetch details speculatively');
       await tester.binding.handlePopRoute();
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 30));
+      expect(tester.getRect(find.byType(PlayerScreen)).left, 0);
+      expect(
+        tester.getSize(find.byType(PlayerScreen)).width,
+        tester.view.physicalSize.width / tester.view.devicePixelRatio,
+      );
       await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.element(find.byType(CatalogNavigationRail)), same(menu));
       expect(FocusManager.instance.primaryFocus, same(poster));
       expect(tester.takeException(), isNull);
     });
@@ -307,8 +317,11 @@ void main() {
         await tester.pump();
       }
       await tester.pump(const Duration(milliseconds: 50));
-      final copy = tester.widget<CatalogInspectorCopy>(find.byType(CatalogInspectorCopy));
-      expect(copy.opacity.value, inExclusiveRange(0, 1));
+      final copy = tester
+          .widgetList<CatalogInspectorCopy>(find.byType(CatalogInspectorCopy))
+          .singleWhere((view) => view.anime.id == (fadeIn ? 2 : 1));
+      final scene = find.ancestor(of: find.byWidget(copy), matching: find.byType(FadeTransition)).first;
+      expect(tester.widget<FadeTransition>(scene).opacity.value, inExclusiveRange(0, 1));
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
       await tester.pump();
       await tester.sendKeyEvent(LogicalKeyboardKey.select);

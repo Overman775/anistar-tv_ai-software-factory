@@ -16,7 +16,7 @@ class FakeCatalogBrowseRepository implements CatalogBrowseRepository {
   FakeCatalogBrowseRepository({this.load, this.genres});
 
   @override
-  Future<Result<List<CatalogFilter>, Failure>> getGenres() =>
+  Future<Result<List<CatalogFilter>, Failure>> getGenres({bool refresh = false}) =>
       genres?.call() ?? Future.value(const Result.success([comedyFilter, ongoingFilter]));
 
   @override

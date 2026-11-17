@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
@@ -11,11 +13,20 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
+import '../../../../../support/decoded_fixture_image.dart';
 import '../../../../../support/test_app.dart';
 
 const _first = AnimeSummary(id: 1, slug: '1-first', title: 'Первый тайтл');
 const _second = AnimeSummary(id: 2, slug: '2-second', title: 'Второй тайтл');
 const _last = AnimeSummary(id: 3, slug: '3-last', title: 'Последний тайтл');
+
+ImageProvider<Object> _backdropProvider(String url) =>
+    AppNetworkImage.providerFor(url, cacheHeight: compactTvSize.height.ceil()) ?? fail('Invalid fixture URL');
+
+Future<void> _seedBackdrop(String url, Future<ImageInfo> image) async {
+  final key = await _backdropProvider(url).obtainKey(ImageConfiguration.empty);
+  PaintingBinding.instance.imageCache.putIfAbsent(key, () => OneFrameImageStreamCompleter(image));
+}
 
 void main() {
   testWidgets('TV inspector presents a valid rating without an outlined metadata badge', (tester) async {
@@ -144,7 +155,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('150ms dwell cancels obsolete targets and shows one copy', (tester) async {
+  testWidgets('150ms dwell cancels obsolete targets before the 220ms crossfade', (tester) async {
     final semantics = tester.ensureSemantics();
     final selected = ValueNotifier(_first);
     addTearDown(selected.dispose);
@@ -171,9 +182,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 149));
     expect(find.text(_second.title), findsNothing);
     await tester.pump(const Duration(milliseconds: 1));
-    expect(find.byType(CatalogInspectorCopy), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 110));
-    await tester.pump(const Duration(milliseconds: 220));
+    expect(find.byType(CatalogInspectorCopy), findsNWidgets(2));
+    await tester.pump(const Duration(milliseconds: 219));
+    expect(find.byType(CatalogInspectorCopy), findsNWidgets(2));
+    await tester.pump(const Duration(milliseconds: 1));
     await tester.pumpAndSettle();
     final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);
     expect(labels, contains(_last.title));
@@ -219,8 +231,10 @@ void main() {
                 .value,
           )
           .toList();
-      expect(opacities.where((opacity) => opacity > 0.001), hasLength(lessThanOrEqualTo(1)));
-      expect(find.byType(CatalogInspectorCopy), findsOneWidget);
+      expect(opacities.length, inInclusiveRange(1, 2));
+      expect(opacities.reduce((first, second) => first + second), closeTo(1, 0.001));
+      final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);
+      expect(labels.where({_first.title, _second.title, _last.title}.contains), hasLength(lessThanOrEqualTo(1)));
     }
     await settle();
     final labels = tester.semantics.simulatedAccessibilityTraversal().map((node) => node.label);
@@ -262,6 +276,88 @@ void main() {
     expect(initialError, isNull, reason: 'initial reduced-motion layout');
     expect(updateError, isNull, reason: 'immediate reduced-motion selection');
     expect(error, isNull, reason: 'dispose after reduced-motion selection');
+  });
+
+  testWidgets('the old scene remains during image loading and an obsolete image cannot restore it', (tester) async {
+    final decoded = await cacheDecodedFixtureImage(tester);
+    final pending = Completer<ImageInfo>();
+    const pendingUrl = 'https://fixture.test/pending-inspector-poster.png';
+    final first = AnimeSummary(id: 1, slug: '1-first', title: _first.title, posterUri: Uri.parse(decodedFixtureUrl));
+    final pendingAnime = AnimeSummary(id: 2, slug: '2-second', title: _second.title, posterUri: Uri.parse(pendingUrl));
+    final selected = ValueNotifier(first);
+    addTearDown(selected.dispose);
+    await _seedBackdrop(decodedFixtureUrl, Future.value(ImageInfo(image: decoded.clone())));
+    await _seedBackdrop(pendingUrl, pending.future);
+    await pumpTvApp(
+      tester,
+      ValueListenableBuilder(
+        valueListenable: selected,
+        builder: (context, anime, _) => CatalogInspector(anime: anime, rail: const SizedBox(height: 120)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final firstImage = find.byWidgetPredicate(
+      (widget) => widget is Image && widget.image == _backdropProvider(decodedFixtureUrl),
+    );
+    expect(firstImage, findsNWidgets(2));
+    selected.value = pendingAnime;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(firstImage, findsNWidgets(2));
+    expect(find.text(_first.title), findsOneWidget);
+    expect(find.text(_second.title), findsNothing);
+
+    selected.value = _last;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+    pending.complete(ImageInfo(image: decoded.clone()));
+    await tester.pumpAndSettle();
+    expect(find.text(_last.title), findsOneWidget);
+    expect(find.text(_second.title), findsNothing);
+    expect(firstImage, findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pending and failed first backgrounds keep the text visible and disposal drops late frames', (
+    tester,
+  ) async {
+    final decoded = await cacheDecodedFixtureImage(tester);
+    final initial = Completer<ImageInfo>();
+    final later = Completer<ImageInfo>();
+    const initialUrl = 'https://fixture.test/failed-inspector-poster.png';
+    const laterUrl = 'https://fixture.test/disposed-inspector-poster.png';
+    await _seedBackdrop(initialUrl, initial.future);
+    await _seedBackdrop(laterUrl, later.future);
+    final selected = ValueNotifier(
+      AnimeSummary(id: 1, slug: '1-first', title: _first.title, posterUri: Uri.parse(initialUrl)),
+    );
+    addTearDown(selected.dispose);
+    await pumpTvApp(
+      tester,
+      ValueListenableBuilder(
+        valueListenable: selected,
+        builder: (context, anime, _) => CatalogInspector(anime: anime, rail: const SizedBox(height: 120)),
+      ),
+    );
+    final inspector = find.byType(CatalogInspector);
+    final image = find.descendant(of: inspector, matching: find.byType(Image));
+    expect(find.text(_first.title), findsOneWidget);
+    expect(image, findsNothing);
+    initial.completeError(StateError('fixture image decode failed'));
+    await tester.pumpAndSettle();
+    expect(find.text(_first.title), findsOneWidget);
+    expect(image, findsNothing);
+    expect(tester.takeException(), isNull);
+
+    selected.value = AnimeSummary(id: 2, slug: '2-second', title: _second.title, posterUri: Uri.parse(laterUrl));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text(_first.title), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    later.complete(ImageInfo(image: decoded.clone()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('compact TV inspector at 130% text has no overflow', (tester) async {
