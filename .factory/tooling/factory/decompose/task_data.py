@@ -298,7 +298,7 @@ def _plan_commit_error(plan: Path, content: bytes, commit: object) -> str | None
             b"\r\n", b"\n"
         ):
             return "plan_commit does not identify the plan content"
-    except (OSError, subprocess.TimeoutExpired, ValueError):
+    except OSError, subprocess.TimeoutExpired, ValueError:
         # Git or repository identity unavailable: do not invent provenance.
         return None
     return None

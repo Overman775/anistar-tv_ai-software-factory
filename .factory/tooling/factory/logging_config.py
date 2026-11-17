@@ -208,7 +208,7 @@ class Journal(logging.Handler):
             if len(self.pending) >= 64:
                 raise ValueError("diagnostic buffer full")
             self.pending.append(row)
-        except (OSError, ValueError, sqlite3.Error):
+        except OSError, ValueError, sqlite3.Error:
             self.failed = True
 
     def flush_pending(self) -> None:
@@ -217,7 +217,7 @@ class Journal(logging.Handler):
         try:
             self._write(self.pending, self.wait_budget)
             self.pending.clear()
-        except (OSError, ValueError, sqlite3.Error):
+        except OSError, ValueError, sqlite3.Error:
             self.failed = True
 
 
@@ -231,7 +231,7 @@ def initialize(workspace: str | Path, operation: str) -> Journal | None:
     LOGGER.setLevel(logging.INFO)
     try:
         handler = Journal(workspace, operation)
-    except (OSError, sqlite3.Error):
+    except OSError, sqlite3.Error:
         return None
     LOGGER.addHandler(handler)
     return handler

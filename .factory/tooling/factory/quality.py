@@ -48,6 +48,7 @@ def source_files() -> list[Path]:
             for p in root.rglob("*.py")
             if not {
                 ".venv",
+                ".python",
                 "__pycache__",
                 ".mypy_cache",
                 ".ruff_cache",
@@ -60,10 +61,15 @@ def source_files() -> list[Path]:
 
 def source_digest() -> str:
     digest = hashlib.sha256()
-    for file in sorted(FACTORY_ROOT.rglob("*")):
+    files: list[Path] = []
+    for directory, dirs, names in FACTORY_ROOT.walk():
+        dirs[:] = [name for name in dirs if name not in {".venv", ".python"}]
+        files.extend(directory / name for name in names)
+    for file in sorted(files):
         parts = file.relative_to(FACTORY_ROOT).parts
         if parts[0] == "memory" or {
             ".venv",
+            ".python",
             ".venv.setup.lock",
             "__pycache__",
             ".mypy_cache",

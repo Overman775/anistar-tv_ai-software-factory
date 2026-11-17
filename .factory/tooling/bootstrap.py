@@ -10,6 +10,10 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+
+if __name__ == "__main__" and sys.version_info[:2] != (3, 14):
+    sys.exit("BLOCKED: Python 3.14 required; see .factory/tooling/README.md (Python setup).")
+
 from typing import NotRequired, TypedDict
 
 TOOLS = Path(__file__).resolve().parent
@@ -88,8 +92,8 @@ def bundle_site_line(bundle: Path) -> str:
 def check() -> None:
     if (AGENTS / ".venv.setup.lock").exists():
         raise RuntimeError("Python setup in progress; wait for it to finish")
-    if sys.version_info < (3, 11):  # noqa: UP036  # Bootstrap rejects unsupported host Python.
-        raise RuntimeError("Python 3.11+ required; see tooling/README.md")
+    if sys.version_info[:2] != (3, 14):
+        raise RuntimeError("Python 3.14 required; see tooling/README.md")
     if (
         ENV.is_symlink()
         or Path(sys.prefix).resolve() != ENV.resolve()
@@ -111,9 +115,9 @@ def check() -> None:
 def setup(development: bool = False) -> None:
     import venv
 
-    if sys.version_info < (3, 11):  # noqa: UP036  # Bootstrap rejects unsupported host Python.
+    if sys.version_info[:2] != (3, 14):
         raise RuntimeError(
-            "Python 3.11+ required; install a supported Python using official OS instructions"
+            "Python 3.14 required; install a supported Python using official OS instructions"
         )
     state = AGENTS.parent / ".factory/memory/state/workflow.json"
     if (
@@ -134,6 +138,22 @@ def setup(development: bool = False) -> None:
             raise RuntimeError("Refusing to replace a symlink or non-venv .factory/.venv")
         if MARKER.is_symlink():
             raise RuntimeError("Refusing symlink readiness marker")
+        if ENV.exists():
+            version = subprocess.check_output(
+                [
+                    str(interpreter()),
+                    "-E",
+                    "-s",
+                    "-c",
+                    "import sys; print(sys.version_info[:2] == (3, 14))",
+                ],
+                text=True,
+                env=clean_environment(),
+            ).strip()
+            if version != "True":
+                raise RuntimeError(
+                    "Venv Python must be 3.14; recreate .factory/.venv with Python 3.14"
+                )
         # Once setup starts, failure must not leave an old success marker.
         MARKER.unlink(missing_ok=True)
         if not ENV.exists():
@@ -204,8 +224,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise RuntimeError("Readiness requires the project venv")
             import yaml
 
-            if sys.version_info < (3, 11):  # noqa: UP036  # Bootstrap rejects unsupported host Python.
-                raise RuntimeError("Venv Python is too old; recreate it with Python 3.11+")
+            if sys.version_info[:2] != (3, 14):
+                raise RuntimeError(
+                    "Venv Python must be 3.14; recreate .factory/.venv with Python 3.14"
+                )
             if not Path(yaml.__file__).resolve().is_relative_to(ENV.resolve()):
                 raise RuntimeError("PyYAML must be installed in the factory venv")
             check_bundle()

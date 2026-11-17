@@ -61,12 +61,12 @@ existing AGENTS.md or user host configuration. Explain a required host reload.
 ## Interpreter
 
 Follow [Python setup](../../../tooling/README.md#python-setup). Inventory Python first;
-if missing or too old, obtain official OS/distribution installation instructions.
+if 3.14 is absent, use the documented project-local uv option or obtain official OS/distribution installation instructions.
 Do not assume Homebrew, a Python launcher, sudo or an existing PATH entry. Explain
 any required user/system action; never overwrite system Python. This prerequisite
 is separate from project packages and requires authorized scope.
 
-Use the chosen Python 3.11+ only to run `tooling/bootstrap.py setup`. That helper
+Use the chosen Python 3.14 only to run `tooling/bootstrap.py setup`. That helper
 creates the factory-owned `.factory/.venv/` and installs tooling/requirements.txt there.
 This standard Python environment does not change vendor project-install layouts.
 Do not add factory packages to application manifests or install them globally.

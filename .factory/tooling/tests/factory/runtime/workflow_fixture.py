@@ -127,7 +127,9 @@ class WorkflowFixture:
         shutil.copytree(
             ROOT,
             dest,
-            ignore=shutil.ignore_patterns("__pycache__", ".venv", ".mypy_cache", ".ruff_cache"),
+            ignore=shutil.ignore_patterns(
+                "__pycache__", ".venv", ".python", ".mypy_cache", ".ruff_cache"
+            ),
             symlinks=True,
         )
         raw["project"] = "project/fixture.yaml"

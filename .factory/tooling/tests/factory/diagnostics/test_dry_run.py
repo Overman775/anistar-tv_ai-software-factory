@@ -27,7 +27,8 @@ def snapshot() -> dict[str, str]:
         if p.is_file()
         and not p.is_symlink()
         and not any(
-            part in p.parts for part in ("__pycache__", ".venv", ".mypy_cache", ".ruff_cache")
+            part in p.parts
+            for part in ("__pycache__", ".venv", ".python", ".mypy_cache", ".ruff_cache")
         )
     }
 
@@ -65,7 +66,7 @@ class DryRunTests(unittest.TestCase):
                 TOOLS.parent,
                 source,
                 ignore=shutil.ignore_patterns(
-                    ".venv", "__pycache__", ".ruff_cache", ".mypy_cache", ".pytest_cache"
+                    ".venv", ".python", "__pycache__", ".ruff_cache", ".mypy_cache", ".pytest_cache"
                 ),
             )
             for name in (".ruff_cache/cache", ".coverage.tmp", "htmlcov/index.html", "module.pyo"):

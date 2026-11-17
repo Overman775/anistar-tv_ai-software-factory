@@ -8,7 +8,7 @@ import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
 
 class Invalid(ValueError):
@@ -20,11 +20,7 @@ def require(condition: object, message: str) -> None:
         raise Invalid(message)
 
 
-P = ParamSpec("P")
-R = TypeVar("R")
-
-
-def acceptance_guard(function: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
+def acceptance_guard[**P, R](function: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
     try:
         return function(*args, **kwargs)
     except ValueError as exc:

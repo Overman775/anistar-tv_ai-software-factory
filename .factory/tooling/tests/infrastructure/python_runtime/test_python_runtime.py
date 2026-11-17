@@ -226,6 +226,10 @@ class RuntimeTests(unittest.TestCase):
                 patch.object(runtime, "ENV", self.environment),
                 patch.object(runtime, "MARKER", marker),
                 patch.object(runtime, "interpreter", return_value=self.python),
+                patch(
+                    "subprocess.check_output",
+                    side_effect=["True\n", json.dumps(str(self.tools))],
+                ),
                 patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "pip")),
             ):
                 with self.assertRaises(subprocess.CalledProcessError):
@@ -234,6 +238,31 @@ class RuntimeTests(unittest.TestCase):
             self.assertFalse((agents / ".venv.setup.lock").exists())
         finally:
             marker.write_bytes(original)
+
+    def test_unsupported_minors_block_setup_and_launch(self) -> None:
+        for version in ((3, 11, 14), (3, 15, 2)):
+            with self.subTest(version=version), patch("sys.version_info", version):
+                with self.assertRaisesRegex(RuntimeError, "Python 3.14 required"):
+                    runtime.setup()
+                with self.assertRaisesRegex(RuntimeError, "Python 3.14 required"):
+                    runtime.check()
+
+    def test_wrong_minor_venv_blocks_setup_before_package_changes(self) -> None:
+        agents = self.root / ".factory"
+        marker = self.environment / ".factory-ready.json"
+        original = marker.read_bytes()
+        with (
+            patch.object(runtime, "AGENTS", agents),
+            patch.object(runtime, "ENV", self.environment),
+            patch.object(runtime, "MARKER", marker),
+            patch("subprocess.check_output", return_value="False\n"),
+            patch("subprocess.run") as run,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "recreate .factory/.venv"):
+                runtime.setup()
+            run.assert_not_called()
+        self.assertEqual(marker.read_bytes(), original)
+        self.assertFalse((agents / ".venv.setup.lock").exists())
 
     def test_clean_environment_does_not_redirect_pip(self) -> None:
         with patch.dict(

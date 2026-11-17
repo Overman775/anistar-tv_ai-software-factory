@@ -104,7 +104,7 @@ def validate_evidence(
         try:
             source = Path(path)
             line_count = len(source.read_text(encoding="utf-8").splitlines())
-        except (OSError, UnicodeError):
+        except OSError, UnicodeError:
             line_count = 0
         if side != "new" or not source.is_file() or line > line_count:
             return False, "feature source evidence does not resolve"

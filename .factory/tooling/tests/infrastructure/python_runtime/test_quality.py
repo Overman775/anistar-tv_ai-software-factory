@@ -47,6 +47,10 @@ class QualityTests(unittest.TestCase):
         module = package / "example.py"
         module.write_text("before\n", encoding="utf-8")
         before = quality.source_digest()
+        managed = self.tools.parent / ".python"
+        managed.mkdir()
+        (managed / "interpreter").write_text("local runtime", encoding="utf-8")
+        self.assertEqual(before, quality.source_digest())
         memory = self.tools.parent / "memory"
         memory.mkdir()
         (memory / "run.json").write_text("state\n", encoding="utf-8")

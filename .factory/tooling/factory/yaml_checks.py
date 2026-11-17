@@ -30,6 +30,7 @@ def source_files(agents: Path = FACTORY_ROOT) -> list[Path]:
     for file in candidates:
         if {
             ".venv",
+            ".python",
             "__pycache__",
             ".mypy_cache",
             ".ruff_cache",

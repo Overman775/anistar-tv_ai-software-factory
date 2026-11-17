@@ -3,7 +3,7 @@
 The parent agent is the scheduler. These Python helpers load YAML, validate a
 proposed graph, reserve local resources, preserve evidence/counters and invoke
 ACP and declared required check commands. They are not a daemon, sandbox, semantic verifier or cross-machine queue.
-Prepare Python 3.11+ with the [factory setup](../tooling/README.md#python-setup).
+Prepare Python 3.14 with the [factory setup](../tooling/README.md#python-setup).
 Run commands from the consumer checkout. `--workspace` can select another
 checkout; `--config` can select another factory YAML. Do not run application work
 inside the Lab snapshot, which has no AniStar source or Flutter toolchain.

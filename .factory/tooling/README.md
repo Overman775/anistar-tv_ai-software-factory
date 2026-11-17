@@ -43,23 +43,27 @@ Factory tools use the standard project venv `.factory/.venv/`. No activation,
 global pip install, global PATH edit or temporary PYTHONPATH is needed. This is
 only the factory's own Python environment, not a layout imposed on vendor tools.
 
-1. Choose an installed Python **3.11+**. If absent, follow the official
+1. Choose an installed Python **3.14**. If absent, follow the official
    [Python installation instructions](https://www.python.org/downloads/) for the OS.
    On Linux ensure that interpreter has venv/ensurepip support using the distribution's
-   instructions. Do not replace the system Python. A supported managed Python may be
-   used if system installation is unavailable. Runtime installation must be within
+   instructions. Do not replace the system Python. An installed uv can provision a project-local managed interpreter: on Unix run
+   `UV_PYTHON_INSTALL_DIR="$PWD/.factory/.python" uv python install --no-bin --no-registry 3.14`, then
+   use `UV_PYTHON_INSTALL_DIR="$PWD/.factory/.python" uv python find --managed-python 3.14`
+   to locate it. On Windows PowerShell set `$env:UV_PYTHON_INSTALL_DIR` to the
+   absolute project `.factory/.python` directory and run the same uv commands.
+   Exclude that directory from Git and indexing. Runtime installation must be within
    the user’s authorized setup scope; do not ask again when already authorized.
    The helper never installs an OS package or downloads Python.
 2. From the project root, explicitly prepare the environment (may download packages):
 
-   macOS/Linux: `python3 -E -s -B .factory/tooling/bootstrap.py setup`
+   macOS/Linux: `python3.14 -E -s -B .factory/tooling/bootstrap.py setup`
 
-   Windows: `py -3 -E -s -B .factory/tooling/bootstrap.py setup`
+   Windows: `py -3.14 -E -s -B .factory/tooling/bootstrap.py setup`
 
    These are bootstrap examples: substitute the verified Python executable when
-   `python3`/`py -3` selects an older or unavailable interpreter. Setup creates venv,
+   `python3.14`/`py -3.14` is unavailable or selects an unexpected interpreter. Setup creates venv,
    installs PyYAML, Pydantic v2 and their dependencies from the hash-locked requirements.txt, checks dependencies, and records readiness. Existing
-   compatible venv is reused; a non-venv directory or active workflow blocks setup.
+   compatible venv is reused; a wrong-minor venv blocks setup before package changes. Stop active runs, preserve any data in it, then remove and recreate the disposable `.factory/.venv` using Python 3.14. A non-venv directory or active workflow also blocks setup.
 3. For subsequent factory Python commands use the launcher, except for the
    documented direct Decompose graph entry point described above:
 
@@ -91,11 +95,11 @@ support, package download failure, or incompatible wheel is an explicit blocker.
 For tooling development, run explicit setup with `--dev` using the selected Python:
 
 ```bash
-python3 -E -s -B .factory/tooling/bootstrap.py setup --dev
+python3.14 -E -s -B .factory/tooling/bootstrap.py setup --dev
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/check.py --report-dir /absolute/path/to/reports
 ```
 
-On Windows use `py -3` for setup and `.\.factory\tooling\bin\python.cmd` for checks.
+On Windows use `py -3.14` for setup and `.\.factory\tooling\bin\python.cmd` for checks.
 Setup installs the resolved, hash-locked `requirements-dev.txt`, including runtime
 requirements. `requirements.in` declares runtime dependencies; `requirements-dev.in`
 declares development dependencies. Normal checks never install packages or use the network.
@@ -139,13 +143,12 @@ Tests use temporary workspaces and pinned fixtures, not the consumer's current
 factory.yaml or project profile. Test discovery must find every expected suite.
 A dry-run PASS demonstrates preparation, not live model or application readiness.
 
-CI must invoke the same checker on Python 3.11 and the selected current supported
-version (3.15), on Linux, macOS and Windows. The Lab workflow provides this matrix;
+CI must invoke the same checker on Python 3.14, on Linux, macOS and Windows. The Lab workflow provides this matrix;
 an installed consumer connects the same command to its own CI. Remote CI execution
 and required branch protection depend on the repository host.
 
 To update dependencies, resolve both `.in` files into their `.txt` lock files with
-transitive versions and hashes (for example `uv pip compile --python-version 3.11
+transitive versions and hashes (for example `uv pip compile --python-version 3.14
 --universal --generate-hashes`). Then run explicit setup, the full checker, the audit,
 and a fresh runtime-only verification. The resolver is a maintenance tool, not a
 runtime requirement.

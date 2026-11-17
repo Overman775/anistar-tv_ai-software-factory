@@ -138,7 +138,7 @@ def _session_command(
                 else Path(config["_path"]).parent / executable
             )
         return cwd, alias, name, command
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return None
 
 
@@ -181,7 +181,7 @@ def _collect_session_usage(
                     record.cumulative_cost.model_dump(exclude_unset=True)
                 )
             session.collection = "ok"
-        except (OSError, subprocess.SubprocessError, ValidationError, ValueError, UnicodeError):
+        except OSError, subprocess.SubprocessError, ValidationError, ValueError, UnicodeError:
             continue
 
 

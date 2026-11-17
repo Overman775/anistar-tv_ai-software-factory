@@ -1,6 +1,6 @@
 # Python tooling
 
-Target: Python 3.11+, factory-owned tools, gates, skill scripts and tests, including
+Target: Python 3.14, factory-owned tools, gates, skill scripts and tests, including
 hidden `.factory/` paths. Explicitly exclude venvs, caches, run output and third-party
 code. Read actual configuration before
 running checks. This bundle ships the checker, explicit configuration and resolved runtime/dev dependency locks.
@@ -16,7 +16,7 @@ A check result applies only to its tested source state and environment.
   then pass typed records internally. An annotation or cast does not validate data.
 - Use Pydantic v2 at structured input, publication and persistence boundaries.
   Reuse owned TypedDict contracts with TypeAdapter when mutable dictionaries suit
-  consumers. Use typing_extensions.TypedDict on the Python 3.11 baseline.
+  consumers. Use standard-library TypedDict where supported by the installed Pydantic version.
   Validate before serializing and hashing new evidence. Check persisted byte
   digests before reading evidence into its typed form.
 - Closed factory records use strict types and forbid extra keys in nested records.
@@ -46,13 +46,13 @@ runs with an updated factory is not automatic.
 
 ## Target checks
 
-- Ruff lint and format check: py311, line length 100, double quotes, spaces,
+- Ruff lint and format check: py314, line length 100, double quotes, spaces,
   formatter preview off; lint preview enabled only for explicitly selected rules.
   Rules: E4, E7, E9, F, I, B, UP, RUF100, PGH003, PGH004, S307, S506,
   S602, S110, S112, SIM107, RUF012, PLW1510, C901, PLW1514, RUF018.
   Factory text artifacts use UTF-8. Explain narrow exceptions. No automatic unsafe fixes.
   Use `--no-cache` for direct Ruff commands; format only authorized paths.
-- Mypy: strict=true, python_version=3.11, disallow_any_unimported=true;
+- Mypy: strict=true, python_version=3.14, disallow_any_unimported=true;
   include tests and compatible dependency stubs. Pin checker version.
 - Unittest: all applicable tools/skill suites. Zero tests in an expected suite
   is a discovery failure. Test contracts, meaningful failures and boundaries.
@@ -82,5 +82,5 @@ stubs reproducibly. Explicit setup may install packages within authorized scope;
 normal checks are offline and never install or rewrite source.
 Verify runtime in a clean runtime-only environment as well as the dev environment.
 Verify the installed copy with a temporary profile, without Lab/specs or AniStar inputs.
-Test Python 3.11 and the selected current supported version; verify launchers on
+Test Python 3.14; verify launchers on
 their respective operating systems. Local success does not prove other platforms.

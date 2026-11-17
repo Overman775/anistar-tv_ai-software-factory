@@ -29,6 +29,7 @@ class FactoryLoader(unittest.TestLoader):
     def _find_test_path(self, full_path: str, pattern: str, *args: Any) -> Any:
         if {
             ".venv",
+            ".python",
             "__pycache__",
             ".mypy_cache",
             ".ruff_cache",
@@ -55,6 +56,7 @@ def main() -> int:
     for file in tests.rglob("test*.py"):
         if {
             ".venv",
+            ".python",
             "__pycache__",
             ".mypy_cache",
             ".ruff_cache",

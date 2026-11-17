@@ -155,6 +155,7 @@ def copy_bundle(source: Path, target: Path) -> None:
         "tests",
         ".DS_Store",
         ".venv",
+        ".python",
         ".venv.setup.lock",
         ".ruff_cache",
         ".mypy_cache",

@@ -41,6 +41,7 @@ when needed, without replacing user rules.
 ```gitignore
 /memory/
 /.venv/
+/.python/
 /.venv.setup.lock
 __pycache__/
 *.py[cod]
@@ -60,7 +61,7 @@ Add these entries only for the selected installation/host; use actual paths:
 
 | Local artifact | Git and Graphify rule |
 | --- | --- |
-| Factory virtualenv, if located here | `/.factory/.venv/` |
+| Factory virtualenv and managed Python, if located here | `/.factory/.venv/`, `/.factory/.python/` |
 | Python bytecode under factory tools/skills | `/.factory/**/__pycache__/`, `/.factory/**/*.pyc`, `/.factory/**/*.pyo` |
 | Test/linter caches created under the factory | `/.factory/**/.pytest_cache/`, `/.factory/**/.mypy_cache/`, `/.factory/**/.ruff_cache/` |
 | Personal root instructions | `/AGENTS.local.md`, `/CLAUDE.local.md` |
@@ -126,6 +127,7 @@ discovery aliases if present. Existing application exclusions stay outside the b
 
 # Local data is excluded explicitly, independently of .gitignore.
 /.factory/.venv/
+/.factory/.python/
 /.factory/.venv.setup.lock
 /.factory/**/__pycache__/
 /.factory/**/*.pyc

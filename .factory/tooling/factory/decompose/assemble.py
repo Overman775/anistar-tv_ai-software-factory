@@ -336,7 +336,7 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
         review_inputs = {Path(p): Path(p).read_bytes() for p in (args.request, args.review)}
         request = json.loads(review_inputs[Path(args.request)])
         report = json.loads(review_inputs[Path(args.review)])
-    except (OSError, ValueError):
+    except OSError, ValueError:
         request, report = {}, {}
     records.append(review_record(request, report, artifacts, policy_hash, tasks, args.review))
     result = core_result(
