@@ -129,11 +129,6 @@ class SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPro
 
   void _enterSearch() {
     if (!mounted || !widget.active || ModalRoute.of(context)?.isCurrent != true) return;
-    if (AppLayoutScope.isTvOf(context) && _bloc.state.items.any((item) => item.id == _selectedId)) {
-      focusFirst();
-
-      return;
-    }
     _startEditing();
   }
 
@@ -876,12 +871,8 @@ class SearchScreenState extends ConsumerState<SearchScreen> with SingleTickerPro
     final bloc = _bloc;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_resultsActive || bloc != _bloc || _selectedId != selected.id || !_scroll.hasClients) return;
-      final position = _scroll.position;
-      if (position.axis != Axis.horizontal) return;
-      final step = CatalogPosterRail.stepOf(context);
-      final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-      _railMotion.stop();
-      _scroll.jumpTo(target);
+      if (_scroll.position.axis != Axis.horizontal || !_scroll.position.hasContentDimensions) return;
+      _railMotion.reanchor(index, CatalogPosterRail.stepOf(context));
       _reanchorPending = false;
     });
   }

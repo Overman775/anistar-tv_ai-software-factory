@@ -53,6 +53,11 @@ class CatalogRailMotion {
     }
   }
 
+  void reanchor(int index, double step) {
+    if (!_scroll.hasClients || _scroll.position.axis != Axis.horizontal) return;
+    retarget(index, step, animate: false);
+  }
+
   double _clampTarget(ScrollPosition position) => _target.clamp(position.minScrollExtent, position.maxScrollExtent);
 
   void _advance(Duration elapsed) {

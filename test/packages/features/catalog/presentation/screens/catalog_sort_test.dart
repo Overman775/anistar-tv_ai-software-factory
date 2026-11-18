@@ -314,6 +314,43 @@ void main() {
     expect(bloc.state.items.every((item) => item.title.startsWith('Batch 3')), isTrue);
   });
 
+  testWidgets('after a failed sort applying the confirmed order loads page one', (tester) async {
+    var calls = 0;
+    final repository = FakeCatalogBrowseRepository(
+      load: (_, page) async {
+        calls++;
+        if (calls == 2) return const Result.failure(UnknownFailure());
+        return Result.success(
+          AnimePage(
+            page: page,
+            hasNext: false,
+            items: [AnimeSummary(id: calls, slug: '$calls-test', title: 'Result $calls', posterUri: Uri())],
+          ),
+        );
+      },
+    );
+    await pumpTvApp(
+      tester,
+      CatalogScreen(filter: comedyFilter, onAnimeTap: (_) => fail('Unexpected anime selection')),
+      wrapInScaffold: false,
+      overrides: [catalogBrowseRepositoryProvider.overrideWithValue(repository)],
+    );
+    await tester.pumpAndSettle();
+    await _applyTitle(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Каталог недоступен'), findsOneWidget);
+    await _key(tester, LogicalKeyboardKey.arrowUp);
+    await _key(tester, LogicalKeyboardKey.select);
+    expect(find.byType(CatalogSortSheet), findsOneWidget);
+    await _key(tester, LogicalKeyboardKey.arrowDown, 7);
+    await _key(tester, LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(repository.requests.map((request) => request.$2), [1, 1, 1]);
+    expect(repository.sorts.last, defaultCatalogSort);
+    expect(find.text('Result 3'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('filtered route shell moves from Sort to retry with one Down', (tester) async {
     var requests = 0;
     final repository = FakeCatalogBrowseRepository(

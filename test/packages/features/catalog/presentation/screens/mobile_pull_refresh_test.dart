@@ -188,6 +188,81 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('confirmed favorite removal during pull reloads after the stale page', (tester) async {
+    final stale = Completer<Result<AnimePage, Failure>>();
+    final favorites = FakeFavoritesRepository()..ids.addAll([1, 2]);
+    favorites.load = (number) async {
+      if (favorites.pages.length == 2) return stale.future;
+      return Result.success(page(favorites.ids.toList()));
+    };
+    await pumpMobileApp(
+      tester,
+      const CatalogScreen(favoritesOnly: true, onAnimeTap: ignoreAnime),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        favoritesRepositoryProvider.overrideWithValue(favorites),
+      ],
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Аниме 1'), findsOneWidget);
+    await pull(tester, find.byType(CustomScrollView));
+    expect(favorites.pages, [1, 1]);
+    await tester.longPress(find.byType(MobileAnimeCard).first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Удалить из избранного'));
+    await tester.pump();
+    expect(favorites.writes, [false]);
+    expect(favorites.ids, {2});
+    expect(favorites.pages, [1, 1]);
+    stale.complete(Result.success(page([1, 2])));
+    await tester.pumpAndSettle();
+    expect(favorites.pages, [1, 1, 1]);
+    expect(find.text('Аниме 1'), findsNothing);
+    expect(find.text('Аниме 2'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('manual pull supersedes an ongoing automatic refresh', (tester) async {
+    final automatic = Completer<Result<AnimePage, Failure>>();
+    final manual = Completer<Result<AnimePage, Failure>>();
+    var calls = 0;
+    await pumpMobileApp(
+      tester,
+      const CatalogScreen(onAnimeTap: ignoreAnime),
+      wrapInScaffold: false,
+      overrides: [
+        authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+        favoritesAccountProvider.overrideWithValue('test'),
+        catalogRepositoryProvider.overrideWithValue(
+          FakeCatalogScreenRepository(
+            load: (number) {
+              calls++;
+              if (calls == 1) return Future.value(Result.success(page([1])));
+              return calls == 2 ? automatic.future : manual.future;
+            },
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+    tester.state<CatalogScreenState>(find.byType(CatalogScreen)).refresh();
+    await tester.pump();
+    await pull(tester, find.byType(CustomScrollView));
+    expect(calls, 3);
+    manual.complete(Result.success(page([3])));
+    await tester.pumpAndSettle();
+    expect(find.byType(RefreshProgressIndicator), findsNothing);
+    expect(find.text('Аниме 3'), findsOneWidget);
+    automatic.complete(Result.success(page([2])));
+    await tester.pumpAndSettle();
+    expect(find.text('Аниме 3'), findsOneWidget);
+    expect(find.text('Аниме 2'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('failed pull after pagination keeps the list and scroll can request the next page', (tester) async {
     final refresh = Completer<Result<AnimePage, Failure>>();
     final pagination = Completer<Result<AnimePage, Failure>>();

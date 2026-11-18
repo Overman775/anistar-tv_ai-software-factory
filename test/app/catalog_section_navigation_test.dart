@@ -611,6 +611,10 @@ void main() {
     expect(search.requests, hasLength(1));
     expect(homeRequests, 2);
     expect(favorites.pages.length, greaterThanOrEqualTo(2));
+    final query = tester.widget<TextField>(find.byKey(const ValueKey('search-query')));
+    expect(query.focusNode?.hasFocus, isTrue);
+    expect(query.readOnly, isFalse);
+    await key(LogicalKeyboardKey.arrowDown);
     expect(FocusManager.instance.primaryFocus, same(searchFocus));
     expect(tester.takeException(), isNull);
   });
