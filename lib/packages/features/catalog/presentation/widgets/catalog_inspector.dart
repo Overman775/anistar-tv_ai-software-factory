@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
+import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_summary.dart';
 import '../../domain/models/catalog_filter.dart';
+import 'catalog_backdrop.dart';
+import 'catalog_backdrop_cache.dart';
 import 'catalog_inspector_copy.dart';
 import 'catalog_layout.dart';
 
@@ -44,8 +46,9 @@ class CatalogInspector extends StatefulWidget {
 class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerProviderStateMixin {
   late AnimeSummary _displayed = widget.anime;
   AnimeSummary? _outgoing;
-  ImageProvider<Object>? _backdrop;
-  ImageProvider<Object>? _outgoingBackdrop;
+  final _backdrops = CatalogBackdropCache();
+  ui.Image? _backdrop;
+  ui.Image? _outgoingBackdrop;
   Uri? _resolvedPoster;
   bool? _reduced;
   int _request = 0;
@@ -62,6 +65,7 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
 
   void _clearOutgoing() {
     _outgoing = null;
+    _outgoingBackdrop?.dispose();
     _outgoingBackdrop = null;
   }
 
@@ -81,31 +85,34 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
   Future<void> _resolveScene(int request, {required bool immediate}) async {
     final poster = widget.anime.posterUri;
     var image = _backdrop;
-    if (_resolvedPoster != poster || widget.rail == null) {
-      image = widget.rail == null
+    final needsBackdrop = _resolvedPoster != poster || widget.rail == null;
+    if (needsBackdrop) {
+      final provider = widget.rail == null
           ? null
           : AppNetworkImage.providerFor(
               poster?.toString(),
               cacheHeight: (MediaQuery.sizeOf(context).height * MediaQuery.devicePixelRatioOf(context)).ceil(),
             );
-      if (image != null) {
-        var failed = false;
-        await precacheImage(image, context, onError: (_, _) => failed = true);
-        if (failed) image = null;
-      }
+      image = provider == null ? null : await _backdrops.acquire(provider, createLocalImageConfiguration(context));
     }
-    if (!mounted || request != _request) return;
+    if (!mounted || request != _request) {
+      if (needsBackdrop) image?.dispose();
+      return;
+    }
     if (immediate && identical(_backdrop, image) && _resolvedPoster == poster) return;
     if (!immediate && _displayed.id == widget.anime.id && identical(_backdrop, image)) return;
 
     setState(() {
+      _clearOutgoing();
       if (!immediate) {
         _outgoing = _displayed;
-        _outgoingBackdrop = _backdrop;
+        _outgoingBackdrop = identical(image, _backdrop) ? _backdrop?.clone() : _backdrop;
+      } else if (!identical(image, _backdrop)) {
+        _backdrop?.dispose();
       }
       _displayed = widget.anime;
       _backdrop = image;
-      _resolvedPoster = poster;
+      _resolvedPoster = widget.rail == null ? null : poster;
       if (!immediate) unawaited(_opacity.forward(from: 0));
     });
   }
@@ -114,7 +121,9 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
   void didUpdateWidget(covariant CatalogInspector oldWidget) {
     super.didUpdateWidget(oldWidget);
     final changed = oldWidget.anime.id != widget.anime.id || oldWidget.anime.posterUri != widget.anime.posterUri;
-    if (changed || widget.immediate && !oldWidget.immediate) {
+    if ((widget.rail == null) != (oldWidget.rail == null)) {
+      _requestScene(immediate: true);
+    } else if (changed || widget.immediate && !oldWidget.immediate) {
       _requestScene(immediate: widget.immediate || _reduced == true);
     } else if (_displayed.id == widget.anime.id) {
       _displayed = widget.anime;
@@ -139,6 +148,9 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
   void dispose() {
     _dwell?.cancel();
     _opacity.dispose();
+    _clearOutgoing();
+    _backdrop?.dispose();
+    _backdrops.dispose();
     for (final node in _genreFocus.values) {
       node.dispose();
     }
@@ -221,27 +233,12 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
     return Stack(
       fit: StackFit.expand,
       children: [
-        ExcludeSemantics(
-          child: IgnorePointer(
-            child: LayoutBuilder(
-              builder: (context, constraints) => Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (_outgoingBackdrop case final image?)
-                    FadeTransition(
-                      opacity: _fadeOut,
-                      child: _CatalogBackdrop(image: image, height: constraints.maxHeight),
-                    ),
-                  if (_backdrop case final image?)
-                    FadeTransition(
-                      opacity: _fadeIn,
-                      child: _CatalogBackdrop(image: image, height: constraints.maxHeight),
-                    ),
-                ],
-              ),
+        if (_backdrops.fadeShader case final shader? when _backdrop != null || _outgoingBackdrop != null)
+          ExcludeSemantics(
+            child: IgnorePointer(
+              child: CatalogBackdrop(shader: shader, incoming: _backdrop, outgoing: _outgoingBackdrop, fade: _fadeIn),
             ),
           ),
-        ),
         Column(
           children: [
             Expanded(
@@ -266,59 +263,6 @@ class _CatalogInspectorState extends State<CatalogInspector> with SingleTickerPr
           ],
         ),
       ],
-    );
-  }
-}
-
-class _CatalogBackdrop extends StatelessWidget {
-  const _CatalogBackdrop({required this.image, required this.height});
-
-  final ImageProvider<Object> image;
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    // Clamp the blur at image edges. The shared mask starts after compositing
-    // both layers, so neither layer stops abruptly at the top of the rail.
-    const blur = 19.0;
-    final poster = Image(image: image, height: height, fit: BoxFit.contain, excludeFromSemantics: true);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: ShaderMask(
-        blendMode: BlendMode.dstIn,
-        shaderCallback: (bounds) => const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: [0.86, 1],
-          colors: [Colors.white, Colors.transparent],
-        ).createShader(bounds),
-        child: ShaderMask(
-          blendMode: BlendMode.dstIn,
-          shaderCallback: (bounds) => const LinearGradient(
-            stops: [0, 0.48, 0.72],
-            colors: [Colors.transparent, Color(0x99FFFFFF), Colors.white],
-          ).createShader(bounds),
-          child: ClipRect(
-            child: ColorFiltered(
-              colorFilter: const ColorFilter.mode(Color(0x1F000000), BlendMode.srcATop),
-              child: Stack(
-                children: [
-                  poster,
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.64,
-                      child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur, tileMode: TileMode.clamp),
-                        child: poster,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

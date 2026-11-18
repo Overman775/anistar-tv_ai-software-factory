@@ -37,6 +37,7 @@ import '../mocks/features/catalog/fake_catalog_browse_repository.dart';
 import '../mocks/features/catalog/fake_catalog_screen_repository.dart';
 import '../mocks/features/favorites/fake_favorites_repository.dart';
 import '../mocks/features/search/fake_search_repository.dart';
+import '../support/catalog_backdrop.dart';
 import '../support/decoded_fixture_image.dart';
 import '../support/test_app.dart';
 
@@ -308,6 +309,9 @@ Future<void> _runRedesignScene(
   if (!mobile && scene == 'menu') {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await settle();
+  }
+  if (!mobile && ['home', 'favorites', 'browse', 'search', 'menu'].contains(scene)) {
+    await pumpUntilCatalogBackdrop(tester);
   }
   final sceneError = tester.takeException();
   expect(sceneError, isNull, reason: sceneError is Error ? '${sceneError.stackTrace}' : null);

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:anistar_tv/packages/features/catalog/catalog_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/anime_summary.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/screens/catalog_screen.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_backdrop.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_copy.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_rating.dart';
@@ -13,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../../../mocks/features/catalog/fake_catalog_screen_repository.dart';
+import '../../../../../support/catalog_backdrop.dart';
 import '../../../../../support/decoded_fixture_image.dart';
 import '../../../../../support/test_app.dart';
 
@@ -296,26 +298,34 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final firstImage = find.byWidgetPredicate(
-      (widget) => widget is Image && widget.image == _backdropProvider(decodedFixtureUrl),
-    );
-    expect(firstImage, findsNWidgets(2));
+    final backdrop = find.byType(CatalogBackdrop);
+    final firstImage = (await pumpUntilCatalogBackdrop(tester)).incoming;
+    expect(firstImage?.height, 240);
     selected.value = pendingAnime;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(firstImage, findsNWidgets(2));
+    expect(tester.widget<CatalogBackdrop>(backdrop).incoming, same(firstImage));
     expect(find.text(_first.title), findsOneWidget);
     expect(find.text(_second.title), findsNothing);
 
     selected.value = _last;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 110));
+    final transition = tester.widget<CatalogBackdrop>(backdrop);
+    final copyFade = tester.widget<FadeTransition>(
+      find.ancestor(of: find.text(_last.title), matching: find.byType(FadeTransition)).first,
+    );
+    expect(transition.outgoing, same(firstImage));
+    expect(transition.incoming, isNull);
+    expect(transition.fade, same(copyFade.opacity));
+    expect(transition.fade.value, inExclusiveRange(0, 1));
     await tester.pumpAndSettle();
     pending.complete(ImageInfo(image: decoded.clone()));
     await tester.pumpAndSettle();
     expect(find.text(_last.title), findsOneWidget);
     expect(find.text(_second.title), findsNothing);
-    expect(firstImage, findsNothing);
+    expect(backdrop, findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -340,14 +350,13 @@ void main() {
         builder: (context, anime, _) => CatalogInspector(anime: anime, rail: const SizedBox(height: 120)),
       ),
     );
-    final inspector = find.byType(CatalogInspector);
-    final image = find.descendant(of: inspector, matching: find.byType(Image));
+    final backdrop = find.byType(CatalogBackdrop);
     expect(find.text(_first.title), findsOneWidget);
-    expect(image, findsNothing);
+    expect(backdrop, findsNothing);
     initial.completeError(StateError('fixture image decode failed'));
     await tester.pumpAndSettle();
     expect(find.text(_first.title), findsOneWidget);
-    expect(image, findsNothing);
+    expect(backdrop, findsNothing);
     expect(tester.takeException(), isNull);
 
     selected.value = AnimeSummary(id: 2, slug: '2-second', title: _second.title, posterUri: Uri.parse(laterUrl));
