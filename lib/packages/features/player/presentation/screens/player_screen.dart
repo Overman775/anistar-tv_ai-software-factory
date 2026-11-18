@@ -66,6 +66,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   VideoPlayerController? _controller;
   bool _controlsVisible = true;
   bool _disposed = false;
+  bool _popped = false;
   bool _isTv = true;
   bool _scrubbing = false;
   bool _panelOpen = false;
@@ -365,7 +366,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   void _onPlayerChanged() {
     final player = _controller;
-    if (_disposed || player == null) {
+    if (_disposed || _popped || player == null) {
       return;
     }
     _updateScreenAwake();
@@ -401,7 +402,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _markStarted(VideoPlayerController player) {
-    if (!identical(_controller, player) || !player.value.isPlaying || player.value.hasError) return;
+    if (_popped || !identical(_controller, player) || !player.value.isPlaying || player.value.hasError) return;
     final account = ref.read(watchHistoryAccountProvider);
     final episode = _episodeNumber;
     final anime = widget.animeId;
@@ -453,7 +454,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       setState(() => _restart(resetBudget: resetBudget, preservePosition: preservePosition));
 
   void _restart({required bool resetBudget, required bool preservePosition}) {
-    if (_disposed) {
+    if (_disposed || _popped) {
       return;
     }
     _controlsTimer?.cancel();
@@ -579,7 +580,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   void _previewSeek(Duration offset) {
     final player = _controller;
-    if (player == null || !player.value.isInitialized || player.value.hasError) {
+    if (_popped || player == null || !player.value.isInitialized || player.value.hasError) {
       _seekHold.stop();
 
       return;
@@ -615,7 +616,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   void _seek(Duration position) {
     _seekHold.stop();
     final player = _controller;
-    if (player == null || !player.value.isInitialized || player.value.hasError) {
+    if (_popped || player == null || !player.value.isInitialized || player.value.hasError) {
       return;
     }
     final target = Duration(milliseconds: position.inMilliseconds.clamp(0, player.value.duration.inMilliseconds));
@@ -724,6 +725,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _setPlaying(bool playing) {
+    if (_popped) return;
     _seekHold.stop();
     if (!_appResumed) {
       _lifecycleResumePlaying = playing;
@@ -745,11 +747,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     }
   }
 
-  bool _isCurrent(int initializationId) => !_disposed && initializationId == _initializationId;
+  bool _isCurrent(int initializationId) => !_disposed && !_popped && initializationId == _initializationId;
 
   Future<void> _runPlayerCommand(Future<void> Function(VideoPlayerController) command) async {
     final player = _controller;
-    if (player == null || !player.value.isInitialized || player.value.hasError) {
+    if (_popped || player == null || !player.value.isInitialized || player.value.hasError) {
       return;
     }
     try {
@@ -796,6 +798,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_popped) return;
     final resumed = state == AppLifecycleState.resumed;
     if (_appResumed && !resumed) {
       _lifecycleResumePlaying = _controller?.value.isPlaying ?? _resumePlaying;
@@ -831,6 +834,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   @override
   void didPop() {
+    _popped = true;
+    _initializationId++;
     _routeActive = false;
     _seekHold.stop();
     _controlsTimer?.cancel();

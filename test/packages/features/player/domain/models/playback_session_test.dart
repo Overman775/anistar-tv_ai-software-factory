@@ -43,4 +43,22 @@ void main() {
     expect(value.previousEpisode(3), 1);
     expect(value.nextEpisode(1), 3);
   });
+
+  test('neighbors use episode numbers even when metadata is unsorted and has gaps', () {
+    final value = session(
+      episodes: const [
+        PlaybackEpisode(number: 9, title: 'Nine'),
+        PlaybackEpisode(number: 1, title: 'One'),
+        PlaybackEpisode(number: 5, title: 'Five'),
+        PlaybackEpisode(number: 3, title: 'Three'),
+      ],
+    );
+
+    expect(value.previousEpisode(5), 3);
+    expect(value.nextEpisode(5), 9);
+    expect(value.previousEpisode(4), 3);
+    expect(value.nextEpisode(4), 5);
+    expect(value.previousEpisode(1), isNull);
+    expect(value.nextEpisode(9), isNull);
+  });
 }

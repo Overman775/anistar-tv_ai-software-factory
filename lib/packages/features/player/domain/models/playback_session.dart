@@ -27,7 +27,21 @@ final class PlaybackSession {
   Set<int> get watchedEpisodes =>
       Set.unmodifiable(episodes.where((episode) => episode.isWatched).map((episode) => episode.number));
 
-  int? previousEpisode(int current) => (episodeNumbers.where((number) => number < current).toList()..sort()).lastOrNull;
+  int? previousEpisode(int current) {
+    int? previous;
+    for (final episode in episodes) {
+      final number = episode.number;
+      if (number < current && (previous == null || number > previous)) previous = number;
+    }
+    return previous;
+  }
 
-  int? nextEpisode(int current) => (episodeNumbers.where((number) => number > current).toList()..sort()).firstOrNull;
+  int? nextEpisode(int current) {
+    int? next;
+    for (final episode in episodes) {
+      final number = episode.number;
+      if (number > current && (next == null || number < next)) next = number;
+    }
+    return next;
+  }
 }

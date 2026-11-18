@@ -54,8 +54,10 @@ final class AnistarHtmlParser {
     return AnistarCatalogPageDto(items: items, page: page, hasNext: hasNext);
   }
 
-  AnistarCatalogPageDto catalog(String source, int page, {bool favorites = false, String? filterPath}) {
-    final document = _document(source);
+  AnistarCatalogPageDto catalog(String source, int page, {bool favorites = false, String? filterPath}) =>
+      catalogDocument(_document(source), page, favorites: favorites, filterPath: filterPath);
+
+  AnistarCatalogPageDto catalogDocument(Document document, int page, {bool favorites = false, String? filterPath}) {
     final items = <AnistarAnimeSummaryDto>[];
     final ids = <int>{};
     final content = favorites ? document.querySelector('#dle-content') ?? document : document;
@@ -131,8 +133,12 @@ final class AnistarHtmlParser {
     return filters;
   }
 
-  List<AnistarCatalogFilterDto> genreMenu(String source) =>
-      _filters(_document(source).querySelectorAll('.block-janrs a[href]'));
+  List<AnistarCatalogFilterDto> genreMenu(String source) => genreMenuDocument(parseDocument(source));
+
+  List<AnistarCatalogFilterDto> genreMenuDocument(Document document) =>
+      _filters(document.querySelectorAll('.block-janrs a[href]'));
+
+  Document parseDocument(String source) => _document(source);
 
   List<AnistarEpisodeDto> episodes(String source, {Map<String, String> httpHeaders = const {}}) =>
       List.unmodifiable(parsedEpisodes(source, httpHeaders: httpHeaders).map((item) => item.episode));

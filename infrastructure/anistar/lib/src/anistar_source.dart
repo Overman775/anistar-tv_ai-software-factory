@@ -1,5 +1,6 @@
 import 'package:core/data.dart';
 import 'package:dio/dio.dart';
+import 'package:html/dom.dart';
 import 'package:networking/networking.dart';
 
 import 'anistar_failure.dart';
@@ -23,7 +24,7 @@ final class AnistarSource {
   final int Function()? _accessGeneration;
   int? _catalogAccess;
   List<AnistarCatalogFilterDto>? _genreMenu;
-  ({Future<String> response, bool refresh})? _catalogRequest;
+  ({Future<Document> response, bool refresh})? _catalogRequest;
 
   AnistarSource(this._dio, {int Function()? accessGeneration})
     : baseUri = Uri.parse(_dio.options.baseUrl),
@@ -48,16 +49,19 @@ final class AnistarSource {
     final path = (filterPath ?? '/anime/').substring(1);
     final homePage = page == 1 && path == 'anime/' && parameters == null;
     final access = homePage ? _accessGeneration?.call() : null;
-    final source = homePage
-        ? await _catalogHome(access)
-        : await _html(
-            page == 1 ? path : '${path}page/$page/',
-            sortCookies: parameters?.cookies(filterPath ?? '/anime/'),
-          );
+    final parser = AnistarHtmlParser(baseUri);
+    if (homePage) {
+      final document = await _catalogHome(access);
+      _verifyAccess(access);
+      return parser.catalogDocument(document, page, filterPath: filterPath);
+    }
+    final source = await _html(
+      page == 1 ? path : '${path}page/$page/',
+      sortCookies: parameters?.cookies(filterPath ?? '/anime/'),
+    );
     _verifyAccess(access);
     parameters?.verify(source);
-
-    return AnistarHtmlParser(baseUri).catalog(source, page, filterPath: filterPath);
+    return parser.catalog(source, page, filterPath: filterPath);
   }
 
   Future<List<AnistarCatalogFilterDto>> genres({bool refresh = false}) async {
@@ -66,9 +70,13 @@ final class AnistarSource {
     final menu = _genreMenu;
     if (!refresh && menu != null) return menu;
 
-    final source = await _catalogHome(access, refresh: refresh);
+    final document = await _catalogHome(access, refresh: refresh);
     _verifyAccess(access);
-    return AnistarHtmlParser(baseUri).genres(source);
+    final filters = AnistarHtmlParser(baseUri).genreMenuDocument(document);
+    if (filters.isEmpty) {
+      throw const AnistarFailure(message: 'Не удалось загрузить жанры AniStar. Попробуйте снова.');
+    }
+    return filters;
   }
 
   void _syncCatalogAccess(int? access) {
@@ -78,23 +86,23 @@ final class AnistarSource {
     _catalogRequest = null;
   }
 
-  Future<String> _catalogHome(int? access, {bool refresh = false}) async {
+  Future<Document> _catalogHome(int? access, {bool refresh = false}) async {
     _syncCatalogAccess(access);
     final pending = _catalogRequest;
     if (pending != null && (!refresh || pending.refresh)) return pending.response;
     if (refresh) _genreMenu = null;
     final response = _html('anime/', expectedAccess: access).then((source) {
       _verifyAccess(access);
-      return source;
+      return AnistarHtmlParser(baseUri).parseDocument(source);
     });
     _catalogRequest = (response: response, refresh: refresh);
     try {
-      final source = await response;
+      final document = await response;
       if (identical(_catalogRequest?.response, response)) {
-        final menu = AnistarHtmlParser(baseUri).genreMenu(source);
+        final menu = AnistarHtmlParser(baseUri).genreMenuDocument(document);
         _genreMenu = menu.isEmpty ? null : menu;
       }
-      return source;
+      return document;
     } finally {
       if (identical(_catalogRequest?.response, response)) _catalogRequest = null;
     }

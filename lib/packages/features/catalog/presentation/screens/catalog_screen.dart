@@ -61,7 +61,8 @@ class CatalogScreen extends ConsumerStatefulWidget {
 class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerProviderStateMixin {
   late CatalogBloc _bloc;
   final _disposed = Completer<void>();
-  Future<void>? _mobileRefresh;
+  ({CatalogBloc bloc, Future<void> completion})? _mobileRefresh;
+  bool _favoritesRefreshPending = false;
   FilteredCatalogRepository? _filteredRepository;
   final _sortFocus = FocusNode(debugLabel: 'Сортировка');
   FocusNode? _sortOrigin;
@@ -163,12 +164,9 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
           _selected(_bloc.state.items)?.id != selected.id ||
           !_scrollController.hasClients)
         return;
-      final position = _scrollController.position;
-      if (position.axis != Axis.horizontal) return;
-      final step = CatalogPosterRail.stepOf(context);
-      final target = (index * step).clamp(position.minScrollExtent, position.maxScrollExtent);
-      _railMotion.stop();
-      _scrollController.jumpTo(target);
+      if (_scrollController.position.axis != Axis.horizontal || !_scrollController.position.hasContentDimensions)
+        return;
+      _railMotion.reanchor(index, CatalogPosterRail.stepOf(context));
       _reanchorPending = false;
     });
   }
@@ -442,20 +440,32 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
     );
   }
 
-  Future<void> _refreshMobile() => _mobileRefresh ??= _performMobileRefresh().whenComplete(() => _mobileRefresh = null);
-
-  Future<void> _performMobileRefresh() async {
+  Future<void> _refreshMobile() {
     final bloc = _bloc;
+    final active = _mobileRefresh;
+    if (active != null && identical(active.bloc, bloc)) return active.completion;
+
+    final completion = _performMobileRefresh(bloc).whenComplete(() {
+      if (!identical(_mobileRefresh?.bloc, bloc)) return;
+      _mobileRefresh = null;
+      if (mounted && identical(bloc, _bloc) && _favoritesRefreshPending) {
+        _favoritesRefreshPending = false;
+        refresh();
+      }
+    });
+    _mobileRefresh = (bloc: bloc, completion: completion);
+
+    return completion;
+  }
+
+  Future<void> _performMobileRefresh(CatalogBloc bloc) async {
     // Revision must be sampled again after the asynchronous refresh.
     final revision = ref.read(favoritesControllerProvider).revision;
     // Logout can dispose the catalog while the refresh request is pending.
     // Wait for the refresh's terminal state, never a preceding pagination result.
-    final completion = bloc.stream
-        .skipWhile((state) => state is! CatalogRefreshing)
-        .skip(1)
-        .firstWhere((state) => state is CatalogReady || state is CatalogFailure, orElse: () => bloc.state);
-    bloc.add(const CatalogStarted(preserveContent: true));
-    await Future.any<void>([completion.then<void>((_) => null), _disposed.future]);
+    final completion = Completer<void>();
+    bloc.add(CatalogStarted(preserveContent: true, completion: completion));
+    await Future.any<void>([completion.future, _disposed.future]);
     if (!mounted || !identical(bloc, _bloc)) {
       return;
     }
@@ -883,10 +893,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
     }
     final current = _filteredRepository;
     final applied = selected;
-    if (applied == null ||
-        current == null ||
-        applied == initial ||
-        applied == current.sort && bloc.state is! CatalogFailure) {
+    if (applied == null || current == null || applied == current.sort && bloc.state is! CatalogFailure) {
       return;
     }
     final next = FilteredCatalogRepository(current.repository, current.filter, sort: applied);
@@ -1009,6 +1016,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
   void _replaceCatalog() {
     _clearContinuationIntent();
     _returnToPoster = false;
+    _favoritesRefreshPending = false;
     unawaited(_bloc.close());
     _selectedIndex = 0;
     _selectedId = null;
@@ -1069,7 +1077,12 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
             previous?.updatingAnimeId != null &&
             next.updatingAnimeId == null &&
             next.revision != previous?.revision) {
-          _bloc.add(const CatalogStarted(preserveContent: true, preservePages: true));
+          // A read already in flight can predate this confirmed change.
+          if (identical(_mobileRefresh?.bloc, _bloc)) {
+            _favoritesRefreshPending = true;
+          } else {
+            refresh();
+          }
         }
       });
 

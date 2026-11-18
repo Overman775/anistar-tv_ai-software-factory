@@ -1228,6 +1228,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('pop during initialization prevents late playback and history before disposal', (tester) async {
+    final native = video..delayInitialization = true;
+    final storage = FakeWatchedEpisodesRepository();
+    await pumpTvApp(
+      tester,
+      const Text('Каталог'),
+      overrides: [
+        playbackRepositoryProvider.overrideWithValue(repository),
+        watchedEpisodesRepositoryProvider.overrideWithValue(storage),
+        watchHistoryAccountProvider.overrideWithValue('tester'),
+      ],
+    );
+    final navigator = Navigator.of(tester.element(find.text('Каталог')));
+    unawaited(
+      navigator.push(
+        MaterialPageRoute<void>(builder: (_) => const PlayerScreen(animeId: 10938, episodeNumber: 1, title: 'Аниме')),
+      ),
+    );
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(native.sources, hasLength(1));
+    navigator.pop();
+    await tester.pump();
+    expect(find.byType(PlayerScreen), findsOneWidget, reason: 'reverse transition is still running');
+    native.events[1]!.add(
+      platform.VideoEvent(
+        eventType: platform.VideoEventType.initialized,
+        duration: const Duration(minutes: 24),
+        size: const Size(1280, 720),
+      ),
+    );
+    await tester.pump();
+    await settle(tester);
+    expect(native.playCalls, isEmpty);
+    expect(storage.writes, 0);
+    expect(find.text('Каталог'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('native source receives HLS and Referer; runtime error refreshes once and restores position', (
     tester,
   ) async {

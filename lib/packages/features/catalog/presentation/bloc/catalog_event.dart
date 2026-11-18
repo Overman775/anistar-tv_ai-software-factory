@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../domain/repositories/catalog_repository.dart';
@@ -12,8 +14,9 @@ final class CatalogStarted extends CatalogEvent {
   final bool preserveContent;
   final bool preservePages;
   final CatalogRepository? repository;
+  final Completer<void>? completion;
 
-  const CatalogStarted({this.preserveContent = false, this.preservePages = false, this.repository});
+  const CatalogStarted({this.preserveContent = false, this.preservePages = false, this.repository, this.completion});
 }
 
 @immutable
