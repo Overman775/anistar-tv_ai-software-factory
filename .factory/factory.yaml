@@ -223,10 +223,10 @@ models:
     id: gpt-6-luna
     effort: high
   sol:
-    id: gpt-6.1-sol
+    id: gpt-6.2-sol
     effort: medium
   astra:
-    id: gpt-6-astra
+    id: gpt-6.2-astra
     effort: medium
   glm-5-3:
     id: openrouter/z-ai/glm-5.3
