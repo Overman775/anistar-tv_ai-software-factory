@@ -2,14 +2,14 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:ui_kit/ui_kit.dart';
 
-/// Quiet page motion; the video surface only fades and never scales.
+/// Fades the player route without transforming its video surface.
 class AppNavigationPage extends CustomTransitionPage<void> {
-  AppNavigationPage({required BuildContext context, required LocalKey key, required super.child, bool player = false})
+  AppNavigationPage({required BuildContext context, required LocalKey key, required super.child})
     : super(
         key: key,
-        transitionDuration: AppMotion.durationOf(context, player ? AppMotion.fast : AppMotion.page),
-        reverseTransitionDuration: AppMotion.durationOf(context, player ? AppMotion.fast : AppMotion.pageReverse),
-        transitionsBuilder: player ? _fade : _detail,
+        transitionDuration: AppMotion.durationOf(context, AppMotion.fast),
+        reverseTransitionDuration: AppMotion.durationOf(context, AppMotion.fast),
+        transitionsBuilder: _fade,
       );
 
   static Widget _fade(BuildContext context, Animation<double> animation, Animation<double> secondary, Widget child) {
@@ -20,21 +20,6 @@ class AppNavigationPage extends CustomTransitionPage<void> {
     return FadeTransition(
       opacity: animation.drive(CurveTween(curve: AppMotion.enterCurve)),
       child: child,
-    );
-  }
-
-  static Widget _detail(BuildContext context, Animation<double> animation, Animation<double> secondary, Widget child) {
-    if (AppMotion.reducedOf(context)) {
-      return child;
-    }
-    final curved = animation.drive(CurveTween(curve: AppMotion.enterCurve));
-
-    return FadeTransition(
-      opacity: curved,
-      child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, 0.02), end: Offset.zero).animate(curved),
-        child: child,
-      ),
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:anistar_tv/packages/features/anime/anime_providers.dart';
 import 'package:anistar_tv/packages/features/anime/data/repositories/anistar_anime_repository.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_details.dart';
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
+import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_hero.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_skeleton.dart';
 import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
@@ -87,6 +88,9 @@ void main() {
       ).push<void>(tester.element(find.byType(CatalogScreen))),
     );
     await tester.pumpAndSettle();
+    final detailRoute = ModalRoute.of(tester.element(find.byType(AnimeScreen)));
+    expect(detailRoute?.transitionDuration, Duration.zero);
+    expect(detailRoute?.reverseTransitionDuration, Duration.zero);
     await tester.tap(find.text('Подробнее'));
     await tester.pumpAndSettle();
     final authorChip = find.text(author);
@@ -139,7 +143,7 @@ void main() {
   });
 
   for (final favorites in [false, true]) {
-    testWidgets('page transitions from ${favorites ? 'favorites' : 'home'} before details load and returns on Back', (
+    testWidgets('details open from ${favorites ? 'favorites' : 'home'} and close on Back without route animation', (
       tester,
     ) async {
       final router = AppRouter(AppLogger.logger);
@@ -168,14 +172,17 @@ void main() {
       }
       final heroFinder = find.byType(AnimeHero);
       final card = find.byType(AnimeCard).first;
-      final imagesInCard = find.descendant(of: card, matching: find.byType(AppNetworkImage));
-      expect(imagesInCard, findsOneWidget);
+      final sourceRoute = ModalRoute.of(tester.element(card));
+      final sourceImage = find.descendant(of: card, matching: find.byType(AppNetworkImage));
+      expect(sourceImage, findsOneWidget);
       await tester.tap(card);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 60));
-      expect(find.byType(AnimeSkeleton), findsOneWidget);
-      expect(ModalRoute.of(tester.element(card))?.offstage, isFalse);
-      expect(imagesInCard, findsOneWidget);
+      final skeleton = find.byType(AnimeSkeleton);
+      expect(skeleton, findsOneWidget);
+      final detailRoute = ModalRoute.of(tester.element(skeleton));
+      expect(detailRoute?.transitionDuration, Duration.zero);
+      expect(detailRoute?.reverseTransitionDuration, Duration.zero);
+      expect(sourceRoute?.isCurrent, isFalse);
       expect(find.byType(AnimeHero), findsNothing);
       pending.complete(await const FakeAnimeScreenRepository().getAnime(id: 1, slug: '1-test'));
       await tester.pump();
@@ -184,8 +191,9 @@ void main() {
       expect(heroFinder, findsNothing);
       router.router.pop();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 60));
-      expect(imagesInCard, findsOneWidget);
+      expect(find.byType(AnimeScreen), findsNothing);
+      expect(sourceRoute?.isCurrent, isTrue);
+      expect(sourceImage, findsOneWidget);
       await settle();
       expect(find.byType(AnimeCard), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -227,19 +235,15 @@ void main() {
   });
 
   for (final accessible in [false, true]) {
-    testWidgets('reduced motion disables page duration and poster flight; accessible=$accessible', (tester) async {
-      final pages = <AppNavigationPage>[];
+    testWidgets('reduced motion disables player fade and poster flight; accessible=$accessible', (tester) async {
+      late AppNavigationPage page;
       await pumpTvApp(
         tester,
         MediaQuery(
           data: MediaQueryData(disableAnimations: !accessible, accessibleNavigation: accessible),
           child: Builder(
             builder: (context) {
-              for (final player in [false, true]) {
-                pages.add(
-                  AppNavigationPage(context: context, key: ValueKey(player), child: const SizedBox(), player: player),
-                );
-              }
+              page = AppNavigationPage(context: context, key: const ValueKey('player'), child: const SizedBox());
 
               return const SizedBox.square(
                 dimension: 100,
@@ -249,12 +253,8 @@ void main() {
           ),
         ),
       );
-      expect(
-        pages.every(
-          (page) => page.transitionDuration == Duration.zero && page.reverseTransitionDuration == Duration.zero,
-        ),
-        isTrue,
-      );
+      expect(page.transitionDuration, Duration.zero);
+      expect(page.reverseTransitionDuration, Duration.zero);
       expect(tester.widget<HeroMode>(find.byType(HeroMode)).enabled, isFalse);
     });
   }

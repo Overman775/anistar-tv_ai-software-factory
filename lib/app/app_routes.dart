@@ -117,7 +117,7 @@ class AnimeRoute extends GoRouteData with $AnimeRoute {
 
   @override
   Page<void> buildPage(BuildContext context, GoRouterState state) =>
-      AppNavigationPage(context: context, key: state.pageKey, child: build(context, state));
+      NoTransitionPage<void>(key: state.pageKey, child: build(context, state));
 
   @override
   Widget build(BuildContext context, GoRouterState state) => _RouteShell(
@@ -167,7 +167,7 @@ class PlayerRoute extends GoRouteData with $PlayerRoute {
 
   @override
   Page<void> buildPage(BuildContext context, GoRouterState state) =>
-      AppNavigationPage(context: context, key: state.pageKey, player: true, child: build(context, state));
+      AppNavigationPage(context: context, key: state.pageKey, child: build(context, state));
 
   @override
   Widget build(BuildContext context, GoRouterState state) => PlayerScreen(
