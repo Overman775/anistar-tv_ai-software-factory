@@ -1,7 +1,6 @@
 # Generalist Contract
 
-For review findings assigned to your node, follow the supplied
-[review finding transitions](common/review-findings.md).
+For review findings assigned to your node, follow the supplied review finding transitions.
 Apply [Verification Rules](../gates/common/verification-rules.md).
 
 

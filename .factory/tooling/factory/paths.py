@@ -8,3 +8,5 @@ TOOLS = TOOLING_ROOT
 BIN = TOOLING_ROOT / "bin"
 PACKAGE = TOOLING_ROOT / "factory"
 TESTS = TOOLING_ROOT / "tests"
+
+MEMORY = ".factory/memory"

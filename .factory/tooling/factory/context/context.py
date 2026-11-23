@@ -8,7 +8,6 @@ factory_files derives frozen dependencies from those same rules.
 
 from __future__ import annotations
 
-# Direct CLI execution and import-by-path use the same tool modules.
 import hashlib
 import json
 from collections.abc import Callable, Mapping
@@ -19,9 +18,13 @@ from typing import Annotated, Literal, NotRequired, cast
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+# Direct CLI execution and import-by-path use the same tool modules.
+from factory import file_reader
+from factory.logging_config import diagnostic_operation
 from factory.project.contracts import (
     BoundaryGate,
     MaterialEntry,
+    Policy,
     ReviewCriterion,
     Rule,
     Snapshot,
@@ -34,7 +37,6 @@ from factory.project.profile_io import (
     validate_snapshot,
 )
 from factory.project.profile_rules import boundary_gates, matches, review_criteria
-from factory.runtime.acceptance import ensure
 from factory.runtime.contracts import (
     Config,
     ContextNode,
@@ -44,6 +46,7 @@ from factory.runtime.contracts import (
     Profile,
     ProfileCommon,
 )
+from factory.runtime.reports.acceptance import ensure
 from factory.tasks.contracts import Task, TaskSelection
 from factory.validation import validation_message
 
@@ -68,6 +71,13 @@ COMMON = [
     "contracts/common/communication.md",
     "contracts/common/code-discovery.md",
 ]
+DECOMPOSE_REPAIR_REFS = ("skills/factory-decompose/references/staging-contract.md",)
+DECOMPOSE_REVIEW_REFS = (
+    "gates/skills/decompose/review-contract.md",
+    "skills/factory-decompose/references/decomposition-policy.md",
+    "skills/factory-decompose/references/task-template.md",
+    "contracts/common/implementation-detail.md",
+)
 ROLE_REFS = {
     "developer": ["gates/roles/developer.md", "contracts/common/coding-principles.md"],
     "test-writer": ["gates/roles/test-writer.md", "contracts/common/testing-principles.md"],
@@ -78,21 +88,17 @@ ROLE_REFS = {
     ],
     "architect": [
         "skills/factory-planning/references/architect-input.md",
-        "skills/factory-planning/references/plan-contract.md",
-        "contracts/common/implementation-detail.md",
+        "skills/factory-planning/references/architect-plan-contract.md",
+        "skills/factory-planning/references/plan-content.md",
     ],
     "task-decomposer": [
         "skills/factory-decompose/references/decomposition-policy.md",
         "skills/factory-decompose/references/generation-contract.md",
+        *DECOMPOSE_REPAIR_REFS,
         "skills/factory-decompose/references/task-template.md",
         "contracts/common/implementation-detail.md",
     ],
-    "task-reviewer": [
-        "skills/factory-decompose/references/decomposition-policy.md",
-        "skills/factory-decompose/references/generation-contract.md",
-        "skills/factory-decompose/references/task-template.md",
-        "contracts/common/implementation-detail.md",
-    ],
+    "task-reviewer": list(DECOMPOSE_REVIEW_REFS),
     "judge": ["gates/roles/judge.md", "contracts/common/review-principles.md"],
     "reviewer": [
         "gates/roles/reviewer.md",
@@ -105,6 +111,8 @@ COMMAND_REFS = [
     "skills/factory-implement/references/project-checks.md",
 ]
 REVIEW_FINDINGS_CONTRACT = "contracts/common/review-findings.md"
+WRITE_RESULT_CONTRACT = "contracts/common/implement-write-result.md"
+AUTHORS = frozenset({"developer", "test-writer", "doc-writer", "generalist"})
 
 
 @dataclass(frozen=True)
@@ -127,6 +135,9 @@ class MaterialRule:
 
 STAGE_RULES = (
     MaterialRule(
+        ("contracts/common/implement-handoff.md",), "Implement handoff evidence", "implement"
+    ),
+    MaterialRule(
         ("contracts/common/implement-result.md",), "Implement result/stage interface", "implement"
     ),
     MaterialRule(
@@ -134,10 +145,11 @@ STAGE_RULES = (
     ),
     MaterialRule(
         (REVIEW_FINDINGS_CONTRACT,),
-        "Implement review/correction interface",
+        "Implement review interface",
         "implement",
-        roles=frozenset({"developer", "test-writer", "doc-writer", "judge"}),
+        roles=frozenset({"judge"}),
     ),
+    MaterialRule((WRITE_RESULT_CONTRACT,), "Implement write handoff", "implement", roles=AUTHORS),
 )
 WORKER_PROFILE_FIELDS = ("role", "contract", "adapter", "capabilities", "enforcement", "mcp")
 IMPLEMENT_STAGES = {"work", "docs", "explore", "verify", "review"}
@@ -152,6 +164,8 @@ class ContextInput(TypedDict):
     read: NotRequired[list[Nonblank]]
     scope_files: NotRequired[list[Nonblank]]
     project_policy: NotRequired[Snapshot]
+    owned_gates: NotRequired[dict[str, str]]
+    decompose_mode: NotRequired[Literal["review", "repair"]]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -219,7 +233,7 @@ def accepted_path(config: Config, root: str | Path, rel: str, *, exists: bool = 
 
 
 def accepted_bytes(
-    config: Config, file: Path, fallback: Callable[[Path], bytes] = Path.read_bytes
+    config: Config, file: Path, fallback: Callable[[Path], bytes] = file_reader.read_bytes
 ) -> bytes:
     key = str(file)
     pinned = config.get("_documents", {}).get(key)
@@ -248,6 +262,14 @@ def factory_files(config: Config) -> list[str]:
             "adapters/common.md",
             "adapters/worker/native-packet.md",
             "tooling/bin/context.py",
+            "tooling/bin/lessons.py",
+            "roles/teacher.md",
+            "skills/factory-lessons/SKILL.md",
+            "skills/factory-lessons/references/dispatch.md",
+            "skills/factory-lessons/references/capture.md",
+            "skills/factory-lessons/references/edit.md",
+            "skills/factory-lessons/references/refresh.md",
+            "skills/factory-meta-retune-lessons/SKILL.md",
             "tooling/bin/acpx_adapter.py",
         ]
     )
@@ -261,6 +283,7 @@ def factory_files(config: Config) -> list[str]:
     )
     result.update(p for rule in STAGE_RULES for p in rule.paths)
     result.update(p for refs in ROLE_REFS.values() for p in refs)
+    result.update(DECOMPOSE_REPAIR_REFS)
     for adapter in config["adapters"].values():
         result.add(adapter["worker_instructions"])
     return sorted(result)
@@ -286,7 +309,10 @@ def _validate_assignment(
     )
     node: Node | ContextNode = assignment.get("node") or ContextNode()
     resources = node.get("resources", [])
-    ensure(not node.get("owns") or profile["capabilities"]["edit"], "Profile forbids edits")
+    requires_edit = node.get("owns") or (
+        role == "task-reviewer" and assignment.get("decompose_mode") == "repair"
+    )
+    ensure(not requires_edit or profile["capabilities"]["edit"], "Profile forbids edits")
     if process == "implement":
         if node.get("stage") not in IMPLEMENT_STAGES:
             raise ValueError("Invalid worker stage")
@@ -300,21 +326,21 @@ def _validate_assignment(
     return profile, node, reads
 
 
-def _generalist_owns_unresolved_finding(node_id: object, findings: object) -> bool:
+def _owns_unresolved_finding(role: str, node_id: object, findings: object) -> bool:
     if not isinstance(node_id, str) or not isinstance(findings, dict):
         return False
     return any(
         isinstance(item, dict)
         and item.get("owner_node_id") == node_id
-        and item.get("owner_role") == "generalist"
+        and item.get("owner_role") == role
         and item.get("status") in ("open", "ready")
         for item in findings.values()
     )
 
 
-def _factory_materials(
-    config: Config,
+def factory_materials(
     profile: Profile,
+    worker_instructions: str,
     role: str,
     process: str,
     node: Node | ContextNode,
@@ -325,19 +351,30 @@ def _factory_materials(
     selected += [
         (profile["contract"], "role interface"),
         (profile["role"], "role procedure"),
-        (config["adapters"][profile["adapter"]]["worker_instructions"], "worker environment"),
+        (worker_instructions, "worker environment"),
     ]
     if process == "implement" and profile["runner"] == "native":
         selected.append(("adapters/worker/native-packet.md", "native packet transport"))
     selected += [(p, "process-specific role reference") for p in ROLE_REFS.get(role, [])]
+    if role == "task-reviewer" and assignment.get("decompose_mode") == "repair":
+        selected += [(p, "Decompose repair contract") for p in DECOMPOSE_REPAIR_REFS]
     for rule in STAGE_RULES:
         if rule.matches(process, role, node):
+            write_only = (
+                role in AUTHORS
+                and node.get("stage") in {"work", "docs"}
+                and "project-checks" not in node.get("resources", [])
+            )
+            if WRITE_RESULT_CONTRACT in rule.paths and not write_only:
+                continue
+            if "contracts/common/implement-result.md" in rule.paths and write_only:
+                continue
             selected.extend((p, rule.reason) for p in rule.paths)
     if (
         process == "implement"
-        and role == "generalist"
-        and _generalist_owns_unresolved_finding(
-            node.get("id", assignment.get("node_id")), assignment.get("review_findings")
+        and role in AUTHORS
+        and _owns_unresolved_finding(
+            role, node.get("id", assignment.get("node_id")), assignment.get("review_findings")
         )
     ):
         selected.append((REVIEW_FINDINGS_CONTRACT, "Assigned Implement review findings"))
@@ -437,7 +474,7 @@ def build(
     process: object,
     assignment: object,
     *,
-    read_bytes: Callable[[Path], bytes] = Path.read_bytes,
+    read_bytes: Callable[[Path], bytes] = file_reader.read_bytes,
 ) -> ContextPacket:
     """Return a complete packet from a loaded config and explicit assignment.
 
@@ -460,7 +497,14 @@ def build(
     active = process == "implement" and "_project_documents" in config
     materials = [
         ((accepted_path(config, root, rel) if active else path(root, rel)), reason, "worker")
-        for rel, reason in _factory_materials(config, profile, role, process, node, data)
+        for rel, reason in factory_materials(
+            profile,
+            config["adapters"][profile["adapter"]]["worker_instructions"],
+            role,
+            process,
+            node,
+            data,
+        )
     ]
     if process == "implement":
         orchestrator_paths = {
@@ -518,6 +562,11 @@ def build(
             "Coordinator instructions cannot be injected as project rules",
         )
         materials.append((file, "project profile: " + rule["id"], "project"))
+    user = root / "memory/USER.md"
+    if pinned is None and str(user) in config["_files"]:
+        materials.append(
+            (accepted_path(config, root, "memory/USER.md"), "project user instructions", "project")
+        )
     materials.extend(project_reading)
 
     def packet_bytes(file: Path) -> bytes:
@@ -525,7 +574,9 @@ def build(
 
     instructions = _read_instructions(materials, packet_bytes if active else read_bytes)
     if pinned is not None:
-        accepted = review_materials(pinned, root, workspace, role=role, scope=scope)
+        accepted = review_materials(
+            pinned, root, workspace, role=role, stage=node.get("stage") or "review", scope=scope
+        )
         by_path = {entry["path"]: entry for entry in instructions}
         by_path.update({entry["path"]: entry for entry in accepted})
         instructions = list(by_path.values())
@@ -565,6 +616,8 @@ def build(
                         stage=node.get("stage"),
                         scope=scope,
                     )
+                    and (role != "reviewer" or g["lens"] == data.get("lens"))
+                    and (role != "reviewer" or g["id"] not in data.get("owned_gates", {}))
                 ]
                 if role in {"judge", "reviewer"}
                 else [],
@@ -596,15 +649,31 @@ def main() -> None:
     )
     args = parser.parse_args()
     try:
-        packet = build(
-            load_config(args.config),
-            args.workspace,
-            args.profile,
-            args.role,
-            args.process,
-            json.loads(Path(args.assignment).read_text(encoding="utf-8")),
-        )
-        print(json.dumps(packet, ensure_ascii=False, indent=2))
+        with diagnostic_operation(args.workspace, "context"):
+            assignment = json.loads(file_reader.read_text(Path(args.assignment), encoding="utf-8"))
+            policy: Policy | None = None
+            if args.process == "code-review":
+                pinned = CONTEXT_INPUT.validate_python(assignment).get("project_policy")
+                if pinned is None:
+                    raise ValueError("Code review context requires pinned project_policy")
+                workspace = Path(args.workspace).resolve()
+                policy = {
+                    "data": validate_snapshot(pinned),
+                    "hash": pinned["sha256"],
+                    "path": str(workspace / pinned["profile_root"] / pinned["manifest"]),
+                    "workspace": str(workspace),
+                    "profile_root": pinned["profile_root"],
+                    "files": {},
+                }
+            packet = build(
+                load_config(args.config, policy=policy),
+                args.workspace,
+                args.profile,
+                args.role,
+                args.process,
+                assignment,
+            )
+            print(json.dumps(packet, ensure_ascii=False, indent=2))
     except (ValueError, KeyError, OSError) as exc:
         parser.exit(1, f"BLOCKED: {exc}\n")
 

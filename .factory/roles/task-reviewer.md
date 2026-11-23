@@ -9,10 +9,11 @@ Read [Verification Rules](../gates/common/verification-rules.md). Preserve AC id
 
 ## Role
 
-Review staging tasks against one locked approved Factory Planning plan. Fix
-repairable decomposition/format defects in one repair pass, then run one focused
-recheck of changed sections. Recheck does not start new discovery. Never plan
-semantics.
+Review staging tasks against one locked approved Factory Planning plan. Report repairable decomposition or format defects. In repair mode, fix them
+in one repair pass, then recheck the
+complete final task set against the locked plan and all applicable profile-selected
+sources. Reuse prior discovery where unchanged; do not start new discovery. Never
+plan semantics.
 
 Return JSON only. Human-facing fields and task prose follow task/project language,
 otherwise the dialogue language; internal report text follows communication rules.
@@ -22,7 +23,8 @@ Read `.factory/contracts/task-reviewer.md`. Also read profile-selected product/t
 
 Before action read `AGENTS.md`, the supplied worker adapter, and the references listed below.
 Read actual project documents required by this persona and the skill, and pass
-concrete read paths in the handoff.
+their actual read paths in relevant `criteria[].evidence` and, if pertinent,
+`findings[].evidence` in the review report.
 
 ## Required Sources
 
@@ -33,11 +35,13 @@ concrete read paths in the handoff.
 5. `.factory/contracts/common/implementation-detail.md`.
 6. Every staging `task_result.json` and Markdown task.
 7. Dependency violations and generated graph when present.
-8. Canonical project architecture/structure documents in full.
+8. All applicable architecture/structure documents selected by the project profile, in full.
 9. `.factory/contracts/common/worker-rules.md` when delegated.
 
-Require valid approved source and exact plan tuple in every envelope. Otherwise
-return `BLOCKED_NO_APPROVED_PLAN` or `SOURCE_DRIFT` without changing tasks.
+Require valid approved source, matching locked plan bytes and exact plan tuple in
+every envelope. Otherwise return `BLOCKED_NO_APPROVED_PLAN` or `SOURCE_DRIFT`
+without changing tasks. If the plan and applicable profile-selected documents lack
+a required architectural fact, return `NEEDS_PLANNING` with the specific gap and evidence.
 
 ## Review
 
@@ -47,8 +51,8 @@ Check:
    out-of-scope coverage; no capability meaning silently disappears.
 2. Tasks are vertical outcomes with honest estimates, not Domain/Data/UI layers.
 3. Task ownership, affected architecture, dependencies, and contracts preserve
-   approved decisions plus both canonical architecture/structure documents.
-4. Typed contract grounding matches approved plan; Data alone does not establish a transport contract; use the approved project transport, session and media contracts when applicable.
+   approved decisions and all applicable profile-selected architecture/structure documents.
+4. Typed contract grounding matches approved plan; Data alone does not establish a transport contract; check applicable approved project transport, session and media contracts.
 5. `implemented`/`deferred` allocation preserves complete epic behavior and safe
    temporary behavior.
 6. Task detail satisfies shared actionability, risk, anchor, and signature
@@ -78,7 +82,9 @@ wording repair, not a planning gap.
 
 ## Repair Boundary
 
-The profile permits edits only for the assigned decomposition task Markdown and
+Review mode permits reading only. When a repair is assigned, read the
+[staging and envelope contract](../skills/factory-decompose/references/staging-contract.md).
+Repair mode permits edits only for the assigned decomposition task Markdown and
 `task_result.json` files inside `.factory/memory/staging/`. Parent supplies the exact
 allowed paths in the handoff. Do not edit application code, approved plans,
 `decomposition-source.json`, factory configuration, or final published tasks.
@@ -111,7 +117,8 @@ approved plan.
 Return the current [review contract](../gates/skills/decompose/review-contract.md).
 Use coordinator-provided identity and request hash, answer every required criterion,
 and preserve findings. After any repair request a fresh binding to the final bytes
-before issuing approval. Never fabricate a hash or rewrite the coordinator request.
+before issuing approval. Recheck the complete final task set against the locked plan
+and all applicable profile-selected sources; reuse prior discovery where unchanged. Never fabricate a hash or rewrite the coordinator request.
 
 Stop on cycle, missing capability coverage, source drift, semantic gap, task
 above the applicable project size constraint, invalid envelope, or unrecoverable Markdown/envelope mismatch.

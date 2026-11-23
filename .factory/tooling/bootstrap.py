@@ -8,7 +8,7 @@ import json
 import os
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 if __name__ == "__main__" and sys.version_info[:2] != (3, 14):
@@ -35,8 +35,8 @@ def interpreter(environment: Path = ENV, platform: str = os.name) -> Path:
     return environment / ("Scripts/python.exe" if platform == "nt" else "bin/python")
 
 
-def clean_environment() -> dict[str, str]:
-    env = dict(os.environ)
+def clean_environment(environ: Mapping[str, str] | None = None) -> dict[str, str]:
+    env = dict(os.environ if environ is None else environ)
     for key in ("PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "PIP_TARGET", "PIP_PREFIX", "PIP_USER"):
         env.pop(key, None)
     # Do not inherit pip configuration that can redirect installs outside the venv.
@@ -44,27 +44,29 @@ def clean_environment() -> dict[str, str]:
     return env
 
 
-def identity(development: bool = False) -> EnvironmentIdentity:
+def identity(
+    development: bool = False, *, read_bytes: Callable[[Path], bytes] = Path.read_bytes
+) -> EnvironmentIdentity:
     result: EnvironmentIdentity = {
-        "requirements": hashlib.sha256(REQUIREMENTS.read_bytes()).hexdigest(),
+        "requirements": hashlib.sha256(read_bytes(REQUIREMENTS)).hexdigest(),
         "environment": str(ENV),
         "python": list(sys.version_info[:3]),
         "development": development,
     }
     if development:
         result["dev_requirements"] = hashlib.sha256(
-            (TOOLS / "requirements-dev.txt").read_bytes()
+            read_bytes(TOOLS / "requirements-dev.txt")
         ).hexdigest()
     return result
 
 
-def check_bundle() -> None:
+def check_bundle(*, read_bytes: Callable[[Path], bytes] = Path.read_bytes) -> None:
     import sysconfig
 
     registration = Path(sysconfig.get_path("purelib")) / "factory-bundle.pth"
-    if not registration.is_file() or registration.read_text(encoding="ascii") != bundle_site_line(
-        TOOLS
-    ):
+    if not registration.is_file() or read_bytes(registration).decode("ascii").replace(
+        "\r\n", "\n"
+    ) != bundle_site_line(TOOLS):
         raise RuntimeError("Factory package missing or from another bundle; rerun setup")
     expected = (TOOLS / "factory/__init__.py").resolve()
     origin = subprocess.check_output(
@@ -89,7 +91,7 @@ def bundle_site_line(bundle: Path) -> str:
     return f"import sys; sys.path.append({ascii(str(bundle.resolve()))})\n"
 
 
-def check() -> None:
+def check(*, read_bytes: Callable[[Path], bytes] = Path.read_bytes) -> None:
     if (AGENTS / ".venv.setup.lock").exists():
         raise RuntimeError("Python setup in progress; wait for it to finish")
     if sys.version_info[:2] != (3, 14):
@@ -102,28 +104,32 @@ def check() -> None:
         raise RuntimeError(
             "Use the factory project venv via tooling/bin/python.sh or tooling/bin/python.cmd"
         )
-    marker = json.loads(MARKER.read_text(encoding="utf-8")) if MARKER.is_file() else {}
-    if not marker or marker != identity(marker.get("development", False)):
+    marker = json.loads(read_bytes(MARKER).decode("utf-8")) if MARKER.is_file() else {}
+    if not marker or marker != identity(marker.get("development", False), read_bytes=read_bytes):
         raise RuntimeError("Factory environment missing/stale/moved; rerun bootstrap.py setup")
     import yaml
 
     if not Path(yaml.__file__).resolve().is_relative_to(ENV.resolve()):
         raise RuntimeError("PyYAML must come from the factory venv")
-    check_bundle()
+    check_bundle(read_bytes=read_bytes)
 
 
-def setup(development: bool = False) -> None:
+def setup(
+    development: bool = False,
+    *,
+    has_active_workflow: Callable[[Path], bool] | None = None,
+) -> None:
     import venv
 
     if sys.version_info[:2] != (3, 14):
         raise RuntimeError(
             "Python 3.14 required; install a supported Python using official OS instructions"
         )
-    state = AGENTS.parent / ".factory/memory/state/workflow.json"
-    if (
-        state.exists()
-        and json.loads(state.read_text(encoding="utf-8")).get("status") != "completed"
-    ):
+    if has_active_workflow is None:
+        from factory.database.provider import current_database
+
+        has_active_workflow = current_database().has_active_workflow
+    if has_active_workflow(AGENTS):
         raise RuntimeError("Stop/archive the active workflow before changing Python dependencies")
     lock = AGENTS / ".venv.setup.lock"
     try:

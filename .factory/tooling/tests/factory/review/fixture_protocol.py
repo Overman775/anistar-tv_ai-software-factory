@@ -10,7 +10,7 @@ from typing import Any
 
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, snapshot
-from factory.review.review_contracts import expected_gates as resolve_gates
+from factory.review.protocol.contracts import expected_gates as resolve_gates
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
 
 POLICY = snapshot(
@@ -173,7 +173,7 @@ class ProtocolFixture:
             command_selection_reason="Fixture verifies commands",
             source_evidence={},
         )
-        from factory.review.review_plan import prepare
+        from factory.review.protocol.plan import prepare
 
         self.manifest = prepare(self.manifest)
         self.registry = expected_gates([path])
@@ -285,7 +285,7 @@ class ProtocolFixture:
         return finding
 
     def rebind(self) -> None:
-        from factory.review.review_plan import prepare
+        from factory.review.protocol.plan import prepare
 
         self.manifest = prepare(self.manifest)
         for artifact in [*self.tools, *self.lenses, self.qa]:

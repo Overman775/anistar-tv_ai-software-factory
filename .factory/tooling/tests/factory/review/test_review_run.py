@@ -4,25 +4,331 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from collections.abc import Callable
+from contextlib import chdir
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
+
+import yaml
 
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, snapshot
-from factory.review.review_contracts import validate_manifest
-from factory.review.review_plan import prepare, validate_plan
+from factory.review.protocol.contracts import validate_manifest
+from factory.review.protocol.plan import prepare, validate_plan
 from tests.factory.review.fixture_protocol import ProtocolFixture, write_json
 
 RUNNER = FACTORY_ROOT / "skills/factory-code-review/scripts/review_run.py"
 
 
 class ReviewRunTests(unittest.TestCase):
+    def test_status_does_not_create_uninitialized_run(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        result = self.call(f, "status", "--run", run)
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse(run.exists())
+        result = self.call(f, "init", "--input", request, "--run", run)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_status_during_init_before_inputs_does_not_lock(self) -> None:
+        f = self.fixture()
+        run = f.root / "run"
+        run.mkdir()
+        result = self.call(f, "status", "--run", run)
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse((run / ".review.lock").exists())
+
+    def test_pr_review_completes_with_sha256_and_broken_candidate_project_yaml(self) -> None:
+        from factory.project.project import review_snapshot
+        from tests.fixture_bundle import ROOT as fixture
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            f = ProtocolFixture(root, mode="pr")
+            bundle = root / ".factory"
+            shutil.copytree(fixture, bundle)
+            project = bundle / "project/project.yaml"
+            project.write_text(
+                """id: accepted
+documents:
+  author-guide: {path: author-guide.md}
+  review-guide: {path: review-guide.md}
+rules:
+  worker:
+    - id: author-guide
+      for: {processes: [code-review], stages: [work]}
+      documents: [author-guide]
+    - id: review-guide
+      for: {processes: [code-review], stages: [review]}
+      documents: [review-guide]
+""",
+                encoding="utf-8",
+            )
+            (root / "AGENTS.md").write_text("Accepted policy.", encoding="utf-8")
+
+            def git(*args: str) -> bytes:
+                return subprocess.check_output(["git", "-C", str(root), *args])
+
+            def commit(message: str) -> str:
+                git(
+                    "add",
+                    "--",
+                    ".factory/project/project.yaml",
+                    "AGENTS.md",
+                    "review-guide.md",
+                    f.path,
+                )
+                git(
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-qm",
+                    message,
+                )
+                return git("rev-parse", "HEAD").decode().strip()
+
+            git("init", "-q", "--object-format=sha256")
+            (root / f.path).parent.mkdir()
+            (root / f.path).write_text("int value = 0;\n", encoding="utf-8")
+            guide = root / "review-guide.md"
+            guide.write_text("Review reference from baseline.", encoding="utf-8")
+            base = commit("baseline")
+            pinned = review_snapshot(root, base)
+            self.assertEqual({"AGENTS.md", "review-guide.md"}, pinned["documents"].keys())
+
+            git("rm", "--", "review-guide.md")
+            git(
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "commit",
+                "-qm",
+                "missing review guide",
+            )
+            with self.assertRaisesRegex(ValueError, "review-guide.md"):
+                review_snapshot(root, git("rev-parse", "HEAD").decode().strip())
+            git("restore", "--source", base, "--", "review-guide.md")
+
+            project.write_text("broken: [", encoding="utf-8")
+            (root / f.path).write_text("int value = 1;\n", encoding="utf-8")
+            head = commit("change under review")
+            diff = git("diff", "--no-ext-diff", "--no-color", base + "..." + head)
+            diff_path = Path(f.manifest["diff_file"])
+            diff_path.write_bytes(diff)
+            f.manifest.update(
+                base_sha=base,
+                head_sha=head,
+                project_policy=pinned,
+                scope_files=[".factory/project/project.yaml", f.path],
+                diff_sha256=hashlib.sha256(diff).hexdigest(),
+            )
+            f.manifest["context"]["pr"]["head_sha"] = head
+            f.manifest["additional_checks"] = []
+            f.rebind()
+            request, run = root / "request.json", root / "run"
+            write_json(request, f.manifest)
+            env = {**os.environ, "PYTHONPATH": str(bundle / "tooling")}
+
+            def cli(script: Path, *args: str | Path) -> dict[str, Any]:
+                result = subprocess.run(
+                    [sys.executable, str(script), *map(str, args)],
+                    cwd=root,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                    check=False,
+                )
+                self.assertEqual(0, result.returncode, result.stderr)
+                value: dict[str, Any] = json.loads(result.stdout)
+                return value
+
+            runner = bundle / RUNNER.relative_to(FACTORY_ROOT)
+            cli(runner, "init", "--input", request, "--run", run)
+            for lens in f.lenses:
+                direction = lens["lens"]
+                assignment = cli(runner, "assignment", "--id", direction, "--run", run)
+                self.assertEqual((base, head), (assignment["base_sha"], assignment["head_sha"]))
+                path = root / "assignment.json"
+                write_json(path, assignment)
+                packet = cli(
+                    bundle / "tooling/bin/context.py",
+                    "--process",
+                    "code-review",
+                    "--role",
+                    "reviewer",
+                    "--profile",
+                    assignment["profile"],
+                    path,
+                )
+                self.assertIn(
+                    "Review reference from baseline.",
+                    [entry["content"] for entry in packet["instructions"]],
+                )
+                write_json(path, lens)
+                cli(runner, "submit", "--id", direction, "--input", path, "--run", run)
+            write_json(path, f.qa)
+            result = cli(runner, "finish", "--input", path, "--run", run)
+            self.assertEqual("COMPLETE", result["pipeline_status"], result.get("errors"))
+
+    def test_lock_owner_exit_and_legacy_directory(self) -> None:
+        from factory.review.review_run import locked
+
+        f = self.fixture()
+        run = f.root / "run"
+        request = f.root / "request.json"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        with locked(run):
+            result = self.call(f, "status", "--run", run)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn("locked", result.stderr)
+        (run / ".busy").mkdir()
+        result = self.call(f, "status", "--run", run)
+        self.assertIn("legacy .busy", result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "SIGKILL is POSIX-specific")
+    def test_killed_owner_releases_lock_and_interrupted_check_blocks(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        script = (
+            "from pathlib import Path; from factory.review.review_run import locked; "
+            "import sys, time; "
+            "lock = locked(Path(sys.argv[1])); lock.__enter__(); print('ready', flush=True); "
+            "time.sleep(60)"
+        )
+        owner = subprocess.Popen(
+            [sys.executable, "-c", script, str(run)], cwd=f.root, stdout=subprocess.PIPE, text=True
+        )
+        try:
+            assert owner.stdout is not None
+            self.assertEqual("ready", owner.stdout.readline().strip())
+        finally:
+            owner.kill()
+            owner.wait()
+            if owner.stdout:
+                owner.stdout.close()
+        self.assertEqual(0, self.call(f, "status", "--run", run).returncode)
+        write_json(run / ".check-in-progress", {"id": "unknown"})
+        result = self.call(f, "status", "--run", run)
+        self.assertIn("interrupted check has unknown outcome", result.stderr)
+
+    @unittest.skipIf(os.name == "nt", "legacy PID verification requires POSIX")
+    def test_legacy_recovery_rejects_live_owner_then_recovers_dead_owner(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        (run / ".busy").mkdir()
+        try:
+            result = self.call(
+                f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid)
+            )
+            self.assertIn("still active", result.stderr)
+            self.assertTrue((run / ".busy").is_dir())
+        finally:
+            owner.kill()
+            owner.wait()
+        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse((run / ".busy").exists())
+
+    def test_interrupted_check_reconciles_only_its_valid_saved_attempt(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        check_id = f.manifest["checks"][0]["id"]
+        self.assertEqual(0, self.call(f, "check", "--id", check_id, "--run", run).returncode)
+        path = run / f"check-{check_id}-1.json"
+        saved = path.read_bytes()
+        marker = run / ".check-in-progress"
+        write_json(marker, {"id": check_id, "attempt": path.name})
+        result = self.call(f, "status", "--run", run)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(saved, path.read_bytes())
+        write_json(marker, {"id": check_id})
+        result = self.call(f, "status", "--run", run)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertFalse(marker.exists())
+        write_json(marker, {"id": check_id, "attempt": f"check-{check_id}-2.json"})
+        result = self.call(f, "status", "--run", run)
+        self.assertIn("interrupted check has unknown outcome", result.stderr)
+        path.write_text("{", encoding="utf-8")
+        result = self.call(f, "status", "--run", run)
+        self.assertIn(str(path), result.stderr)
+
+    def test_interrupted_blocked_attempt_can_retry(self) -> None:
+        f = self.fixture()
+        f.manifest["additional_checks"][0]["execution"]["argv"] = ["missing-review-command"]
+        f.rebind()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        check_id = f.manifest["checks"][0]["id"]
+        result = self.call(f, "check", "--id", check_id, "--run", run)
+        self.assertEqual("BLOCKED", json.loads(result.stdout)["status"])
+        marker = run / ".check-in-progress"
+        write_json(marker, {"id": check_id, "attempt": f"check-{check_id}-1.json"})
+        result = self.call(f, "status", "--run", run)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("command unavailable", result.stdout)
+        self.assertFalse(marker.exists())
+        result = self.call(f, "check", "--id", check_id, "--run", run)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue((run / f"check-{check_id}-2.json").exists())
+
+    @unittest.skipIf(os.name == "nt", "legacy PID verification requires POSIX")
+    def test_legacy_baseline_lock_upgrade_preserves_reviewed_input_drift(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
+        inputs_path = run / "inputs.json"
+        inputs = json.loads(inputs_path.read_text(encoding="utf-8"))
+        inputs["files"][str(FACTORY_ROOT / "tooling/factory/runtime/command_worker.py")] = (
+            "1f3d94ab067ff89e744fc518901a31fb35f9792bc5596599c65cea0adb095e22"
+        )
+        inputs["files"][str(FACTORY_ROOT / "tooling/factory/review/review_run.py")] = (
+            "f8fbac0a730eb92908f0da6fea92fc6097785de4441fe677dff2fcf3b98916ec"
+        )
+        inputs["files"][
+            str(FACTORY_ROOT / "skills/factory-code-review/references/run-contract.md")
+        ] = "5296c319ffd9af0d04f21e2265d4549a522de0dc4d96b1ea76fcd6295fd5afa2"
+        write_json(inputs_path, inputs)
+        (run / ".busy").mkdir()
+        owner = subprocess.Popen([sys.executable, "-c", "pass"])
+        owner.wait()
+        original = (f.root / f.path).read_text(encoding="utf-8")
+        (f.root / f.path).write_text("changed", encoding="utf-8")
+        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
+        self.assertIn("source drift", result.stderr)
+        self.assertTrue((run / ".busy").is_dir())
+        self.assertEqual(inputs, json.loads(inputs_path.read_text(encoding="utf-8")))
+        (f.root / f.path).write_text(original, encoding="utf-8")
+        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(0, self.call(f, "status", "--run", run).returncode)
+
     def fixture(self) -> ProtocolFixture:
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -32,6 +338,31 @@ class ReviewRunTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, str(RUNNER), *args], cwd=f.root, text=True, capture_output=True
         )
+
+    def test_status_validates_policy_once_and_detects_subsequent_source_drift(self) -> None:
+        from factory.project.profile_io import validate_snapshot
+        from factory.review import review_run
+        from factory.review.protocol import contracts as review_contracts
+
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        with chdir(f.root):
+            review_run.initialize(request, run)
+            with (
+                patch.object(
+                    review_contracts, "validate_snapshot", wraps=review_contracts.validate_snapshot
+                ) as contract,
+                patch(
+                    "factory.review.protocol.plan.validate_snapshot", wraps=validate_snapshot
+                ) as plan,
+            ):
+                manifest = review_run.fresh(run)
+                review_run.inspect(run, manifest)
+                self.assertEqual(1, contract.call_count + plan.call_count)
+            (f.root / f.path).write_text("changed", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "source drift"):
+                review_run.fresh(run)
 
     def test_three_specializations_cover_intent_under_acceptance(self) -> None:
         f = self.fixture()
@@ -81,6 +412,136 @@ class ReviewRunTests(unittest.TestCase):
         )
         self.assertEqual(f.manifest["target"], packet["source"]["target"])
         self.assertEqual("system-design", packet["lens"])
+
+    def test_dispatch_packets_contain_only_owned_project_questions(self) -> None:
+        from factory.context.context import build
+        from factory.project.profile_io import sha
+        from factory.project.profile_rules import document_paths, select_rules
+        from factory.runtime.workflow_config import load_config
+        from tests.fixture_bundle import ROOT as fixture
+
+        f = self.fixture()
+        project = f.root / ".factory/project"
+        shutil.copytree(fixture / "project", project)
+        gate = project / "gates/skills/code-review.yaml"
+        gate.write_text(
+            yaml.safe_dump(
+                {
+                    "gates": [
+                        {
+                            "id": "review-ready",
+                            "at": ["implement.review", "code-review.complete"],
+                            "criteria": [
+                                {
+                                    "id": "PROJECT-" + str(i),
+                                    "lens": lens,
+                                    "question": "Check " + lens,
+                                }
+                                for i, lens in enumerate(
+                                    ("system-design", "runtime-safety", "verification-quality")
+                                )
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        policy = load_profile(project / "project.yaml")
+        paths = {"AGENTS.md"}
+        for rule in select_rules(
+            policy["data"], process="code-review", audience="worker", role="reviewer"
+        ):
+            if "file" not in rule:
+                paths.update(document_paths(policy["data"], rule))
+        content = "Accepted baseline documentation."
+        f.manifest["project_policy"] = snapshot(
+            policy,
+            source="fixture",
+            documents={
+                path: {"content": content, "sha256": sha(content.encode())} for path in paths
+            },
+        )
+        f.rebind()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        created = self.call(f, "init", "--input", request, "--run", run)
+        self.assertEqual(0, created.returncode, created.stderr)
+        config = load_config(fixture / "factory.yaml")
+        for i, (lens, count) in enumerate(
+            (("system-design", 3), ("runtime-safety", 4), ("verification-quality", 5))
+        ):
+            response = self.call(f, "assignment", "--id", lens, "--run", run)
+            self.assertEqual(0, response.returncode, response.stderr)
+            assignment = json.loads(response.stdout)
+            self.assertEqual(count, len(assignment["owned_gates"]))
+            packet: dict[str, Any] = dict(
+                build(config, f.root, "reviewer", "reviewer", "code-review", assignment)
+            )
+            project_id = "PROJECT-" + str(i)
+            self.assertEqual("Check " + lens, packet["owned_gates"][project_id])
+            self.assertEqual([], packet["project_policy"]["review_criteria"])
+            self.assertEqual(1, json.dumps(packet).count("Check " + lens))
+
+    def test_configured_reviewer_profile_packages_all_directions(self) -> None:
+        from factory.context.context import build
+        from factory.project.profile_io import sha
+        from factory.project.profile_rules import document_paths, select_rules
+        from factory.review.review_run import initialize
+        from factory.runtime.workflow_config import load_config
+        from tests.fixture_bundle import ROOT as fixture
+
+        for variants, default in [
+            (["local-review"], None),
+            (["reviewer"], None),
+            (["reviewer", "local-review"], "local-review"),
+        ]:
+            with self.subTest(variants=variants, default=default):
+                f = self.fixture()
+                bundle = f.root / ".factory"
+                shutil.copytree(fixture, bundle)
+                config_path = bundle / "factory.yaml"
+                settings = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+                group = settings["profiles"]["reviewer"]
+                variant = next(iter(group["variants"].values()))
+                group["variants"] = {name: deepcopy(variant) for name in variants}
+                group.pop("default", None)
+                if default:
+                    group["default"] = default
+                config_path.write_text(yaml.safe_dump(settings), encoding="utf-8")
+                config = load_config(config_path)
+                policy = load_profile(bundle / "project/project.yaml")
+                paths = {"AGENTS.md"}
+                for rule in select_rules(
+                    policy["data"], process="code-review", audience="worker", role="reviewer"
+                ):
+                    if "file" not in rule:
+                        paths.update(document_paths(policy["data"], rule))
+                content = "Accepted baseline documentation."
+                f.manifest["project_policy"] = snapshot(
+                    policy,
+                    source="fixture baseline",
+                    documents={
+                        path: {"content": content, "sha256": sha(content.encode())}
+                        for path in paths
+                    },
+                )
+                request, run = f.root / "request.json", f.root / "run"
+                write_json(request, f.manifest)
+                with patch("factory.review.review_run.FACTORY_ROOT", bundle), chdir(f.root):
+                    initialize(request, run)
+                expected = default or variants[0]
+                manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+                self.assertEqual([expected] * 3, [a["profile"] for a in manifest["assignments"]])
+                for direction in ("system-design", "runtime-safety", "verification-quality"):
+                    response = self.call(f, "assignment", "--id", direction, "--run", run)
+                    self.assertEqual(0, response.returncode, response.stderr)
+                    assignment = json.loads(response.stdout)
+                    self.assertEqual(expected, assignment["profile"])
+                    packet: dict[str, Any] = dict(
+                        build(config, f.root, expected, "reviewer", "code-review", assignment)
+                    )
+                    self.assertEqual(direction, packet["lens"])
 
     def test_project_commands_and_criteria_extend_without_orchestrator_changes(self) -> None:
         f = self.fixture()

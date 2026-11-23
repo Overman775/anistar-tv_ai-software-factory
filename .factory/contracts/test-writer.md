@@ -1,6 +1,6 @@
 # Test Writer Contract
 
-For Implement corrections, follow [review finding transitions](common/review-findings.md).
+For assigned Implement findings, follow the supplied review finding transitions.
 Apply [Verification Rules](../gates/common/verification-rules.md).
 
 

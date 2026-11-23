@@ -11,17 +11,15 @@ import subprocess
 
 # Direct CLI execution and import-by-path use the same tool modules.
 import sys
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Literal, NotRequired, Protocol, TypedDict
+from uuid import uuid4
 
-from factory.logging_config import (
-    error_code,
-    event,
-    failure_context,
-    finish,
-    initialize,
-)
+from factory.diagnostics.events import event
+from factory.diagnostics.records import error_code
+from factory.logging_config import finish, initialize
 from factory.paths import FACTORY_ROOT
 from factory.runtime.contracts import (
     Acpx,
@@ -32,7 +30,10 @@ from factory.runtime.contracts import (
     State,
     agent_key,
 )
-from factory.runtime.packet_io import freeze_packet, read_packet_bytes
+from factory.runtime.history.artifact_ref import Artifact, transport_report
+from factory.runtime.packets.content import freeze_packet, materialize_packet, read_packet_bytes
+from factory.runtime.scheduling.run_sessions import RunSessions
+from factory.runtime.transport import streams as transport_streams
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import (
     check_capabilities,
@@ -42,6 +43,7 @@ from factory.runtime.workflow_config import (
 from factory.runtime.workflow_core import (
     Invalid,
     atomic_json,
+    lock,
     read_json,
     require,
 )
@@ -102,8 +104,7 @@ def assignment(state: State, node_id: str) -> tuple[Node, Profile, Connection, s
     profile = state["config"]["profiles"][agent["profile"]]
     require(profile["runner"] == "acpx", "Node is not assigned to ACP")
     conn = state["config"]["acpx"]["connections"][profile["connection"]]
-    epoch = state.get("epochs", {}).get(agent_key(node), 0)
-    session = f"{state['run_id']}-{node['agent']}-e{epoch}"
+    session = RunSessions(state).acp_name(agent_key(node))
     return node, profile, conn, session
 
 
@@ -165,18 +166,26 @@ def prepare_prompt(ledger: Ledger, node_id: str) -> dict[str, Any]:
         _, _, conn, session = assignment(s, node_id)
         _check_dispatch_workspace(ledger, s, conn)
         require(not v.get("prompt_submitted"), "Prompt already submitted")
-        meta = freeze_packet(ledger.root, ledger.dir, s, n, v)
+        meta, data = freeze_packet(
+            ledger.root, s, n, v, packets=ledger.packets, history=ledger.history
+        )
         p = ledger.root / meta["path"]
-        expected_report = ledger.dir / f"{s['run_id']}-{node_id}-{v['dispatch_id']}.report.json"
+        report = transport_report(s["run_id"], node_id, v["dispatch_id"])
         artifacts = s.setdefault("transport_artifacts", [])
-        report = str(expected_report.relative_to(ledger.root))
         if report not in artifacts:
             artifacts.append(report)
-        ledger.save(s, "prompt_prepared", node=node_id, session=session)
+        ledger.save_artifacts(
+            s,
+            "prompt_prepared",
+            (Artifact(meta["path"], "packet", data, node_id, v["dispatch_id"]),),
+            node=node_id,
+            session=session,
+        )
+        materialize_packet(ledger.root, meta, data)
         return {
             "prompt": str(p),
             "session": session,
-            "report": str(expected_report),
+            "report": str(ledger.root / report),
             "create": build_command(s, node_id, "create"),
             "show": build_command(s, node_id, "show"),
             "prompt_argv": build_command(s, node_id, "prompt", p),
@@ -197,7 +206,9 @@ class TransportAttempt:
     err: Path
 
 
-def _prepare_operation(ledger: Ledger, node_id: str, operation: str) -> TransportAttempt:
+def _prepare_operation(
+    ledger: Ledger, node_id: str, operation: str, lifetime: ExitStack
+) -> TransportAttempt:
     with ledger.locked():
         s = ledger.read()
         if operation in {"create", "prompt"}:
@@ -222,11 +233,7 @@ def _prepare_operation(ledger: Ledger, node_id: str, operation: str) -> Transpor
         prompt_path = None
         if operation == "create":
             require(v["status"] == "reserved", "Create requires reservation")
-            require(
-                session not in s.get("acp_created", {}),
-                "Session creation already attempted; reconcile instead of creating again",
-            )
-            s.setdefault("acp_created", {})[session] = "requested"
+            RunSessions(s).request_acp_creation(agent_key(n))
         if operation == "prompt":
             require(
                 v["status"] == "running", "Confirm session/model with workflow bind before prompt"
@@ -239,7 +246,10 @@ def _prepare_operation(ledger: Ledger, node_id: str, operation: str) -> Transpor
             meta = v.get("packet_file")
             if meta is None:
                 raise Invalid("Prepare JSON packet before prompt")
-            read_packet_bytes(ledger.root, s, n, meta, meta)
+            data = read_packet_bytes(
+                ledger.root, s, n, meta, meta, packets=ledger.packets, history=ledger.history
+            )
+            materialize_packet(ledger.root, meta, data)
             prompt_path = ledger.root / meta["path"]
             bound = s["sessions"].get(agent_key(n))
             require(
@@ -253,19 +263,25 @@ def _prepare_operation(ledger: Ledger, node_id: str, operation: str) -> Transpor
         if operation == "prompt" and s["config"]["models"][profile["model"]].get("effort"):
             effort_argv = build_command(s, node_id, "set-effort")
             effort_argv[0] = executable_path
-        prefix = ledger.dir / f"{s['run_id']}-{node_id}-{v['dispatch_id']}-{operation}"
+        prefix = ledger.dir / f"{s['run_id']}-{v['dispatch_id']}-{operation}-{uuid4().hex}"
         out, err = Path(str(prefix) + ".stdout"), Path(str(prefix) + ".stderr")
         for p in (out, err):
             require(not p.is_symlink(), "Symlink transport output")
-            s.setdefault("transport_artifacts", []).append(str(p.relative_to(ledger.root)))
+            s.setdefault("transport_artifacts", []).append(p.relative_to(ledger.root).as_posix())
         ledger.save(
             s,
             "transport_requested",
             node=node_id,
             operation=operation,
+            dispatch_id=expected_dispatch,
             argv=argv,
+            stdout=out.relative_to(ledger.root).as_posix(),
+            stderr=err.relative_to(ledger.root).as_posix(),
             **({"effort_argv": effort_argv} if effort_argv else {}),
         )
+        lease = relative(ledger.root, out.relative_to(ledger.root).as_posix() + ".lock")
+        lifetime.callback(lease.unlink, missing_ok=True)
+        lifetime.enter_context(lock(lease))
     return TransportAttempt(
         node_id,
         operation,
@@ -285,15 +301,12 @@ def _execute_operation(
     attempt_context: TransportAttempt,
     run: TransportRunner,
 ) -> TransportResult:
-    node_id, operation = attempt_context.node_id, attempt_context.operation
-    expected_run, expected_dispatch = (
-        attempt_context.expected_run,
-        attempt_context.expected_dispatch,
-    )
     argv, effort_argv = attempt_context.argv, attempt_context.effort_argv
     out, err = attempt_context.out, attempt_context.err
     try:
-        with out.open("w", encoding="utf-8") as stdout, err.open("w", encoding="utf-8") as stderr:
+        with out.open("x", encoding="utf-8") as stdout, err.open("x", encoding="utf-8") as stderr:
+            transport_streams.protect_writer(stdout)
+            transport_streams.protect_writer(stderr)
             result = (
                 run(effort_argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
                 if effort_argv
@@ -302,74 +315,69 @@ def _execute_operation(
             if result is None or result.returncode == 0:
                 result = run(argv, cwd=ledger.root, stdout=stdout, stderr=stderr, check=False)
     except BaseException:
-        if operation in {"create", "prompt"}:
-            with ledger.locked():
-                current = ledger.read()
-                attempt = current["nodes"].get(node_id)
-                if (
-                    current["run_id"] == expected_run
-                    and attempt is not None
-                    and attempt.get("dispatch_id") == expected_dispatch
-                ):
-                    attempt["status"] = "unknown"
-                    ledger.save(current, "transport_interrupted", node=node_id, operation=operation)
+        _record_outcome(ledger, attempt_context, None)
         raise
     return result
+
+
+def _record_outcome(ledger: Ledger, transport: TransportAttempt, exit_code: int | None) -> bool:
+    """Persist any output under its original dispatch, including late and interrupted calls."""
+    node, operation = transport.node_id, transport.operation
+    with ledger.locked(wait=True):
+        state = ledger.read()
+        require(state["run_id"] == transport.expected_run, "Transport run changed")
+        attempt = state["nodes"].get(node)
+        expected_phase = {"create": "reserved", "prompt": "running"}.get(operation)
+        current = (
+            attempt is not None
+            and attempt.get("dispatch_id") == transport.expected_dispatch
+            and (expected_phase is None or attempt["status"] in {expected_phase, "unknown"})
+        )
+        if current and attempt is not None:
+            if operation == "create" and exit_code == 0:
+                RunSessions(state).confirm_acp_creation(transport.session)
+            if operation in {"create", "prompt"} and exit_code != 0:
+                attempt["status"] = "unknown"
+        streams = {
+            kind: path.relative_to(ledger.root).as_posix()
+            for kind, path in (("stdout", transport.out), ("stderr", transport.err))
+        }
+        for name in streams.values():
+            transport_streams.require_idle(relative(ledger.root, name))
+        evidence = tuple(
+            Artifact(name, kind, source, node, transport.expected_dispatch)
+            for kind, name in streams.items()
+            if (source := relative(ledger.root, name)).is_file()
+        )
+        ledger.save_artifacts(
+            state,
+            "transport_interrupted" if exit_code is None else "transport_returned",
+            evidence,
+            node=node,
+            dispatch_id=transport.expected_dispatch,
+            operation=operation,
+            **({"exit_code": exit_code} if exit_code is not None else {}),
+            **({"status": "stale"} if not current else {}),
+            **streams,
+        )
+    return current
 
 
 def _reconcile_operation(
     ledger: Ledger, attempt_context: TransportAttempt, result: TransportResult
 ) -> dict[str, Any]:
-    node_id, operation = attempt_context.node_id, attempt_context.operation
-    expected_run, expected_dispatch = (
-        attempt_context.expected_run,
-        attempt_context.expected_dispatch,
-    )
+    current = _record_outcome(ledger, attempt_context, result.returncode)
     session, out, err = attempt_context.session, attempt_context.out, attempt_context.err
-    with ledger.locked():
-        s = ledger.read()
-        attempt = s["nodes"].get(node_id)
-        if (
-            s["run_id"] != expected_run
-            or attempt is None
-            or attempt.get("dispatch_id") != expected_dispatch
-        ):
-            event(
-                "transport_returned",
-                run_id=expected_run,
-                node_id=node_id,
-                task_id=attempt_context.task_id,
-                dispatch_id=expected_dispatch,
-                transport_operation=operation,
-                outcome="stale",
-            )
-            return {
-                "stale": True,
-                "exit_code": result.returncode,
-                "stdout": str(out),
-                "stderr": str(err),
-                "dispatch_id": expected_dispatch,
-                "gate": "NOT_EVALUATED",
-            }
-        if operation == "create" and result.returncode == 0:
-            s["acp_created"][session] = "created"
-        if operation in {"create", "prompt"} and result.returncode != 0:
-            s["nodes"][node_id]["status"] = "unknown"
-        ledger.save(
-            s,
-            "transport_returned",
-            node=node_id,
-            operation=operation,
-            exit_code=result.returncode,
-            stdout=str(out),
-            stderr=str(err),
-        )
     # Zero exit is transport only. Parent validates effective model, role output and evidence.
     return {
         "exit_code": result.returncode,
         "stdout": str(out),
         "stderr": str(err),
-        "session": session,
+        "run_id": attempt_context.expected_run,
+        "dispatch_id": attempt_context.expected_dispatch,
+        "stdout_ref": out.relative_to(ledger.root).as_posix(),
+        "stderr_ref": err.relative_to(ledger.root).as_posix(),
+        **({"session": session} if current else {"stale": True}),
         "gate": "NOT_EVALUATED",
     }
 
@@ -382,9 +390,10 @@ def run_operation(
     run: TransportRunner | None = None,
 ) -> dict[str, Any]:
     # Journal before transport, then reconcile only the same dispatch.
-    attempt = _prepare_operation(ledger, node_id, operation)
-    result = _execute_operation(ledger, attempt, subprocess.run if run is None else run)
-    return _reconcile_operation(ledger, attempt, result)
+    with ExitStack() as lifetime:
+        attempt = _prepare_operation(ledger, node_id, operation, lifetime)
+        result = _execute_operation(ledger, attempt, subprocess.run if run is None else run)
+        return _reconcile_operation(ledger, attempt, result)
 
 
 class DoctorConfig(TypedDict):
@@ -450,6 +459,8 @@ def main() -> int:
             failed = True
             event("operation_failed", error_code="executable_unavailable")
             return 1
+        if args.action in {"setup", "doctor"}:
+            event("operation_completed")
         return 0
     except BaseException as exc:
         failed = True
@@ -457,7 +468,7 @@ def main() -> int:
             "operation_failed",
             error_code=error_code(exc),
             **(
-                failure_context(ledger, getattr(args, "node", None))
+                ledger.failure_context(getattr(args, "node", None))
                 if args.action not in {"doctor", "setup", "run"}
                 else {}
             ),

@@ -33,6 +33,21 @@ For Python changes, read [Python tooling](references/python.md).
 For factory-owned YAML changes, read [YAML tooling](references/yaml.md).
 For setup and actual commands, read [tools](../../tooling/README.md).
 
+## Python architecture
+
+Trace the use case from its CLI or Python entry point. When an operation depends on
+domain state, put its rule on the smallest domain model that has the facts to decide.
+Reuse that model across callers. Test an allowed transition and a rejected one,
+including the state after rejection. Keep locking and persistence in the caller.
+For replaceable I/O, select the implementation at the entry point and pass the
+smallest existing contract the use case needs. A repository Protocol can serve
+as the port. A pure calculation can stay a function.
+
+For a storage change, identify which writes must survive or roll back together
+and what the caller should observe on retry. Use these guarantees to choose the
+transaction boundary and its tests. See the [Python examples and contract tests](references/python.md#application-and-storage-boundaries)
+for the patterns adopted in ADR 0018.
+
 ## Change and verify
 
 Reuse existing components and standard facilities before adding code or dependencies.

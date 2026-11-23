@@ -14,10 +14,11 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from factory.review.review_contracts import IDENTITY_FIELDS
-from factory.review.review_evidence import COMMAND_RESULT, TOOL_RESULT, command_outcome
-from factory.review.review_shapes import CommandResult, Manifest, ReviewCommand
-from factory.runtime.check_process import run_process
+from factory import file_reader
+from factory.review.protocol.contracts import IDENTITY_FIELDS
+from factory.review.protocol.evidence import COMMAND_RESULT, TOOL_RESULT, command_outcome
+from factory.review.protocol.shapes import CommandResult, Manifest, ReviewCommand
+from factory.runtime.commands.process import run_process
 from factory.validation import validation_message
 
 EXCERPT_BYTES = 24 * 1024
@@ -41,9 +42,9 @@ def parse_args() -> argparse.Namespace:
 
 def load_manifest(path: Path) -> Manifest:
     from factory.project.profile_io import validate_snapshot
-    from factory.review.review_contracts import parse_manifest
+    from factory.review.protocol.contracts import parse_manifest
 
-    value = parse_manifest(json.loads(path.read_text(encoding="utf-8")))
+    value = parse_manifest(json.loads(file_reader.read_text(path, encoding="utf-8")))
     validate_snapshot(value["project_policy"])
     return value
 
@@ -83,9 +84,9 @@ def run_command(
         stderr=stderr,
     )
     # Bound memory as well as the report; full output remains in the log files.
-    with stdout.open("rb") as stream:
+    with file_reader.open_binary(stdout) as stream:
         stdout_excerpt, stdout_truncated = excerpt(stream.read(EXCERPT_BYTES + 1))
-    with stderr.open("rb") as stream:
+    with file_reader.open_binary(stderr) as stream:
         stderr_excerpt, stderr_truncated = excerpt(stream.read(EXCERPT_BYTES + 1))
     return {
         "argv": argv,
@@ -172,7 +173,7 @@ def main() -> int:
     args = parse_args()
     try:
         manifest = load_manifest(args.manifest)
-        from factory.review.review_plan import validate_plan
+        from factory.review.protocol.plan import validate_plan
 
         validate_plan(manifest)
         check = next((c for c in manifest["checks"] if c["id"] == args.tool_id), None)

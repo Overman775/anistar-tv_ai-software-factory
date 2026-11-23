@@ -2,6 +2,6 @@
 """Command entry point for task metadata projection."""
 
 if __name__ == "__main__":
-    from factory.decompose.metadata import main
+    from factory.decompose.staging.metadata import main
 
     main()

@@ -1,7 +1,11 @@
 # Decompose gate
 
+For the normal route, use the [review request](../../../skills/factory-decompose/references/output-contract.md#review-request)
+to run this gate and bind the reviewer together. For standalone validation, from
+the project root run:
+
 ```bash
-python3 .factory/gates/skills/decompose/generate_task_graph.py \
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/generate_task_graph.py \
   --staging-dir .factory/memory/staging/tasks/ \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --output .factory/memory/staging/mermaid_graph.txt
@@ -13,7 +17,8 @@ errors return to decomposer for one fast-fix pass, then the complete gate reruns
 They do not invoke planning or require user approval.
 
 The graph validator also runs project decompose.complete commands after its common
-checks. Re-run immediately before final assembly and after any artifact change.
+checks. The review request reruns it after any artifact change; final assembly independently
+revalidates it.
 Require the current policy/artifact hashes and PASS receipt; a saved old PASS is
 not reusable. Missing/failed/timed-out project checks block assembly. Scripts
 receive normalized tasks/envelopes on stdin and must not edit artifacts. They are

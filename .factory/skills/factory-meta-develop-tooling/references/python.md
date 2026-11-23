@@ -44,6 +44,45 @@ their executable wrappers alongside other run dependencies. Any package change,
 including an unrelated module, blocks continuation as drift. Compatibility of saved
 runs with an updated factory is not automatic.
 
+For a new module, start with the [package map](../../../tooling/README.md#find-the-owner-of-a-change).
+Place it with the feature that owns the rule and follow that feature's tests.
+When moving code, check callers, CLI wrappers, input locks, import contracts and
+eval fixtures for paths assembled from directory and file names.
+
+## Application and storage boundaries
+
+Keep use-case preconditions in the application function or coordinator. CLI handlers
+parse arguments, read inputs and render results. Select infrastructure at the
+entry point and pass the operations a use case consumes through arguments.
+Name each Protocol for its responsibility and its implementation for the technology
+or source. Keep SQL and transaction handling inside the database adapter.
+
+Specify which writes succeed or fail together. Preserve each atomic operation across
+adapters and retries. Use a shared Unit of Work when one use case must coordinate
+separate repository calls in the same transaction. Run the same observable storage
+contract tests against every backend alongside its driver-specific integration tests.
+
+Place a transition with the smallest owner that can check all of its conditions.
+For example, a dispatch can decide whether it may leave the unknown state. Only
+the run can decide whether another agent owns its session handle. Keep the
+existing persisted record and test the rule with plain values where possible.
+[Dispatch recovery](../../../tooling/factory/runtime/scheduling/dispatch.py)
+
+Two examples from the installed tooling:
+
+- For workflow status, follow the Teacher repository from CLI construction through
+  both the finalizer and the pending queue. When testing a new branch, give the
+  injected repository a distinguishable result so a fallback to the default
+  backend becomes visible. [CLI](../../../tooling/factory/runtime/workflow_cli.py) · [Status query](../../../tooling/factory/runtime/workflow_query.py)
+- For an archive change, reopen the same isolated store through a fresh adapter,
+  retry the operation and check the history and number of Teacher jobs. A child
+  CLI resolves its own backend. If the test starts one, configure that process
+  explicitly or exercise the public Python entry point in the test process.
+  [RunRepository](../../../tooling/factory/runtime/run_repository.py) · [Shared contract suite](../../../tooling/tests/factory/runtime/test_run_repository_contract.py)
+
+The design rationale comes from *Architecture Patterns with Python*.
+[Service Layer](https://www.cosmicpython.com/book/chapter_04_service_layer.html) · [Dependency Injection](https://www.cosmicpython.com/book/chapter_13_dependency_injection.html) · [Repository](https://www.cosmicpython.com/book/chapter_02_repository.html) · [Unit of Work](https://www.cosmicpython.com/book/chapter_06_uow.html)
+
 ## Target checks
 
 - Ruff lint and format check: py314, line length 100, double quotes, spaces,

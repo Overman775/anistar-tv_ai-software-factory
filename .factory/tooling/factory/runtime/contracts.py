@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, NotRequired, Required
 
-from pydantic import AfterValidator, ConfigDict, Field, StringConstraints, with_config
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, with_config
 from typing_extensions import TypedDict
 
 from factory.checks.command import CommandExecution
 from factory.checks.contracts import CheckId, CheckSpec, ExecutableCheck
 from factory.gates.gate_contract import GateResult
 from factory.project.contracts import BoundaryGate, Policy
+from factory.runtime.observability.configuration import TelemetrySettings
 from factory.tasks.contracts import Criterion, Task
 
 Nonblank = Annotated[str, StringConstraints(pattern=r"\S")]
@@ -136,6 +137,7 @@ class NodeMaterials(TypedDict, total=False):
     owns: list[str]
     resources: list[str]
     read: list[str]
+    handoff_inputs: list[str]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -156,6 +158,7 @@ class Node(NodeMaterials):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class GraphTopology(TypedDict):
+    after_archive: NotRequired[Annotated[Literal["teacher"], Field(default="teacher")]]
     agents: dict[str, Agent]
     tasks: dict[str, Task]
     nodes: list[Node]
@@ -218,12 +221,16 @@ class Adapter(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
-class ProfileCommon(TypedDict):
-    role: Nonblank
-    contract: Nonblank
+class ProfilePolicy(TypedDict):
     capabilities: Capabilities
     enforcement: Literal["instructions", "required"]
     mcp: list[Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]*\.[A-Za-z0-9_-]+$")]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProfileCommon(ProfilePolicy):
+    role: Nonblank
+    contract: Nonblank
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -299,6 +306,29 @@ class Orchestrator(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class LegacyTelemetrySettings(TypedDict):
+    """Keep previously frozen runs readable with their original settings."""
+
+    otlp_enabled: bool
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class FrozenLogReceiver(TypedDict):
+    endpoint: str
+    headers: NotRequired[dict[str, str]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class NestedTelemetrySettings(TypedDict):
+    """Read snapshots created before logs acquired an independent switch."""
+
+    logs: FrozenLogReceiver
+    enabled: NotRequired[bool]
+    endpoint: NotRequired[str]
+    headers: NotRequired[dict[str, str]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class Settings(TypedDict):
     project: Nonblank
     router: Nonblank
@@ -313,6 +343,8 @@ class Settings(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class Config(Settings):
+    telemetry: NotRequired[TelemetrySettings | LegacyTelemetrySettings | NestedTelemetrySettings]
+    logs: NotRequired[TelemetrySettings]
     profiles: dict[Alias, Profile]
     routing: Routing
     _path: str
@@ -420,7 +452,46 @@ class FindingRecord(FindingView):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class ReportRef(TypedDict):
+    run_id: str
+    node_id: str
+    dispatch_id: str
+    path: str
+    sha256: str
+    content_identity: str
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class AppliedCase(TypedDict):
+    report_ref: ReportRef
+    result: Nonblank
+
+
+LessonId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$", max_length=96)]
+LessonScope = Literal["factory", "project"]
+
+
+class CardChange(BaseModel):
+    id: LessonId
+    scope: LessonScope
+    action: Literal["created", "updated", "deleted"]
+    revision: str
+    incident: str
+    at: str
+    confirmed: bool = False
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class AppliedLesson(TypedDict):
+    id: LessonId
+    revision: Annotated[str, StringConstraints(pattern=r"^[a-f0-9]{64}$")]
+    result: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class ReportEvidence(TypedDict, total=False):
+    applied_lessons: list[AppliedLesson]
+    applied_cases: list[AppliedCase]
     review_checks: list[ReviewCheck]
     not_applicable: dict[str, str]
     verdict: Literal["APPROVE", "NEEDS_WORK", "RETHINK", "BLOCKED_TOOL_ERROR"]
@@ -465,16 +536,6 @@ class Report(ReportSummary):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
-class ReportRef(TypedDict):
-    run_id: str
-    node_id: str
-    dispatch_id: str
-    path: str
-    sha256: str
-    content_identity: str
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
 class PacketRef(TypedDict):
     run_id: str
     node_id: str
@@ -503,6 +564,7 @@ class Dispatch(TypedDict, total=False):
     packet_chunks_read: int
     packet_receipt: str
     packet_confirmed: bool
+    packet_delivery_version: Literal[2]
     prompt_submitted: bool
     prompt_hash: str
     gate_result: GateResult
@@ -517,6 +579,7 @@ class TestSelection(TypedDict):
     mode: Literal["full"]
     selected: Positive
     completed: Positive
+    files: NotRequired[Annotated[list[Nonblank], Field(min_length=1)]]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -565,7 +628,20 @@ class TestRetry(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class RetroNote(TypedDict):
+    source: Nonblank
+    observation: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class LedgerEvent(TypedDict):
+    lesson_retro: NotRequired[RetroNote]
+    lesson_incident: NotRequired[str]
+    lesson_checkout: NotRequired[str | None]
+    lesson_user: NotRequired[str]
+    lesson_reports: NotRequired[list[ReportRef]]
+    lesson_applications: NotRequired[list[AppliedLesson]]
+    lesson_applied_cases: NotRequired[list[AppliedCase]]
     at: float
     event: Nonblank
     node: NotRequired[Nonblank]
@@ -586,6 +662,8 @@ class LedgerEvent(TypedDict):
     previous_nodes: NotRequired[dict[str, Dispatch]]
     previous_config: NotRequired[Config]
     authorization: NotRequired[str]
+    role: NotRequired[str]
+    harness: NotRequired[str | None]
     agent: NotRequired[str]
     handoff: NotRequired[str]
     task_handoffs: NotRequired[dict[str, Nonblank]]
@@ -653,6 +731,8 @@ class Session(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class State(TypedDict):
+    lesson_run_checkout: str | None
+    final_teacher_event: NotRequired[str]
     run_id: str
     revision: Positive
     status: Literal["active", "completed", "cancelled"]

@@ -15,10 +15,12 @@
    of assignments and reasons, checks with file scope/hash, findings/retries,
    user decisions, outstanding work and measured usage (`null` if unknown).
 5. Save additional required evidence under the run's history directory. Then
-   `workflow.py archive completed "<summary>"` saves one verified
-   `.factory/memory/history/archive/YYYY-MM-DD_<run-id>.tar.gz` before terminal state.
-   On failure retain state. Never archive credentials or full raw conversations by default.
-6. Use [cleanup](shared-cleanup.md). Report history path and remaining temporary
+   `workflow.py archive completed "<summary>"` publishes verified terminal history and returns its path.
+   Record the run ID together with the returned workflow database path.
+   On failure retain state. Keep secrets out of summaries and additional evidence. The journal retains raw transport output, which may already contain sensitive data.
+6. After successful archival, dispatch the [final Teacher review](../../../workflow/orchestration.md#teacher-at-run-completion)
+   once for the run. A retro already held for this run contributes its recorded notes.
+   Use [cleanup](shared-cleanup.md). Report history path and remaining temporary
    files if any. History stays until explicit deletion.
 7. Do not automatically stage, commit, push, publish, merge or release. These
    retain separate user authorization. An ordinary authorized docs update needs

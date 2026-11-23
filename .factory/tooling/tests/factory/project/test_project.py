@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,7 +18,7 @@ from typing import Any
 import yaml
 
 from factory.context import context
-from factory.project.contracts import Policy, ProjectData, Selection
+from factory.project.contracts import AcceptedDocument, Policy, ProjectData, Selection
 from factory.project.profile_io import (
     check_frozen,
     freeze_materials,
@@ -37,9 +38,11 @@ from factory.project.profile_rules import (
 )
 from factory.project.project import review_snapshot
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, atomic_json
+from factory.runtime.workflow_core import Invalid
+from factory.runtime.workflow_graph import expand_intake_checks, validate_graph
 from factory.tasks.contracts import TaskSelection
 from tests.factory.runtime import workflow_fixture
+from tests.factory.runtime.store_fixture import has_current, overwrite
 
 ROOT = workflow_fixture.ROOT
 
@@ -366,6 +369,59 @@ class ProjectTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNKNOWN"):
             required_checks(profile, task)
 
+    def test_compact_examples_expand_and_persist_checks(self) -> None:
+        for name in ("example.workflow.json", "reviewed-slice.workflow.json"):
+            fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
+            fixture.config["_project"] = load_profile(ROOT / "project/project.yaml")
+            fixture.config["_files"].update(fixture.config["_project"]["files"])
+            for document in fixture.config["_project"]["data"]["documents"].values():
+                path = fixture.root / document["path"]
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("Fixture document", encoding="utf-8")
+            graph = json.loads((ROOT / "tooling/examples" / name).read_text(encoding="utf-8"))
+            if name.startswith("reviewed"):
+                fixture.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
+            full = expand_intake_checks(graph, fixture.config)
+            task_id = next(iter(full["tasks"]))
+            task = full["tasks"][task_id]
+            self.assertEqual(
+                [
+                    "behavior",
+                    "anistar-analyze",
+                    "anistar-dcm",
+                    "anistar-format-check",
+                    "anistar-check",
+                    "anistar-test-e2e",
+                    "anistar-build-android-prod-apk",
+                ],
+                [c["id"] for c in task["required_checks"]],
+            )
+            validate_graph(full, fixture.config, fixture.root)
+            explicit = deepcopy(full)
+            explicit["tasks"][task_id]["required_checks"].pop()
+            with self.assertRaisesRegex(Invalid, "missing/changed"):
+                validate_graph(explicit, fixture.config, fixture.root)
+            conflict = deepcopy(graph)
+            conflict["tasks"][task_id]["required_checks"].append(task["required_checks"][1])
+            with self.assertRaisesRegex(Invalid, "conflicts"):
+                expand_intake_checks(conflict, fixture.config)
+            saved = fixture.ledger.init(graph, fixture.config)["graph"]
+            self.assertEqual(full["tasks"], saved["tasks"])
+            validate_graph(saved, fixture.config, fixture.root)
+
+    def test_compact_checks_keep_additional_inputs(self) -> None:
+        fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
+        fixture.config["_project"] = load_profile(ROOT / "project/project.yaml")
+        graph = json.loads((ROOT / "tooling/examples/example.workflow.json").read_text())
+        graph["tasks"]["label"]["project_check_inputs"] = {"anistar-analyze": ["extra.txt"]}
+        task = expand_intake_checks(graph, fixture.config)["tasks"]["label"]
+        check_task(fixture.config["_project"]["data"], task, final=True)
+        check = task["required_checks"][1]
+        assert check["kind"] != "observation"
+        self.assertEqual(
+            ["pubspec.yaml", "pubspec.lock", "extra.txt"], check["execution"]["inputs"]
+        )
+
     def test_task_inputs_can_strengthen_but_not_weaken_profile_checks(self) -> None:
         profile = load_profile(ROOT / "project/project.yaml")["data"]
         original = deepcopy(profile)
@@ -421,19 +477,26 @@ class ProjectTests(unittest.TestCase):
             validate_snapshot(corrupt)
 
     def test_review_snapshot_reads_git_baseline_not_changed_checkout(self) -> None:
-        self.data["documents"] = {"api": {"path": "api.md"}, "schema": {"path": "schema.md"}}
+        self.data["documents"] = {
+            "api": {"path": "api.md"},
+            "schema": {"path": "schema.md"},
+            "owner": {"path": ".factory/memory/USER.md"},
+        }
         for audience in ("worker", "coordinator"):
             self.data["rules"][audience].append(
                 {
                     "id": "review-docs-" + audience,
                     "for": {"processes": ["code-review"]},
-                    "documents": ["api", "schema"],
+                    "documents": ["api", "schema", "owner"],
                 }
             )
         for name in ["api.md", "schema.md"]:
             (self.root / name).write_text("Accepted " + name)
         self.policy()
         (self.root / "AGENTS.md").write_text("Accepted workspace policy")
+        user = self.root / ".factory/memory/USER.md"
+        user.parent.mkdir(parents=True)
+        user.write_text("Baseline owner instructions", encoding="utf-8")
 
         def git(*args: str) -> str:
             return subprocess.run(
@@ -456,15 +519,312 @@ class ProjectTests(unittest.TestCase):
         sha = git("rev-parse", "HEAD")
         (self.root / "backend.md").write_text("candidate weakens policy")
         (self.root / "api.md").write_text("candidate API")
+        user.write_text("Candidate replacement", encoding="utf-8")
         result = review_snapshot(self.root, sha, "project.yaml")
         self.assertEqual("git:" + sha, result["source"])
         self.assertEqual(
             hashlib.sha256(b"Python API rules").hexdigest(), result["files"]["backend.md"]
         )
         entries = review_materials(result, self.root, self.root, role="reviewer")
+        [owner] = [entry for entry in entries if entry["path"] == str(user)]
+        self.assertEqual(["review-docs-worker"], [r["id"] for r in owner.get("rules", [])])
         self.assertTrue(
-            {"Accepted api.md", "Accepted schema.md"} <= {e["content"] for e in entries}
+            {"Accepted api.md", "Accepted schema.md", "Baseline owner instructions"}
+            <= {e["content"] for e in entries}
         )
+
+    def test_review_policy_cli_uses_full_commit_in_repository_object_format(self) -> None:
+        for object_format in ("sha1", "sha256"):
+            with self.subTest(object_format=object_format):
+                root = self.root / object_format
+                root.mkdir()
+                (root / "project.yaml").write_text(yaml.safe_dump(self.data), encoding="utf-8")
+                for name in ("backend.md", "frontend.md", "coordinator.md", "AGENTS.md"):
+                    (root / name).write_text("baseline " + name, encoding="utf-8")
+
+                def git(*args: str, root: Path = root) -> str:
+                    return subprocess.run(
+                        ["git", "-C", str(root), *args],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip()
+
+                git("init", "-q", "--object-format=" + object_format)
+                git("add", ".")
+                git(
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-qm",
+                    "baseline",
+                )
+                revision = git("rev-parse", "HEAD")
+                blob = git("rev-parse", "HEAD:AGENTS.md")
+                (root / "AGENTS.md").write_text("later commit", encoding="utf-8")
+                git("add", ".")
+                git(
+                    "-c",
+                    "user.name=Fixture",
+                    "-c",
+                    "user.email=fixture@example.invalid",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "commit",
+                    "-qm",
+                    "later",
+                )
+                (root / "AGENTS.md").write_text("working copy", encoding="utf-8")
+
+                def cli(value: str, root: Path = root) -> subprocess.CompletedProcess[str]:
+                    return subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "tooling/bin/project.py"),
+                            "--workspace",
+                            str(root),
+                            "review-policy",
+                            "--profile-path",
+                            "project.yaml",
+                            "--revision",
+                            value,
+                        ],
+                        capture_output=True,
+                        text=True,
+                    )
+
+                mixed = "".join(c.upper() if i % 2 == 0 else c for i, c in enumerate(revision))
+                for value in (revision, revision.upper(), mixed):
+                    with self.subTest(revision=value):
+                        result = cli(value)
+                        self.assertEqual(0, result.returncode, result.stderr)
+                        pinned = json.loads(result.stdout)
+                        self.assertEqual("git:" + revision, pinned["source"])
+                        self.assertEqual(
+                            "baseline AGENTS.md", pinned["documents"]["AGENTS.md"]["content"]
+                        )
+                for invalid in (
+                    revision[:-1],
+                    revision + "0",
+                    "g" * len(revision),
+                    "0" * len(revision),
+                    blob,
+                ):
+                    self.assertNotEqual(0, cli(invalid).returncode, invalid)
+
+    def test_review_stage_documents_are_pinned_and_selected_by_cli(self) -> None:
+        data: Any = deepcopy(self.data)
+        data["documents"] = {name: {"path": name + ".md"} for name in ("review", "work", "all")}
+        data["rules"]["worker"] = [
+            {"id": name, "for": {"processes": ["code-review"], **selector}, "documents": [name]}
+            for name, selector in (
+                ("review", {"stages": ["review"]}),
+                ("work", {"stages": ["work"]}),
+                ("all", {}),
+            )
+        ]
+        for name in ("review", "work", "all"):
+            (self.root / (name + ".md")).write_text("Accepted " + name, encoding="utf-8")
+        (self.root / "AGENTS.md").write_text("Accepted instructions", encoding="utf-8")
+        self.policy(data)
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(self.root), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "baseline",
+        )
+        pinned = review_snapshot(self.root, git("rev-parse", "HEAD"), "project.yaml")
+        self.assertEqual({"AGENTS.md", "review.md", "all.md"}, pinned["documents"].keys())
+        (self.root / "review.md").write_text("Candidate review", encoding="utf-8")
+        policy_file = self.root / "snapshot.json"
+        policy_file.write_text(json.dumps(pinned), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "tooling/bin/project.py"),
+                "--workspace",
+                str(self.root),
+                "context",
+                "--process",
+                "code-review",
+                "--audience",
+                "worker",
+                "--role",
+                "reviewer",
+                "--policy-snapshot",
+                str(policy_file),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        contents = {entry["content"] for entry in json.loads(result.stdout)["instructions"]}
+        self.assertIn("Accepted review", contents)
+        self.assertIn("Accepted all", contents)
+        self.assertNotIn("Accepted work", contents)
+        self.assertNotIn("Candidate review", contents)
+
+    def test_review_snapshot_uses_nested_project_baseline(self) -> None:
+        self.policy()
+        (self.root / "AGENTS.md").write_text("Root policy", encoding="utf-8")
+        child = self.root / "nested" / "project"
+        child.mkdir(parents=True)
+        child_data = deepcopy(self.data)
+        child_data["id"] = "child"
+        (child / "project.yaml").write_text(yaml.safe_dump(child_data), encoding="utf-8")
+        for name in ("backend.md", "frontend.md", "coordinator.md"):
+            (child / name).write_text("Child " + name, encoding="utf-8")
+        (child / "AGENTS.md").write_text("Child policy", encoding="utf-8")
+        colon_child = self.root / ":child"
+        if sys.platform != "win32":
+            shutil.copytree(child, colon_child)
+        sibling = child.parent / "sibling"
+        sibling.mkdir()
+        (sibling / "tracked").write_text("tracked", encoding="utf-8")
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(self.root), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "baseline",
+        )
+        revision = git("rev-parse", "HEAD")
+        (child / "AGENTS.md").write_text("Candidate policy", encoding="utf-8")
+        nested = review_snapshot(child, revision, "project.yaml")
+        root = review_snapshot(self.root, revision, "project.yaml")
+        self.assertEqual("child", nested["profile"]["id"])
+        self.assertEqual("Child policy", nested["documents"]["AGENTS.md"]["content"])
+        self.assertEqual(
+            hashlib.sha256(b"Child backend.md").hexdigest(), nested["files"]["backend.md"]
+        )
+        self.assertEqual("requests", root["profile"]["id"])
+        self.assertEqual("Root policy", root["documents"]["AGENTS.md"]["content"])
+        if sys.platform != "win32":
+            self.assertEqual(
+                "child", review_snapshot(colon_child, revision, "project.yaml")["profile"]["id"]
+            )
+        via_parent = sibling / ".." / "project"
+        self.assertEqual(
+            "child", review_snapshot(via_parent, revision, "project.yaml")["profile"]["id"]
+        )
+
+        (child / "AGENTS.md").unlink()
+        (child / "AGENTS.md").symlink_to("../../AGENTS.md")
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "symlink",
+        )
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            review_snapshot(child, git("rev-parse", "HEAD"), "project.yaml")
+
+        alias = self.root / "alias"
+        alias.symlink_to(child, target_is_directory=True)
+        reentry = self.root / "reentry"
+        reentry.symlink_to(".", target_is_directory=True)
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "workspace symlink",
+        )
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            review_snapshot(alias, git("rev-parse", "HEAD"), "project.yaml")
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            review_snapshot(
+                reentry / "nested" / "project", git("rev-parse", "HEAD"), "project.yaml"
+            )
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            review_snapshot(alias / ".." / "project", git("rev-parse", "HEAD"), "project.yaml")
+
+        (child / "AGENTS.md").unlink()
+        (child / "AGENTS.md").write_text("Child policy", encoding="utf-8")
+        (child / "linked").symlink_to(".", target_is_directory=True)
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "symlink directory",
+        )
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            review_snapshot(child, git("rev-parse", "HEAD"), "linked/project.yaml")
+
+    def test_review_snapshot_git_root_with_trailing_space(self) -> None:
+        root = self.root / "repo "
+        root.mkdir()
+        (root / "project.yaml").write_text(yaml.safe_dump(self.data), encoding="utf-8")
+        for name in ("AGENTS.md", "backend.md", "frontend.md", "coordinator.md"):
+            (root / name).write_text(name, encoding="utf-8")
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(root), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "baseline",
+        )
+        result = review_snapshot(root, git("rev-parse", "HEAD"), "project.yaml")
+        self.assertEqual("requests", result["profile"]["id"])
+        self.assertEqual("AGENTS.md", result["documents"]["AGENTS.md"]["content"])
 
     def test_document_catalog_is_optional_and_not_implicitly_loaded(self) -> None:
         for catalog in [None, {}, {"unused": {"path": "missing.md", "category": "custom"}}]:
@@ -478,6 +838,25 @@ class ProjectTests(unittest.TestCase):
                     policy, self.root, process="implement", audience="worker", role="developer"
                 ),
             )
+
+    def test_decompose_roles_receive_zero_one_or_three_selected_documents(self) -> None:
+        for count in (0, 1, 3):
+            with self.subTest(count=count):
+                names = [f"architecture-{index}" for index in range(count)]
+                for name in names:
+                    (self.root / f"{name}.md").write_text(name, encoding="utf-8")
+                data: dict[str, Any] = {
+                    "id": "decompose",
+                    "documents": {name: {"path": f"{name}.md"} for name in names},
+                }
+                if names:
+                    data["rules"] = {"worker": [{"id": "sources", "documents": names}]}
+                policy = self.policy(data)
+                for role in ("task-decomposer", "task-reviewer"):
+                    entries = material_entries(
+                        policy, self.root, process="decompose", audience="worker", role=role
+                    )
+                    self.assertEqual(set(names), {entry["content"] for entry in entries})
 
     def test_document_lists_select_exact_files_and_deduplicate_with_provenance(self) -> None:
         self.data["documents"] = {
@@ -571,6 +950,126 @@ class ProjectIntegrationTests(unittest.TestCase):
         f.config["_project"] = load_profile(f.fixture_profile)
         f.config["_files"].update(f.config["_project"]["files"])
 
+    def test_review_packet_preserves_accepted_profile_rule_paths(self) -> None:
+        f = self.f
+        paths = [".factory/project", "custom/policy"]
+        for directory in paths:
+            folder = f.root / directory
+            folder.mkdir(parents=True)
+            (folder / "rule.md").write_text("Rule from " + directory, encoding="utf-8")
+            (folder / "second.md").write_text("Second from " + directory, encoding="utf-8")
+            (folder / "project.yaml").write_text(
+                yaml.safe_dump(
+                    {
+                        "id": "fixture",
+                        "rules": {
+                            "worker": [
+                                {"id": "first", "file": "rule.md"},
+                                {"id": "second", "file": "second.md"},
+                                {"id": "document", "project_file": "other/rule.md"},
+                            ]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+        (f.root / "other").mkdir()
+        (f.root / "other/rule.md").write_text("Other rule", encoding="utf-8")
+
+        def git(*args: str) -> str:
+            return subprocess.run(
+                ["git", "-C", str(f.root), *args], check=True, capture_output=True, text=True
+            ).stdout.strip()
+
+        git("init", "-q")
+        git("add", ".")
+        git(
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "baseline",
+        )
+        revision = git("rev-parse", "HEAD")
+        for directory in paths:
+            with self.subTest(directory=directory):
+                pinned = review_snapshot(f.root, revision, directory + "/project.yaml")
+                packet = context.build(
+                    f.config,
+                    f.root,
+                    f.config["_defaults"]["reviewer"],
+                    "reviewer",
+                    "code-review",
+                    {
+                        "source": f.g["sources"]["request"],
+                        "scope_files": ["lib/example.dart"],
+                        "project_policy": pinned,
+                    },
+                )
+                selected = [
+                    entry
+                    for entry in packet["instructions"]
+                    if entry.get("reason", "").startswith("accepted review policy:")
+                ]
+                self.assertEqual(
+                    [
+                        (str((f.root / directory / "rule.md").resolve()), "Rule from " + directory),
+                        (
+                            str((f.root / directory / "second.md").resolve()),
+                            "Second from " + directory,
+                        ),
+                        (str((f.root / "other/rule.md").resolve()), "Other rule"),
+                    ],
+                    [(entry["path"], entry["content"]) for entry in selected],
+                )
+
+    def test_standalone_review_packet_selects_review_stage(self) -> None:
+        f = self.f
+        self.install_policy(
+            {
+                "id": "fixture",
+                "documents": {name: {"path": name + ".md"} for name in ("review", "work", "all")},
+                "rules": {
+                    "worker": [
+                        {"id": name, "for": selector, "documents": [name]}
+                        for name, selector in (
+                            ("review", {"stages": ["review"]}),
+                            ("work", {"stages": ["work"]}),
+                            ("all", {}),
+                        )
+                    ]
+                },
+            }
+        )
+        documents: dict[str, AcceptedDocument] = {}
+        for name in ("AGENTS.md", "review.md", "work.md", "all.md"):
+            content = "Accepted " + name
+            documents[name] = {
+                "content": content,
+                "sha256": hashlib.sha256(content.encode()).hexdigest(),
+            }
+        pinned = snapshot(f.config["_project"], source="fixture", documents=documents)
+        packet = context.build(
+            f.config,
+            f.root,
+            f.config["_defaults"]["reviewer"],
+            "reviewer",
+            "code-review",
+            {
+                "source": f.g["sources"]["request"],
+                "task": {"scope": ["lib/example.dart"]},
+                "project_policy": pinned,
+            },
+        )
+        contents = {entry["content"] for entry in packet["instructions"]}
+        self.assertIn("Accepted review.md", contents)
+        self.assertIn("Accepted all.md", contents)
+        self.assertNotIn("Accepted work.md", contents)
+
     def test_worker_packet_and_ledger_freeze_project_document(self) -> None:
         f = self.f
         (f.root / "norm.md").write_text("Original normative input")
@@ -599,13 +1098,13 @@ class ProjectIntegrationTests(unittest.TestCase):
         f.init()
         state = f.ledger.read()
         state["config"].pop("_documents")
-        atomic_json(f.ledger.path, state)
+        overwrite(f.ledger, state)
         f.ledger.claim("write-label")
         self.assertIn(
             "Accepted rules",
             [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
         )
-        atomic_json(f.ledger.path, state)
+        overwrite(f.ledger, state)
         norm.write_text("Candidate rules")
         with self.assertRaisesRegex(Invalid, "Accepted document bytes unavailable"):
             f.ledger.claim("write-label")
@@ -771,13 +1270,21 @@ class ProjectIntegrationTests(unittest.TestCase):
                 "AGENTS.md": {
                     "content": agents,
                     "sha256": hashlib.sha256(agents.encode()).hexdigest(),
-                }
+                },
+                ".factory/memory/USER.md": {
+                    "content": "Accepted owner notes",
+                    "sha256": hashlib.sha256(b"Accepted owner notes").hexdigest(),
+                },
             },
         )
         (f.root / "review.md").write_text("Candidate disables review")
         (f.root / "AGENTS.md").write_text("Candidate changes instructions")
+        config = f.config_file(lambda _: None)
+        candidate_user = config.parent / "memory/USER.md"
+        candidate_user.parent.mkdir(exist_ok=True)
+        candidate_user.write_bytes(b"\xff")
         packet = context.build(
-            f.config,
+            load_config(config, policy={**f.config["_project"], "files": {}}),
             f.root,
             f.config["_defaults"]["reviewer"],
             "reviewer",
@@ -791,6 +1298,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         content = "\n".join(x["content"] for x in packet["instructions"])
         self.assertIn("Accepted strict review", content)
         self.assertIn(agents, content)
+        self.assertIn("Accepted owner notes", content)
         self.assertNotIn("Candidate disables review", content)
         self.assertNotIn("Candidate changes instructions", content)
 
@@ -881,7 +1389,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         self.install_policy(data)
         with self.assertRaisesRegex(Invalid, "missing"):
             self.f.init()
-        self.assertFalse(self.f.ledger.path.exists())
+        self.assertFalse(has_current(self.f.ledger))
 
     def test_acp_delivers_same_project_rule_as_native(self) -> None:
         from factory.adapters.acpx_adapter import prepare_prompt
@@ -995,6 +1503,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         f = self.f
         config = load_config(ROOT / "factory.yaml")
         graph = json.loads((ROOT / "tooling/examples/reviewed-slice.workflow.json").read_text())
+        graph = expand_intake_checks(graph, config)
         validate_graph(graph, config, f.root)
         next(n for n in graph["nodes"] if n["id"] == "verify")["agent"] = "tests"
         with self.assertRaisesRegex(Invalid, "Judge verification"):

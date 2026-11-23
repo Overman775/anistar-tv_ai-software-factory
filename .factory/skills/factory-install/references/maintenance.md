@@ -48,3 +48,7 @@ the missing evidence. Reject an existing destination or active run until resolve
 Keep the backup until verification completes. On interruption, stop writers, restore
 all affected paths and links from that backup, verify hashes, then retry the inventory
 and comparison. A repeated install recognizes `.factory/` and preserves memory.
+
+When upgrading an existing configuration, merge missing Teacher profile and model entries from the example while preserving selected variants and existing aliases. Verify `lessons.py teacher-launch` in the installed checkout.
+
+Seed `.factory/memory/USER.md` empty only when missing. Preserve existing owner text and both lesson scopes on reinstall. Install factory-lessons for each enabled host. When migrating, replace the two previous factory-owned capture/refresh aliases and remove their obsolete factory skill directories after preserving local changes. The SQLite cache, Teacher queue and each run archive belong to the local checkout.

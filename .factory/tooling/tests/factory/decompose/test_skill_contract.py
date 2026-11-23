@@ -13,6 +13,7 @@ ROOT = FACTORY_ROOT.parent
 SKILL = ROOT / ".factory/skills/factory-decompose/SKILL.md"
 POLICY = ROOT / ".factory/skills/factory-decompose/references/decomposition-policy.md"
 GENERATION = ROOT / ".factory/skills/factory-decompose/references/generation-contract.md"
+STAGING = GENERATION.with_name("staging-contract.md")
 OUTPUT = ROOT / ".factory/skills/factory-decompose/references/output-contract.md"
 TEMPLATE = ROOT / ".factory/skills/factory-decompose/references/task-template.md"
 DECOMPOSER = ROOT / ".factory/roles/task-decomposer.md"
@@ -144,18 +145,51 @@ class FactoryDecomposeContractTest(unittest.TestCase):
             self.assertIn("in full", content)
             self.assertIn("profile", content)
 
+    def test_sources_and_final_review_follow_profile_and_locked_plan(self) -> None:
+        for path in (DECOMPOSER, REVIEWER):
+            content = " ".join(read(path).split())
+            self.assertIn("all applicable", content.lower())
+            self.assertIn("matching locked plan bytes", content)
+            self.assertIn("specific gap and evidence", content)
+            self.assertNotIn("both canonical", content)
+        decomposer = read(DECOMPOSER)
+        self.assertIn("`plan_path` in the source lock", decomposer)
+        self.assertIn("then reread the saved files", decomposer)
+        self.assertIn("decomposition-policy.md#decomposition-order", decomposer)
+        reviewer = " ".join(read(REVIEWER).split())
+        self.assertIn("one repair pass", reviewer)
+        self.assertIn("complete final task set against the locked plan", reviewer)
+        opening = reviewer.split("## Required Sources", 1)[0]
+        self.assertIn("complete final task set against the locked plan", opening)
+        self.assertIn("Reuse prior discovery where unchanged", opening)
+        self.assertNotIn("recheck of changed sections", reviewer)
+        self.assertIn("transport, session and media contracts", reviewer)
+        skill = " ".join(read(SKILL).split())
+        self.assertIn("empty document catalog is valid", skill)
+        self.assertIn("complete final task set", skill)
+
     def test_graph_gate_is_documented_as_strict(self) -> None:
         skill = read(SKILL)
         self.assertIn("../../gates/skills/decompose/gate.md", skill)
         skill += read(FACTORY_ROOT / "gates/skills/decompose/gate.md")
         generation = read(GENERATION)
-        for content in (skill, generation):
-            self.assertIn("--source-lock", content)
+        self.assertIn("--source-lock", skill)
+        self.assertIn("review request", generation)
         self.assertIn("Every reported violation is a hard block", generation)
-        self.assertIn("Graph gate: PASS", generation)
+        self.assertIn("complete review request succeeds", generation)
+        self.assertIn("coordinator runs the initial", read(DECOMPOSER))
+        self.assertIn("Do not run it separately", read(DECOMPOSER))
+        self.assertIn("review request succeeds (exit 0", generation)
+        self.assertNotIn("only after `Graph gate: PASS`", generation)
+        review_contract = " ".join(
+            read(FACTORY_ROOT / "gates/skills/decompose/review-contract.md").split()
+        )
+        self.assertIn("`assemble.py review-request` as preflight", review_contract)
+        self.assertIn("Start TaskReviewer only after the request succeeds", review_contract)
+        self.assertIn("Do not run a separate preflight in the normal route", review_contract)
         self.assertIn(
             "Single-task/list payloads, version tags and inferred filenames are rejected",
-            generation,
+            read(STAGING),
         )
 
     def test_task_template_has_single_implemented_body(self) -> None:
@@ -187,8 +221,8 @@ class FactoryDecomposeContractTest(unittest.TestCase):
         self.assertNotIn("BLOCKED_PLAN_GAP", decomposer + reviewer)
 
     def test_transactional_staging_is_required(self) -> None:
-        self.assertIn("generation-contract.md#transactional-staging", read(SKILL))
-        self.assertIn("atomically rename", read(GENERATION))
+        self.assertIn("staging-contract.md#transactional-staging", read(SKILL))
+        self.assertIn("atomically rename", read(STAGING))
         self.assertIn("generation-contract.md", read(DECOMPOSER))
         self.assertIn("Transaction", read(OUTPUT))
 

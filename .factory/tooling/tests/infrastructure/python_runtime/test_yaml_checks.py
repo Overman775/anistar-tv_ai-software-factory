@@ -166,7 +166,14 @@ class YamlTests(unittest.TestCase):
             "tooling",
         ):
             (self.agents / name).mkdir(exist_ok=True)
-        for name in ("planning", "implement", "decompose", "code-review"):
+        for name in (
+            "planning",
+            "implement",
+            "decompose",
+            "code-review",
+            "lessons",
+            "meta-retune-lessons",
+        ):
             (self.agents / "skills" / f"factory-{name}").mkdir(parents=True)
         external = self.agents.parent / "sentinel.py"
         external.write_text("original sentinel\n", encoding="utf-8")

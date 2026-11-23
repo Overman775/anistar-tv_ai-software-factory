@@ -41,12 +41,14 @@ Read `.factory/factory.yaml`; resolve role → profile → adapter. The adapter 
 owns harness, runner, connection and instructions; the profile owns role files,
 model, capabilities, MCP allowlist and enforcement. For native use a generic
 spawned agent, never assume a registered named role. For Implement, after claim
-use `workflow.py prepare-packet NODE --with-diagnostics`. Review the diagnostics
-and send the complete `bootstrap` to the native worker sharing this exact workspace.
-Spawn, then bind the returned actual handle/model immediately. The worker reads
-every chunk, observes the bind and confirms delivery. Wait for outstanding delivery
-confirmations before coordinator checks. `workflow.py packet NODE` remains an inline alternative when its
-full contents can be delivered. A filename or digest alone is not delivery.
+use `workflow.py prepare-packet NODE --with-diagnostics` and inspect diagnostics.
+Spawn the intended worker with a wait-only instruction. Bind the returned actual
+handle and model, prepare the same packet again, then send its bound `bootstrap`
+to that handle. Start a fresh turn with `followup_task` if the worker is idle.
+The worker uses `read_command` within the stated display budget and confirms
+delivery before work. Wait for all outstanding confirmations before coordinator
+checks. Full inline `workflow.py packet NODE` remains available when its entire
+contents can be delivered.
 Planning/Decompose/Code Review use their owning skill’s `context.py` assignment
 route and staging; do not add Implement claim/ledger to those processes.
 Use the configured exact model/effort through actual supported spawn fields.

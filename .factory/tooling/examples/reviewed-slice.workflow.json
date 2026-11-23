@@ -70,144 +70,6 @@
             "cwd": ".",
             "timeout_seconds": 600
           }
-        },
-        {
-          "id": "anistar-analyze",
-          "kind": "static",
-          "method": "AniStar required analyze",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "analyze"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
-        },
-        {
-          "id": "anistar-dcm",
-          "kind": "static",
-          "method": "AniStar required dcm",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "dcm"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
-        },
-        {
-          "id": "anistar-format-check",
-          "kind": "static",
-          "method": "AniStar required format:check",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "format:check"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
-        },
-        {
-          "id": "anistar-check",
-          "kind": "tests",
-          "method": "AniStar required check",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "check"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
-        },
-        {
-          "id": "anistar-test-e2e",
-          "kind": "tests",
-          "method": "AniStar required test:e2e",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "test:e2e"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
-        },
-        {
-          "id": "anistar-build-android-prod-apk",
-          "kind": "build",
-          "method": "AniStar required build:android:prod:apk",
-          "execution": {
-            "argv": [
-              "fvm",
-              "dart",
-              "run",
-              "melos",
-              "run",
-              "build:android:prod:apk"
-            ],
-            "cwd": ".",
-            "timeout_seconds": 3600,
-            "inputs": [
-              "pubspec.yaml",
-              "pubspec.lock"
-            ]
-          },
-          "category": "project",
-          "criteria": []
         }
       ],
       "policy_decisions": {
@@ -221,7 +83,8 @@
           "probability": 0.9,
           "source": "agent:coordinator (illustrative estimate)"
         }
-      }
+      },
+      "project_check_inputs": {}
     }
   },
   "nodes": [

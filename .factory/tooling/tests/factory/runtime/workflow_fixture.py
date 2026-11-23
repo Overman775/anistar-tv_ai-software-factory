@@ -17,7 +17,10 @@ from tests.fixture_bundle import ROOT as ROOT
 
 class WorkflowFixture:
     def __init__(self, add_cleanup: Callable[[Callable[[], object]], object]) -> None:
-        acpx = patch("factory.runtime.telemetry._show", side_effect=FileNotFoundError)
+        acpx = patch(
+            "factory.runtime.observability.acpx_usage.acpx_session_probe",
+            side_effect=FileNotFoundError,
+        )
         acpx.start()
         add_cleanup(acpx.stop)
         self.temp = tempfile.TemporaryDirectory(prefix="factory-workflow-test-")
@@ -35,6 +38,7 @@ class WorkflowFixture:
         self.config["_project"] = load_profile(self.fixture_profile)
         self.config["_files"].update(self.config["_project"]["files"])
         self.g = read_json(ROOT / "tooling/examples/example.workflow.json")
+        self.g["tasks"]["label"].pop("project_check_inputs", None)
         self.g["tasks"]["label"].pop("policy_decisions", None)
         for node in self.g["nodes"]:
             if node["stage"] == "work":

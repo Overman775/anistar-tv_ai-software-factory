@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from factory.review.protocol.evidence import validate_tool_results
+from factory.review.protocol.plan import review_checks
 from factory.review.render_review_report import render_report_text
-from factory.review.review_evidence import validate_tool_results
-from factory.review.review_plan import review_checks
 from factory.review.run_tool_checks import EXCERPT_BYTES, collect_results, run_command
 
 
@@ -107,7 +107,7 @@ class ReviewBoundaryTests(unittest.TestCase):
             "additional_checks": [],
         }
         with (
-            patch("factory.review.review_plan.validate_snapshot", return_value=profile),
+            patch("factory.review.protocol.plan.validate_snapshot", return_value=profile),
             self.assertRaisesRegex(ValueError, "composite execution is not supported in review"),
         ):
             review_checks(manifest)

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
+import time
 import unittest
+from contextlib import ExitStack
 from copy import deepcopy
 from pathlib import Path
 from typing import IO, Any, Literal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from factory.adapters.acpx_adapter import (
     build_command,
@@ -15,13 +18,19 @@ from factory.adapters.acpx_adapter import (
     prepare_prompt,
     run_operation,
 )
-from factory.runtime import report_history
+from factory.database.sqlite import sqlite_history_repository, sqlite_run_repository, workflow_db
+from factory.runtime import teacher
 from factory.runtime.contracts import FindingRecord
-from factory.runtime.memory import read_task, resolve_evidence
+from factory.runtime.history import report_history
+from factory.runtime.history.task_records import read_task, resolve_evidence
+from factory.runtime.run_repository import ArchiveReference
+from factory.runtime.scheduling.run_sessions import RunSessions
+from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, atomic_json, digest, read_json, snapshot
+from factory.runtime.workflow_core import Invalid, digest, read_json, snapshot
 from factory.runtime.workflow_graph import diagram, validate_graph
 from factory.runtime.workflow_sources import lock_source
+from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
 from tests.fixture_bundle import ROOT as ROOT
 
@@ -44,6 +53,26 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         path.write_text(yaml.safe_dump(raw))
         with self.assertRaisesRegex(Invalid, "orchestrator model"):
             load_config(path)
+
+    def test_python_init_checks_supplied_config_pin_before_creating_run(self) -> None:
+        pin = {
+            "ok": True,
+            "result": {"_path": self.config["_path"], "_files": self.config["_files"]},
+        }
+        for invalid in (
+            None,
+            {},
+            {"ok": False, "result": pin["result"]},
+            {"ok": True, "result": {"_path": "another", "_files": self.config["_files"]}},
+            {"ok": True, "result": {"_path": self.config["_path"], "_files": {}}},
+        ):
+            with (
+                self.subTest(invalid=type(invalid)),
+                self.assertRaisesRegex(Invalid, "changed since snapshot"),
+            ):
+                self.ledger.init(self.g, self.config, config_pin=invalid)
+            self.assertFalse(self.ledger.runs.has_current(self.root))
+        self.assertEqual(self.ledger.init(self.g, self.config, config_pin=pin)["status"], "active")
 
     def test_pinned_entry_rejects_changed_instructions_before_init(self) -> None:
         path = self.config_file(lambda c: None)
@@ -82,7 +111,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             rejected = subprocess.run(init, capture_output=True, text=True)
             self.assertNotEqual(0, rejected.returncode, relative)
             self.assertIn("changed since snapshot", rejected.stderr)
-            self.assertFalse(self.ledger.path.exists())
+            self.assertFalse(has_current(self.ledger))
             file.write_text(original)
         result = subprocess.run(
             command + ["read-instructions", str(snapshot), "roles/orchestrator.md"],
@@ -104,7 +133,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         file.write_text(file.read_text() + "\nchanged\n")
         with self.assertRaisesRegex(Invalid, "drift"):
             self.init()
-        self.assertFalse(self.ledger.path.exists())
+        self.assertFalse(has_current(self.ledger))
         self.assertNotIn("hash", self.g["sources"]["request"])
 
     def test_missing_execution_source_contract_rejects_config(self) -> None:
@@ -161,11 +190,35 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         (self.root / "checks").mkdir()
         (foreign / "checks").symlink_to(self.root / "checks", target_is_directory=True)
         self.g["tasks"]["label"]["required_checks"][0]["execution"]["cwd"] = "checks"
-        with patch("factory.runtime.workflow.Path.cwd", return_value=foreign):
+        with patch.object(Path, "cwd", return_value=foreign):
             validate_graph(self.g, self.config, self.root)
             self.init()
             self.ledger.claim("write-label")
         self.assertEqual("reserved", self.ledger.read()["nodes"]["write-label"]["status"])
+
+    def test_scope_rejects_existing_directory_before_init_and_revision(self) -> None:
+        graph = deepcopy(self.g)
+        graph["tasks"]["label"]["scope"].append("lib")
+        with self.assertRaisesRegex(Invalid, "Scope must contain real files: lib"):
+            validate_graph(graph, self.config, self.root)
+        with self.assertRaisesRegex(Invalid, "Scope must contain real files: lib"):
+            self.ledger.init(graph, self.config)
+        self.assertFalse(has_current(self.ledger))
+
+        self.init()
+        before = self.ledger.read()
+        graph = deepcopy(before["graph"])
+        graph["tasks"]["label"]["scope"].append("lib")
+        with self.assertRaisesRegex(Invalid, "Scope must contain real files: lib"):
+            self.ledger.revise(graph, "directory is not a file")
+        self.assertEqual(before, self.ledger.read())
+
+    def test_future_scope_file_and_directory_ownership_are_accepted(self) -> None:
+        self.g["tasks"]["label"]["scope"].append("lib/future.txt")
+        self.g["nodes"][0]["owns"] = ["lib"]
+        validate_graph(self.g, self.config, self.root)
+        self.init()
+        self.ledger.claim("write-label")
 
     def test_workspace_symlink_and_hardlink_are_rejected_from_other_cwd(self) -> None:
         foreign = self.root / "foreign"
@@ -173,7 +226,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         (self.root / "alias").symlink_to(self.root / "lib", target_is_directory=True)
         graph = deepcopy(self.g)
         graph["tasks"]["label"]["scope"] = ["alias/example.dart"]
-        with patch("factory.runtime.workflow.Path.cwd", return_value=foreign):
+        with patch.object(Path, "cwd", return_value=foreign):
             with self.assertRaisesRegex(Invalid, "Symlink"):
                 validate_graph(graph, self.config, self.root)
         import os
@@ -231,6 +284,16 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.ledger.claim("write-label")
         packet = self.ledger.packet("write-label")
+        run = self.ledger.read()["run_id"]
+        self.assertEqual(packet, self.ledger.packet("write-label"))
+        [saved] = [
+            a
+            for a in sqlite_history_repository.listing(self.root, run)
+            if a["kind"] == "inline-packet"
+        ]
+        exported = self.root / "inline.json"
+        sqlite_history_repository.export(self.root, run, str(saved["path"]), exported)
+        self.assertEqual(packet, json.loads(exported.read_bytes()))
         self.assertEqual(packet["profile"]["adapter"], "codex")
         self.assertEqual(packet["model"]["id"], "gpt-6.1-sol")
         self.assertTrue(any("Codex worker adapter" in f["content"] for f in packet["instructions"]))
@@ -278,9 +341,13 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         path = self.config_file(lambda c: c.update(router="workflow/alternate-router.txt"))
         policy = path.parent / "workflow/alternate-router.txt"
         policy.write_text("Accepted router")
+        user = path.parent / "memory/USER.md"
+        user.parent.mkdir(exist_ok=True)
+        user.write_text("Accepted owner instructions", encoding="utf-8")
         self.config = load_config(path)
         self.init()
         policy.unlink()
+        user.write_text("Replaced owner instructions", encoding="utf-8")
         (self.root / "AGENTS.md").write_text("Candidate instructions")
         command = [sys.executable, str(_TOOLS / "workflow.py"), "--workspace", str(self.root)]
         for args, accepted in (
@@ -290,6 +357,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             result = subprocess.run(command + args, capture_output=True, text=True, check=True)
             self.assertIn(accepted, result.stdout)
             self.assertNotIn("Candidate instructions", result.stdout)
+            if args == ["read-project"]:
+                self.assertEqual(1, result.stdout.count("Accepted owner instructions"))
+                self.assertNotIn("Replaced owner instructions", result.stdout)
 
     def test_configuration_has_two_separate_caps(self) -> None:
         self.assertEqual(self.config["_limits"], {"native": 3, "acpx:zcode": 3})
@@ -382,6 +452,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.start("write-label")
         self.ledger.unknown("write-label", "lost response")
+        before = self.ledger.read()
+        with self.assertRaisesRegex(Invalid, "evidence"):
+            self.ledger.resolve("write-label", "running", " \t ")
+        self.assertEqual(self.ledger.read(), before)
         self.ledger.resolve("write-label", "running", "runtime result recovered")
         self.ledger.finish("write-label", self.report("write-label"))
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["attempt"], 1)
@@ -437,32 +511,67 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.clean()
         self.assertTrue(history.exists())
         self.assertTrue(unknown.exists())
-        self.assertFalse(self.ledger.path.exists())
+        self.assertFalse(has_current(self.ledger))
 
     def test_archive_retry_after_interrupted_terminal_state_write(self) -> None:
         run_id = self.init()["run_id"]
         self.complete()
         with (
-            patch("factory.runtime.workflow.atomic_json", side_effect=OSError("interrupted")),
+            patch(
+                "factory.database.sqlite.sqlite_teacher_job_repository.insert_event",
+                side_effect=OSError("interrupted"),
+            ),
             self.assertRaisesRegex(OSError, "interrupted"),
         ):
             self.ledger.archive("completed", "done")
         self.assertEqual("active", self.ledger.read()["status"])
-        folder = self.root / ".factory/memory/history/archive"
-        archives = list(folder.glob("*.tar.gz"))
-        self.assertEqual(1, len(archives))
-        self.assertEqual(archives[0].resolve(), Path(self.ledger.archive("completed", "done")))
-        self.ledger.clean()
-        self.assertEqual(archives, list(folder.glob("*.tar.gz")))
+        with sqlite_history_repository.database(self.root) as db:
+            self.assertEqual([], db.execute("SELECT run_id FROM closed_runs").fetchall())
+        self.assertEqual([], teacher.pending(self.root))
+        restarted = Ledger(self.root)
+        path = restarted.archive("completed", "done")
+        self.assertEqual(str(self.root.resolve() / workflow_db.DATABASE), path)
+        reopened = Ledger(self.root)
+        self.assertEqual(path, reopened.archive("completed", "done"))
+        with self.assertRaisesRegex(Invalid, "Terminal history is immutable"):
+            reopened.archive("completed", "changed summary")
+        state = reopened.read()
+        self.assertEqual([state["final_teacher_event"]], teacher.pending(self.root))
+        event = teacher.read_event(self.root, state["final_teacher_event"])
+        self.assertEqual((run_id, workflow_db.DATABASE), (event.incident, event.source))
+        reopened.clean()
+        with sqlite_history_repository.database(self.root) as db:
+            self.assertEqual([(run_id,)], db.execute("SELECT run_id FROM closed_runs").fetchall())
         self.assertEqual("completed", read_task(self.root, "label", run_id=run_id)["run_status"])
+
+    def test_archive_preserves_adapter_reference_on_close_and_retry(self) -> None:
+        run_id = self.init()["run_id"]
+        self.complete()
+        archive = ArchiveReference(f"urn:run:{run_id}", f"archive://history/{run_id}")
+        store = Mock(spec_set=sqlite_run_repository, wraps=sqlite_run_repository)
+        store.reference.return_value = archive
+        self.assertEqual(
+            archive.location, Ledger(self.root, runs=store).archive("completed", "done")
+        )
+        store.reference.assert_called_once_with(self.ledger.root, run_id)
+        state = self.ledger.read()
+        self.assertEqual(archive.source, state["archive_path"])
+        self.assertEqual(
+            archive.source, teacher.read_event(self.root, state["final_teacher_event"]).source
+        )
+        store.reference.reset_mock()
+        reopened = Ledger(self.root, runs=store)
+        self.assertEqual(archive.location, reopened.archive("completed", "done"))
+        store.reference.assert_called_once_with(reopened.root, run_id, stored_source=archive.source)
+        store.commit_archive.assert_called_once()
 
     def test_memory_reads_task_from_the_requested_run_after_cleanup(self) -> None:
         archived_id = self.init()["run_id"]
         self.complete()
         saved_steps = self.ledger.read()["nodes"]
-        archive = Path(self.ledger.archive("completed", "done"))
+        self.ledger.archive("completed", "done")
         self.ledger.clean()
-        archive_bytes = archive.read_bytes()
+        archive_bytes = sqlite_history_repository.journal_bytes(self.root, archived_id)
         before_next_run = read_task(self.root, "label", run_id=archived_id)
         self.assertEqual(before_next_run["run_id"], archived_id)
         self.assertEqual(before_next_run["run_status"], "completed")
@@ -497,7 +606,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             }
         }
         self.ledger.save(state, "fixture_findings")
-        active_bytes = self.ledger.path.read_bytes()
+        active_bytes = record_bytes(self.ledger)
 
         active = read_task(self.root, "label", run_id=None)
         archived = read_task(self.root, "label", run_id=archived_id)
@@ -509,8 +618,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertEqual(archived["run_status"], "completed")
         self.assertEqual(archived, before_next_run)
         self.assertEqual(archived["open_findings"], {})
-        self.assertEqual(self.ledger.path.read_bytes(), active_bytes)
-        self.assertEqual(archive.read_bytes(), archive_bytes)
+        self.assertEqual(record_bytes(self.ledger), active_bytes)
+        self.assertEqual(
+            sqlite_history_repository.journal_bytes(self.root, archived_id), archive_bytes
+        )
 
     def test_factory_ancestor_symlink_rejected_before_lock_or_read(self) -> None:
         outside = self.root / "outside"
@@ -548,18 +659,22 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             read_task(self.root, "label", run_id="../other")
         with self.assertRaisesRegex(Invalid, "single run ID"):
             read_task(self.root, "label", run_id="run-\0")
-        self.ledger.path.write_text("{")
-        with self.assertRaisesRegex(Invalid, "Cannot read run"):
+        overwrite(self.ledger, {"status": "invalid"})
+        with self.assertRaises(Invalid):
             read_task(self.root, "label", run_id=None)
 
     def test_cleanup_requires_saved_history(self) -> None:
         self.init()
         self.complete()
-        history = Path(self.ledger.archive("completed", "done"))
-        history.unlink()
-        with self.assertRaisesRegex(Invalid, "History"):
+        ref = self.ledger.read()["nodes"]["write-label"]["report_ref"]
+        self.ledger.archive("completed", "done")
+        with sqlite_history_repository.database(self.root) as db:
+            db.execute(
+                "DELETE FROM artifacts WHERE run_id=? AND path=?", (ref["run_id"], ref["path"])
+            )
+        with self.assertRaisesRegex(Invalid, "Missing or changed artifact"):
             self.ledger.clean()
-        self.assertTrue(self.ledger.path.exists())
+        self.assertTrue(has_current(self.ledger))
 
     def test_archive_failure_keeps_state(self) -> None:
         self.init()
@@ -583,6 +698,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         rendered = diagram(self.init())
         self.assertEqual(rendered.count("participant A1"), 1)
         self.assertIn("sequenceDiagram", rendered)
+        self.assertIn("participant T as Teacher", rendered)
+        self.assertLess(
+            rendered.rindex(" acceptance"), rendered.index("O->>T: Final Teacher review (planned)")
+        )
 
     def test_reserved_test_writer_must_submit_actual_tests_receipt(self) -> None:
         self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
@@ -627,6 +746,22 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.finish("write-label", self.report("write-label"))
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "done")
 
+    def test_unreserved_test_writer_reports_required_observation(self) -> None:
+        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
+        self.require_fixture_review()
+        check = self.g["tasks"]["label"]["required_checks"][0]
+        check["kind"] = "observation"
+        check.pop("execution")
+        self.g["nodes"][0]["required_check_ids"] = ["behavior"]
+        self.init()
+        self.start("write-label")
+        report = self.report("write-label")
+        with self.assertRaisesRegex(Invalid, "Missing required check results: behavior"):
+            self.ledger.finish("write-label", report)
+        report["checks"] = [{**check, "result": "PASS", "evidence": "Observed behavior"}]
+        self.ledger.finish("write-label", report)
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "done")
+
     def test_blocked_reserved_test_writer_can_report_without_tests(self) -> None:
         self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
         self.g["nodes"][0]["resources"] = ["project-checks"]
@@ -664,6 +799,29 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.claim("worker1")
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             self.ledger.bind("worker1", "shared", "gpt-6.1-sol")
+
+    def test_requested_acp_name_belongs_to_one_agent_before_bind(self) -> None:
+        state = self.init()
+        sessions = RunSessions(state)
+        name = sessions.acp_name("author")
+        sessions.request_acp_creation("author")
+        requested = deepcopy(state)
+        with self.assertRaisesRegex(Invalid, "different agent or epoch"):
+            sessions.bind("reviewer", name, "fixture-model", expected_model=None)
+        self.assertEqual(state, requested)
+        sessions.bind("author", name, "fixture-model", expected_model=None)
+        self.assertEqual(state["handle_owners"][name], "author")
+
+    def test_acp_request_respects_native_binding_in_older_snapshot(self) -> None:
+        state = self.init()
+        sessions = RunSessions(state)
+        name = sessions.acp_name("author")
+        state["sessions"]["reviewer"] = {"handle": name, "model": "fixture-model"}
+        state.pop("handle_owners", None)
+        before = deepcopy(state)
+        with self.assertRaisesRegex(Invalid, "Physical session shared"):
+            sessions.request_acp_creation("author")
+        self.assertEqual(state, before)
 
     def transport(self, argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         # Keep real child-process/output behavior without requiring a POSIX shell.
@@ -745,6 +903,249 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertIn("--approve-all", argv)
         self.assertEqual(argv[argv.index("--cwd") + 1], str(self.ledger.root))
 
+    def test_acp_poll_outputs_survive_repeated_calls_and_archive(self) -> None:
+        self._check_acp_poll_history("write-label")
+
+    def test_acp_poll_history_with_long_node_id(self) -> None:
+        node_id = "a" * 161
+        self.g["nodes"][0]["id"] = node_id
+        for node in self.g["nodes"]:
+            node["depends_on"] = [
+                node_id if dep == "write-label" else dep for dep in node["depends_on"]
+            ]
+        self._check_acp_poll_history(node_id)
+
+    def _check_acp_poll_history(self, node_id: str) -> None:
+        self.fake_acp()
+        install_connection(self.config, self.root, "zcode")
+        self.init()
+        self.ledger.claim(node_id)
+        responses = iter(("ready", "idle"))
+
+        def poll(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            kwargs["stdout"].write(next(responses))
+            return subprocess.CompletedProcess(argv, 0)
+
+        results = [run_operation(self.ledger, node_id, "show", run=poll) for _ in range(2)]
+        paths = [result["stdout"] for result in results]
+        self.assertEqual(len(set(paths)), 2)
+        self.assertEqual(
+            [Path(path).read_text(encoding="utf-8") for path in paths], ["ready", "idle"]
+        )
+        events = [
+            event
+            for event in self.ledger.read()["events"]
+            if event["event"] == "transport_returned"
+        ]
+        refs = [result["stdout_ref"] for result in results]
+        self.assertEqual([event["stdout"] for event in events], refs)
+        run = results[0]["run_id"]
+        name = results[0]["session"]
+        self.ledger.unknown(node_id, "poll complete")
+        self.ledger.resolve(node_id, "blocked", "transport stopped")
+        usage = {
+            "cwd": str(self.ledger.root),
+            "name": name,
+            "acpxRecordId": "fixture-record",
+            "acpSessionId": "fixture-session",
+            "messages": ["private content"],
+            "request_token_usage": {"request-1": {"input_tokens": 8, "output_tokens": 0}},
+            "cumulative_cost": {"amount": 0.25, "currency": "USD"},
+        }
+        probe = Mock(return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(usage)))
+        self.ledger.archive("cancelled", "poll history", probe=probe)
+        self.ledger.archive("cancelled", "poll history", probe=probe)
+        probe.assert_called_once()
+        self.assertEqual(probe.call_args.kwargs["cwd"], str(self.ledger.root))
+        self.ledger.clean()
+        self.assertTrue(all(not Path(path).exists() for path in paths))
+        restored = self.root / "restored"
+        target = restored / workflow_db.DATABASE
+        target.parent.mkdir(parents=True)
+        shutil.copyfile(self.root / workflow_db.DATABASE, target)
+        self.assertEqual(
+            [sqlite_history_repository.member(restored, run, ref).decode() for ref in refs],
+            ["ready", "idle"],
+        )
+        with workflow_db.database(restored) as db:
+            self.assertEqual(
+                db.execute(
+                    "SELECT session_name, collection, cost_amount, cost_currency FROM acpx_sessions"
+                ).fetchall(),
+                [(name, "ok", 0.25, "USD")],
+            )
+            self.assertEqual(
+                db.execute(
+                    "SELECT request_id, input_tokens, output_tokens, thought_tokens FROM acpx_request_usage"
+                ).fetchall(),
+                [("request-1", 8, 0, None)],
+            )
+            self.assertEqual(
+                db.execute("SELECT node_id,dispatch_id FROM acpx_attempts").fetchall(),
+                [(node_id, results[0]["dispatch_id"])],
+            )
+        projection = sqlite_history_repository.member(
+            restored, run, f".factory/memory/history/{run}/usage.acpx.json"
+        )
+        self.assertNotIn(b"private content", projection)
+
+    def test_interrupted_transport_preserves_partial_output_and_excludes_live_archive(self) -> None:
+        self.fake_acp()
+        install_connection(self.config, self.root, "zcode")
+        self.init()
+        self.ledger.claim("write-label")
+
+        def stop(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            kwargs["stderr"].write("partial diagnostic")
+            self.ledger.unknown("write-label", "reconciling")
+            self.ledger.resolve("write-label", "blocked", "stopped")
+            with self.assertRaisesRegex(Invalid, "locked"):
+                self.ledger.archive("cancelled", "stopped")
+            raise OSError("process interrupted")
+
+        with self.assertRaisesRegex(OSError, "process interrupted"):
+            run_operation(self.ledger, "write-label", "show", run=stop)
+        state = self.ledger.read()
+        final = state["events"][-1]
+        self.assertEqual(final["event"], "transport_interrupted")
+        self.ledger.archive("cancelled", "stopped")
+        self.ledger.clean()
+        self.assertEqual(
+            sqlite_history_repository.member(self.root, state["run_id"], final["stderr"]),
+            b"partial diagnostic",
+        )
+        rows = sqlite_history_repository.listing(self.root, state["run_id"])
+        self.assertTrue(
+            any(
+                row["path"] == final["stderr"]
+                and row["dispatch_id"] == final["dispatch_id"]
+                and row["kind"] == "stderr"
+                for row in rows
+            )
+        )
+
+    def test_archive_waits_for_acpx_writer_after_adapter_is_killed(self) -> None:
+        self.fake_acp()
+        install_connection(self.config, self.root, "zcode")
+        state = self.init()
+        self.ledger.claim("write-label")
+        child = self.root / "writer.py"
+        child.write_text(
+            "import os, time\n"
+            "from pathlib import Path\n"
+            "os.write(1, b'early\\n')\n"
+            "Path('ready').touch()\n"
+            "deadline = time.monotonic() + 45\n"
+            "while not Path('release').exists() and time.monotonic() < deadline:\n"
+            "    time.sleep(0.02)\n"
+            "os.write(1, b'late\\n')\n"
+            "os.write(2, b'last diagnostic')\n",
+            encoding="utf-8",
+        )
+        adapter = (
+            "import subprocess, sys\n"
+            "from factory.adapters.acpx_adapter import run_operation\n"
+            "from factory.runtime.workflow import Ledger\n"
+            "def run(argv, **kwargs):\n"
+            "    return subprocess.run([sys.executable, 'writer.py'], **kwargs)\n"
+            "run_operation(Ledger(sys.argv[1]), 'write-label', 'show', run=run)\n"
+        )
+        with subprocess.Popen(
+            [sys.executable, "-c", adapter, str(self.root)], cwd=_TOOLS.parent
+        ) as parent:
+            try:
+                deadline = time.monotonic() + 30
+                while not (self.root / "ready").exists():
+                    self.assertIsNone(parent.poll(), "Adapter exited before starting ACPX")
+                    self.assertLess(time.monotonic(), deadline, "ACPX did not start")
+                    time.sleep(0.02)
+                parent.kill()
+                parent.wait(timeout=10)
+                self.ledger.unknown("write-label", "adapter exited")
+                self.ledger.resolve("write-label", "blocked", "session reconciled")
+                with self.assertRaisesRegex(Invalid, "locked by a writer"):
+                    self.ledger.archive("cancelled", "stopped")
+            finally:
+                (self.root / "release").touch()
+                if parent.poll() is None:
+                    parent.kill()
+        deadline = time.monotonic() + 15
+        while True:
+            try:
+                self.ledger.archive("cancelled", "stopped")
+                break
+            except Invalid as exc:
+                if "locked by a writer" not in str(exc) or time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.02)
+        self.ledger.clean()
+        items = sqlite_history_repository.listing(self.root, state["run_id"])
+        for kind, expected in (("stdout", b"early\nlate\n"), ("stderr", b"last diagnostic")):
+            name = next(str(item["path"]) for item in items if item["kind"] == kind)
+            self.assertEqual(
+                sqlite_history_repository.member(self.root, state["run_id"], name), expected
+            )
+
+    def test_return_with_descendant_holding_stderr_keeps_evidence_pending(self) -> None:
+        self.fake_acp()
+        install_connection(self.config, self.root, "zcode")
+        state = self.init()
+        self.ledger.claim("write-label")
+        with ExitStack() as children:
+
+            def spawn(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+                process = children.enter_context(
+                    subprocess.Popen(
+                        [
+                            sys.executable,
+                            "-c",
+                            "import sys; sys.stdin.read(); sys.stderr.write('tail')",
+                        ],
+                        stdin=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=kwargs["stderr"],
+                    )
+                )
+                assert process.stdin is not None
+                children.callback(process.stdin.close)
+                return subprocess.CompletedProcess(argv, 0)
+
+            with self.assertRaisesRegex(Invalid, "locked by a writer"):
+                run_operation(self.ledger, "write-label", "show", run=spawn)
+            request = self.ledger.read()["events"][-1]
+            self.assertEqual(request["event"], "transport_requested")
+            self.ledger.unknown("write-label", "reconciling")
+            self.ledger.resolve("write-label", "blocked", "session reconciled")
+            with self.assertRaisesRegex(Invalid, "locked by a writer"):
+                self.ledger.archive("cancelled", "stopped")
+        self.ledger.archive("cancelled", "stopped")
+        self.ledger.clean()
+        self.assertEqual(
+            sqlite_history_repository.member(self.root, state["run_id"], request["stderr"]), b"tail"
+        )
+
+    def test_late_create_failure_preserves_reconciled_dispatch(self) -> None:
+        self.fake_acp()
+        install_connection(self.config, self.root, "zcode")
+        self.init()
+        self.ledger.claim("write-label")
+
+        def late_failure(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+            kwargs["stderr"].write("late failure")
+            self.ledger.unknown("write-label", "reconciling")
+            self.ledger.resolve("write-label", "blocked", "verified termination")
+            return subprocess.CompletedProcess(argv, 2)
+
+        result = run_operation(self.ledger, "write-label", "create", run=late_failure)
+        self.assertTrue(result["stale"])
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "blocked")
+        self.ledger.archive("cancelled", "stopped")
+        self.ledger.clean()
+        self.assertEqual(
+            sqlite_history_repository.member(self.root, result["run_id"], result["stderr_ref"]),
+            b"late failure",
+        )
+
     def test_prompt_return_never_marks_node_passed(self) -> None:
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
@@ -760,6 +1161,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         packet_path = Path(prepared["prompt"])
         frozen = packet_path.read_bytes()
         self.assertEqual(frozen, frozen.strip())
+        packet_path.unlink()
+        prepare_prompt(self.ledger, "write-label")
+        self.assertEqual(frozen, packet_path.read_bytes())
         self.assertEqual(prepare_prompt(self.ledger, "write-label")["prompt"], str(packet_path))
         packet_path.write_bytes(frozen + b" ")
         with self.assertRaisesRegex(Invalid, "Packet digest mismatch"):
@@ -986,6 +1390,12 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         )
         self.ledger.retry("write-label", "recovery", "creation failed", "terminal verified")
         self.ledger.claim("write-label")
+        before = self.ledger.read()
+        profile = self.config["profiles"]["middle-test-writer-zcode"]
+        model = self.config["models"][profile["model"]]["id"] or "fixture-model"
+        with self.assertRaisesRegex(Invalid, "different agent or epoch"):
+            self.ledger.bind("write-label", old, model)
+        self.assertEqual(before, self.ledger.read())
         new = run_operation(self.ledger, "write-label", "create", run=self.transport)["session"]
         self.assertNotEqual(old, new)
 
@@ -1003,6 +1413,13 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
         result = run_operation(self.ledger, "write-label", "create", run=old_call)
         self.assertTrue(result["stale"])
+        saved = next(
+            row
+            for row in sqlite_history_repository.listing(self.root, result["run_id"])
+            if row["path"] == result["stdout_ref"]
+        )
+        self.assertEqual(saved["dispatch_id"], result["dispatch_id"])
+        self.assertEqual(self.ledger.read()["events"][-1]["status"], "stale")
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "reserved")
 
     def test_source_reintake_retains_failure_budget(self) -> None:
@@ -1167,10 +1584,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.complete()
         self.ledger.archive("completed", "done")
-        before = self.ledger.path.read_bytes()
+        before = record_bytes(self.ledger)
         with self.assertRaisesRegex(Invalid, "Terminal run"):
             self.ledger.retry("write-label", "tests", "attempt", "terminal")
-        self.assertEqual(before, self.ledger.path.read_bytes())
+        self.assertEqual(before, record_bytes(self.ledger))
         self.ledger.clean()
 
     def test_case_alias_writers_cannot_run_together(self) -> None:
@@ -1191,7 +1608,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.start("write-label")
         state = self.ledger.read()
         state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
-        atomic_json(self.ledger.path, state)
+        overwrite(self.ledger, state)
         self.ledger.finish("write-label", self.report("write-label", "BLOCKED"))
         node = self.ledger.read()["nodes"]["write-label"]
         self.assertEqual(node["status"], "blocked")
@@ -1207,7 +1624,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.start("write-label")
         state = self.ledger.read()
         state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
-        atomic_json(self.ledger.path, state)
+        overwrite(self.ledger, state)
         for outcome in ("FAIL", "BLOCKED"):
             draft = self.report("write-label", outcome)
             draft.pop("files")
@@ -1271,7 +1688,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertEqual(results["verify-label"]["report"]["checks"][0]["result"], "PASS")
         self.assertNotIn("files", results["write-label"]["report"])
         reference = results["write-label"]["report_ref"]
-        stored = read_json(self.root / reference["path"])["report"]
+        stored = report_history.read(self.root, reference)["report"]
         self.assertEqual(stored["dispatch_id"], reference["dispatch_id"])
         self.assertEqual(stored["files"], snapshot(self.root, ["lib/example.dart"]))
         self.assertEqual(before, self.ledger.read())
@@ -1291,7 +1708,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         )
 
     def test_dependency_projection_stops_at_indirect_task(self) -> None:
-        from factory.runtime.assignment import dependency_results
+        from factory.runtime.scheduling.assignment import dependency_results
 
         self.batch()
         state = self.init()
@@ -1305,7 +1722,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         )
 
     def test_integration_includes_both_tasks_without_duplicate_reports(self) -> None:
-        from factory.runtime.assignment import dependency_results
+        from factory.runtime.scheduling.assignment import dependency_results
 
         self.batch()
         self.init()
@@ -1366,10 +1783,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             if attempt < allowed:
                 self.ledger.retry("verify-all", "review", "Integration finding", "Worker stopped")
             else:
-                before = self.ledger.path.read_bytes()
+                before = record_bytes(self.ledger)
                 with self.assertRaisesRegex(Invalid, "RETRY_BUDGET_EXHAUSTED"):
                     self.ledger.retry("verify-all", "review", "Still failing", "Worker stopped")
-                self.assertEqual(before, self.ledger.path.read_bytes())
+                self.assertEqual(before, record_bytes(self.ledger))
         self.assertEqual(self.ledger.read()["counters"]["integrated:review"], allowed)
 
     def test_task_refactor_integration_has_one_review_retry(self) -> None:

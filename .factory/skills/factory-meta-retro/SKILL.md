@@ -65,6 +65,8 @@ Choose useful directions and add your own.
   Look for lost requirements, duplicate effort, unclear ownership, or repeated handoffs.
 - **Environment design.** Which changes to skills, tools, automation, or project
   organization could make future runs simpler and more reliable?
+  When an agent makes a mistake, what in its instructions, context, or tools
+  might have contributed to it? What evidence from the run supports that explanation?
   Consider recurring workarounds and manual steps that suitable tooling could remove.
 
 ## Choosing Improvements
@@ -119,3 +121,20 @@ Respond in the user's language.
 
 See [CREDITS.md](CREDITS.md) for Matt Pocock's original `retro` skill and the
 Factory adaptation details.
+
+## Offer Teacher review
+
+For each finding worth teaching, name the incident, its evidence and the action a
+future agent could reuse. Ask which findings the owner wants Teacher to review.
+Finish with that proposal. An empty retro or a declined proposal ends here.
+
+On an explicit request to launch Teacher, use the factory launcher with
+`lessons.py retro INCIDENT SOURCE OBSERVATION --confirmed` for each selected
+finding. Follow [Teacher dispatch](../factory-lessons/references/dispatch.md)
+for the returned IDs only. Reuse the same inputs on retry.
+
+If the owner chooses to include a finding in an active Implement run’s final
+review, use `workflow.py record-retro RUN_ID INCIDENT SOURCE OBSERVATION`
+instead. Use the task’s `lesson_incident` when available. The run’s final
+Teacher assignment includes this note after successful archival. Until the
+owner chooses, leave the journal, queue and catalog untouched.

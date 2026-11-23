@@ -31,8 +31,8 @@ reset or stash user work to create scope.
   "review_id": "unique id",
   "mode": "branch | pr | feature",
   "target": "resolved target",
-  "base_sha": "40 hex chars or null for feature",
-  "head_sha": "40 hex chars",
+  "base_sha": "full Git commit ID or null for feature",
+  "head_sha": "full Git commit ID",
   "scope_files": ["sorted/relative/path.dart"],
   "source_sha256": {"sorted/relative/path.dart": "sha256 for feature"},
   "diff_file": ".factory/memory/state/review.diff",
@@ -42,8 +42,11 @@ reset or stash user work to create scope.
 ```
 
 `scope_hash` is SHA-256 of compact sorted-key JSON containing `mode`, `target`,
+Use the repository's full lowercase commit IDs, 40 hex digits for SHA-1 or
+64 for SHA-256.
+
 `base_sha`, `head_sha`, `scope_files`, `diff_sha256`, plus feature source hashes, captured context, assignments, command plan and contextual source evidence.
-The authoritative field list is canonical_scope_hash in review_contracts.py.
+The authoritative field list is `canonical_scope_hash` in the [review protocol](../../../tooling/factory/review/protocol/contracts.py).
 
 Branch/PR diff contains one unique `diff --git` section per scoped path.
 Preserve full extended headers, including `old mode`/`new mode` and

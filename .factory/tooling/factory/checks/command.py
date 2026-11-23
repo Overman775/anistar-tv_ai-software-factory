@@ -30,6 +30,7 @@ class Execution(TypedDict):
     outputs: NotRequired[list[Name]]
     stages: NotRequired[Annotated[list[Name], Field(min_length=1)]]
     mode: NotRequired[Literal["full", "filtered", "update"]]
+    selection_files: NotRequired[Literal[True]]
 
 
 def execution_shape(value: Execution) -> Execution:
@@ -41,10 +42,10 @@ def execution_shape(value: Execution) -> Execution:
         if len(set(paths)) != len(paths):
             raise PydanticCustomError("duplicate_execution_field", f"Duplicate execution {field}")
     if "stages" in value:
-        if value["argv"] or value.get("outputs"):
+        if value["argv"] or value.get("outputs") or value.get("selection_files"):
             raise PydanticCustomError(
                 "composite_execution_fields",
-                "Composite execution has no independent argv or outputs",
+                "Composite execution has no independent argv, outputs or test file selection",
             )
     elif not value["argv"]:
         raise PydanticCustomError(

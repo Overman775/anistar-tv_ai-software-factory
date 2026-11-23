@@ -51,6 +51,8 @@ sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py validate work
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py init workflow.json --config-pin "$CONFIG_SNAPSHOT"
 ```
 
+The CLI passes the decoded snapshot to `Ledger.init(graph, config, config_pin=...)`. The Python entry point checks the path and file hashes before creating the run.
+
 For Implement, save the snapshot in OS temporary storage and use verified
 `read-instructions` content for factory instructions. See [orchestration entry](orchestration.md#entry)
 for the complete reading sequence. Bare `init` remains a low-level compatibility
@@ -79,11 +81,18 @@ Graph:
   (`low|moderate|high`), `kind` (`feature|task|refactor|fix|docs|integration`),
   `independent_review`, exact changed-file `scope`, task `depends_on`,
   `acceptance_ids` and `required_checks` (ID/category/kind/criteria/method plus `execution` for commands).
+  At `validate` and initial `init`, optional `project_check_inputs` selects automatic
+  project checks: use `{}` or map selected check IDs to additional input paths.
+  Keep task-specific checks in `required_checks`; do not repeat derived IDs there.
+  Applicability decisions remain explicit in `policy_decisions`. The saved graph
+  contains complete checks. Revise and reintake use that full graph.
 - `agents`: logical ID → configured `role`, `profile`. One role may have several
   instances. The canonical role path determines eligible profiles.
 - `nodes`: `id`, `task`, `stage` (`explore|work|docs|verify|review|accept`), `agent`
   (null only for accept), `depends_on`, `owns` (relative paths/subtrees),
-  `resources` and optional concrete `read` document paths.
+  `resources`, optional concrete `read` document paths and optional exhaustive
+  `handoff_inputs` file paths for deferred writers. Declare them only when the
+  result’s dependencies are known; otherwise omit the field.
 
 All task work must reach exactly one accept node. Authoritative verify follows
 all writers. Independent review follows verification and has a different agent.
@@ -125,13 +134,31 @@ sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py archive compl
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py clean
 ```
 
-Archive verifies terminal obligations and writes one
-`.factory/memory/history/archive/YYYY-MM-DD_<run-id>.tar.gz` (UTC date). It contains
-`run.json`, a digest manifest, all registered transport files, and evidence saved
-under the run's history directory. Put any external evidence needed for later
-review in that directory before archive. After archive, `clean` verifies the
-bundle and removes its exact loose copies and active ledger. Active, blocked and
-unknown work remains resumable. Keep individual packets until run cleanup.
+The workflow ledger lives in `.factory/memory/workflow.sqlite3` from intake through
+cleanup. Use `workflow.py show` to inspect the current run. A successful close
+commits the terminal state and the final Teacher job together. Cancellation commits
+the state alone. Cleanup releases the current run slot. Search reads the published
+rows from the database. Query `closed_steps` for each final node and
+`closed_attempts` for its report references. Packets, original reports, check logs, telemetry and attachments live in the same database.
+Native delivery reads the stored packet. ACPX materializes a temporary packet for its file interface.
+Workflow schema 2 retains local Teacher search evidence. Only eligible production observations enter the OTLP delivery feed. Version 1 data migrates locally on first open. Packet receipts reference the stored packet by artifact ID and track served and acknowledged counts per recipient. Cleanup verifies the stored bytes and removes registered working copies.
+
+After closing a run, query `acpx_sessions` for collection status and session cost,
+`acpx_request_usage` for per-request counters, and `acpx_attempts` for dispatch and model
+bindings. Read these views from the same database after cleanup or restore. A missing
+counter is SQL NULL. Aggregate costs per currency from the session view.
+
+To inspect or extract saved evidence, use the logical path returned by the first command:
+
+```sh
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py list-artifacts RUN_ID
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py export-artifact RUN_ID LOGICAL_PATH NEW_FILE
+```
+
+To restore closed runs, finish cleanup, stop writers and copy `.factory/memory/workflow.sqlite3`
+to the same location in the destination. Run `verify-history RUN_ID`. For case search in the relocated checkout use
+`rebind-history RUN_ID` on the original branch. Use `reset-history-index` to rebuild the derived index.
+User instructions and lesson cards travel separately in Git.
 
 ## Repair, revision and recovery
 
@@ -189,14 +216,15 @@ hash-only document, restore bytes matching the recorded digest, or explicitly
 authorize a replacement through re-intake where supported.
 Do not reset budgets by moving the same failure into another stage/run.
 
-A stale workflow.lock is not automatically stolen. Confirm its process stopped
-and no ledger write is in progress before deleting that exact lock. Unknown
-transport cannot be retried without terminal evidence. A successful cancellation
+The operating system releases the workflow lock when its holder exits. Keep the lock file in place
+and retry after the current operation finishes. Unknown transport cannot be retried without terminal evidence. A successful cancellation
 command is not proof of no later writes. Replace-session increments a logical
 epoch, preserves history/counters and requires handoff; new conversation starts
 without memory. Reviewers never inherit an author's session.
 
 ## Sequence view
+
+The graph carries `"after_archive": "teacher"` from intake. Omitted input uses this default. The run-level step depends on successful archival of all accepted tasks. `workflow.py next` reports its status and the exact job ID once queued. Cancelled runs show `skipped`.
 
 Render with `workflow.py diagram`; the projection uses unique logical-agent
 lifelines and dispatch/dependency order. It is a human view, never an alternative
@@ -227,6 +255,16 @@ or reserve that resource for the entire writer when codegen cannot be separated.
 All reported static/tests/build/codegen commands require the reservation. The
 parent prohibits unreported commands too. Docs-only verification can belong to
 DocWriter, with concrete link/example commands and justified tests N/A.
+
+For an intermediate `WRITES_READY` handoff, a node may declare `handoff_inputs` as
+an exhaustive list of workspace file paths on which its result depends; `[]` means
+there are no such inputs. The report snapshots those inputs and the task files
+covered by the node's ownership. Omit the field when dependencies are unknown:
+the entire task scope is captured and checked. This declaration does not replace
+final verification, which still checks the full task scope and command receipts.
+An intermediate handoff may also provide the full task scope when the snapshot
+includes all declared input paths. Graphs without `handoff_inputs` keep the
+full-scope freshness check.
 
 Terminal ledgers/history are immutable: retries, revisions and transport writes
 require an active run. Inspect terminal state with show; after archival inspect
@@ -275,8 +313,9 @@ logical agents without resetting task/cause budgets.
 `factory.example.yaml` is a separate annotated example with help beside sections
 and fields; it is not loaded automatically. Maintain the example when the schema
 changes, but do not overwrite user settings from it.
-A profile declares adapter, role (path under `.factory/roles/`), required contract, model, capabilities,
-MCP allowlist and enforcement. An adapter declares coordinator instructions, worker_instructions, harness, runner
+A profile group declares capabilities, MCP allowlist and enforcement; each variant declares its model and adapter.
+Role and contract paths default to `roles/<group>.md` and `contracts/<group>.md`.
+Explicit `role` and `contract` fields must match those paths. An adapter declares coordinator instructions, worker_instructions, harness, runner
 and (for ACP) connection. The loader validates references and freezes adapter
 instruction hashes too. Runner/harness/connection on profiles are rejected to
 avoid two competing sources. Configuration, graph and run state have no schema
@@ -287,7 +326,7 @@ TestWriter have junior/middle/senior profiles sharing one procedure and contract
 The annotated example additionally shows ZCode/GLM and Pi/DeepSeek; verify
 backend IDs, credentials and required tools before selecting them.
 
-After `claim NODE`, `workflow.py packet NODE` returns the full native packet. It
+After `claim NODE`, `workflow.py packet NODE` saves the generated inline packet in SQLite and returns it. It
 uses `context.py` to return role/contract, worker adapter, shared assignment,
 stage-specific rules, project documents, locked source, dependency results and
 review findings, task-scoped correction/replacement history, assignment IDs,
@@ -295,18 +334,22 @@ model and capabilities for a generic agent. Only a worker-facing projection of
 the profile is included; routing/escalation and transport policy stay with the parent.
 Each `instructions` entry records path/hash/reason/audience alongside its content.
 Router, orchestration, coordinator checkpoint and this full README stay with the parent.
-For native file delivery, run `workflow.py prepare-packet NODE` after claim and
-send the returned bootstrap (including `read_command`, identity, role and owned
-paths) to a worker sharing this canonical workspace. Run the bootstrap command in
-its named shell (POSIX shell or Windows PowerShell). Spawn and bind its actual
-handle/model without waiting for work. The worker requests one chunk per tool call. Supply the last response's
-`acknowledgement` as `--ack` on the next request. Retry lost output with the same
-arguments. A missing receipt requires reading from chunk one. Each chunk carries
-at most 12,000 UTF-8 bytes. When bound and the last response is received, append
-its `--ack` and `--materials` values to `confirm_command`. The receipt records
-served and acknowledged ordinals. The ledger records preparation and confirmed
-delivery. Confirmation validates packet, dispatch, source and material identity
-before work is authorized. Acknowledgement records transport receipt.
+For native file delivery, run `workflow.py prepare-packet NODE` after claim.
+Spawn the intended worker with a wait-only instruction. Bind its real handle and
+model, run `prepare-packet NODE` again, and send the resulting bootstrap only to
+that bound worker sharing this workspace. Follow the named shell and preserve
+`--recipient`. Each response includes at most 5,500 UTF-8 content bytes and its serialized JSON
+is capped at 12,000 UTF-8 bytes, including escapes, metadata and newline. Set a
+tool output limit of at least 12,000 tokens and use one call per response. If
+output is missing or truncated, replay the same command with a sufficient
+display budget. Advance with `--ack` only after the entire response is visible.
+If the receipt is lost, restart at chunk one. Append the final response's
+`--ack` and `--materials` values to `confirm_command` before starting work.
+The receipt records served and acknowledged ordinals for the bound handle.
+The CLI compares the caller-supplied handle with the ledger's bound recipient.
+Host events establish which worker was sent the bootstrap and issued each call,
+and whether output was displayed in full. Ledger acknowledgements establish
+transport progress. Legacy acknowledgements and receipts require replay from chunk one.
 
 Use `prepare-packet NODE --with-diagnostics` to get separate `bootstrap` and
 `diagnostics` objects. Send only `bootstrap` to the worker. Diagnostics report
@@ -389,7 +432,9 @@ execution is explicit, never an automatic failure retry; diagnose failures and u
 existing node retry budgets when correcting/recovering work.
 
 The runner rejects checks while any prepared native delivery is reserved or
-running without confirmation. Finish those deliveries before a synchronous check
+running without confirmation. `next` lists their node IDs in
+`pending_packet_confirmations`; a rejected `run-check` also names them. Finish
+those deliveries before a synchronous check
 and start new deliveries after it. Wait outside the ledger lock and reconcile a
 failed or unknown delivery through normal recovery.
 

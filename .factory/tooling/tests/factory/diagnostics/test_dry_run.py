@@ -77,7 +77,7 @@ class DryRunTests(unittest.TestCase):
             driver.copy_bundle(source, target)
             for name in (".ruff_cache/cache", ".coverage.tmp", "htmlcov/index.html", "module.pyo"):
                 self.assertFalse((target / "tooling" / name).exists())
-            self.assertTrue((target / "tooling/factory/runtime/memory.py").is_file())
+            self.assertTrue((target / "tooling/factory/runtime/history/task_records.py").is_file())
 
     def test_missing_role_fails_and_cleans_temporary_bundle(self) -> None:
         original = driver.copy_bundle

@@ -43,17 +43,11 @@ Apply [the judge gates](../gates/roles/judge.md); required in this role’s cont
 
 ## Review output
 
-Report starts with:
-
-```yaml
-run_id: {current run id}
-node_id: {assigned node id}
-dispatch_id: {assigned dispatch id}
-source_hash: {current source hash}
-workflow: {feature | task | refactor | fix | docs | integration}
-phase: {review | re-review}
-verdict: {APPROVE | NEEDS_WORK | RETHINK}
-```
+Use the [Implement result format](common/implement-result.md) and the
+[verdict/outcome mapping](common/review-findings.md). On `verify`, return the
+verification result without `APPROVE`; the independent `review` decides the
+verdict. A tool execution blocker uses `BLOCKED_TOOL_ERROR` with `BLOCKED`.
+An open blocking finding excludes `APPROVE`.
 
 Initial findings use stable IDs `REV-1`, `REV-2`, and so on. Each finding
 contains severity, file/line, violated rule, concrete impact, source evidence,

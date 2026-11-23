@@ -12,6 +12,7 @@ import yaml
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory import file_reader
 from factory.decisions.decision_contract import DefinitionData
 from factory.project.contracts import (
     AcceptedDocument,
@@ -157,14 +158,19 @@ def profile_workspace(path: str | Path) -> Path:
 def load_profile(
     path: str | Path,
     *,
-    read_bytes: Callable[[Path], bytes] = Path.read_bytes,
+    read_bytes: Callable[[Path], bytes] = file_reader.read_bytes,
     resolve: Callable[[str | Path, str], Path] = safe_path,
+    workspace_root: str | Path | None = None,
 ) -> Policy:
     """Read a profile, explicit gate/decision files and local rules once. Never run project code."""
     path = Path(path).absolute()
     require(not path.is_symlink(), "symlink profile")
     path = path.parent.resolve() / path.name
-    workspace = profile_workspace(path).resolve()
+    workspace = (
+        Path(workspace_root).resolve()
+        if workspace_root is not None
+        else profile_workspace(path).resolve()
+    )
     profile_root = str(path.parent.relative_to(workspace))
     raw = read_bytes(path)
     files = {str(path): sha(raw)}
@@ -218,8 +224,9 @@ def material_entries(
     policy: Policy,
     workspace: str | Path,
     *,
-    read_bytes: Callable[[Path], bytes] = Path.read_bytes,
+    read_bytes: Callable[[Path], bytes] = file_reader.read_bytes,
     resolve: Callable[[str | Path, str], Path] = safe_path,
+    user: Path | None = None,
     **selection: Unpack[Selection],
 ) -> list[MaterialEntry]:
     """One read per file, all selection reasons retained; rule scope stays local."""
@@ -239,6 +246,15 @@ def material_entries(
         entries[key]["rules"].append(
             cast(Rule, {k: rule[k] for k in ("id", "for", "usage") if k in rule})
         )
+    if user is not None and str(user) not in entries:
+        raw = read_bytes(user)
+        entries[str(user)] = MaterialEntry(
+            path=str(user),
+            content=raw.decode("utf-8"),
+            sha256=sha(raw),
+            reason="project user instructions",
+            audience=selection["audience"],
+        )
     return list(entries.values())
 
 
@@ -250,7 +266,7 @@ def freeze_materials(
     for selection in selections:
         for file, _ in selected_materials(policy, workspace, **selection):
             if str(file) not in result:
-                result[str(file)] = sha(file.read_bytes())
+                result[str(file)] = sha(file_reader.read_bytes(file))
     return result
 
 
@@ -259,7 +275,7 @@ def check_frozen(files: dict[str, str]) -> None:
         require(
             Path(path).is_file()
             and not Path(path).is_symlink()
-            and sha(Path(path).read_bytes()) == expected,
+            and sha(file_reader.read_bytes(Path(path))) == expected,
             f"policy drift: {path}",
         )
 
@@ -270,7 +286,7 @@ def snapshot(
     """Portable review snapshot. Source is the coordinator's pinned policy baseline."""
     contents: dict[str, str] = {}
     for p, expected in policy["files"].items():
-        raw = Path(p).read_bytes()
+        raw = file_reader.read_bytes(Path(p))
         require(sha(raw) == expected, "policy changed while capturing snapshot")
         contents[str(Path(p).relative_to(Path(policy["path"]).parent))] = raw.decode("utf-8")
     payload = {
@@ -342,12 +358,15 @@ def review_materials(
     workspace: str | Path,
     *,
     role: str | None = None,
+    stage: str | None = None,
     scope: list[str] | None = None,
     audience: str = "worker",
 ) -> list[MaterialEntry]:
     """Deliver accepted policy bytes even when candidate modifies its own rules."""
     data = validate_snapshot(value)
-    rules = select_rules(data, process="code-review", audience=audience, role=role, scope=scope)
+    rules = select_rules(
+        data, process="code-review", audience=audience, role=role, stage=stage, scope=scope
+    )
     entries: dict[str, MaterialEntry] = {}
     for rule in rules:
         local = rule.get("file")
@@ -356,7 +375,7 @@ def review_materials(
                 require(rel in value["contents"], f"missing pinned rule: {rel}")
                 content, digest = value["contents"][rel], value["files"][rel]
                 # Paths locate provenance only; never read candidate bytes here.
-                path = str(Path(factory_root) / "project" / rel)
+                path = str(Path(workspace) / value["profile_root"] / rel)
             else:
                 require(rel in value["documents"], f"missing pinned project document: {rel}")
                 content, digest = (
@@ -379,6 +398,17 @@ def review_materials(
                 cast(Rule, {k: rule[k] for k in ("id", "for", "usage") if k in rule})
             )
     require("AGENTS.md" in value["documents"], "missing accepted AGENTS.md for review")
+    user_path = ".factory/memory/USER.md"
+    key = str(Path(workspace) / user_path)
+    if user_path in value["documents"] and key not in entries:
+        user = value["documents"][user_path]
+        entries[key] = MaterialEntry(
+            path=key,
+            content=user["content"],
+            sha256=user["sha256"],
+            reason="accepted user instructions",
+            audience="project",
+        )
     agents_document = value["documents"]["AGENTS.md"]
     entries[str(Path(workspace) / "AGENTS.md")] = MaterialEntry(
         content=agents_document["content"],

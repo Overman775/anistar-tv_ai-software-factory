@@ -1,6 +1,6 @@
 # Workflow state
 
-One authoritative `.factory/memory/state/workflow.json` belongs to the active
+One current ledger row in `.factory/memory/workflow.sqlite3` belongs to the active
 implementation run in a checkout. `workflow.py` owns atomic ledger transitions.
 The graph is supplied by the orchestrator; no separate pipeline.md can declare
 success. Planning/decomposition keep their existing staging contracts.

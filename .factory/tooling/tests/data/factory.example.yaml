@@ -117,6 +117,18 @@ profiles:
         model: sol
         adapter: codex
 
+  teacher:
+    role: roles/teacher.md
+    contract: contracts/teacher.md
+    capabilities: {read: true, edit: true, commands: true, web: false}
+    enforcement: instructions
+    mcp: []
+    default: teacher
+    variants:
+      teacher:
+        model: sol-medium
+        adapter: codex
+
   judge:
     role: roles/judge.md
     contract: contracts/judge.md
@@ -223,6 +235,9 @@ profiles:
 
 # Models: exact ID and parameters, referenced by variants.
 models:
+  sol-medium:
+    id: gpt-6.2-sol
+    effort: medium
   # Primary model for native workers.
   terra:
     id: gpt-6.1-terra

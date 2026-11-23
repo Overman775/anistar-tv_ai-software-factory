@@ -8,16 +8,16 @@ import signal
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NotRequired
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
-from factory.runtime import windows_job
-from factory.runtime.check_process import run_process
+from factory import file_reader
+from factory.diagnostics.events import event
+from factory.runtime.commands import windows_job
+from factory.runtime.commands.process import run_process
 from factory.runtime.contracts import ExecutionReceipt, Nonblank, Positive, TestSelection
 from factory.runtime.workflow_config import check_config
 from factory.runtime.workflow_core import (
@@ -28,10 +28,11 @@ from factory.runtime.workflow_core import (
     require,
     snapshot,
 )
+from factory.runtime.workflow_core import lock as lock
 from factory.validation import validation_message
 
 if TYPE_CHECKING:
-    from factory.runtime.workflow import Ledger
+    from factory.runtime.run_journal import RunJournal
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -64,26 +65,6 @@ PROCESS_FACTS = TypeAdapter[ProcessFacts](ProcessFacts)
 TEST_SELECTION = TypeAdapter[TestSelection](TestSelection)
 
 
-@contextmanager
-def lock(path: Path) -> Iterator[None]:
-    """The kernel releases ownership when a caller dies. Keep one stable lock inode."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b") as file:
-        try:
-            if sys.platform != "win32":
-                import fcntl
-
-                fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            else:
-                import msvcrt
-
-                file.seek(0)
-                msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError as exc:
-            raise Invalid("Ledger locked; retry after the current transaction") from exc
-        yield
-
-
 def artifact(root: Path, record: ExecutionReceipt, suffix: str) -> Path:
     return relative(root, record["output"] + suffix)
 
@@ -114,7 +95,7 @@ def group_live(pid: int) -> bool:
     return True
 
 
-def own(ledger: Ledger, execution_id: str) -> ExecutionReceipt:
+def own(ledger: RunJournal, execution_id: str) -> ExecutionReceipt:
     # A delayed supervisor rechecks the durable intent before running any project code.
     for attempt in range(100):
         try:
@@ -150,6 +131,14 @@ def own(ledger: Ledger, execution_id: str) -> ExecutionReceipt:
                         }
                     ),
                 )
+                event(
+                    "check_process",
+                    run_id=state["run_id"],
+                    task_id=node["task"],
+                    node_id=node["id"],
+                    dispatch_id=record["dispatch_id"],
+                    execution_id=execution_id,
+                )
                 return record
         except Invalid as exc:
             if not str(exc).startswith("Ledger locked") or attempt == 99:
@@ -159,9 +148,9 @@ def own(ledger: Ledger, execution_id: str) -> ExecutionReceipt:
 
 
 def test_selection(log: Path) -> TestSelection | None:
-    """Read the selected/completed counts emitted by a registered full test stage."""
+    """Read the selection emitted by the project test runner."""
     reports = []
-    with log.open("rb") as stream:
+    with file_reader.open_binary(log) as stream:
         for line in stream:
             if line.startswith(b"FACTORY_TEST_SELECTION "):
                 try:
@@ -174,10 +163,26 @@ def test_selection(log: Path) -> TestSelection | None:
         report = TEST_SELECTION.validate_python(reports[0])
     except ValidationError:
         return None
-    return report if report["selected"] == report["completed"] else None
+    files = report.get("files", [])
+    if report["selected"] != report["completed"] or len(set(files)) != len(files):
+        return None
+    return report
 
 
-def supervise(ledger: Ledger, execution_id: str) -> None:
+def selection_error(
+    selection: TestSelection | None, before: dict[str, str], *, files_required: bool
+) -> str | None:
+    if not selection or (files_required and not selection.get("files")):
+        return "Missing valid full test selection/completion evidence"
+    omitted = sorted(
+        path for path in selection.get("files", []) if before.get(path) in {None, "DELETED"}
+    )
+    if omitted:
+        return "Executed test files missing from input snapshot: " + ", ".join(omitted)
+    return None
+
+
+def supervise(ledger: RunJournal, execution_id: str) -> None:
     record = own(ledger, execution_id)
     composite = record.get("composite_stages", [])
     stages = composite or [
@@ -199,10 +204,15 @@ def supervise(ledger: Ledger, execution_id: str) -> None:
             log = relative(ledger.root, output)
             result = run_process(execution, cwd, log, separate_group=False)
             selection = None
-            if composite and spec["kind"] == "tests" and result["exit_code"] == 0:
+            files_required = execution.get("selection_files", False)
+            if result["exit_code"] is not None and (
+                files_required
+                or (composite and spec["kind"] == "tests" and result["exit_code"] == 0)
+            ):
                 selection = test_selection(log)
-                if selection is None:
-                    result["error"] = "Missing valid full test selection/completion evidence"
+                result["error"] = result["error"] or selection_error(
+                    selection, before, files_required=files_required
+                )
             after = snapshot(ledger.root, scope)
             if any(before[p] != after[p] for p in scope if p not in execution.get("outputs", [])):
                 result["error"] = "Files changed during check"

@@ -4,9 +4,8 @@ Delegated handoff follows `.factory/contracts/common/worker-rules.md`.
 
 ## Required Reading
 
-Read selected project profile rules and their actual documents, plus assigned
-source/evidence. An index is navigation, not a substitute for its applicable
-documents. Missing required inputs block dependent action. Report paths read.
+Follow [Worker Rules](common/worker-rules.md) for mandatory project documents,
+assigned source/evidence, missing inputs and paths read.
 
 ## Input
 
@@ -33,8 +32,10 @@ handoff and handles explicit failure.
 ## Evidence
 
 - `analysis.md` starts with current `run_id` when a pipeline manifest exists.
-- Location search returns verified sites and relevance; investigation adds applicable
-  entry points, traced flow and findings with file/line evidence.
+- Location search returns verified paths, symbols and brief relevance with file/line
+  evidence. A cross-module failure investigation traces the call chain to the
+  observable effect or the exact boundary of available evidence. Other investigations
+  include the entry points, flow and findings needed to answer the question.
 - Any unresolved semantic choice is reported as `semantic_gap_candidate` with
   exact evidence and alternatives. Parent owns Material Semantic Gap Gate and
   directive routing to delegated planning or terminal `NEEDS_PLANNING`;

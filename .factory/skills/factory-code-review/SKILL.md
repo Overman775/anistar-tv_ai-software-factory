@@ -66,10 +66,10 @@ claim to execute them. Failed commands and unavailable checks remain distinct.
 Commands must be appropriate for read-only review; mutating checks need separate scope.
 
 Create each assignment with `review_run.py assignment --id DIRECTION --run RUN`;
-save the returned JSON and package it with:
+save the returned JSON and package it with the `profile` value from that assignment:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process code-review --role reviewer --profile reviewer ASSIGNMENT.json
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process code-review --role reviewer --profile PROFILE_FROM_ASSIGNMENT ASSIGNMENT.json
 ```
 
 Keep three independent assignments, in parallel or sequentially according to available slots:

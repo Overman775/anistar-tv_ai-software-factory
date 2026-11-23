@@ -39,10 +39,21 @@ retains its own rules; add selected host overrides or `graphify-out/` there only
 when needed, without replacing user rules.
 
 ```gitignore
-/memory/
+/memory/*
+!/memory/USER.md
+!/memory/lessons/
+/memory/lessons/*
+!/memory/lessons/project/
+!/memory/lessons/factory/
+/memory/lessons/*/*
+!/memory/lessons/*/*.md
+!/memory/lessons/*/.gitkeep
+/memory/lessons/*/*/
 /.venv/
 /.python/
 /.venv.setup.lock
+/.env
+/diagnostics/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -129,6 +140,8 @@ discovery aliases if present. Existing application exclusions stay outside the b
 /.factory/.venv/
 /.factory/.python/
 /.factory/.venv.setup.lock
+/.factory/.env
+/.factory/diagnostics/
 /.factory/**/__pycache__/
 /.factory/**/*.pyc
 /.factory/**/*.pyo

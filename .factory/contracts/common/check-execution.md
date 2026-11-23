@@ -83,8 +83,9 @@ honest evidence; full command recovery belongs to the coordinator.
 An assigned check may declare registered ordered `execution.stages` and an empty
 `argv`. The runner executes each registered read-only full stage once and records distinct
 child receipts, command results, input hashes and logs under the parent execution.
-Use `check-results EXECUTION_ID` to retrieve the parent and child results. Copy each actual receipt ID into `prepare-report`; a parent receipt alone cannot
-satisfy child gates. A stage that never ran has no receipt. Judge uses its own
+Use `check-results EXECUTION_ID` to retrieve the parent and child results. Select the parent execution ID in `prepare-report` to include its recorded child
+receipts, or select individual receipt IDs explicitly. A stage that never ran has
+no receipt and cannot satisfy its gate. Judge uses its own
 assignment. A `codegen` command may declare exact owned `outputs`; the runner
 records before/after hashes and checks immutability of other declared inputs.
 
@@ -93,3 +94,15 @@ A registered composite test stage supplies one log record
 actual test runner or wrapper. N is positive and reflects completed tests. A
 missing, filtered or incomplete selection blocks the composite. Generation
 with declared outputs uses a separate assigned writer command.
+
+### Discovered test files
+
+When tests are selected by discovery, the project can set `execution.selection_files: true`
+on the registered test command. Its runner emits one `FACTORY_TEST_SELECTION` JSON
+record with full selected/completed counts and `files`, the distinct workspace-relative
+paths of the tests actually executed. For example,
+`{"mode":"full","selected":3,"completed":3,"files":["tests/test_history.py"]}`.
+The receipt stores this selection. The project runner must report every executed test
+file. A reported path without a recorded digest in the pre-command snapshot blocks
+the receipt. Declare stable inputs in the project check and include newly written tests in the
+locked task scope. The Factory does not infer discovery semantics from process arguments.

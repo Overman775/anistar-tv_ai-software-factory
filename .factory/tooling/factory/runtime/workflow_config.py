@@ -10,9 +10,11 @@ from typing import Annotated, NotRequired
 import yaml
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 
+from factory import file_reader
+
 # Direct CLI execution and import-by-path use the same tool modules.
 from factory.context import context
-from factory.project.contracts import Selection
+from factory.project.contracts import Policy, Selection
 from factory.project.profile_io import (
     load_profile,
     parse_yaml,
@@ -20,7 +22,6 @@ from factory.project.profile_io import (
     selected_materials,
 )
 from factory.project.profile_rules import rule_groups
-from factory.runtime import escalation
 from factory.runtime.contracts import (
     Adapter,
     Alias,
@@ -28,13 +29,16 @@ from factory.runtime.contracts import (
     GraphTopology,
     LockedSource,
     Node,
+    Nonblank,
     Profile,
-    ProfileCommon,
+    ProfilePolicy,
     ProfileVariant,
     Settings,
     State,
     agent_key,
 )
+from factory.runtime.observability.configuration import TelemetrySettings
+from factory.runtime.scheduling import escalation
 from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -46,7 +50,9 @@ from factory.validation import validation_message
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
-class ProfileGroup(ProfileCommon):
+class ProfileGroup(ProfilePolicy):
+    role: NotRequired[Nonblank]
+    contract: NotRequired[Nonblank]
     default: NotRequired[Alias]
     variants: Annotated[dict[Alias, ProfileVariant], Field(min_length=1)]
 
@@ -56,6 +62,8 @@ ProfileGroups = Annotated[dict[Alias, ProfileGroup], Field(min_length=1)]
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class FactoryConfig(Settings):
+    telemetry: NotRequired[TelemetrySettings]
+    logs: NotRequired[TelemetrySettings]
     profiles: ProfileGroups
 
 
@@ -76,23 +84,25 @@ def _expand_profiles(groups: ProfileGroups) -> tuple[dict[str, Profile], dict[st
     profiles: dict[str, Profile] = {}
     defaults: dict[str, str] = {}
     for role, group in groups.items():
+        role_path = group.get("role", f"roles/{role}.md")
+        contract_path = group.get("contract", f"contracts/{role}.md")
         require(
-            group["role"] == f"roles/{role}.md" and group["contract"] == f"contracts/{role}.md",
+            role_path == f"roles/{role}.md" and contract_path == f"contracts/{role}.md",
             "Profile group and role/contract must identify the same specialty",
         )
         variants = group["variants"]
         default = group.get("default", next(iter(variants)) if len(variants) == 1 else "")
         require(default in variants, "Multiple profiles require an explicit valid default")
         if "default" in group:
-            defaults[group["role"]] = default
+            defaults[role_path] = default
         for name, variant in variants.items():
             require(
                 name != "human" and name not in profiles,
                 f"Invalid or duplicate profile name: {name}",
             )
             profiles[name] = {
-                "role": group["role"],
-                "contract": group["contract"],
+                "role": role_path,
+                "contract": contract_path,
                 "capabilities": group["capabilities"].copy(),
                 "enforcement": group["enforcement"],
                 "mcp": list(group["mcp"]),
@@ -116,29 +126,46 @@ def _validate_adapters(
         for name in (adapter["instructions"], adapter["worker_instructions"]):
             f = relative(path.parent, name)
             require(f.is_file(), f"Missing adapter instruction: {name}")
-            files[str(f)] = digest(f.read_bytes())
+            files[str(f)] = digest(file_reader.read_bytes(f))
 
 
-def load_config(path: str | Path) -> Config:
+def _read_settings(path: Path) -> tuple[FactoryConfig, bytes]:
     if yaml is None:
         raise Invalid("Install .factory/tooling/requirements.txt in a virtualenv")
-    path = Path(path).resolve()
-    raw = path.read_bytes()
+    raw = file_reader.read_bytes(path)
     try:
-        settings = FACTORY_CONFIG.validate_python(parse_yaml(raw))
+        return FACTORY_CONFIG.validate_python(parse_yaml(raw)), raw
     except ValidationError as exc:
         raise Invalid(
             validation_message("Invalid factory configuration", exc, FACTORY_CONFIG)
         ) from None
     except ValueError as exc:
         raise Invalid(f"Invalid factory configuration: {exc}") from exc
+
+
+def default_profile(path: str | Path, role: str) -> str:
+    """Resolve a route from factory settings without loading project policy."""
+    settings, _ = _read_settings(Path(path).resolve())
+    profiles, defaults = _expand_profiles(settings["profiles"])
+    _, runtime_defaults = acceptance_guard(escalation.routing, profiles, defaults)
+    return runtime_defaults[role]
+
+
+def load_config(path: str | Path, *, policy: Policy | None = None) -> Config:
+    path = Path(path).resolve()
+    settings, raw = _read_settings(path)
     profiles, defaults = _expand_profiles(settings["profiles"])
     models = settings["models"]
     if "orchestrator" in settings:
         require(settings["orchestrator"]["model"] in models, "Unknown orchestrator model alias")
-    policy = acceptance_guard(
-        load_profile, acceptance_guard(safe_path, path.parent, settings["project"])
-    )
+    files = {str(path): digest(raw)}
+    if policy is None:
+        policy = acceptance_guard(
+            load_profile, acceptance_guard(safe_path, path.parent, settings["project"])
+        )
+        user = relative(path.parent, "memory/USER.md")
+        if user.is_file():
+            files[str(user)] = digest(file_reader.read_bytes(user))
     require(relative(path.parent, settings["router"]).is_file(), "Missing router policy")
     require(
         relative(path.parent, settings["orchestration"]).is_file(), "Missing orchestration policy"
@@ -155,7 +182,7 @@ def load_config(path: str | Path) -> Config:
             endpoints.add(endpoint)
             limits[f"acpx:{name}"] = conn["max_parallel_agents"]
 
-    files = {str(path): digest(raw), **policy["files"]}
+    files.update(policy["files"])
     adapters = settings["adapters"]
     _validate_adapters(adapters, limits, path, files)
     for p in profiles.values():
@@ -165,7 +192,7 @@ def load_config(path: str | Path) -> Config:
         for name in (p["role"], p["contract"]):
             f = relative(path.parent, name)
             require(f.is_file(), f"Missing role/contract: {name}")
-            files[str(f)] = digest(f.read_bytes())
+            files[str(f)] = digest(file_reader.read_bytes(f))
         adapter = adapters[p["adapter"]]
         p["worker_instructions"] = adapter["worker_instructions"]
         p["harness"] = adapter["harness"]
@@ -174,7 +201,7 @@ def load_config(path: str | Path) -> Config:
             p["connection"] = adapter["connection"]
     for name in (settings["orchestration"], settings["router"]):
         file = relative(path.parent, name)
-        files[str(file)] = digest(file.read_bytes())
+        files[str(file)] = digest(file_reader.read_bytes(file))
 
     roles, runtime_defaults = acceptance_guard(escalation.routing, profiles, defaults)
     result = {
@@ -213,21 +240,21 @@ def load_config(path: str | Path) -> Config:
         "contracts/common/review-findings.md",
         "tooling/bin/workflow.py",
         "gates/skills/planning/validate_plan.py",
-        "tooling/factory/runtime/acceptance.py",
+        "tooling/factory/runtime/reports/acceptance.py",
         "tooling/factory/runtime/workflow.py",
         "tooling/factory/runtime/workflow_core.py",
         "tooling/factory/runtime/workflow_sources.py",
         "tooling/factory/runtime/workflow_config.py",
         "tooling/factory/runtime/workflow_graph.py",
         "tooling/factory/checks/command.py",
-        "tooling/factory/runtime/assignment.py",
-        "tooling/factory/runtime/check_process.py",
-        "tooling/factory/runtime/review_findings.py",
-        "tooling/factory/runtime/escalation.py",
-        "tooling/factory/runtime/transition_gates.py",
+        "tooling/factory/runtime/scheduling/assignment.py",
+        "tooling/factory/runtime/commands/process.py",
+        "tooling/factory/runtime/reports/review_findings.py",
+        "tooling/factory/runtime/scheduling/escalation.py",
+        "tooling/factory/runtime/reports/transition_gates.py",
         "tooling/factory/gates/gate_contract.py",
         "tooling/factory/gates/catalog.py",
-        "tooling/factory/runtime/escalation_policy.py",
+        "tooling/factory/runtime/scheduling/escalation_policy.py",
         "tooling/factory/adapters/acpx_adapter.py",
         "tooling/factory/decisions/decision_contract.py",
         "contracts/common/decisions.md",
@@ -252,7 +279,7 @@ def load_config(path: str | Path) -> Config:
         dependencies.add(file)
     for dependency in dependencies:
         if str(dependency) not in files:
-            files[str(dependency)] = digest(dependency.read_bytes())
+            files[str(dependency)] = digest(file_reader.read_bytes(dependency))
     _capture_config_documents(c)
     return c
 
@@ -361,7 +388,7 @@ def check_config(state: State) -> None:
             acceptance_guard(context.accepted_bytes, config, Path(path))
         else:
             require(
-                Path(path).is_file() and digest(Path(path).read_bytes()) == expected,
+                Path(path).is_file() and digest(file_reader.read_bytes(Path(path))) == expected,
                 "Executable configuration/tooling drift; reconcile explicitly",
             )
     for path in config.get("_project_documents", {}):
@@ -408,7 +435,7 @@ def freeze_project(config: Config, graph: GraphTopology, workspace: str | Path) 
             paths.add(str(file))
     executable = result["_files"].keys() - documents
     for path in sorted(paths - contents.keys() - executable):
-        raw = Path(path).read_bytes()
+        raw = file_reader.read_bytes(Path(path))
         hashes[path], contents[path] = digest(raw), raw.decode("utf-8")
     return result
 

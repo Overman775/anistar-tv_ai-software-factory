@@ -65,9 +65,10 @@ planning-only work does not trigger it.
 Main session is planning orchestrator.
 
 - `architect` is Factory Planning-owned semantic plan writer. It writes only
-  a ready `.factory/memory/staging/planning-plan.md` candidate after discovery.
+  a ready `.factory/memory/staging/planning-plan.md.candidate` after discovery.
   A newly detected semantic gap returns to orchestrator without replacing the
   last presented plan.
+- For a revision, give Architect the coordinator's change classification and, for a nonsemantic change, the specific supporting rationale.
 - `code-explorer` is optional read-only help for a scoped Reality Check. Return
   evidence to orchestrator; do not create an execution plan.
 
@@ -90,8 +91,8 @@ Instruction ownership:
 - plan contract owns output schema, semantic quality, deduplication, and language;
 - validator owns mechanical structure, identity, references, and transitions.
 
-Pass delegated roles only run identity, source/session paths, requested boundary,
-previous-plan path when applicable, and checkpoint context. Do not copy their
+Pass delegated roles only run identity, source/session paths, requested boundary, previous-plan path and coordinator's change classification when applicable,
+specific supporting rationale for a nonsemantic change, and checkpoint context. Do not copy their
 canonical instructions into spawn prompts.
 
 Do not invoke Developer, TestWriter, Reviewer, TaskDecomposer, or
@@ -213,13 +214,14 @@ sh .factory/tooling/bin/python.sh "$PWD/.factory/gates/skills/planning/validate_
   --plan .factory/memory/staging/planning-plan.md.candidate --phase draft
 ```
 
-For every later promoted revision or nonsemantic correction, compare the
-candidate with the last user-reviewable target:
+For every later promoted revision or draft correction, compare with the last
+user-reviewable target. This example is for a coordinator-classified nonsemantic
+draft correction; for a semantic revision omit the two `--change-*` options:
 
 ```bash
 sh .factory/tooling/bin/python.sh "$PWD/.factory/gates/skills/planning/validate_plan.py" \
   --plan .factory/memory/staging/planning-plan.md.candidate \
-  --previous .factory/memory/staging/planning-plan.md --phase draft
+  --previous .factory/memory/staging/planning-plan.md --phase draft --change-kind nonsemantic --change-evidence "Capitalization only."
 ```
 
 Only after successful validation atomically replace `planning-plan.md` with the

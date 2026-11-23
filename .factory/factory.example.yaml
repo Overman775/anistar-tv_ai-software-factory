@@ -1,3 +1,10 @@
+# Export approved production observations through the separate OTLP bridge.
+telemetry:
+  enabled: true
+  endpoint: http://localhost:4318/v1/traces
+  headers:
+    Authorization: "Bearer ${env:OTLP_TOKEN}"
+
 # Tutorial example. Selected explicitly; does not overwrite existing settings.
 
 # Application profile: documents, rules and project gates.
@@ -32,14 +39,14 @@ execution:
   on_budget_exhausted: human
 
 # Specialties: shared permissions and tools, then model and adapter variants.
+# role and contract default to roles/<group>.md and contracts/<group>.md.
+# Explicit paths must match these canonical paths.
 # Variants do not override shared fields. Variant names are unique across the factory.
 # default required with multiple variants. Developer/TestWriter always start at that default.
 # capabilities/MCP — instruction policy, not sandbox; enforcement: required blocks generic dispatch.
 # MCP servers and secrets are configured in harness, not here.
 profiles:
   developer:
-    role: roles/developer.md
-    contract: contracts/developer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -70,8 +77,6 @@ profiles:
           after_failed_attempts: 2
 
   test-writer:
-    role: roles/test-writer.md
-    contract: contracts/test-writer.md
     capabilities: {read: true, edit: true, commands: true, web: false}
     enforcement: instructions
     mcp:
@@ -104,8 +109,6 @@ profiles:
           after_failed_attempts: 1
 
   generalist:
-    role: roles/generalist.md
-    contract: contracts/generalist.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -122,9 +125,17 @@ profiles:
         model: glm-5-3
         adapter: opencode
 
+  teacher:
+    capabilities: {read: true, edit: true, commands: true, web: false}
+    enforcement: instructions
+    mcp: []
+    default: teacher
+    variants:
+      teacher:
+        model: sol-medium
+        adapter: codex
+
   judge:
-    role: roles/judge.md
-    contract: contracts/judge.md
     capabilities: {read: true, edit: false, commands: true, web: false}
     enforcement: instructions
     mcp:
@@ -136,8 +147,6 @@ profiles:
         adapter: codex
 
   code-explorer:
-    role: roles/code-explorer.md
-    contract: contracts/code-explorer.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -151,8 +160,6 @@ profiles:
         adapter: codex
 
   bug-hunter:
-    role: roles/bug-hunter.md
-    contract: contracts/bug-hunter.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -170,8 +177,6 @@ profiles:
         adapter: codex
 
   doc-writer:
-    role: roles/doc-writer.md
-    contract: contracts/doc-writer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -181,8 +186,6 @@ profiles:
         adapter: codex
 
   architect:
-    role: roles/architect.md
-    contract: contracts/architect.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -192,8 +195,6 @@ profiles:
         adapter: codex
 
   task-decomposer:
-    role: roles/task-decomposer.md
-    contract: contracts/task-decomposer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -203,8 +204,6 @@ profiles:
         adapter: codex
 
   task-reviewer:
-    role: roles/task-reviewer.md
-    contract: contracts/task-reviewer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -214,8 +213,6 @@ profiles:
         adapter: codex
 
   reviewer:
-    role: roles/reviewer.md
-    contract: contracts/reviewer.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -228,6 +225,9 @@ profiles:
 
 # Models: exact ID and parameters, referenced by variants.
 models:
+  sol-medium:
+    id: gpt-6.2-sol
+    effort: medium
   # Primary model for native workers.
   terra:
     id: gpt-6.1-terra

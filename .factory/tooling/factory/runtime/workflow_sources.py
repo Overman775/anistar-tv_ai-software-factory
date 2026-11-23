@@ -10,9 +10,10 @@ from pathlib import Path
 
 from pydantic import TypeAdapter, ValidationError
 
+from factory import file_reader
 from factory.paths import FACTORY_ROOT
-from factory.runtime import acceptance
 from factory.runtime.contracts import LockedSource, Source
+from factory.runtime.reports import acceptance
 from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -35,7 +36,11 @@ def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> L
             label = "BLOCKED_NO_APPROVED_PLAN"
         raise Invalid(validation_message(label, exc, SOURCE)) from None
     require(bool(src.get("path")) != bool(src.get("text")), "Source needs exactly one path or text")
-    content = relative(root, src["path"]).read_bytes() if src.get("path") else src["text"].encode()
+    content = (
+        file_reader.read_bytes(relative(root, src["path"]))
+        if src.get("path")
+        else src["text"].encode()
+    )
     src.setdefault("kind", "local_task" if src.get("path") else "direct")
     src.setdefault(
         "execution_mode", "approved_plan" if src["kind"] == "approved_plan" else "single_task"

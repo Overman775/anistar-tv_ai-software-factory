@@ -41,7 +41,7 @@ Do not claim certified ASD-STE100 compliance.
 - For English procedures and instructions, use strict structural rules: one instruction per sentence, normally at most 20 words.
 - For English explanations and READMEs, use STE-flavored prose: normally at most 25 words per sentence, with natural vocabulary.
 - For Russian, apply the clarity rules below. Do not translate documents unless requested or impose English vocabulary and grammar on Russian.
-- Meaning takes priority over a length limit. Keep necessary precision and note any deliberate exception in the handoff.
+- Meaning takes priority over a length guideline. Keep necessary precision.
 
 ### Rules to Apply
 
@@ -68,7 +68,7 @@ If text is already clear, leave it unchanged.
 
 ### Optional Skill and Linter
 
-Use `.factory/skills/asd-ste100/SKILL.md` only when this task needs disambiguation
+Use `.agents/skills/asd-ste100/SKILL.md` only when this task needs disambiguation
 of technical English; do not load it for unrelated documentation.
 Its linter can help check changed English prose. Do not use it to certify Russian text.
 Review every finding against its context. A score does not prove meaning was preserved.
@@ -76,8 +76,8 @@ Do not install the skill, block work or weaken these rules when the optional bun
 
 ## When to Update Documentation Indexes
 
-After creating/renaming/moving a doc, update only the affected existing
-`AGENTS.md` and the profile documentation index documentation indexes:
+After creating, renaming or moving a doc, update the affected existing
+`AGENTS.md` and profile documentation indexes. Do not create a duplicate index:
 
 ```markdown
 * **Topic:** `docs/{filename}.md` (Read only when ...)
@@ -106,29 +106,13 @@ One doc type per file. No mixing tutorial + reference.
 
 **Draft:** Explain like to colleague. Lead with what, then why.
 
-**Edit:**
-
-1. Apply the clear-writing rules above.
-2. Compare each changed claim with its source. Check the actor, action, condition, exception, obligation and uncertainty.
-3. Check numbers and units together. Preserve commands, flags, paths, identifiers and quoted labels.
-4. Check that paragraph breaks preserve context. Restore a condition if the next sentence could be read independently.
-5. Verify code examples against actual project APIs. Never shorten an example into a different behavior.
-
-Check documented commands against their definitions. Checking a command does not authorize running it.
-Follow task permissions for tests, live calls and generated updates.
+**Edit:** Apply the clear-writing rules above and the completion checks below.
 
 **Polish:**
 
 - Descriptive headings: "Use `Assets` for referencing files" not "Resources"
 - Links descriptive, never "here" or "click here"
-- Verify cross-references exist and accurate.
-- Check these rules manually even when a linter reports success. Return `DOCS_UPDATED` only after the contract checks pass.
-
-### Step 4: Update the Index
-
-- New/moved/renamed doc → update the affected existing `AGENTS.md` and
-  the profile documentation index documentation indexes.
-- Do not create a duplicate index.
+- Return `DOCS_UPDATED` only after the completion checks pass.
 
 ## Writing Principles
 
@@ -173,8 +157,10 @@ Before `DOCS_UPDATED`:
 - Apply the self-contained ASD-STE100-inspired rules in `.factory/roles/doc-writer.md`.
 - Follow the applicable project template. Remove unused sections and authoring
   placeholders. Keep explicit open questions in an intent when unresolved.
-- Compare changed claims with source. Preserve actors, conditions, exceptions, obligation, uncertainty, numbers and units.
-- Verify commands, examples, links and affected index entries. Resolve draft `[VERIFY]` markers before success.
+- Compare changed claims with source. Preserve actors, actions, results, order, conditions, exceptions, obligation and uncertainty.
+- Preserve numbers, units, versions, negations, commands, flags, paths, identifiers and quoted labels.
+- Check that paragraph breaks preserve context and conditions. Verify examples against project APIs without changing their behavior.
+- Verify commands against their definitions, links and affected index entries. Resolve draft `[VERIFY]` markers before success.
 - Checking documented commands does not authorize executing them. Follow task permissions for tests, live calls and generated updates.
 - Apply language-appropriate rules. Do not translate source text unless requested or claim certified STE compliance.
 - Review meaning manually. An optional skill or linter is not required and cannot replace this review.

@@ -18,7 +18,7 @@ Read [coordinator communication and waiting](../contracts/common/agent-checkpoin
 Complete this entry before preparation or delegation, whether invoked through
 Factory Implement or directly as Orchestrator.
 
-Inspect `.factory/memory/state/workflow.json`. For an active run, continue from
+Inspect the current SQL ledger with `workflow.py show`. For an active run, continue from
 the accepted factory instructions via `workflow.py read-instructions - PATH...`
 and accepted coordinator project reading via `workflow.py read-project`, using
 the Python launcher. Use that policy and instruction text for current-run
@@ -91,7 +91,7 @@ Build/reuse slices, tasks and agent steps; record why the selected team is suffi
 Use the [state contract](../skills/factory-implement/references/shared-state.md)
 and [workflow usage](README.md). Run `workflow.py init GRAPH --config-pin CONFIG_SNAPSHOT`
 to verify observed instruction versions; validate before dispatch.
-Persist an acyclic graph before the first worker. Each logical agent has one ID;
+Persist an acyclic graph before the first worker. Include the run-level `after_archive: teacher` step in the first execution sketch and every revision. Show it after final acceptance and successful archival. Each logical agent has one ID;
 Developer instances have distinct IDs. Steps bind task, slice, source hashes,
 profile, inputs, owned paths, dependencies and output. Fixes reuse nodes with new
 attempts. Runtime state is authoritative; Mermaid sequenceDiagram only projects it: one lifeline
@@ -140,9 +140,9 @@ Apply Implement's shared gates: architecture, source integrity, static/test/buil
 golden, refactor and evidence. Reports bind final scope and file hashes;
 process exit or ACP delivery is not a gate verdict.
 
-Before any `run-check`, call `workflow.py next` and wait for every outstanding
-native packet confirmation, including other nodes. A ready check reservation
-does not clear this delivery gate.
+Wait for outstanding native packet confirmations, including other nodes, before
+`run-check`. The command identifies waiting nodes; a ready check reservation does
+not clear this delivery gate.
 
 Register applicable mandatory commands in task `required_checks.execution` before
 intake, with argv/cwd/timeout and additional input files. Execute through
@@ -268,17 +268,15 @@ Follow [finalize](../skills/factory-implement/references/shared-finalize.md), th
 publication, live tests, golden changes and destructive cleanup retain their
 explicit authorization rules.
 
-Checkpoint every transition in `.factory/memory/state/`, separately from planning/
-decomposition staging. Before terminal cleanup, save a self-contained record in
-`.factory/memory/history/<run-id>/`, retained until explicit deletion. Include source
-versions, final graph/assignments, change reasons, checks/revisions/findings/retries,
-unresolved work and measured usage (`null` if unknown). Separate observations
-from facts; exclude secrets and exhaustive transcripts. After all workers actually
-stop, put any additional required evidence in the run's history directory, then
-archive the completed/cancelled run. Call `workflow.py clean` after the bundle
-is verified. It removes packed loose copies and the active manifest. Keep
-foreign files and the archive. Failed archive writes and live or resumable
-runs block cleanup; report failures and remaining paths.
+Record workflow transitions in `.factory/memory/workflow.sqlite3`. Use the final
+summary for source versions, assignments, changes, checks, findings, retries,
+unresolved work and measured usage (`null` when unknown). After all workers stop,
+place additional evidence under `.factory/memory/history/<run-id>/` and archive
+the completed or cancelled run. Record its run ID and database path. The journal
+retains the original packets, reports and transport logs, which may contain sensitive data.
+`workflow.py clean` verifies the inventory, removes its working copies and releases
+the current run slot. For later inspection use `list-artifacts` and `export-artifact`.
+Report any failed archival or cleanup with the remaining path and cause.
 
 ## Final integration execution
 
@@ -331,3 +329,13 @@ docs updates, unresolved work and history path. Missing checks are `NOT_RUN` or
 `BLOCKED`, never success. Canonical instructions are English; user-facing reports
 follow dialogue language and history follows task/project language. Internal
 messages follow the shared communication contract.
+
+## Teacher at run completion
+
+Task acceptance records evidence for the final review. After successful
+`workflow.py archive completed SUMMARY`, or when resuming a completed run,
+read `workflow.py next` through the factory launcher. When `after_archive.status` is `ready`, dispatch the indicated event ID as the run's
+single [Teacher assignment](../skills/factory-lessons/references/dispatch.md)
+before final handoff. It covers all accepted tasks and retrospective notes
+already recorded for this run. Ready and waiting events survive cleanup on
+their original checkout.

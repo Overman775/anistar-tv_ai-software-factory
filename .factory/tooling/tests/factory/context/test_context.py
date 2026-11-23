@@ -14,9 +14,11 @@ from unittest.mock import patch
 
 from factory.adapters.acpx_adapter import prepare_prompt
 from factory.context import context
+from factory.runtime.history.task_records import read_evidence
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from tests.factory.runtime import workflow_fixture
+from tests.factory.runtime.store_fixture import has_current
 
 _TOOLS = Path(__file__).resolve().parents[3] / "bin"
 
@@ -67,8 +69,17 @@ class ContextTests(unittest.TestCase):
             if Path(i["path"]).is_relative_to(workflow_fixture.ROOT)
         }
 
-    def test_generalist_gets_review_contract_for_owned_unresolved_findings(self) -> None:
+    def test_authors_get_review_contract_for_owned_unresolved_findings(self) -> None:
         contract = "contracts/common/review-findings.md"
+        for role in ("developer", "test-writer", "doc-writer", "generalist"):
+            self.assertNotIn(contract, self.names(self.packet(role)))
+            assigned = {
+                "REV-1": {"owner_node_id": "write-label", "owner_role": role, "status": "open"}
+            }
+            self.assertIn(
+                contract,
+                self.names(self.packet(role, node_id="write-label", review_findings=assigned)),
+            )
         for owner, status, expected in [
             (None, None, False),
             ("write-label", "open", True),
@@ -119,6 +130,18 @@ class ContextTests(unittest.TestCase):
             self.assertEqual({"SYS-INTENT": "Check intent"}, packet["owned_gates"])
             self.assertIn("contracts/reviewer.md", self.names(packet))
 
+    def test_review_packets_select_project_criteria_by_lens(self) -> None:
+        criteria = [
+            {"id": lens, "lens": lens, "question": "Check this direction"}
+            for lens in ("system-design", "runtime-safety", "verification-quality")
+        ]
+        with patch("factory.context.context.review_criteria", return_value=criteria):
+            for criterion in criteria:
+                packet = self.packet("reviewer", "code-review", lens=criterion["lens"])
+                self.assertEqual([criterion], packet["project_policy"]["review_criteria"])
+            judge = self.packet("judge", stage="review")
+            self.assertEqual(criteria, judge["project_policy"]["review_criteria"])
+
     def test_gate_documents_are_role_scoped_not_whole_directory(self) -> None:
         owners = {"developer", "test-writer", "generalist", "judge", "reviewer"}
         for process, roles in context.PROCESS_ROLES.items():
@@ -130,6 +153,8 @@ class ContextTests(unittest.TestCase):
                     expected = {"gates/common/verification-rules.md"}
                     if role in owners:
                         expected.add(f"gates/roles/{role}.md")
+                    if role == "task-reviewer":
+                        expected.add("gates/skills/decompose/review-contract.md")
                     self.assertEqual(expected, selected)
 
     def test_role_gate_edit_preserves_existing_assignment(self) -> None:
@@ -181,7 +206,9 @@ class ContextTests(unittest.TestCase):
         self.assertNotIn("contracts/common/check-execution.md", writing)
         self.assertIn("contracts/common/check-execution.md", checking)
         self.assertIn("skills/factory-implement/references/project-checks.md", checking)
-        self.assertIn("contracts/common/implement-result.md", writing)
+        self.assertIn("contracts/common/implement-write-result.md", writing)
+        self.assertNotIn("contracts/common/implement-result.md", writing)
+        self.assertIn("contracts/common/implement-result.md", checking)
 
     def test_principles_delivered_once_to_applicable_profiles_only(self) -> None:
         recipients: dict[str, Any] = {
@@ -262,6 +289,14 @@ class ContextTests(unittest.TestCase):
             self.assertNotIn("contracts/common/review-findings.md", names)
             self.assertNotIn("contracts/common/check-execution.md", names)
         self.assertIn(
+            "skills/factory-planning/references/architect-plan-contract.md",
+            self.names(self.packet("architect", "planning")),
+        )
+        self.assertNotIn(
+            "contracts/common/implementation-detail.md",
+            self.names(self.packet("architect", "planning")),
+        )
+        self.assertNotIn(
             "skills/factory-planning/references/plan-contract.md",
             self.names(self.packet("architect", "planning")),
         )
@@ -269,6 +304,25 @@ class ContextTests(unittest.TestCase):
             "skills/factory-decompose/references/generation-contract.md",
             self.names(self.packet("task-decomposer", "decompose")),
         )
+
+    def test_decompose_review_and_repair_receive_stage_specific_contracts(self) -> None:
+        review = self.names(self.packet("task-reviewer", "decompose"))
+        repair = self.names(self.packet("task-reviewer", "decompose", decompose_mode="repair"))
+        generation = "skills/factory-decompose/references/generation-contract.md"
+        staging = "skills/factory-decompose/references/staging-contract.md"
+        self.assertIn("gates/skills/decompose/review-contract.md", review)
+        self.assertNotIn(generation, review | repair)
+        self.assertEqual({staging}, repair - review)
+        self.assertLessEqual(review, repair)
+        author = self.names(self.packet("task-decomposer", "decompose"))
+        self.assertLessEqual({generation, staging}, author)
+        architect = self.names(self.packet("architect", "planning"))
+        self.assertIn("skills/factory-planning/references/plan-content.md", architect)
+        for resources in (None, ["project-checks"]):
+            self.assertIn(
+                "contracts/common/implement-handoff.md",
+                self.names(self.packet("test-writer", resources=resources)),
+            )
 
     def test_standalone_and_integrated_review_have_separate_result_contracts(self) -> None:
         lens = self.names(self.packet("reviewer", "code-review"))
@@ -293,7 +347,7 @@ class ContextTests(unittest.TestCase):
         other.init()
         other.ledger.claim("write-label")
         state = other.ledger.read()
-        from factory.runtime.assignment import implement_packet
+        from factory.runtime.scheduling.assignment import implement_packet
 
         expected = implement_packet(state, "write-label")
         prepared = prepare_prompt(other.ledger, "write-label")
@@ -489,7 +543,9 @@ class ContextTests(unittest.TestCase):
         normal.init()
         normal.ledger.claim("write-label")
         bootstrap = normal.ledger.prepare_packet("write-label")
-        packet = json.loads((normal.root / bootstrap["path"]).read_text())
+        packet = json.loads(
+            read_evidence(normal.root, bootstrap["path"], run_id=bootstrap["run_id"])
+        )
         adapter_name = normal.config["profiles"]["generalist"]["adapter"]
         worker_file = normal.config["adapters"][adapter_name]["worker_instructions"]
         worker_path = Path(normal.config["_path"]).parent / worker_file
@@ -553,7 +609,7 @@ class ContextTests(unittest.TestCase):
         )
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("planning", json.loads(result.stdout)["process"])
-        self.assertFalse(f.ledger.path.exists())
+        self.assertFalse(has_current(f.ledger))
 
     def test_each_instruction_records_reason_and_exact_content_hash(self) -> None:
         from factory.runtime.workflow_core import digest
@@ -587,7 +643,10 @@ class ContextTests(unittest.TestCase):
         f.ledger.claim("verify-label")
         second = f.ledger.packet("verify-label")
         self.assertNotEqual(first["dispatch_id"], second["dispatch_id"])
-        self.assertTrue(self.names(first) <= self.names(second))
+        self.assertTrue(
+            self.names(first) - {"contracts/common/implement-write-result.md"} <= self.names(second)
+        )
+        self.assertIn("contracts/common/implement-result.md", self.names(second))
 
     def assignment(self, **node_fields: Any) -> dict[str, Any]:
         return dict(

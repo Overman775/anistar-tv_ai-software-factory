@@ -13,12 +13,15 @@ from pathlib import Path
 from unittest import TestCase, skipUnless
 from unittest.mock import patch
 
+from factory.database.sqlite import workflow_db
 from factory.project.profile_io import load_profile
 from factory.project.profile_rules import required_checks
-from factory.runtime import command_worker, report_history
+from factory.runtime import command_worker
+from factory.runtime.history import report_history
 from factory.runtime.workflow import Ledger
-from factory.runtime.workflow_core import Invalid, atomic_json
+from factory.runtime.workflow_core import Invalid
 from tests.factory.runtime import workflow_fixture
+from tests.factory.runtime.store_fixture import overwrite
 
 CLI = Path(__file__).resolve().parents[3] / "bin/workflow.py"
 
@@ -46,8 +49,10 @@ class RetroTransitionsTests(TestCase):
         self.assertIn("Reconcile actual", resumed.next_actions()["blockers"]["write-label"])
         f.ledger.resolve("write-label", "running", "host returned")
         f.ledger.finish("write-label", f.report("write-label"))
-        result = resumed.next_actions()["results"]["write-label"]
+        returned = Ledger(f.root).next_actions()
+        result = returned["results"]["write-label"]
         self.assertEqual("PASS", result["outcome"])
+        self.assertEqual(["verify-label"], returned["runnable"])
         with self.assertRaisesRegex(Invalid, "stale"):
             resumed.acknowledge_result("write-label", "old")
         resumed.acknowledge_result("write-label", result["dispatch_id"])
@@ -60,6 +65,27 @@ class RetroTransitionsTests(TestCase):
         self.assertEqual(["accept-label"], resumed.next_actions()["acceptance"])
         resumed.accept("accept-label")
         self.assertTrue(resumed.next_actions()["completion_eligible"])
+
+    def test_next_checks_config_once_and_detects_drift_on_next_call(self) -> None:
+        from factory.runtime import workflow_config
+
+        f = self.f
+        policy_file = f.root / "policy.yaml"
+        policy_file.write_text("policy: before\n")
+        from factory.runtime.workflow_core import digest
+
+        f.config["_files"][str(policy_file)] = digest(policy_file.read_bytes())
+        f.init()
+        with patch(
+            "factory.runtime.workflow_query.check_config", wraps=workflow_config.check_config
+        ) as check:
+            result = f.ledger.next_actions()
+            self.assertEqual(1, check.call_count)
+        self.assertEqual("Unfinished nodes", result["blockers"]["completion"])
+        policy_file.write_text("policy: changed\n")
+        result = f.ledger.next_actions()
+        self.assertIn("run", result["blockers"])
+        self.assertFalse(result["completion_eligible"])
 
     def test_additive_scope_requires_current_verification_and_keeps_original_report(self) -> None:
         f = self.f
@@ -137,12 +163,17 @@ class RetroTransitionsTests(TestCase):
         f.start("write-label")
         f.ledger.finish("write-label", f.report("write-label"))
         ref = f.ledger.read()["nodes"]["write-label"]["report_ref"]
-        path = f.root / ref["path"]
-        original = path.read_bytes()
-        path.write_bytes(original + b" ")
+        with workflow_db.database(f.root) as db:
+            original = db.execute(
+                "SELECT body FROM artifact_blobs WHERE sha256=?", (ref["sha256"],)
+            ).fetchone()[0]
+            db.execute(
+                "UPDATE artifact_blobs SET body=? WHERE sha256=?", (original + b" ", ref["sha256"])
+            )
         with self.assertRaisesRegex(Invalid, "digest mismatch"):
             report_history.read(f.root, ref)
-        path.write_bytes(original)
+        with workflow_db.database(f.root) as db:
+            db.execute("UPDATE artifact_blobs SET body=? WHERE sha256=?", (original, ref["sha256"]))
         self.assertEqual("PASS", report_history.read(f.root, ref)["report"]["outcome"])
 
     def ready_check(self, command: str, timeout: int = 10) -> None:
@@ -251,25 +282,27 @@ class RetroTransitionsTests(TestCase):
     def test_late_result_is_retained_against_original_dispatch(self) -> None:
         f = self.f
         self.ready_check("print('actual exit')")
-        with patch.object(
-            f.ledger, "reconcile_check", side_effect=OSError("result commit interrupted")
-        ):
-            with self.assertRaises(OSError):
+        # Interrupt the result transaction while it persists the check output.
+        with patch.object(workflow_db, "put", side_effect=OSError("result commit interrupted")):
+            with self.assertRaisesRegex(OSError, "result commit interrupted"):
                 f.ledger.run_check("verify-label", "behavior")
         state = f.ledger.read()
         [rid] = state["executions"]
+        self.assertEqual("RUNNING", state["executions"][rid]["status"])
         old = state["executions"][rid]["dispatch_id"]
         state["nodes"]["verify-label"]["dispatch_id"] = "replacement"
-        atomic_json(f.ledger.path, state)
+        overwrite(f.ledger, state)
         result = Ledger(f.root).reconcile_check(rid)
         assert result["result"] != "RUNNING"
         self.assertEqual(("BLOCKED", 0), (result["result"], result["exit_code"]))
         self.assertEqual(old, f.ledger.read()["executions"][rid]["dispatch_id"])
         self.assertEqual("replacement", f.ledger.read()["nodes"]["verify-label"]["dispatch_id"])
 
-    def composite_policy(self, selection: str) -> None:
+    def composite_policy(
+        self, selection: str, exit_code: int = 0, *, extra_stages: bool = False
+    ) -> None:
         f = self.f
-        payload = f"print('FACTORY_TEST_SELECTION ' + {selection!r})"
+        payload = f"print('FACTORY_TEST_SELECTION ' + {selection!r}); raise SystemExit({exit_code})"
         tests = {
             "id": "actual-tests",
             "level": "final",
@@ -291,9 +324,26 @@ class RetroTransitionsTests(TestCase):
                 "cwd": ".",
                 "argv": [],
                 "timeout_seconds": 10,
-                "stages": ["actual-tests"],
+                "stages": ["preflight", "actual-tests", "skipped"]
+                if extra_stages
+                else ["actual-tests"],
             },
         }
+        checks = [tests, aggregate]
+        if extra_stages:
+            preflight = {
+                **tests,
+                "id": "preflight",
+                "kind": "static",
+                "execution": {
+                    "cwd": ".",
+                    "argv": [sys.executable, "-c", "pass"],
+                    "timeout_seconds": 10,
+                    "mode": "full",
+                },
+            }
+            skipped = {**preflight, "id": "skipped"}
+            checks = [preflight, tests, skipped, aggregate]
         f.fixture_profile.write_text(
             json.dumps(
                 {
@@ -302,7 +352,7 @@ class RetroTransitionsTests(TestCase):
                         {
                             "id": "verification",
                             "at": ["implement.verify"],
-                            "checks": [tests, aggregate],
+                            "checks": checks,
                         }
                     ],
                 }
@@ -336,6 +386,130 @@ class RetroTransitionsTests(TestCase):
         f.ledger.finish("verify-label", report)
         self.assertEqual(3, len(f.ledger.read()["executions"]))
 
+    def test_prepare_report_expands_composite_with_independent_check(self) -> None:
+        f = self.f
+        self.composite_policy('{"mode":"full","selected":3,"completed":3}')
+        independent = f.ledger.run_check("verify-label", "behavior")
+        parent = f.ledger.run_check("verify-label", "aggregate")
+        _, child = f.ledger.check_results(parent["execution_id"])
+        draft = f.report("verify-label", checks=[])
+        draft.pop("files")
+        explicit = f.ledger.prepare_report(
+            "verify-label",
+            draft,
+            [independent["execution_id"], parent["execution_id"], child["execution_id"]],
+        )
+        expanded = f.ledger.prepare_report(
+            "verify-label", draft, [independent["execution_id"], parent["execution_id"]]
+        )
+        self.assertEqual(explicit, expanded)
+        self.assertEqual(3, len(expanded["checks"]))
+        self.assertEqual(3, len(f.ledger.read()["executions"]))
+        original = f.ledger.read()
+        missing = deepcopy(original)
+        del missing["executions"][child["execution_id"]]
+        overwrite(f.ledger, missing)
+        with self.assertRaisesRegex(Invalid, "Missing required check results: actual-tests"):
+            f.ledger.prepare_report(
+                "verify-label", draft, [independent["execution_id"], parent["execution_id"]]
+            )
+        overwrite(f.ledger, original)
+        scope_file = next(iter(original["executions"][child["execution_id"]]["input_scope"]))
+        path = f.root / scope_file
+        contents = path.read_bytes()
+        path.write_bytes(contents + b"changed")
+        with self.assertRaisesRegex(Invalid, "invalidated by later write"):
+            f.ledger.prepare_report(
+                "verify-label", draft, [independent["execution_id"], parent["execution_id"]]
+            )
+        path.write_bytes(contents)
+        f.ledger.finish("verify-label", expanded)
+
+    def test_explicit_later_receipt_overrides_composite_child(self) -> None:
+        f = self.f
+        self.composite_policy('{"mode":"full","selected":3,"completed":3}')
+        independent = f.ledger.run_check("verify-label", "behavior")
+        parent = f.ledger.run_check("verify-label", "aggregate")
+        later = f.ledger.run_check("verify-label", "actual-tests")
+        draft = f.report("verify-label", checks=[])
+        draft.pop("files")
+        report = f.ledger.prepare_report(
+            "verify-label",
+            draft,
+            [independent["execution_id"], parent["execution_id"], later["execution_id"]],
+        )
+        self.assertEqual(later["execution_id"], report["checks"][2]["execution_id"])
+        f.ledger.finish("verify-label", report)
+
+    def test_failed_composite_includes_earlier_pass_and_skips_later_stage(self) -> None:
+        f = self.f
+        self.composite_policy(
+            '{"mode":"full","selected":3,"completed":3}', exit_code=3, extra_stages=True
+        )
+        parent = f.ledger.run_check("verify-label", "aggregate")
+        results = f.ledger.check_results(parent["execution_id"])
+        self.assertEqual(["FAIL", "PASS", "FAIL"], [result["result"] for result in results])
+        draft = f.report("verify-label", "FAIL", checks=[], stage_result="FAIL_TEST")
+        draft.pop("files")
+        expanded = f.ledger.prepare_report("verify-label", draft, [parent["execution_id"]])
+        explicit = f.ledger.prepare_report(
+            "verify-label", draft, [r["execution_id"] for r in results]
+        )
+        self.assertEqual(expanded, explicit)
+        with self.assertRaises(Invalid):
+            f.ledger.finish("verify-label", dict(expanded, outcome="PASS", stage_result="VERIFIED"))
+        f.ledger.finish("verify-label", expanded)
+
+    def test_failed_composite_child_report_preserves_and_checks_provenance(self) -> None:
+        f = self.f
+        self.composite_policy('{"mode":"full","selected":3,"completed":3}', exit_code=3)
+        parent = f.ledger.run_check("verify-label", "aggregate")
+        assert parent["result"] != "RUNNING"
+        self.assertEqual(("FAIL", 3), (parent["result"], parent["exit_code"]))
+        _, child = f.ledger.check_results(parent["execution_id"])
+        self.assertEqual(("FAIL", 3), (child["result"], child["exit_code"]))
+        draft = f.report("verify-label", "FAIL", checks=[], stage_result="FAIL_TEST")
+        draft.pop("files")
+        ids = [parent["execution_id"], child["execution_id"]]
+        prepared = f.ledger.prepare_report("verify-label", draft, [parent["execution_id"]])
+        self.assertEqual(prepared, f.ledger.prepare_report("verify-label", draft, ids))
+        self.assertEqual(["FAIL", "FAIL"], [check["result"] for check in prepared["checks"]])
+        self.assertEqual(child["evidence"], prepared["checks"][1]["evidence"])
+        self.assertTrue((f.root / child["evidence"]).is_file())
+        with self.assertRaises(Invalid):
+            f.ledger.prepare_report(
+                "verify-label", dict(draft, outcome="PASS"), [parent["execution_id"]]
+            )
+        with self.assertRaises(Invalid):
+            f.ledger.finish("verify-label", dict(prepared, outcome="PASS", stage_result="VERIFIED"))
+
+        original = f.ledger.read()
+        for field in ("dispatch_id", "composite_parent"):
+            altered = deepcopy(original)
+            receipt = altered["executions"][child["execution_id"]]
+            if field == "dispatch_id":
+                receipt["dispatch_id"] = "another-attempt"
+            else:
+                receipt["composite_parent"] = "wrong"
+            overwrite(f.ledger, altered)
+            with self.assertRaises(Invalid):
+                f.ledger.prepare_report("verify-label", draft, [parent["execution_id"]])
+            with self.assertRaises(Invalid):
+                f.ledger.finish("verify-label", prepared)
+        overwrite(f.ledger, original)
+        output = f.root / child["evidence"]
+        contents = output.read_bytes()
+        output.write_bytes(contents + b"modified")
+        with self.assertRaisesRegex(Invalid, "output missing or changed"):
+            f.ledger.prepare_report("verify-label", draft, [parent["execution_id"]])
+        with self.assertRaisesRegex(Invalid, "output missing or changed"):
+            f.ledger.finish("verify-label", prepared)
+        output.write_bytes(contents)
+        f.ledger.finish("verify-label", prepared)
+        state = f.ledger.read()
+        saved = report_history.read(f.root, state["nodes"]["verify-label"]["report_ref"])
+        self.assertEqual(child["evidence"], saved["report"]["checks"][1]["evidence"])
+
     def test_composite_rejects_filtered_stage_even_with_zero_exit(self) -> None:
         self.composite_policy('{"mode":"filtered","selected":3,"completed":3}')
         result = self.f.ledger.run_check("verify-label", "aggregate")
@@ -343,6 +517,27 @@ class RetroTransitionsTests(TestCase):
         self.assertEqual(("BLOCKED", 0), (result["result"], result["exit_code"]))
         _, child = self.f.ledger.check_results(result["execution_id"])
         self.assertEqual("BLOCKED", child["result"])
+        draft = self.f.report(
+            "verify-label", "BLOCKED", checks=[], stage_result="BLOCKED_TOOL_ERROR"
+        )
+        draft.pop("files")
+        prepared = self.f.ledger.prepare_report("verify-label", draft, [result["execution_id"]])
+        self.assertEqual(["BLOCKED", "BLOCKED"], [check["result"] for check in prepared["checks"]])
+        with self.assertRaises(Invalid):
+            self.f.ledger.prepare_report(
+                "verify-label", dict(draft, outcome="PASS"), [result["execution_id"]]
+            )
+        with self.assertRaises(Invalid):
+            self.f.ledger.finish(
+                "verify-label", dict(prepared, outcome="PASS", stage_result="VERIFIED")
+            )
+        output = self.f.root / child["evidence"]
+        contents = output.read_bytes()
+        output.write_bytes(contents + b"modified")
+        with self.assertRaisesRegex(Invalid, "output missing or changed"):
+            self.f.ledger.prepare_report("verify-label", draft, [result["execution_id"]])
+        output.write_bytes(contents)
+        self.f.ledger.finish("verify-label", prepared)
 
     def generator_setup(self, extra_write: bool) -> None:
         f = self.f

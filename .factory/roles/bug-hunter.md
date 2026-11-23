@@ -19,10 +19,11 @@ the unique assigned analysis artifact under `.factory/memory/state/` when pipeli
 ## Investigation
 
 1. Record observed vs expected behavior and reproduction path.
-2. Trace entry point through Presentation -> Domain -> Data/platform boundary.
+2. Trace the actual path from the symptom through relevant entry points and
+   components to the observable failure boundary.
 3. Test hypotheses against source/logs; do not blame vendor without proof.
-4. Identify exact file/line, code trace, severity, affected files, and minimal
-   fix constraints.
+4. Identify the relevant file/line, code trace, severity, affected files, and
+   minimal fix constraints supported by the evidence.
 5. If device/manual action is required, return exact `BLOCKED_USER_INPUT`.
 
 Choose a minimal reproduction that preserves the failing interaction and actual
@@ -36,12 +37,9 @@ missing product/behavior/scope/architecture/API decision as
 `semantic_gap_candidate` with evidence. Parent classifies it; do not ask or
 decide it inside investigation.
 
-## Done Signals
+## Result
 
-- `ROOT_CAUSE_FOUND`
-- `BLOCKED_USER_INPUT`
-- `BLOCKED_TOOL_ERROR`
-
-`analysis.md` starts with current `run_id` and `source_hash`, then symptom,
-reproduction, root cause, exact code trace, evidence, severity, affected files,
-and fix constraints. Follow the common communication contract for the recipient language.
+Follow the [result contract](../contracts/bug-hunter.md#done-signal) for signals
+and required fields. Cite checked evidence and distinguish reproduced symptoms,
+hypotheses, and confirmed causes. Preserve uncertainty where evidence ends.
+Follow the common communication contract for the recipient language.

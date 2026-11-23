@@ -13,6 +13,7 @@ from typing import Annotated, Literal
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory import file_reader
 from factory.gates.catalog import core_result as core_result
 from factory.gates.gate_contract import EvidenceText, GateResult
 from factory.gates.gate_contract import digest as digest
@@ -46,6 +47,7 @@ from factory.planning.plan_document import parse_metadata as parse_metadata
 from factory.planning.plan_document import split_row as split_row
 from factory.planning.plan_document import table_after_header as table_after_header
 from factory.planning.plan_document import validate_applicability as validate_applicability
+from factory.planning.plan_revision import PlanRevision
 from factory.planning.plan_revision import normalize_url as normalize_url
 from factory.planning.plan_revision import semantic_normal_form as semantic_normal_form
 from factory.planning.plan_revision import validate_transition as validate_transition
@@ -117,7 +119,8 @@ def validate(
     change_kind: str = "auto",
     change_evidence: str = "",
 ) -> list[dict[str, str]]:
-    metadata, errors = parse_metadata(text)
+    revision = PlanRevision(text)
+    metadata, errors = revision.metadata, revision.metadata_errors.copy()
     errors.extend(validate_structure(text))
     errors.extend(validate_acceptance(text))
     errors.extend(validate_pseudocode(text))
@@ -127,11 +130,10 @@ def validate(
     errors.extend(validate_api_evidence(text))
     errors.extend(validate_cross_section(text, metadata))
     if previous_text is not None:
-        errors.extend(
-            validate_transition(
-                previous_text, text, change_kind=change_kind, change_evidence=change_evidence
-            )
+        transition_issues = revision.transition_errors(
+            PlanRevision(previous_text), change_kind=change_kind, change_evidence=change_evidence
         )
+        errors += [issue for issue in transition_issues if issue not in errors]
     return errors
 
 
@@ -155,8 +157,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    text = args.plan.read_bytes().decode("utf-8")
-    previous = args.previous.read_bytes().decode("utf-8") if args.previous else None
+    text = file_reader.read_bytes(args.plan).decode("utf-8")
+    previous = file_reader.read_bytes(args.previous).decode("utf-8") if args.previous else None
     errors = validate(
         text,
         phase=args.phase,
@@ -165,7 +167,10 @@ def main() -> int:
         change_evidence=args.change_evidence,
     )
     policy_hash = digest(
-        {p.name: p.read_text(encoding="utf-8") for p in Path(__file__).parent.glob("*.py")}
+        {
+            p.name: file_reader.read_text(p, encoding="utf-8")
+            for p in Path(__file__).parent.glob("*.py")
+        }
     )
     records = [
         evidence(
@@ -177,7 +182,7 @@ def main() -> int:
     ]
     if args.completion_review:
         try:
-            review = COMPLETION_REVIEW.validate_json(args.completion_review.read_bytes())
+            review = COMPLETION_REVIEW.validate_json(file_reader.read_bytes(args.completion_review))
             if review["plan_hash"] != digest(text) or review["policy_hash"] != policy_hash:
                 raise ValueError("Stale coordinator review")
             records.append(

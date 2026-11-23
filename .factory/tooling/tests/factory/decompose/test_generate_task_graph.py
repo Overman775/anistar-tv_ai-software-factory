@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import unittest
@@ -10,9 +11,11 @@ from typing import Any
 from unittest.mock import patch
 
 from factory.decompose import generate_task_graph as graph
-from factory.decompose.metadata import apply, project
-from factory.decompose.task_data import load_tasks
-from factory.decompose.task_validation import validate_markdown_files
+from factory.decompose.contracts import LoadedTask
+from factory.decompose.graph.relations import TaskRelationGraph
+from factory.decompose.graph.task_data import load_tasks
+from factory.decompose.graph.validation import validate_markdown_files
+from factory.decompose.staging.metadata import apply, project
 from factory.paths import FACTORY_ROOT
 from tests.factory.decompose.fixture_task_graph import TaskGraphFixture
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
@@ -77,6 +80,18 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         documents = result["documents"]
         self.assertIsInstance(documents, dict)
         self.assertTrue(documents[str(doc)].endswith(prose))
+        literal = self.root / "tasks [draft]"
+        shutil.copytree(self.tasks_dir, literal)
+        neighbor = self.root / "tasks d"
+        shutil.copytree(self.tasks_dir, neighbor)
+        (neighbor / "generated/task_result.json").write_text("{}", encoding="utf-8")
+        literal_result = project(literal, self.source_lock)
+        self.assertEqual(
+            list(result["documents"].values()), list(literal_result["documents"].values())
+        )
+        self.assertEqual(
+            list(result["envelopes"].values()), list(literal_result["envelopes"].values())
+        )
 
     def test_projection_covers_cross_envelope_tasks_and_final_plan_link(self) -> None:
         labels = (
@@ -215,7 +230,9 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.write_tasks([task], markdown=draft)
         extra = self.tasks_dir / "generated/author-notes.txt"
         extra.write_text("Keep all staging")
-        with patch("factory.decompose.metadata.os.replace", side_effect=OSError("interrupted")):
+        with patch(
+            "factory.decompose.staging.metadata.os.replace", side_effect=OSError("interrupted")
+        ):
             with self.assertRaisesRegex(OSError, "interrupted"):
                 apply(self.tasks_dir, self.source_lock, "interrupted-1")
         checkpoint = self.tasks_dir.parent / "checkpoints/interrupted-1/tasks/generated"
@@ -278,7 +295,7 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
             (self.root / "plan.md").write_text("changed after projection")
             return result
 
-        with patch("factory.decompose.metadata.project", side_effect=mutate_plan):
+        with patch("factory.decompose.staging.metadata.project", side_effect=mutate_plan):
             with self.assertRaisesRegex(ValueError, "inputs changed"):
                 apply(self.tasks_dir, self.source_lock, "drift-after-projection")
         self.assertEqual(draft, (self.tasks_dir / "generated" / task["filename"]).read_text())
@@ -469,6 +486,11 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         plan.write_bytes(plan.read_bytes() + b"  ")
         _, messages = graph.load_source_lock(str(self.source_lock))
         self.assertTrue(any("plan_content_hash differs" in message for message in messages))
+        result = self.run_cli()
+        self.assertEqual(2, result.returncode, result.stderr)
+        self.assertIn("Graph gate: BLOCKED", result.stderr)
+        self.assertIn("SOURCE_DRIFT", result.stderr)
+        self.assertFalse((self.root / "graph.md").exists())
 
     def test_acceptance_missing_from_all_tasks_blocks(self) -> None:
         self.write_tasks([self.task()])
@@ -487,6 +509,32 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.source_lock.write_text(json.dumps(source))
         _, messages = graph.load_source_lock(str(self.source_lock))
         self.assertTrue(any("differs from plan" in message for message in messages))
+
+    def test_escaped_pipes_survive_plan_criteria_handoff(self) -> None:
+        self.write_tasks([self.task()])
+        source = json.loads(self.source_lock.read_text())
+        plan_path = Path(source["plan_path"])
+        plan = plan_path.read_text(encoding="utf-8").replace(
+            "Visible outcome AC-01", r"Button A\|B"
+        )
+        plan = plan.replace("Verify the outcome", r"Check type A\|B")
+        plan_path.write_text(plan, encoding="utf-8")
+        source["plan_content_hash"] = "sha256:" + hashlib.sha256(plan_path.read_bytes()).hexdigest()
+        source["plan_hash"] = "sha256:" + hashlib.sha256(plan.rstrip().encode()).hexdigest()
+        self.source_lock.write_text(json.dumps(source))
+        _, messages = graph.load_source_lock(str(self.source_lock))
+        self.assertEqual([], messages)
+        self.assertEqual(
+            [
+                {
+                    "id": "AC-01",
+                    "applies_to": "global",
+                    "requirement": r"Button A\|B",
+                    "verification": r"Check type A\|B",
+                }
+            ],
+            graph.plan_criteria(plan_path.read_text(encoding="utf-8")),
+        )
 
     def test_acceptance_visible_handoff_cannot_drop_id(self) -> None:
         self.write_tasks([self.task()])
@@ -556,7 +604,7 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.assertTrue(any("Field required" in message for message in violations["violations"]))
 
     def test_unknown_fields_are_rejected_without_graph_or_projection(self) -> None:
-        from factory.decompose.metadata import project
+        from factory.decompose.staging.metadata import project
 
         for location in ("envelope", "task"):
             with self.subTest(location=location):
@@ -1185,6 +1233,17 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
                 for message in messages
             )
         )
+
+    def test_long_dependency_chain_reports_cycle_without_recursion(self) -> None:
+        depth = sys.getrecursionlimit() + 10
+        tasks: dict[str, LoadedTask] = {str(i): {"depends_on": [str(i + 1)]} for i in range(depth)}
+        tasks[str(depth)] = {"depends_on": [str(depth - 1)]}
+        self.assertEqual(
+            graph.check_circular_dependencies(tasks), [f"{depth - 1} -> {depth} -> {depth - 1}"]
+        )
+        self.assertEqual(graph.check_mixed_relation_cycles(tasks), [])
+        dependencies = TaskRelationGraph.for_relation(tasks, "depends_on")
+        self.assertEqual(dependencies.predecessors("0"), {str(i) for i in range(1, depth + 1)})
 
     def test_parent_task_cycle_is_detected_separately(self) -> None:
         first = self.task("orders-first-01", parent_task="orders-second-02")

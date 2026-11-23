@@ -1,3 +1,16 @@
+# Export approved production observations through the separate OTLP bridge.
+telemetry:
+  enabled: false
+  endpoint: http://localhost:4318/v1/traces
+  headers:
+    Authorization: "Bearer ${env:OTLP_TOKEN}"
+
+logs:
+  enabled: false
+  endpoint: http://localhost:4318/v1/logs
+  headers:
+    Authorization: "Bearer ${env:OTLP_LOGS_TOKEN}"
+
 # Application profile: documents, rules and project gates.
 project: project/project.yaml
 
@@ -32,8 +45,6 @@ execution:
 # Variants do not override shared fields. Variant names are unique across the factory.
 profiles:
   developer:
-    role: roles/developer.md
-    contract: contracts/developer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -64,8 +75,6 @@ profiles:
           after_failed_attempts: 2
 
   test-writer:
-    role: roles/test-writer.md
-    contract: contracts/test-writer.md
     capabilities: {read: true, edit: true, commands: true, web: false}
     enforcement: instructions
     mcp:
@@ -92,8 +101,6 @@ profiles:
           after_failed_attempts: 2
 
   generalist:
-    role: roles/generalist.md
-    contract: contracts/generalist.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -110,9 +117,17 @@ profiles:
         model: glm-5-3
         adapter: opencode
 
+  teacher:
+    capabilities: {read: true, edit: true, commands: true, web: false}
+    enforcement: instructions
+    mcp: []
+    default: teacher
+    variants:
+      teacher:
+        model: sol-medium
+        adapter: codex
+
   judge:
-    role: roles/judge.md
-    contract: contracts/judge.md
     capabilities: {read: true, edit: false, commands: true, web: false}
     enforcement: instructions
     mcp:
@@ -124,8 +139,6 @@ profiles:
         adapter: codex
 
   code-explorer:
-    role: roles/code-explorer.md
-    contract: contracts/code-explorer.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -139,8 +152,6 @@ profiles:
         adapter: codex
 
   bug-hunter:
-    role: roles/bug-hunter.md
-    contract: contracts/bug-hunter.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -158,19 +169,15 @@ profiles:
         adapter: codex
 
   doc-writer:
-    role: roles/doc-writer.md
-    contract: contracts/doc-writer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
     variants:
       doc-writer:
-        model: terra
+        model: sol
         adapter: codex
 
   architect:
-    role: roles/architect.md
-    contract: contracts/architect.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -180,8 +187,6 @@ profiles:
         adapter: codex
 
   task-decomposer:
-    role: roles/task-decomposer.md
-    contract: contracts/task-decomposer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -191,8 +196,6 @@ profiles:
         adapter: codex
 
   task-reviewer:
-    role: roles/task-reviewer.md
-    contract: contracts/task-reviewer.md
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions
     mcp: []
@@ -202,8 +205,6 @@ profiles:
         adapter: codex
 
   reviewer:
-    role: roles/reviewer.md
-    contract: contracts/reviewer.md
     capabilities: {read: true, edit: false, commands: true, web: true}
     enforcement: instructions
     mcp:
@@ -216,6 +217,9 @@ profiles:
 
 # Models: exact ID and parameters, referenced by variants.
 models:
+  sol-medium:
+    id: gpt-6.2-sol
+    effort: medium
   terra:
     id: gpt-6.1-terra
     effort: high

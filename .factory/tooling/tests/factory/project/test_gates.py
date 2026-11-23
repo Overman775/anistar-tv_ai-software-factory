@@ -12,7 +12,7 @@ from factory.project.contracts import ProjectData
 from factory.project.profile_io import load_profile
 from factory.project.profile_rules import required_checks, validate
 from factory.runtime.contracts import ContextNode
-from factory.runtime.transition_gates import evaluate
+from factory.runtime.reports.transition_gates import evaluate
 from factory.runtime.workflow_core import Invalid
 from factory.runtime.workflow_graph import validate_graph
 from factory.tasks.contracts import TaskSelection

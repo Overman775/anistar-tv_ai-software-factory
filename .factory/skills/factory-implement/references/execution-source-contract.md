@@ -323,7 +323,7 @@ source is a separate intake.
 ## Dynamic batch application
 
 Apply this contract separately to every source/task in a fixed batch. Snapshot
-and hash in workflow.json are per source; task/node/dispatch IDs disambiguate
+and hash in the workflow ledger are per source; task/node/dispatch IDs disambiguate
 reports. Referenced plan approval still requires validate_plan.py. Do not use one
 source hash or mutable singleton brief for unrelated tasks. Re-intake invalidates
 affected assignments/evidence and retains counters; it never silently approves

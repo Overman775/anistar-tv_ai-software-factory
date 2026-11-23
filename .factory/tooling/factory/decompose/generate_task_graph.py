@@ -7,57 +7,58 @@ import os
 import sys
 from pathlib import Path
 
-from factory.decompose.output_safety import (
+from factory.decompose.graph.relations import build_relation_graph as build_relation_graph
+from factory.decompose.graph.relations import (
+    check_circular_dependencies as check_circular_dependencies,
+)
+from factory.decompose.graph.relations import check_deferred_cycles as check_deferred_cycles
+from factory.decompose.graph.relations import (
+    check_mixed_relation_cycles as check_mixed_relation_cycles,
+)
+from factory.decompose.graph.relations import (
+    check_parent_task_cycles as check_parent_task_cycles,
+)
+from factory.decompose.graph.render import _aliases as _aliases
+from factory.decompose.graph.render import _ensure_directory as _ensure_directory
+from factory.decompose.graph.render import _escape_mermaid_label as _escape_mermaid_label
+from factory.decompose.graph.render import _write_violations_json as _write_violations_json
+from factory.decompose.graph.render import generate_mermaid_graph as generate_mermaid_graph
+from factory.decompose.graph.task_data import CAPABILITY_ID_RE as CAPABILITY_ID_RE
+from factory.decompose.graph.task_data import SCOPE_RE as SCOPE_RE
+from factory.decompose.graph.task_data import TASK_FILENAME_RE as TASK_FILENAME_RE
+from factory.decompose.graph.task_data import TASK_ID_SEQUENCE_RE as TASK_ID_SEQUENCE_RE
+from factory.decompose.graph.task_data import VALID_CONTRACT_TYPES as VALID_CONTRACT_TYPES
+from factory.decompose.graph.task_data import VALID_COVERAGE as VALID_COVERAGE
+from factory.decompose.graph.task_data import VALID_PURPOSES as VALID_PURPOSES
+from factory.decompose.graph.task_data import _as_list as _as_list
+from factory.decompose.graph.task_data import _format_hours as _format_hours
+
+# Compatibility exports: existing imports and command entry points stay valid.
+from factory.decompose.graph.task_data import _graph_scope as _graph_scope
+from factory.decompose.graph.task_data import _is_nonempty_text as _is_nonempty_text
+from factory.decompose.graph.task_data import _is_number as _is_number
+from factory.decompose.graph.task_data import _relation_ids as _relation_ids
+from factory.decompose.graph.task_data import find_markdown_file as find_markdown_file
+from factory.decompose.graph.task_data import load_source_lock as load_source_lock
+from factory.decompose.graph.task_data import load_tasks as load_tasks
+from factory.decompose.graph.task_data import normalize_estimate as normalize_estimate
+from factory.decompose.graph.validation import _markdown_field as _markdown_field
+from factory.decompose.graph.validation import _plain_markdown_value as _plain_markdown_value
+from factory.decompose.graph.validation import _validate_task as _validate_task
+from factory.decompose.graph.validation import validate_dependencies as validate_dependencies
+from factory.decompose.graph.validation import validate_envelopes as validate_envelopes
+from factory.decompose.graph.validation import (
+    validate_markdown_files as validate_markdown_files,
+)
+from factory.decompose.staging.output_safety import (
     atomic_write_text,
     guard_output,
     protected_inputs,
 )
-from factory.decompose.task_data import CAPABILITY_ID_RE as CAPABILITY_ID_RE
-from factory.decompose.task_data import SCOPE_RE as SCOPE_RE
-from factory.decompose.task_data import TASK_FILENAME_RE as TASK_FILENAME_RE
-from factory.decompose.task_data import TASK_ID_SEQUENCE_RE as TASK_ID_SEQUENCE_RE
-from factory.decompose.task_data import VALID_CONTRACT_TYPES as VALID_CONTRACT_TYPES
-from factory.decompose.task_data import VALID_COVERAGE as VALID_COVERAGE
-from factory.decompose.task_data import VALID_PURPOSES as VALID_PURPOSES
-from factory.decompose.task_data import _as_list as _as_list
-from factory.decompose.task_data import _format_hours as _format_hours
-
-# Compatibility exports: existing imports and command entry points stay valid.
-from factory.decompose.task_data import _graph_scope as _graph_scope
-from factory.decompose.task_data import _is_nonempty_text as _is_nonempty_text
-from factory.decompose.task_data import _is_number as _is_number
-from factory.decompose.task_data import _relation_ids as _relation_ids
-from factory.decompose.task_data import find_markdown_file as find_markdown_file
-from factory.decompose.task_data import load_source_lock as load_source_lock
-from factory.decompose.task_data import load_tasks as load_tasks
-from factory.decompose.task_data import normalize_estimate as normalize_estimate
-from factory.decompose.task_relations import build_relation_graph as build_relation_graph
-from factory.decompose.task_relations import (
-    check_circular_dependencies as check_circular_dependencies,
-)
-from factory.decompose.task_relations import check_deferred_cycles as check_deferred_cycles
-from factory.decompose.task_relations import (
-    check_mixed_relation_cycles as check_mixed_relation_cycles,
-)
-from factory.decompose.task_relations import (
-    check_parent_task_cycles as check_parent_task_cycles,
-)
-from factory.decompose.task_render import _aliases as _aliases
-from factory.decompose.task_render import _ensure_directory as _ensure_directory
-from factory.decompose.task_render import _escape_mermaid_label as _escape_mermaid_label
-from factory.decompose.task_render import _write_violations_json as _write_violations_json
-from factory.decompose.task_render import generate_mermaid_graph as generate_mermaid_graph
-from factory.decompose.task_validation import _markdown_field as _markdown_field
-from factory.decompose.task_validation import _plain_markdown_value as _plain_markdown_value
-from factory.decompose.task_validation import _validate_task as _validate_task
-from factory.decompose.task_validation import validate_dependencies as validate_dependencies
-from factory.decompose.task_validation import validate_envelopes as validate_envelopes
-from factory.decompose.task_validation import (
-    validate_markdown_files as validate_markdown_files,
-)
 from factory.paths import FACTORY_ROOT as FACTORY_ROOT
 from factory.project.profile_io import load_profile as load_profile
 from factory.project.project import configured_profile as configured_profile
+from factory.project.skill_gates import check_decomposition_gates
 from factory.project.skill_gates import run_decomposition_gates as run_decomposition_gates
 from factory.tasks.criteria import criteria_map as criteria_map
 from factory.tasks.criteria import plan_criteria as plan_criteria
@@ -114,7 +115,9 @@ def main() -> None:
     source_lock, source_lock_violations = load_source_lock(args.source_lock)
 
     if source_lock is not None and source_lock.get("project_policy_sha256") != policy["hash"]:
-        source_lock_violations.append("Project policy drift/missing baseline: re-intake required")
+        source_lock_violations.append(
+            "SOURCE_DRIFT: project policy changed or baseline missing. Re-intake required."
+        )
 
     scope_count = len({_graph_scope(task) for task in tasks.values()})
     print(f"Tasks loaded: {len(tasks)}; scopes: {scope_count}.", file=sys.stderr)
@@ -133,12 +136,23 @@ def main() -> None:
     has_cycles = bool(
         dependency_cycles or parent_task_cycles or deferred_cycles or mixed_relation_cycles
     )
-    if not messages and not has_cycles and not args.core_only:
-        messages.extend(
-            run_decomposition_gates(
-                policy, tasks, envelopes, args.staging_dir, args.source_lock, output_dir or "."
-            )
+    source_drift = any("SOURCE_DRIFT:" in message for message in source_lock_violations)
+    status = "BLOCKED" if source_drift else "FAIL" if messages or has_cycles else "PASS"
+    if status == "PASS" and not args.core_only:
+        gates = check_decomposition_gates(
+            policy, tasks, envelopes, args.staging_dir, args.source_lock, output_dir or "."
         )
+        checks = [
+            (gate, check) for gate in gates for check in gate["checks"] if check["status"] != "PASS"
+        ]
+        statuses = {check["status"] for _, check in checks}
+        status = "FAIL" if "FAIL" in statuses else "BLOCKED" if statuses else "PASS"
+        messages.extend(
+            f"{gate['gate_id']}: {check['id']}: {check['status']}: {check['message']}"
+            for gate, check in checks
+        )
+    elif status == "FAIL" and not args.core_only:
+        messages.append("Core validation must pass before project commands")
     if messages or has_cycles:
         if dependency_cycles:
             print("🚨 Task dependency cycle detected.", file=sys.stderr)
@@ -181,10 +195,10 @@ def main() -> None:
         if os.path.exists(args.output):
             os.remove(args.output)
         print(
-            "🚨 Graph gate: FAIL. Graph and final assembly blocked.",
+            f"🚨 Graph gate: {status}. Graph and final assembly blocked.",
             file=sys.stderr,
         )
-        sys.exit(1)
+        sys.exit(1 if status == "FAIL" else 2)
 
     violations_file = os.path.join(output_dir, "violations.json")
     violations_md_file = os.path.join(output_dir, "dependency_violations.md")

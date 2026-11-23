@@ -24,38 +24,33 @@ concrete read paths in the handoff.
 
 ## Required Sources
 
-1. Explicit approved `docs/plans/{plan_id}.md`.
+1. Approved plan at `plan_path` in the source lock.
 2. `.factory/memory/staging/decomposition-source.json`.
 3. `.factory/skills/factory-decompose/references/decomposition-policy.md`.
-4. `.factory/skills/factory-decompose/references/generation-contract.md`.
-5. `.factory/skills/factory-decompose/references/task-template.md`.
-6. `.factory/contracts/common/implementation-detail.md`.
-7. Canonical project architecture/structure documents in full.
-8. `.factory/contracts/common/worker-rules.md` when delegated.
+4. [Generation and handoff](../skills/factory-decompose/references/generation-contract.md).
+5. [Staging and envelope](../skills/factory-decompose/references/staging-contract.md).
+6. `.factory/skills/factory-decompose/references/task-template.md`.
+7. `.factory/contracts/common/implementation-detail.md`.
+8. All applicable architecture/structure documents selected by the project profile, in full.
+9. `.factory/contracts/common/worker-rules.md` when delegated.
 
-Require validated approved plan and exact source tuple. Otherwise write no
-tasks and return `BLOCKED_NO_APPROVED_PLAN` or `SOURCE_DRIFT`.
+Require a validated approved plan, exact source tuple and matching locked plan bytes.
+Otherwise write no tasks and return `BLOCKED_NO_APPROVED_PLAN` or `SOURCE_DRIFT`.
+If the plan and applicable profile-selected documents lack a required architectural
+fact, return `NEEDS_PLANNING` with the specific gap and evidence.
 
 ## Boundary
 
 Apply ownership table from decomposition policy. Own task map and delivery
-metadata; never revise plan meaning. Generation contract exclusively owns
-envelope, filename, gate, and semantic-gap shapes—do not recreate them locally.
-Never write `docs/plans/`, call Architect, or create a pre-plan.
+metadata; never revise plan meaning. The staging contract owns the envelope and
+filenames. The generation contract owns the gate and semantic-gap handoff.
+Never write the approved plan, call Architect, or create a pre-plan.
 
 ## Work
 
-1. Extract every approved capability and its acceptance/decisions.
-2. Build complete capability coverage map.
-3. Group capabilities into observable vertical results.
-4. Estimate each result including deterministic tests.
-5. Split only for size, path, state, operation, or independent verification.
-6. Run one bounded codebase check grouped by module/contract surface; reuse
-   evidence across all tasks and keep task boundaries unchanged.
-7. Add owning scope, affected layers, typed contract, dependencies, blockers,
-   and temporary behavior.
-8. Write staging envelope and Markdown transactionally.
-9. Read saved files and self-check full coverage and consistency.
+Follow the [decomposition order](../skills/factory-decompose/references/decomposition-policy.md#decomposition-order).
+Write staging envelopes and Markdown transactionally, then reread the saved files
+and self-check full coverage and consistency.
 
 Check local Markdown links from each task's final path under `docs/tasks/{bundle_id}/`,
 including the approved plan and referenced fragments. Map staged sibling tasks and
@@ -69,20 +64,21 @@ internals. An unresolved non-semantic anchor uses contract-level wording.
 
 ## Task Files
 
-Write exact transactional paths from generation contract. Task template owns
+Write exact transactional paths from the staging contract. Task template owns
 visible provenance, applicable `D-*`/`EXT-*`, scope, acceptance, QA, and
 reference fields. Final Markdown contains no staging schema.
 
 ## Canonical Output
 
-Return saved envelope exactly, without prose.
+Return the [completion handoff](../skills/factory-decompose/references/generation-contract.md#completion-handoff).
+Use the generation contract for semantic gaps and source blockers.
 
 Self-check:
 
 1. Every capability has one complete/external/out-of-scope disposition.
 2. Tasks remain vertical and estimates remain honest within the applicable project size constraint.
-3. Architecture constraints from approved plan and both canonical project docs
-   are preserved.
+3. Architecture constraints from the approved plan and all applicable profile-selected
+   documents are preserved.
 4. Mutation/command acceptance covers applicable success, no-op, and failure.
 5. Each task answers applicable questions about trigger, boundary, owner/effect,
    failure/no-op, unaffected neighbors, and verification without invented
@@ -91,8 +87,10 @@ Self-check:
 7. One bounded language pass follows the assigned artifact language and preserves
    technical identity. It does not trigger a new codebase lookup.
 
-Then run deterministic graph gate. Treat every violation as blocking metadata
-work; do not replace semantic self-check with machine validation.
+The coordinator runs the initial deterministic graph gate with the review
+request. Do not run it separately.
+Treat reported violations as blocking metadata work; machine validation does not
+replace semantic self-check.
 
 Formatting-only failure gets one fast-fix pass. Semantic failure returns
 `NEEDS_PLANNING`.

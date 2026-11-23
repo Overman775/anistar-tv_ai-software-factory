@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factory Meta Retune Lessons"
+  short_description: "Evaluate a skill change on verified cases"
+  default_prompt: "Use $factory-meta-retune-lessons to evaluate a proposed skill change against confirmed cases."

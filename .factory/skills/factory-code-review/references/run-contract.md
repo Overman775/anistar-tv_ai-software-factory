@@ -2,7 +2,7 @@
 
 Run from the reviewed workspace with the Factory Python launcher. `scripts/review_run.py`
 is the local lifecycle entry point, not an agent scheduler or server. Host adapters own
-spawn/wait/session operations. All three assignments use the existing reviewer profile.
+spawn/wait/session operations. All three assignments use the configured reviewer role default, recorded in each assignment.
 
 ## Request
 
@@ -59,8 +59,24 @@ compares it to the actual checkout comparison. Full diff validation remains.
   Incomplete results retain valid findings. Final folders preserve history, not cached approvals.
 
 Manifest, local input hashes, attempt results and logs live only in RUN. Calls acquire
-an exclusive `.busy` directory. After a host crash, confirm no operation remains active
-before removing a stale lock; never treat elapsed time as failure. No distributed lease,
+an OS-owned lock in `.review.lock`; the file must remain in place. An interrupted check
+leaves `.check-in-progress`. A matching, validated saved attempt clears the marker after
+freshness checks. Otherwise inspect the command and logs, confirm it stopped and start a
+new review. A legacy `.busy` has no owner identity. Identify the old owner PID and verify
+that all its child commands stopped; then run `review_run.py recover-legacy --run RUN
+--legacy-owner-pid PID`. The command requires a dead owner PID, an empty marker and successful
+freshness and interrupted-check validation before it removes `.busy`. PID
+verification is available on POSIX only. The operator identifies the correct
+owner and verifies that its children stopped.
+Recovery accepts a lock whose inputs still match. It also accepts a lock-only
+upgrade from the three exact versions of `command_worker.py`, `review_run.py`
+and this contract in Lab `dfe5cfba`, when all other recorded inputs still match
+and none of the changed files is a reviewed source, diff or command input.
+Runs with broader drift, including runs pinned to an unmodified
+`211d3162` factory, need new intake. Their old marker and input lock stay in place.
+A validated BLOCKED attempt retains its concrete execution error and may be
+retried within the existing attempt limit.
+Never treat elapsed time as failure. No distributed lease,
 remote queue, automatic retry of unknown execution or background model process exists.
 A command changing pinned bytes blocks the run; review is not an autofix mechanism.
 Recovery is for the same inputs. Changed revision requires new identity and fresh review.

@@ -22,6 +22,7 @@ from factory.planning.plan_document import (
     table_after_header,
     validate_applicability,
 )
+from factory.planning.plan_revision import approval_error
 
 
 def without_fenced_code(text: str) -> str:
@@ -297,21 +298,8 @@ def validate_metadata(metadata: dict[str, str], phase: str) -> list[dict[str, st
         errors.append(error("REVISION_INVALID", "revision must be integer >= 1"))
 
     status = metadata.get("status")
-    approved = metadata.get("approved_revision")
-    state = metadata.get("plan_state")
-    if status == "draft":
-        if approved != "none":
-            errors.append(
-                error("APPROVAL_INVARIANT_INVALID", "Draft must use approved_revision: none")
-            )
-    elif status == "approved":
-        if state != "PLAN_READY" or revision is None or approved != str(revision):
-            errors.append(
-                error(
-                    "APPROVAL_INVARIANT_INVALID",
-                    "Approved plan needs PLAN_READY and matching revision",
-                )
-            )
+    if issue := approval_error(metadata, revision):
+        errors.append(issue)
 
     if phase == "draft" and status != "draft":
         errors.append(error("PHASE_STATUS_MISMATCH", "Draft phase requires status: draft"))

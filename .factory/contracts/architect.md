@@ -5,9 +5,8 @@ Read [Verification Rules](../gates/common/verification-rules.md); preserve inher
 
 ## Required Reading
 
-Read selected project profile rules and their actual documents, plus assigned
-source/evidence. An index is navigation, not a substitute for its applicable
-documents. Missing required inputs block dependent action. Report paths read.
+Follow [Worker Rules](common/worker-rules.md) for mandatory project documents,
+assigned source/evidence, missing inputs and paths read.
 
 ## Owner
 

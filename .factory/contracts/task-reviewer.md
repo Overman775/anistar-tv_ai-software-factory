@@ -10,7 +10,8 @@ source tuple, capability/AC coverage and relevant existing evidence.
 
 ## Allowed writes
 
-Assigned staging task Markdown and task_result.json only; never source lock, approved plan, code or published tasks.
+Only in repair mode, edit assigned staging task Markdown and task_result.json.
+Source lock, approved plan, code and published tasks stay read-only.
 
 ## Result
 

@@ -42,16 +42,6 @@ class FactoryLoader(unittest.TestLoader):
 
 def main() -> int:
     loader = FactoryLoader()
-    for name in SUITES:
-        discovered = loader.discover(
-            str(FACTORY_ROOT / "tooling/tests/factory" / name),
-            top_level_dir=str(FACTORY_ROOT / "tooling"),
-        )
-        count = discovered.countTestCases()
-        if not count:
-            print(f"BLOCKED: no tests discovered in {name}", file=sys.stderr)
-            return 2
-        print(f"{name}: {count} tests", flush=True)
     tests = FACTORY_ROOT / "tooling/tests"
     for file in tests.rglob("test*.py"):
         if {
@@ -69,6 +59,28 @@ def main() -> int:
                 print(f"BLOCKED: test package missing __init__.py: {file}", file=sys.stderr)
                 return 2
     suite = loader.discover(str(tests), top_level_dir=str(FACTORY_ROOT / "tooling"))
+
+    def cases(group: unittest.TestSuite) -> list[unittest.TestCase]:
+        found: list[unittest.TestCase] = []
+        for test in group:
+            if isinstance(test, unittest.TestSuite):
+                found.extend(cases(test))
+            else:
+                found.append(test)
+        return found
+
+    discovered = cases(suite)
+    for name in SUITES:
+        package = (tests / "factory" / name).resolve().relative_to(tests.resolve())
+        prefix = "tests." + ".".join(package.parts) + "."
+        count = sum(
+            test.id().removeprefix("unittest.loader._FailedTest.").startswith(prefix)
+            for test in discovered
+        )
+        if not count:
+            print(f"BLOCKED: no tests discovered in {name}", file=sys.stderr)
+            return 2
+        print(f"{name}: {count} tests", flush=True)
     return 0 if unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful() else 1
 
 

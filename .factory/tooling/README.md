@@ -3,10 +3,8 @@
 Implementation lives in the importable `factory` package. Stable command
 paths in tooling/bin/, gates/skills/ and skill scripts are thin entry points. Setup registers
 the bundle with the venv; launchers load it without per-script path setup. The
-Decompose graph entry point also supports the documented direct `python3` command;
-the dry-run entry point reports missing dependencies even with Python site disabled.
-Both retain their own path bootstrap. All tooling
-tests live in tooling/tests/, with package suites in tooling/tests/factory/; fixture configuration is independent of consumer settings.
+Decompose graph entry point retains its own path bootstrap; the dry-run entry point
+reports missing dependencies even with Python site disabled. All tooling tests live in tooling/tests/, with package suites in tooling/tests/factory/; fixture configuration is independent of consumer settings.
 
 Use [Factory Meta Develop Tooling](../skills/factory-meta-develop-tooling/SKILL.md)
 for changes to factory tooling. Its shared coding/testing/review contracts apply.
@@ -19,11 +17,39 @@ for changes to factory tooling. Its shared coding/testing/review contracts apply
 | `tooling/factory/decisions/` | Validated predicate, choice and score contracts |
 | `tooling/factory/project/` | Profile validation, selection and portable policy snapshots |
 | `tooling/factory/context/` | Context assembly without workflow transitions |
-| `tooling/factory/runtime/` | Ledger, graph, acceptance, escalation and process execution |
+| `tooling/factory/runtime/workflow.py` | Public Ledger API, run lifecycle and coordination |
+| `tooling/factory/runtime/transitions/` | Packet delivery, command receipts, report acceptance and graph revisions, each in its own module |
+| `tooling/factory/database/port.py` | One database contract with sections for runs, verified history, packet receipts, Teacher jobs, lesson and case indexes, traces, export checkpoints and diagnostics. |
+| `tooling/factory/database/sqlite/` | `SQLiteDatabaseBackend`, SQL schemas, queries and transaction boundaries. A terminal archive and its optional Teacher event commit together. |
+| `tooling/factory/file_reader.py`, `secret_reader.py`, `environment.py` | File contents and binary streams, named secrets and environment settings. |
+| `tooling/factory/runtime/run_journal.py` | Checkout lock, validated state reads and atomic state, event and evidence writes |
 | `tooling/factory/adapters/` | ACP transport |
 | `tooling/factory/planning/`, `decompose/`, `review/`, `github/` | Process tooling |
-| `tooling/factory/diagnostics/` | Safe preparation dry run |
+| `tooling/factory/diagnostics/` | Local diagnostic records, queries and safe preparation dry run |
 | `tests/` | All suites and pinned, disposable configuration fixtures |
+
+### Find the owner of a change
+
+Start a workflow trace at [the CLI](factory/runtime/workflow_cli.py) or the public
+[Ledger](factory/runtime/workflow.py). A state-changing operation enters
+`runtime/transitions/` when it needs the journal lock. Its rules and data live
+with the corresponding feature:
+
+| Change | Implementation under `factory/` |
+|---|---|
+| Assign work, bind a session or spend a retry | `runtime/scheduling/` |
+| Run a command or verify its receipt | `runtime/commands/`. The subprocess enters through `runtime/command_worker.py`. |
+| Build or acknowledge a packet | `runtime/packets/` |
+| Accept a report, resolve findings or request approval | `runtime/reports/` |
+| Read archived reports and evidence | `runtime/history/`. Python consumers can use `factory.runtime.memory`. |
+| Retrieve a lesson or deliver a Teacher job | `runtime/knowledge/`. The workflows are `runtime/lessons.py` and `runtime/teacher.py`. |
+| Recover transport output or export telemetry | `runtime/transport/` owns streams and evidence. `runtime/observability/` owns usage and OTLP export. |
+| Validate a plan or build tasks | `planning/` owns plan validation. `decompose/graph/` owns task relations, checks and rendering. `decompose/staging/` owns staged files and their manifest. |
+| Run a review or interpret findings | `review/review_run.py` coordinates the run. `review/protocol/` owns records, evidence and verdict rules. |
+
+Find feature tests under `tests/factory/<process>/`. For example, command execution
+is covered in `tests/factory/runtime/commands/`; multi-step workflow tests start
+in `tests/factory/runtime/test_workflow.py`.
 
 Project setup/editing/visualization share the existing project and gate tools.
 Read [configuration verification](../skills/factory-project-configure/references/verification.md)
@@ -36,6 +62,60 @@ Use `workflow.py read-instructions - PATH...` and `workflow.py read-project`
 for active coordinator context. Candidate edits remain subject to verification
 on current scope and command inputs. For authorized changes to the active
 baseline, see [re-intake](../workflow/README.md#configuration-and-preparation).
+
+### Workflow domain rules
+
+A run owns session handles and shared reservations. A dispatch records one attempt
+at a node, and [dispatch recovery](factory/runtime/scheduling/dispatch.py) checks whether an
+uncertain attempt may resume. Reconciliation requires nonblank evidence. The Ledger coordinates the lock, read and save.
+
+| Owner | Guarantee |
+|---|---|
+| [RunSessions](factory/runtime/scheduling/run_sessions.py) | Each physical handle belongs to one logical agent. An ACP creation request reserves the name for its current epoch. Explicit replacement closes that epoch even if the session was never bound. |
+| [RetryBudget](factory/runtime/scheduling/escalation_policy.py) | Each task and retry cause use their configured allowance. The transition saves the counter and new state together. |
+| [TestRetryRequest](factory/runtime/transitions/revisions.py) | Revision receives named test node, failed dispatch, diagnosis node and repair node. Existing four-item Python tuples are accepted. |
+| [CheckExecution](factory/runtime/commands/execution.py) | A replay identifies the original request. Abandoning a running intent requires checking that no process owner was registered. |
+| [PacketDelivery](factory/runtime/packets/delivery.py) | At most one served chunk awaits acknowledgement. Final confirmation records receipt of the complete packet. |
+| [TeacherJob](factory/runtime/knowledge/teacher_models.py) | Waiting for the owner requires an open job and a question. Queue keys and stored JSON retain the existing representation. |
+
+Planning compares two [PlanRevision](factory/planning/plan_revision.py) snapshots using the
+headers validated by the [PlanMetadata adapter](factory/planning/plan_document.py). Both snapshots
+must have consistent approval metadata. Approval may
+change only the approval fields in the plan header. Identically named lines in examples
+belong to the plan body. Decompose uses [TaskRelationGraph](factory/decompose/graph/relations.py)
+to report cycles and check that a task closing an acceptance criterion depends on all
+contributors. Only `depends_on` establishes that dependency.
+
+### Storage and input adapters
+
+The tooling exposes three I/O contracts: `DatabaseBackend`, `FileReader` and
+`SecretReader`. Their default implementations are `SQLiteDatabaseBackend`, `LocalFileReader`
+and `EnvironmentSecretReader`.
+
+Select the active adapter with `current_database()` at the invocation boundary.
+The workflow CLI builds its Ledger with the selected run, history, packet and Teacher
+repositories. Both `next` and `status` use that Teacher queue for the finalizer
+and pending jobs. When calling Ledger directly, pass the repositories to its
+constructor or use the invocation defaults. A Ledger keeps its history repository
+for report verification across packet delivery, corrections, revisions and completion.
+The lessons CLI passes the selected index, search trace store, history and Teacher
+queue to their consumers. Python callers can submit a decoded case reference to
+`teacher.capture_case(root, reference, observation, history=history, jobs=jobs)`.
+For example, `database.runs.save_progress(...)` writes the run and evidence, and
+`database.teacher.pending(...)` reads queued jobs. A backend implements all sections
+of `DatabaseBackend` and the read-only pre-installation check. Bind it around an
+invocation with `use_database(backend)`. The SQLite adapter loads each section
+on demand so bootstrap works before third-party dependencies are installed.
+
+`file_reader.use_reader(...)` and `environment.use_environment(...)` select file contents
+and environment variables for the same scope. Local path validation, directory
+enumeration, writes and OS locks still operate on the checkout. Each child process
+loads the installed configuration independently. A future backend must configure
+the CLI, supervisor and bootstrap active-run check consistently, provide its own
+migrations, and preserve the atomic writes and verified historical reads.
+Run the [shared storage contract tests](tests/factory/runtime/test_run_repository_contract.py)
+for each backend. Its `open_backend(root)` must return a fresh adapter to the same
+isolated store on repeated calls for that root.
 
 ## Python setup
 
@@ -62,10 +142,9 @@ only the factory's own Python environment, not a layout imposed on vendor tools.
 
    These are bootstrap examples: substitute the verified Python executable when
    `python3.14`/`py -3.14` is unavailable or selects an unexpected interpreter. Setup creates venv,
-   installs PyYAML, Pydantic v2 and their dependencies from the hash-locked requirements.txt, checks dependencies, and records readiness. Existing
+   installs PyYAML, Pydantic v2, OpenTelemetry protobuf message types and their dependencies from the hash-locked requirements.txt, checks dependencies, and records readiness. Existing
    compatible venv is reused; a wrong-minor venv blocks setup before package changes. Stop active runs, preserve any data in it, then remove and recreate the disposable `.factory/.venv` using Python 3.14. A non-venv directory or active workflow also blocks setup.
-3. For subsequent factory Python commands use the launcher, except for the
-   documented direct Decompose graph entry point described above:
+3. For subsequent factory Python commands use the launcher:
 
    macOS/Linux: `sh .factory/tooling/bin/python.sh SCRIPT [ARGS]`
 
@@ -184,6 +263,14 @@ archive SHA-256 before execution. Optional embedded-script analyzers are disable
 so results do not depend on tools found on PATH. An installed factory needs neither
 the Lab workflow nor actionlint. See [YAML authoring](../skills/factory-meta-develop-tooling/references/yaml.md).
 
+For saved run evidence, use `workflow.py list-artifacts RUN_ID` and `workflow.py export-artifact RUN_ID LOGICAL_PATH NEW_FILE`. The workflow database holds original bytes, including frozen packets, reports and binary attachments. After cleanup a stopped database can be copied independently of runtime scratch files.
+
+For Implement report handoffs, `workflow.py prepare-report` captures current file
+hashes. An intermediate `WRITES_READY` node can declare exhaustive `handoff_inputs`
+to narrow that snapshot to its owned task files and declared inputs. Omission uses
+the full task scope; final verification retains full-scope freshness checks. See
+[command reservation and stage results](../workflow/README.md#command-reservation-and-stage-results).
+
 ## Dry run without a project or model calls
 
 After Python setup, run through the project launcher:
@@ -231,7 +318,7 @@ in the [operation reference](../workflow/README.md).
 
 ## Shared command execution
 
-`tooling/factory/checks/command.py` validates command declarations; `tooling/factory/runtime/check_process.py`
+`tooling/factory/checks/command.py` validates command declarations; `tooling/factory/runtime/commands/process.py`
 executes them with exclusive full logs, bounded waits and optional stdin.
 Implement interprets normal exit codes, Decompose validates structured script
 answers, and Code Review records command failures and execution blockers separately.
@@ -244,7 +331,9 @@ worker group and owns that lifecycle and its Windows Job Object. Native Windows 
 Authorization, receipts and input snapshots stay process-owned. ACP, GitHub and Review
 use narrow runner interfaces for their own required operations and results.
 
-`tooling/factory/runtime/assignment.py` projects Implement state for the shared context builder.
+`tooling/factory/runtime/scheduling/assignment.py` projects Implement state for the shared context builder.
+Decompose source-lock preparation reads the approved plan and selected profile;
+see the [generation contract](../skills/factory-decompose/references/generation-contract.md).
 The builder receives ready assignment data and does not import transition logic.
 Decompose `load_tasks` always returns `{tasks, envelopes, errors}`; callers keep
 load errors alongside usable data. No flag-dependent return shapes are supported.
@@ -266,7 +355,8 @@ individual commands. No Implement graph or model runtime is embedded.
 
 ## Factory profile groups
 
-factory.yaml groups profiles by canonical role ID. Common role/contract,
+factory.yaml groups profiles by canonical role ID. Role and contract paths default to
+`roles/<group>.md` and `contracts/<group>.md`; explicit paths must match. Common
 capabilities, enforcement and MCP belong to the group; variants specify only
 model, adapter and optional escalation. default selects a variant in that group.
 The loader emits a flat runtime profile map with independent copies.
@@ -274,7 +364,7 @@ Unknown fields are rejected. Active run configuration stays pinned.
 
 ## Local diagnostics
 
-Workflow and ACP CLI calls write bounded, local diagnostic records in the workspace's
+Workflow, ACP, lessons/Teacher, context, project and OTLP export commands write bounded local records in the workspace's
 ignored `.factory/diagnostics/journal.sqlite3`. Records contain identifiers and outcomes, not
 prompts, reports, command output or exception text. This journal is separate from workflow
 state and is not acceptance evidence. A failed call prints its invocation ID; inspect it with:
@@ -283,11 +373,181 @@ state and is not acceptance evidence. A failed call prints its invocation ID; in
 sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py --workspace PROJECT diagnostics --invocation ID
 ```
 
-Use `--run ID` or `--dispatch ID` to filter related records. Pages default to 30 records,
-maximum 8 KiB; follow `next_cursor` with `--cursor N`. The most recent 500 records are
+Use `--run ID` or `--dispatch ID` to filter related records. Use
+`--operation lessons.search_lessons` or `--operation lessons.publish` to find recent invocations.
+A `database_failed` record identifies the workflow store or lesson index and a bounded error code.
+A successful search can also report `lesson_trace_unavailable` when saving its evidence failed. Pages default to 30 records,
+maximum 8 KiB; follow `next_cursor` with `--cursor N`. The most recent 5,000 records are
 retained. SQLite transactions coordinate concurrent writers and recover interrupted writes.
 Transition logging does not wait on a busy database while the workflow lock is held; a
 lost diagnostic record is reported on stderr. Identifiers outside the diagnostic field
 length and character limits are omitted.
 Journal failures never block workflow operations and are reported on stderr. The journal
 is intended for local troubleshooting, not automatic inclusion in agent context.
+
+### Read the journal with jq or a local Collector
+
+```sh
+export FACTORY_JOURNAL_SNAPSHOT="$(mktemp -d)/journal.otlp.jsonl"
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/telemetry.py journal > "$FACTORY_JOURNAL_SNAPSHOT"
+jq -c '.resourceLogs[].scopeLogs[].logRecords[] | select(.severityNumber >= 17)' "$FACTORY_JOURNAL_SNAPSHOT"
+```
+
+Each line is one OTLP JSON logs request. The command reads the retained records
+in insertion order. It works offline, including in development. Records tied to a run
+carry its trace ID and the span ID of the dispatch or run. An empty journal produces
+an empty file. Each invocation creates a full snapshot, so replaying overlapping snapshots
+into the same destination can repeat records.
+
+To inspect one completed snapshot with `otelcol-contrib`, save the following as
+`collector.yaml` and run `otelcol-contrib --config=collector.yaml` in the same shell.
+Stop the Collector after it displays the records.
+
+```yaml
+receivers:
+  otlp_json_file:
+    include:
+      - ${env:FACTORY_JOURNAL_SNAPSHOT}
+    start_at: beginning
+exporters:
+  debug:
+    verbosity: detailed
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    logs:
+      receivers: [otlp_json_file]
+      exporters: [debug]
+```
+
+## Project memory
+
+Use `bin/lessons.py search_lessons "query"` through the Python launcher for
+read-only retrieval from the workspace's Git-owned lesson catalog. The
+checkout-local FTS5 index is disposable. Lookup hashes current Markdown files and updates only added, changed or removed cards in one transaction. Each hit has `source_type: lesson`.
+Add `--include-history` to search accepted terminal work even when lessons match.
+The command returns up to three lessons and three `source_type: case` hits.
+Case search reads terminal archives for the current workspace and branch or
+detached commit and searches current accepted reports. A run without a recorded
+checkout at acceptance is omitted. Failed, superseded and unaccepted attempts
+stay available in their original history. A case identifies the run, task, node,
+dispatch, attempt ordinal and exact report reference with SHA-256. Copy
+`report_ref` to `REF.json` and use `workflow.py read-report REF.json` to verify
+and read it. Unreadable archives or selected reports are skipped and reported on
+stderr. Searching history creates no lesson or Teacher event. To report a verified
+reuse, include `applied_cases` in the current PASS report. Each entry has the
+exact historical `report_ref` and a nonblank `result` describing what was
+verified here. Finish validates the reference. Task acceptance retains those
+entries with the task's stable incident ID and references to failed and successful
+attempts. After `workflow.py archive completed SUMMARY` the queue exposes one
+Teacher event for the run. In `packet EVENT`, each `incidents` key identifies
+the task or retrospective finding to cite with `publish EVENT CARD --incident ID`.
+For a retrospective belonging to the active run, record its evidence with
+`workflow.py record-retro RUN_ID INCIDENT SOURCE OBSERVATION` before archival.
+A retro first offers the owner specific findings. Use `lessons.py retro INCIDENT SOURCE OBSERVATION --confirmed` only for selected findings; attach a note to an active run only if the owner chooses its final review. Cancelled runs retain their evidence
+in the archive. Both `workflow.py next` and `lessons.py pending` can recover
+delivery after successful archival. Cleanup also ensures delivery. New Git events belong to their original
+branch or detached commit. Completion moves their records out of the active queue.
+Manual requests use [factory-lessons](../skills/factory-lessons/SKILL.md). Automatic events go directly to Teacher dispatch. Use `route EVENT` to recover the operation and `waiting` for owner questions.
+
+Before starting a Teacher worker the coordinator runs `bin/lessons.py teacher-launch` through the launcher. It resolves the default Teacher variant, exact model ID, effort and adapter from the checkout. Follow the [dispatch procedure](../skills/factory-lessons/references/dispatch.md).
+
+A user deletion pins the target at intake. A changed target leaves the request
+pending. Resolve it on a new owner message as described in the refresh protocol.
+User edits of existing cards record message references in `edits`. Use
+`user --new-observation` when the owner contributes incident evidence.
+
+### Local workflow observations
+
+Read an active run or its archive, including after cleanup:
+
+```sh
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/telemetry.py show --run RUN_ID
+```
+
+Add `--dispatch DISPATCH_ID` to see the run, that attempt, its observations and any
+Teacher job linked to it. Each JSON observation carries hex trace and span IDs,
+parent, links, timestamps in Unix nanoseconds, attributes, events and local report
+references (dispatch, path and SHA-256). The run comes first. Remaining observations
+are ordered by start time. An unknown time is `null`. A match records retrieval,
+an application comes from the worker report, and a confirmed Teacher change records
+the actual card revision. Read-only access works in development with export disabled.
+
+### OTLP telemetry bridge
+
+Configure the receiver in the exporting checkout's `.factory/factory.yaml` before a production run:
+
+```yaml
+telemetry:
+  enabled: false
+  endpoint: http://localhost:4318/v1/traces
+  headers:
+    Authorization: "Bearer ${env:OTLP_TOKEN}"
+
+logs:
+  enabled: false
+  endpoint: http://localhost:4318/v1/logs
+  headers:
+    Authorization: "Bearer ${env:OTLP_LOGS_TOKEN}"
+```
+
+`telemetry.endpoint` and `logs.endpoint` are the complete trace and log URLs.
+Set `telemetry.enabled: true` for traces and `logs.enabled: true` for external diagnostic logs.
+Both default to false. Local diagnostics still go to SQLite.
+Configure headers per signal. To use the same credential, reference the same environment
+variable in both templates. For a Logfire write token, use `Authorization: "${env:LOGFIRE_WRITE_TOKEN}"`. Use `headers: {}` for a Collector
+without authentication. For an API key, use `x-api-key: "${env:MY_API_KEY}"`.
+Copy [.env.example](../.env.example) to `.factory/.env` and set the referenced value there,
+or supply it in the exporter's process environment. Process values take precedence, including
+empty values. Keep credentials out of YAML because workflow runs preserve configuration snapshots.
+
+```sh
+sh .factory/tooling/bin/python.sh .factory/tooling/bin/telemetry.py --follow
+```
+
+The bridge sends binary OTLP/HTTP Protobuf to each configured receiver directly. Without `--follow`
+it drains the current backlog once. `--env-file PATH` selects a different fallback file.
+Files use literal UTF-8 `NAME=VALUE` assignments. Matching outer quotes are stripped.
+In header templates, each `${env:NAME}` requests one value from `SecretReader` when preparing
+a batch. Values are inserted verbatim. A missing, blank or invalid credential stops the batch
+before HTTP or checkpoint advancement. Follow mode checks YAML at each poll. Restart the bridge to reload its environment file.
+`OTEL_SERVICE_NAME` can still override the default service name `overfactory`.
+
+A missing section or switch leaves its signal disabled. A `setup --dev` installation and
+checker subprocesses suppress collection and delivery regardless of receiver settings.
+For other test commands, set `OTEL_SDK_DISABLED=true` in the process environment.
+Local workflow history and Teacher evidence continue to be recorded. The bridge rechecks
+the switch before each batch. Previously eligible batches resume when enabled.
+Version 1 backlog and runs or Teacher jobs created or updated while disabled stay local.
+Run one bridge per workspace and receiver. Use a different `--consumer` for another
+project at the same endpoint. A credential rotation within the project keeps its position.
+The SQLite feed selects committed sources eligible for export. After the transaction closes,
+the bridge encodes the same observations used by the local timeline. Report paths and hashes stay local. Delivery resumes at the first unacknowledged batch.
+The log receiver reads eligible events from the 5,000-row diagnostic journal, up to 128 per
+request. Log records with a run or dispatch carry the corresponding trace and span IDs.
+Each signal has its own checkpoint per endpoint and consumer. A failed request leaves its
+batch pending. A crash after remote receipt and before checkpointing can repeat that batch.
+If retention evicted pending logs, the bridge reports the count on stderr and resumes at the
+first retained record. Older journal schemas, diagnostics emitted while log export was disabled,
+and the bridge's own diagnostics stay local.
+In follow mode, transient failures use exponential backoff with jitter. A valid
+HTTP `Retry-After` (seconds or HTTP date) sets the minimum wait.
+Search observations are available after each lookup, run/attempt/ACPX spans after
+archive, and Teacher decisions after completion. Attempt spans carry the role and
+available harness recorded at reservation. Older attempts use matching archived ACPX
+assignments when available. Request tokens and session cost keep their original scope. Cleanup preserves these sources.
+In instrumentation scope `overfactory` version `2`, each archived ACPX invocation and
+each parent check receipt is a child span of its dispatch. Prompt spans summarize the
+last observed tool kind and status per call from archived ACP notifications. A partial
+stream is marked. Only allowlisted categories and counts leave the workspace.
+Cache usage uses `gen_ai.usage.cache_read.input_tokens` and
+`gen_ai.usage.cache_creation.input_tokens`. ACPX usage is scoped to a prompt request.
+Span links connect assignments to sessions and lesson applications to observed searches.
+The optional `lessons.py telemetry` command reads local evidence as JSON.
+
+For an accepted incident, `bin/lessons.py feedback EVENT INCIDENT_ID` returns the
+attributed lookup wording, candidate revisions and whether the checkout catalog
+still matches the lookup. Only local Teacher feedback retains short (up to 512
+characters), validated assignment queries. Telemetry and OTLP omit the wording.

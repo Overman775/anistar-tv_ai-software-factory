@@ -20,6 +20,20 @@ creating staging files. Lock:
 
 `plan_content_hash` pins SHA-256 of exact approved bytes; `plan_hash` pins the
 normalized content below. Record `plan_commit` when available as Git provenance.
+After the coordinator establishes approval, prepare the record from the application
+working directory, then save the output as the source lock:
+
+```bash
+sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/prepare_source_lock.py \
+  --plan docs/plans/payment-trust.md --config .factory/factory.yaml
+```
+
+The command prints JSON to stdout and validates the approved plan structure; it
+does not establish approval. Save successful output to
+`.factory/memory/staging/decomposition-source.json`. It does not infer a commit;
+add `plan_commit` only when its provenance is known. Existing explicit source
+locks remain valid. Planning's `plan_hash` uses a different representation and
+must not be copied into this record.
 When Git and the repository are accessible, the graph gate checks a supplied full
 commit ID against the plan content. It does not infer intake-time provenance from
 the current HEAD, which may have changed after the source lock was created.
@@ -49,97 +63,49 @@ FactoryDecompose, it does not copy a pre-approved task map one-to-one.
 Implementation detail adds no internal-envelope fields. It improves human task
 Markdown and uses existing architecture/evidence fields; graph validation remains structural.
 
-## Mechanical metadata projection
+Read the [staging and envelope contract](staging-contract.md) before writing task files.
 
-After authoring the structured envelopes and Markdown prose, run:
+## Completion handoff
 
-```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/prepare_metadata.py \
-  .factory/memory/staging/tasks .factory/memory/staging/decomposition-source.json \
-  --checkpoint UNIQUE_CHECKPOINT_ID
-```
-
-The helper checks the source and staging digests and target paths, saves the
-complete staging tree in a new checkpoint, and writes derived headers and totals via atomic sibling files. It
-returns only paths and counts; author prose remains. Use one authorized writer.
-The helper does not lock out concurrent writers. On interruption or failure,
-reconcile partial staging against its checkpoint before retrying with a new ID.
-Run the normal graph and independent review gates after the helper. It does not
-authorize assembly or substitute for semantic review.
-
-## Transactional staging
-
-Write internal envelopes and drafts through temporary sibling paths, validate,
-then atomically rename. Keep last complete checkpoint under
-`.factory/memory/staging/checkpoints/`. Interrupt or failed retry must not delete
-last valid draft. Cleanup may remove only artifacts owned by current run after
-final assembly succeeds.
-
-## Internal Envelope
-
-Each scope writes
-`.factory/memory/staging/tasks/{scope}/task_result.json`:
+After saving and rereading the complete staging files, return `status: DONE`,
+the staging root path, total task count, and blockers (an empty list when none).
+Include a manifest of every `task_result.json` and every task Markdown file:
+each entry has its relative path under the staging root and SHA-256 of its exact
+saved bytes. Include no other files. Use safe relative paths without traversal.
+This manifest is the Done Signal; it does not replace the graph gate or review.
+For example, a shared-filesystem response has this shape (digests shown
+symbolically; actual values are lowercase hexadecimal SHA-256):
 
 ```json
 {
-  "source_plan": {
-    "plan_id": "payment-trust",
-    "revision": 2,
-    "hash": "sha256:..."
-  },
-  "capability_coverage": [
-    {
-      "capability_id": "CAP-01",
-      "task_ids": ["web-view-payment-trust-01"],
-      "coverage": "complete"
-    }
-  ],
-  "summary": "...",
-  "total_min_hours": 6,
-  "total_max_hours": 8,
-  "tasks": [
-    {
-      "id": "web-view-payment-trust-01",
-      "acceptance_ids": ["AC-01"],
-      "filename": "01-web-view-payment-trust.md",
-      "title": "Verifiable outcome",
-      "purpose": "functionality",
-      "scope": "payment_trust",
-      "outcome": "Observable outcome",
-      "affected_layers": ["domain", "data", "presentation", "tests"],
-      "contract_type": "backend_api",
-      "implemented": ["Current slice behavior"],
-      "deferred": [],
-      "parent_task": null,
-      "depends_on": [],
-      "blocked_by": [],
-      "estimate": {"min_hours": 6, "max_hours": 8, "confidence": "medium"}
-    }
+  "status": "DONE",
+  "staging_root": ".factory/memory/staging/tasks",
+  "task_count": 1,
+  "blockers": [],
+  "files": [
+    {"path": "orders/task_result.json", "sha256": "<64 hex digits>"},
+    {"path": "orders/01-orders.md", "sha256": "<64 hex digits>"}
   ]
 }
 ```
 
-Each `**/task_result.json` must be an envelope with a `tasks` list and the fields
-above. Single-task/list payloads, version tags and inferred filenames are rejected.
-Regenerate tagged inputs using the current envelope and task fields.
-Internal schema never appears in final task Markdown.
+When the coordinator can read the same files, return paths and digests only, not
+file contents. When filesystems are separate, also deliver each manifest file's
+exact bytes encoded as base64 in the handoff. The coordinator restores them at
+the same relative paths under its staging root before checking them. If transport
+cannot deliver all bytes, report a blocker instead of `DONE`.
+For this case add `content_base64` to each `files` entry; the other fields and
+checks are identical. Decode without text or newline conversion.
 
-Gate every envelope:
-
-- source tuple exactly matches locked source;
-- `tasks` is non-empty;
-- each capability has exactly one disposition;
-- referenced task IDs exist;
-- every task belongs to at least one `complete` capability when source has
-  `CAP-*` declarations;
-- core visible Markdown identity, provenance, capability list, purpose, module,
-  and estimate agree with staging values;
-- filenames are safe, unique basenames in format `NN-slug.md`, where `NN`
-  exactly matches final `-NN` sequence of task ID; for example,
-  `orders-list-core-01` becomes `01-orders-list-core.md`.
-
-Missing file is generation failure, not empty scope. Formatting/save mismatch
-gets one fast-fix retry. Semantic mismatch returns `NEEDS_PLANNING`.
+The coordinator saves the returned JSON and supplies it to `review-request --author-done`.
+The preflight checks that every listed file exists, its bytes match its digest,
+the manifest exactly covers the staged envelopes and their referenced Markdown,
+and the total matches the task lists. Reject missing, extra, changed, unreadable,
+unsafe or incomplete files and any blockers as an invalid handoff. Do not infer
+success from a path or count alone. Then run the same deterministic graph gate on
+the restored or shared files; its source, schema and coverage checks still apply.
+Recheck the manifest after any transfer and before the gate. A decomposer fast-fix
+returns a fresh completion handoff; reviewer repairs follow the review contract.
 
 ## Semantic Gap
 
@@ -160,27 +126,29 @@ regeneration; do not mix revisions.
 
 ## Graph Gate
 
-```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/generate_task_graph.py \
-  --staging-dir .factory/memory/staging/tasks/ \
-  --source-lock .factory/memory/staging/decomposition-source.json \
-  --output .factory/memory/staging/mermaid_graph.txt
-```
+The coordinator runs the [review request](output-contract.md#review-request) to validate the graph
+and project checks and bind the reviewer in one step. On success the graph is
+`decompose-evidence/graph.md`. For standalone graph validation, use the command
+in the [decompose gate](../../../gates/skills/decompose/gate.md).
 
 Every reported violation is a hard block: missing/empty staging, source mismatch,
 incomplete capability coverage, duplicate identity, missing Markdown, invalid
 schema/metadata, dependency/deferred error, estimate above the applicable project size constraint, or cycle.
-Graph is written only on `Graph gate: PASS`. Deterministic violations get one
-decomposer fast-fix pass, then the full gate reruns.
+The graph is written only when core graph validation passes; start review only when
+the complete review request succeeds. Deterministic task violations get one
+decomposer fast-fix pass, then the full gate reruns. For `BLOCKED / SOURCE_DRIFT`
+(exit 2), stop and repeat intake before task validation.
 
 ## Reviewer Invocation
 
-Start canonical `task-reviewer` only after `Graph gate: PASS`. Pass run identity,
+Start canonical `task-reviewer` only after the review request succeeds (exit 0
+and JSON response). Pass run identity,
 approved plan, source lock, task tree, and graph. Reviewer persona owns the
 semantic, architecture, actionability, language, and repair checks; spawn prompt
 does not restate them.
 
-After any repair, rerun the deterministic gate before focused semantic recheck.
+After any repair, the coordinator prepares a new review request before focused
+semantic recheck; it reruns the deterministic gate.
 Reviewer never reads hidden old pre-plan evidence as a second source.
 
 ## Acceptance continuity

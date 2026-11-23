@@ -74,7 +74,7 @@ Invalid or unapproved input returns `BLOCKED_NO_APPROVED_PLAN`. Raw input or a
 missing semantic decision returns `NEEDS_PLANNING` with evidence and affected
 capabilities.
 
-Approved plan is immutable. FactoryDecompose never writes `docs/plans/`.
+Approved plan is immutable. FactoryDecompose never writes the approved plan, regardless of path.
 
 ## Team
 
@@ -97,8 +97,11 @@ Canonical personas:
 - `.factory/roles/task-decomposer.md`
 - `.factory/roles/task-reviewer.md`
 
-Both roles read selected project profile documents in full where required, plus
-actual affected specifications, ADRs and package READMEs. The profile supplies the
+Both roles read all applicable documents selected by the project profile in full, plus
+actual affected specifications, ADRs and package READMEs. An empty document catalog
+is valid: use the approved plan and other applicable sources. If required architectural
+information is missing, return `NEEDS_PLANNING` with the specific gap and evidence.
+Check transport, session and media contracts when applicable. The profile supplies the
 layer vocabulary and task size limit; vertical behavior stays the unit of work.
 
 Resolve profiles/adapters from `.factory/factory.yaml`; load the configured
@@ -133,10 +136,8 @@ decomposition rerun.
 
 1. Resolve explicit approved plan.
 2. Run approved-plan validation.
-3. Record `plan_id`, revision, source path, normalized plan hash, and declared
-   `CAP-*` IDs and `project_policy_sha256` from the resolved profile context, using
-   generation-contract source-lock schema in
-   `.factory/memory/staging/decomposition-source.json`.
+3. Prepare the source lock from the approved file and selected project policy as
+   described in the [generation contract](references/generation-contract.md).
 4. If plan changed after lock, stop with `SOURCE_DRIFT` and restart intake.
 
 When an input references an approved plan, resolve the plan artifact; do not
@@ -151,21 +152,24 @@ tasks and writes:
   envelope;
 - `.factory/memory/staging/tasks/{scope}/*.md` — human-readable task drafts.
 
-Follow [generation contract](references/generation-contract.md) for the handoff
-and envelope. Canonical `task-decomposer` persona owns policy, template,
+Follow the [generation contract](references/generation-contract.md) for handoff
+and the [staging contract](references/staging-contract.md) for envelopes. Validate its manifest and blockers against the complete staged files
+before the graph gate, including after a decomposer fast-fix. Canonical `task-decomposer` persona owns policy, template,
 implementation-detail, and architecture-source loading. Pass only run identity,
 approved plan, source lock, and resumable checkpoint; do not copy its rules into
 the spawn prompt.
 
 ### 3. Deterministic graph gate
 
-Apply [the decompose gate](../../gates/skills/decompose/gate.md) at this step; complete all checks before continuing.
+Create the [review request](references/output-contract.md#review-request) at this step.
+It runs the complete [graph gate](../../gates/skills/decompose/gate.md) and project
+checks; resolve failures before continuing.
 
 ### 4. Review
 
-Create a coordinator-owned review request with the gate assembler; see
+Pass the coordinator-owned request under the
 [review contract](../../gates/skills/decompose/review-contract.md).
-Start `task-reviewer` after graph preflight. Reviewer compares every task with the
+Start `task-reviewer` after the request succeeds. Reviewer compares every task with the
 approved plan, task template, and implementation detail contract. Allow one
 repair pass followed by one focused recheck. Recheck does not start new
 discovery.
@@ -175,12 +179,18 @@ affected-layer guidance, safe filenames, and internal-envelope consistency.
 Reviewer may not change behavior, scope meaning, solution decision,
 capability coverage, or acceptance semantics.
 
-Pass the exact permitted staging task Markdown and `task_result.json` paths to
-TaskReviewer. Its editable profile permits only that bounded repair; application
-code, approved plan, source lock and final published tasks remain read-only.
+Start review with `decompose_mode: "review"` in the context assignment.
+If repair is needed, build a packet with `decompose_mode: "repair"` for the same
+reviewer and include only the exact permitted staging Markdown and
+`task_result.json` paths. The repair packet supplies the staging contract.
+Keep application code, approved plan, source lock and final published tasks
+read-only. For a non-default worker route, pass the exact selected profiles to
+`review-request` with `--decomposer-profile` and `--reviewer-profile`.
 
-After a repair, rerun deterministic graph preflight and prepare a new request
-bound to the final bytes before focused semantic recheck.
+After a repair, prepare a new request bound to the final bytes; it reruns the
+deterministic graph and project checks before focused semantic recheck. The reviewer rebinds the
+complete final task set to the locked plan and all applicable profile-selected sources.
+Use review mode again and reuse prior discovery where unchanged.
 
 Semantic gap uses exact envelope from generation contract. Stop, preserve last
 complete staging checkpoint, and route to `factory-planning`. A new approved plan
@@ -206,7 +216,7 @@ Canonical personas enforce [decomposition policy](references/decomposition-polic
 
 - complete `CAP-*` coverage and vertical, independently verifiable slices;
 - bounded, verifiable tasks; project-specific size constraints come from rules and gates;
-- architecture constraints from approved plan and both canonical project docs;
+- architecture constraints from the approved plan and all applicable profile-selected documents;
 - separate developer acceptance and QA checks;
 - bounded current-code grounding without invented symbols or semantic changes.
 
@@ -228,7 +238,7 @@ handoffs:
 
 ## Transactional Staging
 
-Follow [transactional staging](references/generation-contract.md#transactional-staging).
+Follow [transactional staging](references/staging-contract.md#transactional-staging).
 
 ## Final Report
 

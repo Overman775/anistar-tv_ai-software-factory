@@ -1,15 +1,14 @@
 # Doc Writer Contract
 
-For Implement corrections, follow [review finding transitions](common/review-findings.md).
+For assigned Implement findings, follow the supplied review finding transitions.
 Delegated handoff follows `.factory/contracts/common/worker-rules.md`. For long work,
 emit progress after coverage check, document write, and reference verification;
 parent validates checkpoints and explicit failures.
 
 ## Required Reading
 
-Read selected project profile rules and their actual documents, plus assigned
-source/evidence. An index is navigation, not a substitute for its applicable
-documents. Missing required inputs block dependent action. Report paths read.
+Follow [Worker Rules](common/worker-rules.md) for mandatory project documents,
+assigned source/evidence, missing inputs and paths read.
 
 ## Input
 
@@ -36,7 +35,7 @@ documents. Missing required inputs block dependent action. Report paths read.
 ## Evidence
 
 - Changed documentation files, verified references, and index changes.
-- Completed writing and meaning checks. Note any necessary length exception in the handoff, not in a new style report.
+- Completed writing and meaning checks.
 - `NEEDS_PLANNING` names missing behavior, scope, architecture, or contract truth
   required for accurate documentation, includes Material Semantic Gap Gate
   evidence and directive mode, and is routed by parent.

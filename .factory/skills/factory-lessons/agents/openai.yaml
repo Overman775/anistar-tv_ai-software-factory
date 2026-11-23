@@ -1,0 +1,4 @@
+interface:
+  display_name: "Factory Lessons"
+  short_description: "Save, edit, delete or maintain lessons on request"
+  default_prompt: "Use $factory-lessons to carry out the requested lesson change."

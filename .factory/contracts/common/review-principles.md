@@ -68,6 +68,9 @@ the correction. Parent evidence stays parent evidence; no invented red run.
 Mocked interactions must not hide the actual risk. Preserve independent expected
 outcomes from requirements; never treat implementation as its own oracle.
 
+When tests are replaced or migrated, trace each old boundary condition to its
+new check; report significant lost coverage.
+
 ## 3. Check before you report
 
 Every defect: reachable condition/input, code behavior, consequence. Re-read

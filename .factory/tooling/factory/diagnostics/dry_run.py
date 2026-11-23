@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from factory import file_reader
 from factory.paths import TOOLS
 
 if TYPE_CHECKING:
@@ -165,7 +166,14 @@ def copy_bundle(source: Path, target: Path) -> None:
     )
     for name in ("roles", "contracts", "gates", "workflow", "adapters", "tooling"):
         shutil.copytree(source / name, target / name, ignore=ignored, symlinks=True)
+    # Exercise the distributed structure without copying real user or lesson data.
+    for rel in ("USER.md", "lessons/factory/.gitkeep", "lessons/project/.gitkeep"):
+        blank = target / "memory" / rel
+        blank.parent.mkdir(parents=True, exist_ok=True)
+        blank.touch()
     for skill in (
+        "factory-lessons",
+        "factory-meta-retune-lessons",
         "factory-planning",
         "factory-implement",
         "factory-decompose",
@@ -234,12 +242,12 @@ def run(source: Path = TOOLS.parent) -> dict[str, Any]:
                 content = "\n".join(entry["content"] for entry in packet["instructions"])
             else:
                 prepared = prepare_prompt(ledger, "work")
-                content = Path(prepared["prompt"]).read_text(encoding="utf-8")
+                content = file_reader.read_text(Path(prepared["prompt"]), encoding="utf-8")
                 if prepared["create"][0] != "dry-run-never-execute":
                     raise ValueError("Unexpected ACP executable")
             if "DRY_RUN_PROJECT_RULE" not in content:
                 raise ValueError("Worker context lost fixture rule")
-            if (workspace / "sample.txt").read_text(encoding="utf-8") != "fixture\n":
+            if file_reader.read_text(workspace / "sample.txt", encoding="utf-8") != "fixture\n":
                 raise ValueError("Preparation modified fixture source")
             checks.extend(
                 [

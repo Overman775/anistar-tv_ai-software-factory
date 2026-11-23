@@ -1,6 +1,6 @@
 # Developer Contract
 
-For Implement corrections, follow [review finding transitions](common/review-findings.md).
+For assigned Implement findings, follow the supplied review finding transitions.
 Apply [Verification Rules](../gates/common/verification-rules.md).
 
 
@@ -24,7 +24,7 @@ assigned source/evidence, missing inputs and paths read.
 
 - Production files inside source boundary.
 - Required generated files for touched package.
-- Small directly affected documentation/specification updates describing already authorized behavior; follow DocWriter completion checks.
+- Small directly affected documentation/specification updates describing already authorized behavior; follow [DocWriter completion checks](../roles/doc-writer.md#completion-checks).
 - Requested execution reports under `.factory/memory/state/`.
 
 ## Forbidden Writes

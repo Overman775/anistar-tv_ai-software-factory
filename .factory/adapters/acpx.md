@@ -103,9 +103,12 @@ need a common external admission owner if they share the same account; the
 local ledger is not a distributed semaphore. Do not enable acpx flows as a
 parallel/durable scheduler without separate verified support.
 
-After terminalization preserve concise evidence in history; raw prompt/transport
-logs are temporary and may contain sensitive source, so do not retain them all
-by default. A real integration trial is still required in the consumer project.
+The adapter returns live stdout/stderr paths plus `run_id`, `dispatch_id`, `stdout_ref` and
+`stderr_ref`. Use the refs with `workflow.py export-artifact RUN REF NEW_FILE` after
+cleanup. The journal stores the original output, including partial output from an interrupted
+call. Raw output and frozen assignments can contain sensitive source. The separate usage
+snapshot includes only session IDs, attempt metadata and provider counters. While a transport
+call or a child still holds an output stream open, archive reports a lock error. Retry after the last writer closes both streams, including when the adapter has exited.
 
 ACP sends the frozen JSON assignment with `acpx prompt --file` after binding.
 The helper validates the recorded hash and dispatch identity before submission.

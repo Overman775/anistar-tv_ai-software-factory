@@ -3,7 +3,7 @@
 import unittest
 
 from factory.decompose.contracts import LoadedTask
-from factory.decompose.metadata import markdown_path, render_metadata
+from factory.decompose.staging.metadata import markdown_path, render_metadata
 
 
 class MetadataTests(unittest.TestCase):

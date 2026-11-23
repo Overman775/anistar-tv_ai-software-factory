@@ -16,7 +16,8 @@ or published tasks.
 
 ## Result
 
-Saved generation envelope under generation-contract; NEEDS_PLANNING or source blocker when meaning is missing.
+Saved generation artifacts and completion handoff under generation-contract;
+NEEDS_PLANNING or source blocker when meaning is missing.
 Do not invent behavior, revise plan meaning, publish tasks or start implementation.
 The coordinator validates artifacts and owns approval/publication/retry budgets.
 Execution procedure and mandatory reference routes: `.factory/roles/task-decomposer.md`.

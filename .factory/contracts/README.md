@@ -30,7 +30,7 @@ Generalist has its own code/tests/self-check contract. Developer/TestWriter
 remain separate when selected. Each delegated role may write its exact assigned
 report under the current run state, in addition to role-specific product paths.
 Never share a singleton report across agents. The dynamic assignment envelope
-and final JSON evidence schema are defined by `common/implement-result.md` and `common/check-execution.md`.
+and final JSON evidence schema are defined by `common/implement-handoff.md`, `common/implement-result.md` and `common/check-execution.md`.
 
 Cross-cutting criteria, mandatory project gates and additional checks —
 [Verification Rules](../gates/common/verification-rules.md). Contract shared by
@@ -38,7 +38,9 @@ Planning, Decompose and Implement; native/ACP receive shared principles; process
 
 - [common/decisions.md](common/decisions.md): coordinator and assigned evaluator contract; not mandatory reading for unrelated workers.
 - `common/worker-rules.md`: shared worker obligations and handoff.
-- `common/implement-result.md`: Implement result envelope and stage boundaries.
+- `common/implement-handoff.md`: shared Implement result fields and snapshots.
+- `common/implement-result.md`: Implement verification, review and command-stage boundaries.
+- `common/implement-write-result.md`: Write-only author handoff.
 - `common/check-execution.md`: reserved command execution/results, conditional on assignment.
 - `common/review-principles.md`: shared review principles, without standalone dispatch/schema.
 - [common/code-discovery.md](common/code-discovery.md): project search and source confirmation for every worker.

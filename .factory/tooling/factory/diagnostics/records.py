@@ -1,0 +1,255 @@
+"""Allowlisted schema shared by diagnostic writers and readers."""
+
+import json
+import re
+import sqlite3
+from datetime import datetime
+from typing import Annotated, Literal, NotRequired, TypeGuard
+
+from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError, with_config
+from typing_extensions import TypedDict
+
+MAX_RECORD_BYTES = 1024
+FIELDS = {
+    "run_id",
+    "task_id",
+    "node_id",
+    "dispatch_id",
+    "execution_id",
+    "outcome",
+    "error_code",
+    "transport_operation",
+    "component",
+}
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
+EVENTS = {
+    "result_acknowledged",
+    "retro_recorded",
+    "operation_completed",
+    "database_failed",
+    "lesson_search_recorded",
+    "lesson_trace_unavailable",
+    "export_retry",
+    "history_skipped",
+    "created",
+    "packet_prepared",
+    "reserved",
+    "bound",
+    "check_started",
+    "check_process",
+    "check_finished",
+    "finished",
+    "unknown",
+    "reconciled",
+    "session_replaced",
+    "revised",
+    "source_reintake",
+    "retry",
+    "task_resumed",
+    "approval_resumed",
+    "paused",
+    "resumed",
+    "packet_chunk_served",
+    "packet_confirmed",
+    "accepted",
+    "correction_decided",
+    "archived",
+    "prompt_prepared",
+    "transport_requested",
+    "transport_interrupted",
+    "transport_returned",
+    "operation_failed",
+}
+OPERATIONS = {
+    "read-instructions",
+    "read-project",
+    "next",
+    "status",
+    "ack-result",
+    "expand-scope",
+    "reconcile-check",
+    "check-results",
+    "_check-worker",
+    "reset-history-index",
+    "export-artifact",
+    "verify-history",
+    "rebind-history",
+    "list-artifacts",
+    "read-report",
+    "record-retro",
+    "prepare-workspace",
+    "context",
+    "project.context",
+    "project.checks",
+    "project.review-policy",
+    "telemetry.export",
+    "lessons.search_lessons",
+    "lessons.telemetry",
+    "lessons.capture-case",
+    "lessons.feedback",
+    "lessons.pending",
+    "lessons.waiting",
+    "lessons.route",
+    "lessons.wait-owner",
+    "lessons.teacher-launch",
+    "lessons.retro",
+    "lessons.user",
+    "lessons.delete",
+    "lessons.packet",
+    "lessons.complete",
+    "lessons.publish",
+    "config",
+    "validate",
+    "init",
+    "correct",
+    "resume-task",
+    "resume-approved",
+    "pause",
+    "resume",
+    "show",
+    "diagram",
+    "revise",
+    "reintake",
+    "replace-session",
+    "claim",
+    "accept",
+    "packet",
+    "prepare-packet",
+    "read-packet",
+    "confirm-packet",
+    "bind",
+    "run-check",
+    "prepare-report",
+    "finish",
+    "unknown",
+    "resolve",
+    "retry",
+    "archive",
+    "clean",
+    "acp_doctor",
+    "acp_setup",
+    "acp_prepare",
+    "acp_run",
+}
+OUTCOMES = {
+    "hit",
+    "miss",
+    "error",
+    "PASS",
+    "FAIL",
+    "BLOCKED",
+    "completed",
+    "cancelled",
+    "success",
+    "failure",
+    "stale",
+}
+ERRORS = {
+    "SOURCE_DRIFT",
+    "RETRY_BUDGET_EXHAUSTED",
+    "QUEUED_CAPACITY",
+    "QUEUED_OWNERSHIP",
+    "QUEUED_RESOURCE",
+    "QUEUED_SNAPSHOT",
+    "database_busy",
+    "database_constraint",
+    "database_corrupt",
+    "database_error",
+    "database_schema",
+    "receiver_auth",
+    "receiver_http",
+    "receiver_protocol",
+    "receiver_rejected",
+    "receiver_unavailable",
+    "io_error",
+    "missing_key",
+    "invalid_operation",
+    "runtime_error",
+    "executable_unavailable",
+}
+TRANSPORT_OPERATIONS = {"create", "show", "status", "prompt", "cancel", "close"}
+JournalId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.:-]{1,96}$")]
+InvocationId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+RunId = Annotated[str, StringConstraints(pattern=r"^run-[0-9a-f]{12}$")]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class JournalRecord(TypedDict):
+    time: str
+    event: JournalId
+    operation: JournalId
+    level: Literal["INFO", "ERROR"]
+    invocation_id: InvocationId
+    run_id: NotRequired[RunId]
+    task_id: NotRequired[JournalId]
+    node_id: NotRequired[JournalId]
+    dispatch_id: NotRequired[InvocationId]
+    execution_id: NotRequired[InvocationId]
+    outcome: NotRequired[JournalId]
+    error_code: NotRequired[JournalId]
+    transport_operation: NotRequired[JournalId]
+    component: NotRequired[Literal["workflow_store", "lesson_index"]]
+
+
+JOURNAL_RECORD = TypeAdapter[JournalRecord](JournalRecord)
+
+
+def valid_record(raw: object) -> TypeGuard[JournalRecord]:
+    try:
+        record = JOURNAL_RECORD.validate_python(raw)
+    except ValidationError:
+        return False
+    if record["event"] not in EVENTS or record["operation"] not in OPERATIONS:
+        return False
+    for value, choices in (
+        (record.get("outcome"), OUTCOMES),
+        (record.get("error_code"), ERRORS),
+        (record.get("transport_operation"), TRANSPORT_OPERATIONS),
+    ):
+        if value is not None and value not in choices:
+            return False
+    try:
+        datetime.fromisoformat(record["time"])
+    except ValueError:
+        return False
+    return True
+
+
+def decode_record(payload: str) -> JournalRecord | None:
+    if not isinstance(payload, str) or len(payload.encode()) > MAX_RECORD_BYTES:
+        return None
+    try:
+        record = json.loads(payload)
+    except ValueError, RecursionError:
+        return None
+    return record if valid_record(record) else None
+
+
+def error_code(exc: BaseException) -> str:
+    cause = exc if isinstance(exc, sqlite3.Error) else exc.__cause__
+    if isinstance(cause, sqlite3.Error):
+        code = getattr(cause, "sqlite_errorcode", 0) & 255
+        if code in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+            return "database_busy"
+        if code in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
+            return "database_corrupt"
+        return "database_constraint" if code == sqlite3.SQLITE_CONSTRAINT else "database_error"
+    message = str(exc) if isinstance(exc, ValueError) else ""
+    if message in {"Unsupported workflow database", "Unsupported lesson index"}:
+        return "database_schema"
+    if message in {
+        "SOURCE_DRIFT",
+        "RETRY_BUDGET_EXHAUSTED",
+        "QUEUED_CAPACITY",
+        "QUEUED_OWNERSHIP",
+        "QUEUED_RESOURCE",
+        "QUEUED_SNAPSHOT",
+    }:
+        return message
+    if isinstance(exc, OSError):
+        return "io_error"
+    if isinstance(exc, KeyError):
+        return "missing_key"
+    if isinstance(exc, ValueError):
+        return "invalid_operation"
+    return "runtime_error"

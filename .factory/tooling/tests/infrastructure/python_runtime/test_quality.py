@@ -55,6 +55,16 @@ class QualityTests(unittest.TestCase):
         memory.mkdir()
         (memory / "run.json").write_text("state\n", encoding="utf-8")
         self.assertEqual(before, quality.source_digest())
+        user = memory / "USER.md"
+        user.touch()
+        self.assertNotEqual(before, quality.source_digest())
+        user.unlink()
+        folder = memory / "lessons/project"
+        folder.mkdir(parents=True)
+        (folder / "case.md").write_text("lesson", encoding="utf-8")
+        self.assertNotEqual(before, quality.source_digest())
+        (folder / "case.md").unlink()
+        self.assertEqual(before, quality.source_digest())
         module.write_text("after\n", encoding="utf-8")
         self.assertNotEqual(before, quality.source_digest())
         module.write_text("before\n", encoding="utf-8")

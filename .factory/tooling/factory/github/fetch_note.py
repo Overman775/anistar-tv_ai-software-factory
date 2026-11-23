@@ -94,7 +94,22 @@ def fetch_comments(
     command = comments_command(kind, pr, repo)
     result = run(command, capture_output=True, text=True, check=False)
     if result.returncode:
-        raise RuntimeError(f"GitHub API failed ({result.returncode}): {result.stderr.strip()}")
+        # gh debug output can include HTTP headers and response bodies.
+        stderr = result.stderr.lower()
+        reason = next(
+            (
+                label
+                for label in (
+                    "permission denied",
+                    "rate limit",
+                    "not found",
+                    "authentication required",
+                )
+                if label in stderr
+            ),
+            "check GitHub CLI authentication and repository access",
+        )
+        raise RuntimeError(f"GitHub API failed ({result.returncode}): {reason}")
     try:
         pages = PAGES.validate_json(result.stdout)
     except ValidationError as exc:

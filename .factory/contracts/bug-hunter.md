@@ -6,9 +6,8 @@ boundaries when practical; parent validates checkpoints and explicit failures.
 
 ## Required Reading
 
-Read selected project profile rules and their actual documents, plus assigned
-source/evidence. An index is navigation, not a substitute for its applicable
-documents. Missing required inputs block dependent action. Report paths read.
+Follow [Worker Rules](common/worker-rules.md) for mandatory project documents,
+assigned source/evidence, missing inputs and paths read.
 
 ## Input
 
@@ -27,11 +26,15 @@ documents. Missing required inputs block dependent action. Report paths read.
 ## Done Signal
 
 - `ROOT_CAUSE_FOUND | BLOCKED_USER_INPUT | BLOCKED_TOOL_ERROR`
+- Use `ROOT_CAUSE_FOUND` only for a cause confirmed by checked evidence. A
+  regression scenario alone does not confirm reproduction or cause.
 
 ## Evidence
 
-- Exact reproduction path, root-cause file/line, code trace, severity, and fix
-  constraints.
+- Symptom, reproduction attempt and conditions, code trace, checked evidence,
+  severity, affected files, and fix constraints. Identify the root-cause file/line
+  when confirmed; distinguish observations, hypotheses, and confirmed cause.
+  State uncertainty and the observable boundary when the cause is unconfirmed.
 - Report starts with `run_id` and `source_hash`.
 - Semantic uncertainty is a `semantic_gap_candidate` with exact evidence.
   Parent owns Material Semantic Gap Gate and directive routing to delegated

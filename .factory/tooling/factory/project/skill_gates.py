@@ -10,6 +10,7 @@ from pathlib import Path
 from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory import file_reader
 from factory.decompose.contracts import Envelope, LoadedTask
 from factory.gates.gate_contract import (
     EvidenceText,
@@ -23,7 +24,7 @@ from factory.project.contracts import (
     Policy,
 )
 from factory.project.profile_io import check_frozen, fingerprint, safe_path, sha
-from factory.runtime.check_process import run_process
+from factory.runtime.commands.process import run_process
 from factory.runtime.workflow_core import atomic_json
 from factory.validation import validation_message
 
@@ -41,12 +42,12 @@ SKILL_CHECK_RESULT = TypeAdapter[SkillCheckResult](SkillCheckResult)
 def artifact_hash(staging: str | Path, source_lock: str | Path) -> str:
     root = Path(staging)
     paths = sorted(p for p in root.rglob("*") if p.is_file()) + [Path(source_lock)]
-    lock = json.loads(Path(source_lock).read_text(encoding="utf-8"))
+    lock = json.loads(file_reader.read_text(Path(source_lock), encoding="utf-8"))
     if lock.get("plan_path"):
         paths.append(Path(lock["plan_path"]))
     if any(p.is_symlink() for p in root.rglob("*")) or any(p.is_symlink() for p in paths):
         raise ValueError("Symlink in decomposition artifacts")
-    return fingerprint({str(p.absolute()): sha(p.read_bytes()) for p in paths})
+    return fingerprint({str(p.absolute()): sha(file_reader.read_bytes(p)) for p in paths})
 
 
 def check_decomposition_gates(
@@ -114,8 +115,8 @@ def check_decomposition_gates(
                     "argv": argv,
                     "cwd": str(cwd),
                     **result,
-                    "stdout": stdout.read_text(encoding="utf-8", errors="replace"),
-                    "stderr": stderr.read_text(encoding="utf-8", errors="replace"),
+                    "stdout": file_reader.read_text(stdout, encoding="utf-8", errors="replace"),
+                    "stderr": file_reader.read_text(stderr, encoding="utf-8", errors="replace"),
                     "stdout_path": str(stdout),
                     "stderr_path": str(stderr),
                 }
@@ -124,7 +125,7 @@ def check_decomposition_gates(
                 check_frozen(policy["files"])
                 if artifact_hash(staging, source_lock) != before:
                     raise ValueError("Decomposition artifacts changed during project checks")
-                answer = SKILL_CHECK_RESULT.validate_json(stdout.read_bytes())
+                answer = SKILL_CHECK_RESULT.validate_json(file_reader.read_bytes(stdout))
                 status = answer["status"]
                 if result["exit_code"] != {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[status]:
                     raise ValueError("Check status/exit code mismatch")

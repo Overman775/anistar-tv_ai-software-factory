@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
+from factory.environment import settings
 from factory.runtime.contracts import Config
 from factory.runtime.workflow_core import Invalid, require
 
@@ -14,7 +15,7 @@ BRANCH_PREFIX = "worktree/factory-"
 
 
 def _git(root: Path, *args: str) -> str:
-    env = os.environ.copy()
+    env = dict(settings())
     for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         env.pop(name, None)
     result = subprocess.run(
@@ -42,6 +43,14 @@ def _linked_factory_worktree(root: Path) -> bool:
     )
 
 
+def checkout_ref(root: Path) -> str | None:
+    """Identify the current branch, or the immutable commit of a detached checkout."""
+    if not any((parent / ".git").exists() for parent in (root, *root.parents)):
+        return None
+    branch = _git(root, "branch", "--show-current")
+    return "refs/heads/" + branch if branch else _git(root, "rev-parse", "--verify", "HEAD")
+
+
 def _worktree_config(root: Path, config: Config) -> Path:
     path = Path(config["_path"])
     require(
@@ -61,7 +70,9 @@ def check_workspace(root: Path, config: Config) -> None:
         )
 
 
-def prepare_workspace(root: Path, config: Config) -> dict[str, str]:
+def prepare_workspace(
+    root: Path, config: Config, *, has_current: Callable[[Path], bool] | None = None
+) -> dict[str, str]:
     mode = config["execution"].get("workspace", "shared")
     if mode != "worktree":
         check_workspace(root, config)
@@ -73,8 +84,12 @@ def prepare_workspace(root: Path, config: Config) -> dict[str, str]:
             Path(_git(root, "rev-parse", "--show-toplevel")).resolve() == root,
             "Prepare the worktree from the Git checkout root",
         )
+        if has_current is None:
+            from factory.database.provider import current_database
+
+            has_current = current_database().runs.has_current
         require(
-            not (root / ".factory/memory/state/workflow.json").exists(),
+            not has_current(root),
             "Existing run: resume or archive/clean it first",
         )
         require(

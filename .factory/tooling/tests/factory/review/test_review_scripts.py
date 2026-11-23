@@ -13,10 +13,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from factory.review.protocol.contracts import canonical_scope_hash
+from factory.review.protocol.diff import parse_diff
+from factory.review.protocol.evidence import validate_evidence
 from factory.review.render_review_report import render_report
-from factory.review.review_contracts import canonical_scope_hash
-from factory.review.review_diff import parse_diff
-from factory.review.review_evidence import validate_evidence
+from factory.review.validate_review_protocol import validator_sources
 from tests.factory.review.fixture_protocol import (
     SCRIPTS,
     TOOL_RUNNER,
@@ -54,6 +55,21 @@ class CurrentProtocolScenarios(unittest.TestCase):
             ".factory/contracts/common/agent-checkpoint.md#same-run-role-continuation",
             skill,
         )
+
+    def test_policy_snapshot_includes_nested_validators_with_distinct_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            package = Path(tmp)
+            (package / "protocol").mkdir()
+            outer = package / "__init__.py"
+            inner = package / "protocol/__init__.py"
+            outer.write_text("# public", encoding="utf-8")
+            inner.write_text("# rules", encoding="utf-8")
+            self.assertEqual(
+                validator_sources(package),
+                {"__init__.py": "# public", "protocol/__init__.py": "# rules"},
+            )
+            inner.write_text("# revised", encoding="utf-8")
+            self.assertEqual(validator_sources(package)["protocol/__init__.py"], "# revised")
 
     def test_clean_feature_complete_approve(self) -> None:
         temp, fixture = self.fixture(path="docs/review.md")
@@ -211,6 +227,32 @@ class CurrentProtocolScenarios(unittest.TestCase):
         )
         self.assertEqual(context["old"], {("lib/sample.dart", 1), ("lib/sample.dart", 3)})
         self.assertEqual(context["new"], {("lib/sample.dart", 1), ("lib/sample.dart", 3)})
+
+    def test_diff_hash_preserves_line_endings_and_finding_location(self) -> None:
+        for ending in (b"\n", b"\r\n"):
+            with self.subTest(ending=ending):
+                temp, fixture = self.fixture(mode="branch")
+                with temp:
+                    diff_path = Path(fixture.manifest["diff_file"])
+                    original = diff_path.read_bytes().replace(b"\n", ending)
+                    diff_path.write_bytes(original)
+                    fixture.manifest["diff_sha256"] = hashlib.sha256(original).hexdigest()
+                    fixture.rebind()
+                    finding = fixture.add_finding(severity="high")
+                    fixture.qa["code_verdict"] = "NEEDS_WORK"
+                    completed, result, _ = fixture.execute()
+                    self.assertEqual(completed.returncode, 0, result["errors"])
+                    self.assertEqual(result["findings"][0]["path"], fixture.path)
+                    self.assertEqual(result["findings"][0]["line"], 1)
+                    finding["line"] = 2
+                    finding["evidence"] = [source_evidence(fixture.path, line=2)]
+                    completed, result, _ = fixture.execute()
+                    self.assertEqual(completed.returncode, 2)
+                    self.assertEqual(result["findings"], [])
+                    diff_path.write_bytes(original + b" ")
+                    completed, result, _ = fixture.execute()
+                    self.assertEqual(completed.returncode, 2)
+                    self.assertIn("diff: sha256 mismatch", result["errors"])
 
     def test_not_run_makes_incomplete(self) -> None:
         temp, fixture = self.fixture()

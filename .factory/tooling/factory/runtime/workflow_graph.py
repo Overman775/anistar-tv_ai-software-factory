@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +14,8 @@ from pydantic import TypeAdapter, ValidationError
 from factory.project.profile_rules import (
     check_task,
     project_checks,
+    required_checks,
 )
-from factory.runtime import acceptance, finish_requirements
 from factory.runtime.contracts import (
     Agent,
     Config,
@@ -24,6 +25,7 @@ from factory.runtime.contracts import (
     State,
     agent_key,
 )
+from factory.runtime.reports import acceptance, finish_requirements
 from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -34,6 +36,44 @@ from factory.tasks.contracts import Task
 from factory.validation import validation_message
 
 GRAPH = TypeAdapter[Graph](Graph)
+
+
+def expand_intake_checks(raw: object, config: Config) -> Graph:
+    """Expand opt-in project checks before validating and saving an intake graph."""
+    graph = deepcopy(raw)
+    if isinstance(graph, dict) and isinstance(graph.get("tasks"), dict):
+        tasks = graph["tasks"]
+        for task in tasks.values():
+            if not isinstance(task, dict) or "project_check_inputs" not in task:
+                continue
+            inputs = task.pop("project_check_inputs")
+            require(isinstance(inputs, dict), "project_check_inputs must be a mapping")
+            checks = acceptance_guard(
+                required_checks,
+                config["_project"]["data"],
+                task,
+                final=len(tasks) == 1 or task.get("kind") == "integration",
+            )
+            by_id = {check["id"]: check for check in checks}
+            require(set(inputs) <= set(by_id), "Unknown or inactive project check inputs")
+            for check_id, paths in inputs.items():
+                check = by_id[check_id]
+                if check["kind"] == "observation":
+                    raise Invalid("Observation cannot have inputs")
+                if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
+                    raise Invalid("project check inputs must be a list of paths")
+                check["execution"]["inputs"] = list(
+                    dict.fromkeys([*check["execution"].get("inputs", []), *paths])
+                )
+            explicit = task.get("required_checks")
+            if not isinstance(explicit, list):
+                raise Invalid("required_checks must be a list")
+            require(
+                all(isinstance(c, dict) and c.get("id") not in by_id for c in explicit),
+                "Explicit check conflicts with derived project check",
+            )
+            task["required_checks"] = [*explicit, *checks]
+    return parse_graph(graph)
 
 
 def parse_graph(raw: object) -> Graph:
@@ -206,6 +246,12 @@ def _validate_nodes(
             require(n.get("agent") in agents, "Unknown agent")
         for p in n.get("owns", []):
             relative(workspace, p)
+        for p in n.get("handoff_inputs", []):
+            handoff_path = relative(workspace, p)
+            require(
+                not handoff_path.exists() or handoff_path.is_file(),
+                f"Node {n['id']} handoff_inputs must contain files: {p}",
+            )
         if n["stage"] in {"verify", "review", "accept", "explore"}:
             require(not n.get("owns"), "Read/check node cannot own product writes")
         if n["stage"] in {"verify", "review"}:
@@ -249,6 +295,7 @@ def validate_graph(
         if not (all(re.fullmatch("[A-Za-z0-9][A-Za-z0-9_-]*", k) for k in group)):
             raise Invalid("Invalid identity")
     for a in agents.values():
+        require(a["role"] != "teacher", "Teacher runs once after successful archival")
         require(
             a["profile"] in config["_roles"].get(a["role"], []),
             "Profile not allowed for role",
@@ -302,7 +349,7 @@ def validate_graph(
             "Duplicate/case-alias file scope",
         )
         for p in t["scope"]:
-            relative(workspace, p)
+            require(not relative(workspace, p).is_dir(), f"Scope must contain real files: {p}")
         require(set(t.get("depends_on", [])).issubset(tasks), "Unknown task dependency")
     for source, criteria in source_criteria.items():
         assigned = {
@@ -433,6 +480,7 @@ def diagram(state: State) -> str:
         lines.append(
             f"    participant {ids[a]} as {label(a)} · {label(info['role'])} / {label(p['model'])} / {p['runner']}"
         )
+    lines.append("    participant T as Teacher")
     nodes = {n["id"]: n for n in graph["nodes"]}
     done: set[str] = set()
     while len(done) < len(nodes):
@@ -462,4 +510,15 @@ def diagram(state: State) -> str:
                 f"        O-->>{ids[agent_key(n)]}: {label(e['reason'])}",
                 "    end",
             ]
+    if state["status"] == "cancelled":
+        lines.append("    Note over O,T: Run cancelled · skip final Teacher review")
+    else:
+        lines += [
+            "    opt After successful archive",
+            "        O->>O: Archive completed run",
+            "        O->>T: Final Teacher review (planned)"
+            if state["status"] == "active"
+            else "        O-->>T: Teacher assignment queued at archive",
+            "    end",
+        ]
     return "\n".join(lines) + "\n"

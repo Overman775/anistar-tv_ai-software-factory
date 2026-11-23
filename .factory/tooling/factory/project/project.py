@@ -9,6 +9,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from factory import file_reader
+from factory.logging_config import diagnostic_operation
 from factory.project.contracts import (
     AcceptedDocument,
     Snapshot,
@@ -19,6 +21,7 @@ from factory.project.profile_io import (
     material_entries,
     parse_yaml,
     review_materials,
+    safe_path,
     sha,
     snapshot,
     validate_snapshot,
@@ -38,7 +41,7 @@ from factory.project.profile_rules import (
 
 def configured_profile(config: str | Path) -> Path:
     config = Path(config).absolute()
-    data = parse_yaml(config.read_bytes())
+    data = parse_yaml(file_reader.read_bytes(config))
     from factory.project.profile_io import safe_path
 
     return safe_path(config.parent, data.get("project"))
@@ -48,26 +51,70 @@ def review_snapshot(
     workspace: str | Path, revision: str, profile_path: str | Path = ".factory/project/project.yaml"
 ) -> Snapshot:
     """Read accepted Git policy bytes, never a candidate working-tree override."""
-    if not (isinstance(revision, str) and re.fullmatch("[0-9a-f]{40}", revision)):
-        raise ValueError("Project policy: " + "full baseline commit SHA required")
     relative(profile_path)
-    workspace = Path(workspace).resolve()
+    workspace = Path(workspace).absolute()
+    git_root = Path(
+        subprocess.run(
+            ["git", "-C", str(workspace), "rev-parse", "--show-toplevel"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.removesuffix("\n")
+    ).resolve()
+    object_format = subprocess.run(
+        ["git", "-C", str(git_root), "rev-parse", "--show-object-format=storage"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    length = {"sha1": 40, "sha256": 64}.get(object_format)
+    require(
+        length is not None
+        and isinstance(revision, str)
+        and re.fullmatch(r"[0-9a-fA-F]{" + str(length) + r"}", revision) is not None,
+        "full baseline commit SHA required",
+    )
+    revision = revision.lower()
+    object_type = subprocess.run(
+        ["git", "-C", str(git_root), "cat-file", "-t", revision],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    require(object_type == "commit", "full baseline commit SHA required")
+    anchor = next(
+        (
+            parent
+            for parent in reversed((workspace, *workspace.parents))
+            if not parent.is_symlink() and parent.samefile(git_root)
+        ),
+        None,
+    )
+    require(anchor is not None, "workspace is outside the Git root")
+    assert anchor is not None
+    workspace_prefix = workspace.relative_to(anchor)
 
     def read(file: Path) -> bytes:
-        rel = str(file.relative_to(workspace))
-        # Reject symlinks at any path component in the baseline tree too.
-        for i in range(1, len(Path(rel).parts) + 1):
-            part = str(Path(*Path(rel).parts[:i]))
+        parts: list[str] = []
+        # Check traversed components before normalizing .., including workspace aliases.
+        for component in (*workspace_prefix.parts, *file.relative_to(workspace).parts):
+            if component == "..":
+                require(parts, "workspace is outside the Git root")
+                parts.pop()
+                continue
+            parts.append(component)
+            part = "/".join(parts)
             mode = subprocess.run(
-                ["git", "-C", str(workspace), "ls-tree", revision, "--", part],
+                ["git", "-C", str(git_root), "ls-tree", revision, "--", ":(literal)" + part],
                 check=True,
                 capture_output=True,
             ).stdout
             require(
                 mode and not mode.startswith(b"120000"), f"missing/symlink baseline policy: {part}"
             )
+        rel = "/".join(parts)
         return subprocess.run(
-            ["git", "-C", str(workspace), "show", f"{revision}:{rel}"],
+            ["git", "-C", str(git_root), "show", f"{revision}:{rel}"],
             check=True,
             capture_output=True,
         ).stdout
@@ -85,9 +132,25 @@ def review_snapshot(
 
     data, definition_paths = compose_profile(profile_raw, read_definition)
     project_paths = {"AGENTS.md"}
+    user_path = ".factory/memory/USER.md"
+    user_entry = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(git_root),
+            "ls-tree",
+            revision,
+            "--",
+            ":(literal)" + (workspace_prefix / user_path).as_posix(),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    if user_entry.stdout:
+        project_paths.add(user_path)
     for audience, role in [("worker", "reviewer"), ("coordinator", None)]:
         for rule in select_rules(
-            data, process="code-review", audience=audience, role=role, scope=None
+            data, process="code-review", audience=audience, role=role, stage="review", scope=None
         ):
             if "file" not in rule:
                 project_paths.update(document_paths(data, rule))
@@ -109,7 +172,9 @@ def review_snapshot(
                 if rel in definition_bytes
                 else read(workspace / Path(profile_path).parent / rel)
             )
-        return snapshot(load_profile(target), source="git:" + revision, documents=documents)
+        return snapshot(
+            load_profile(target, workspace_root=root), source="git:" + revision, documents=documents
+        )
 
 
 def main() -> None:
@@ -139,60 +204,53 @@ def main() -> None:
     args = parser.parse_args()
     result: object
     try:
-        if args.action == "review-policy":
-            result = review_snapshot(args.workspace, args.revision, args.profile_path)
-        elif args.action == "context" and args.process == "code-review":
-            require(
-                args.policy_snapshot,
-                "standalone review needs --policy-snapshot from accepted baseline",
-            )
-            pinned = json.loads(Path(args.policy_snapshot).read_text(encoding="utf-8"))
-            data = validate_snapshot(pinned)
-            result = {
-                "project": data["id"],
-                "policy_hash": pinned["sha256"],
-                "scope_status": "unknown" if args.scope is None else "known",
-                "review_criteria": review_criteria(data, "code-review.complete"),
-                "gates": [g for g in data.get("gates", []) if "code-review.complete" in g["at"]],
-                "instructions": review_materials(
-                    pinned,
-                    Path(args.config).absolute().parent,
-                    Path(args.workspace).resolve(),
-                    role=args.role,
-                    scope=args.scope,
-                    audience=args.audience,
-                ),
-            }
-        else:
-            require(
-                args.action != "context" or not args.policy_snapshot,
-                "review snapshot only belongs to code-review",
-            )
-            policy = load_profile(configured_profile(args.config))
-            if args.action == "checks":
-                result = required_checks(
-                    policy["data"],
-                    json.loads(Path(args.task).read_text(encoding="utf-8")),
-                    final=args.final,
+        with diagnostic_operation(args.workspace, "project." + args.action):
+            if args.action == "review-policy":
+                result = review_snapshot(args.workspace, args.revision, args.profile_path)
+            elif args.action == "context" and args.process == "code-review":
+                require(
+                    args.policy_snapshot,
+                    "standalone review needs --policy-snapshot from accepted baseline",
                 )
-            else:
+                pinned = json.loads(
+                    file_reader.read_text(Path(args.policy_snapshot), encoding="utf-8")
+                )
+                data = validate_snapshot(pinned)
                 result = {
-                    "project": policy["data"]["id"],
-                    "policy_hash": policy["hash"],
+                    "project": data["id"],
+                    "policy_hash": pinned["sha256"],
                     "scope_status": "unknown" if args.scope is None else "known",
+                    "review_criteria": review_criteria(data, "code-review.complete"),
                     "gates": [
-                        g
-                        for g in policy["data"].get("gates", [])
-                        if any(at.startswith(args.process + ".") for at in g["at"])
+                        g for g in data.get("gates", []) if "code-review.complete" in g["at"]
                     ],
-                    "decisions": policy["data"].get("decisions", []),
-                    "checks": project_checks(policy["data"], all_processes=False)
-                    if args.process == "implement"
-                    else [],
-                    "review_criteria": review_criteria(policy["data"])
-                    if args.process in {"code-review", "code-audit", "implement"}
-                    else [],
-                    "instructions": material_entries(
+                    "instructions": review_materials(
+                        pinned,
+                        Path(args.config).absolute().parent,
+                        Path(args.workspace).resolve(),
+                        role=args.role,
+                        stage=args.stage or "review",
+                        scope=args.scope,
+                        audience=args.audience,
+                    ),
+                }
+            else:
+                require(
+                    args.action != "context" or not args.policy_snapshot,
+                    "review snapshot only belongs to code-review",
+                )
+                policy = load_profile(configured_profile(args.config))
+                if args.action == "checks":
+                    result = required_checks(
+                        policy["data"],
+                        json.loads(file_reader.read_text(Path(args.task), encoding="utf-8")),
+                        final=args.final,
+                    )
+                else:
+                    user = safe_path(
+                        Path(args.config).resolve().parent, "memory/USER.md", exists=False
+                    )
+                    instructions = material_entries(
                         policy,
                         args.workspace,
                         process=args.process,
@@ -200,9 +258,27 @@ def main() -> None:
                         role=args.role,
                         stage=args.stage,
                         scope=args.scope,
-                    ),
-                }
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+                        user=user if user.is_file() else None,
+                    )
+                    result = {
+                        "project": policy["data"]["id"],
+                        "policy_hash": policy["hash"],
+                        "scope_status": "unknown" if args.scope is None else "known",
+                        "gates": [
+                            g
+                            for g in policy["data"].get("gates", [])
+                            if any(at.startswith(args.process + ".") for at in g["at"])
+                        ],
+                        "decisions": policy["data"].get("decisions", []),
+                        "checks": project_checks(policy["data"], all_processes=False)
+                        if args.process == "implement"
+                        else [],
+                        "review_criteria": review_criteria(policy["data"])
+                        if args.process in {"code-review", "code-audit", "implement"}
+                        else [],
+                        "instructions": instructions,
+                    }
+            print(json.dumps(result, ensure_ascii=False, indent=2))
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         parser.exit(1, f"BLOCKED: {exc}\n")
 

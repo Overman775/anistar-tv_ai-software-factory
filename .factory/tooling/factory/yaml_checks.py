@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+from factory import file_reader
 from factory.diagnostics.dry_run import copy_bundle
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, parse_yaml
@@ -59,7 +60,7 @@ def _check_files(files: list[Path], agents: Path) -> int:
         try:
             if file.is_symlink() or any(parent.is_symlink() for parent in file.parents):
                 raise ValueError("symlink YAML path")
-            data = parse_yaml(file.read_bytes())
+            data = parse_yaml(file_reader.read_bytes(file))
             if not isinstance(data, dict):
                 raise ValueError("document must be a mapping")
             if file.stem in {"factory", "factory.example"}:

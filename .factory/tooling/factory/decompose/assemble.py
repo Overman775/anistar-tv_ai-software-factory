@@ -7,29 +7,31 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NotRequired
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory import file_reader
 from factory.decompose.contracts import LoadedTask, Text
-from factory.decompose.output_safety import (
+from factory.decompose.graph.task_data import find_markdown_file, load_source_lock, load_tasks
+from factory.decompose.staging.manifest import Sha256, read_done_signal
+from factory.decompose.staging.output_safety import (
     atomic_write_text,
-    factory_inputs,
     guard_evidence_aliases,
     guard_output,
     protected_inputs,
+    review_inputs,
+    review_worker_materials,
 )
-from factory.decompose.task_data import find_markdown_file, load_source_lock, load_tasks
 from factory.gates.catalog import core_result
 from factory.gates.gate_contract import GateCheck, digest, evidence, require_pass
 from factory.paths import FACTORY_ROOT
-from factory.planning.plan_document import parse_metadata
+from factory.planning.plan_document import parse_metadata, parse_revision
 from factory.planning.validate_plan import validate as validate_plan
 from factory.project.contracts import Policy, Selection
 from factory.project.profile_io import check_frozen as check_frozen
@@ -72,6 +74,9 @@ def preflight_outputs(args: argparse.Namespace, *, assembling: bool) -> None:
         guard_output(destination, protected)
         guard_output(destination, {Path(args.evidence_dir).resolve()})
     else:
+        for key in ("author_done", "repair_done", "previous_request"):
+            if path := getattr(args, key, None):
+                protected.add(Path(path).resolve())
         guard_output(args.request, protected)
         if getattr(args, "review", None):
             protected.add(Path(args.review).resolve())
@@ -81,12 +86,17 @@ def preflight_outputs(args: argparse.Namespace, *, assembling: bool) -> None:
     guard_evidence_aliases(args.evidence_dir)
 
 
-def binding(config: str | Path, staging: str | Path, source: str | Path) -> tuple[Policy, str, str]:
+def binding(
+    config: str | Path,
+    staging: str | Path,
+    source: str | Path,
+    selected: dict[str, str] | None = None,
+) -> tuple[Policy, str, str]:
     policy = load_profile(configured_profile(config))
     artifacts = artifact_hash(staging, source)
     core = {
-        p.relative_to(FACTORY_ROOT).as_posix(): sha(p.read_bytes())
-        for p in sorted(factory_inputs())
+        p.relative_to(FACTORY_ROOT).as_posix(): sha(file_reader.read_bytes(p))
+        for p in sorted(review_inputs())
     }
     selections: list[Selection] = [dict(process="decompose", audience="coordinator", scope=None)]
     selections += [
@@ -94,28 +104,60 @@ def binding(config: str | Path, staging: str | Path, source: str | Path) -> tupl
         for r in ("task-decomposer", "task-reviewer")
     ]
     documents = freeze_materials(policy, policy["workspace"], selections)
+    agents = Path(policy["workspace"]) / "AGENTS.md"
+    agents_hash = sha(file_reader.read_bytes(agents)) if agents.exists() else None
+    workers = review_worker_materials(config, selected or {})
+    coordinator = {
+        rel: sha(file_reader.read_bytes(FACTORY_ROOT / rel))
+        for rel in (
+            "gates/skills/decompose/gate.md",
+            "skills/factory-decompose/SKILL.md",
+            "skills/factory-decompose/references/output-contract.md",
+            "contracts/common/agent-checkpoint.md",
+            "contracts/common/project-policy.md",
+        )
+    }
     return (
         policy,
         artifacts,
-        digest({"project": policy["hash"], "core": core, "documents": documents}),
+        digest(
+            {
+                "version": 4,
+                "project": policy["hash"],
+                "core": core,
+                "documents": documents,
+                "agents": agents_hash,
+                "workers": workers,
+                "coordinator": coordinator,
+            }
+        ),
     )
 
 
 def inspect(
-    config: str | Path, staging: str | Path, source: str | Path, output_dir: str | Path
+    config: str | Path,
+    staging: str | Path,
+    source: str | Path,
+    output_dir: str | Path,
+    selected: dict[str, str] | None = None,
+    *,
+    expected_artifacts: str | None = None,
 ) -> tuple[Policy, str, str, dict[str, LoadedTask], list[GateCheck]]:
     """Run core checks and project supplements separately to retain mixed outcomes."""
-    policy, artifacts, policy_hash = binding(config, staging, source)
+    policy, artifacts, policy_hash = binding(config, staging, source, selected)
+    if expected_artifacts is not None and expected_artifacts != artifacts:
+        raise ValueError("Staging changed after Done Signal validation")
     lock, source_errors = load_source_lock(source)
     if lock is not None and lock.get("project_policy_sha256") != policy["hash"]:
         source_errors.append("Project policy changed: new intake required")
-    if lock is not None:
+    if lock is not None and not source_errors:
         try:
-            plan_text = Path(lock["plan_path"]).read_text(encoding="utf-8")
+            plan_text = file_reader.read_text(Path(lock["plan_path"]), encoding="utf-8")
             source_errors += [str(x) for x in validate_plan(plan_text, phase="approved")]
             metadata, _ = parse_metadata(plan_text)
-            if metadata.get("plan_id") != lock["plan_id"] or metadata.get("revision") != str(
-                lock["plan_revision"]
+            if (
+                metadata.get("plan_id") != lock["plan_id"]
+                or parse_revision(metadata.get("revision", "")) != lock["plan_revision"]
             ):
                 source_errors.append("Source plan identity/revision differs from intake")
         except (OSError, ValueError) as exc:
@@ -186,7 +228,7 @@ def inspect(
             "Core validation must pass before project commands",
             [str(output_dir / "graph.log")],
         )
-    if binding(config, staging, source)[1:] != (artifacts, policy_hash):
+    if binding(config, staging, source, selected)[1:] != (artifacts, policy_hash):
         source_record = evidence(
             "source", "BLOCKED", "Inputs changed during validation", [str(source)]
         )
@@ -208,6 +250,10 @@ class ReviewRequest(ReviewIdentity):
     policy_hash: Text
     task_ids: Annotated[list[Text], Field(min_length=1)]
     criteria: list[Text]
+    source_lock_sha256: Sha256
+    author_manifest: dict[Text, Sha256]
+    repaired: bool
+    profiles: NotRequired[dict[Literal["task-decomposer", "task-reviewer"], Text]]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -301,13 +347,73 @@ def review_record(
         return evidence("task-review", "BLOCKED", str(exc), [str(reference)])
 
 
+def validate_repair(
+    args: argparse.Namespace,
+    previous: ReviewRequest,
+    manifest: dict[str, str],
+    profiles: dict[str, str],
+) -> None:
+    if (
+        previous["repaired"]
+        or (previous["run_id"], previous["author_id"], previous["reviewer_id"])
+        != (args.run_id, args.author_id, args.reviewer_id)
+        or previous["assignment_id"] == args.assignment_id
+        or previous.get("profiles", {}) != profiles
+    ):
+        raise ValueError(
+            "Reviewer repair needs the original review assignment and a new request ID"
+        )
+    original = previous["author_manifest"]
+    if set(p for p in original if Path(p).name == "task_result.json") != {
+        p for p in manifest if Path(p).name == "task_result.json"
+    } or len(original) != len(manifest):
+        raise ValueError("Reviewer repair cannot add, remove or move tasks to a new scope")
+
+
 def prepare(args: argparse.Namespace) -> ReviewRequest:
     preflight_outputs(args, assembling=False)
+    initial = getattr(args, "author_done", None)
+    repair = getattr(args, "repair_done", None)
+    previous = getattr(args, "previous_request", None)
+    signal = initial or repair
+    if signal is None or not (
+        (initial and not repair and not previous) or (repair and previous and not initial)
+    ):
+        raise ValueError("Provide --author-done or both --previous-request and --repair-done")
+    source_hash = sha(file_reader.read_bytes(Path(args.source_lock)))
+    old = validate_request(json.loads(file_reader.read_bytes(Path(previous)))) if previous else None
+    if old is not None and source_hash != old["source_lock_sha256"]:
+        raise ValueError("Reviewer repair changed the accepted source lock")
+    expected = artifact_hash(args.staging_dir, args.source_lock)
+    manifest = read_done_signal(signal, args.staging_dir)
+    profiles = {
+        role: name
+        for role, name in (
+            ("task-decomposer", getattr(args, "decomposer_profile", None)),
+            ("task-reviewer", getattr(args, "reviewer_profile", None)),
+        )
+        if name is not None
+    }
+    if old is not None:
+        validate_repair(args, old, manifest, profiles)
     policy, artifacts, policy_hash, tasks, records = inspect(
-        args.config, args.staging_dir, args.source_lock, args.evidence_dir
+        args.config,
+        args.staging_dir,
+        args.source_lock,
+        args.evidence_dir,
+        profiles,
+        expected_artifacts=expected,
     )
     if any(r["status"] != "PASS" for r in records):
-        raise ValueError("; ".join(r["message"] for r in records if r["status"] != "PASS"))
+        status = "FAIL" if any(r["status"] == "FAIL" for r in records) else "BLOCKED"
+        raise ValueError(
+            "Gate "
+            + status
+            + ": "
+            + "; ".join(r["message"] for r in records if r["status"] != "PASS")
+        )
+    if old is not None and (old["task_ids"] != sorted(tasks) or old["policy_hash"] != policy_hash):
+        raise ValueError("Reviewer repair changed task identity or accepted policy")
     raw_request = {
         "run_id": args.run_id,
         "assignment_id": args.assignment_id,
@@ -318,7 +424,12 @@ def prepare(args: argparse.Namespace) -> ReviewRequest:
         "policy_hash": policy_hash,
         "task_ids": sorted(tasks),
         "criteria": REVIEW_CRITERIA,
+        "source_lock_sha256": source_hash,
+        "author_manifest": old["author_manifest"] if old else manifest,
+        "repaired": old is not None,
     }
+    if profiles:
+        raw_request["profiles"] = profiles
     request = validate_request(raw_request)
     guard_output(
         args.request, protected_inputs(args.config, args.staging_dir, args.source_lock, policy)
@@ -329,15 +440,23 @@ def prepare(args: argparse.Namespace) -> ReviewRequest:
 
 def assemble(args: argparse.Namespace) -> dict[str, object]:
     preflight_outputs(args, assembling=True)
-    policy, artifacts, policy_hash, tasks, records = inspect(
-        args.config, args.staging_dir, args.source_lock, args.evidence_dir
-    )
     try:
-        review_inputs = {Path(p): Path(p).read_bytes() for p in (args.request, args.review)}
+        review_inputs = {
+            Path(p): file_reader.read_bytes(Path(p)) for p in (args.request, args.review)
+        }
         request = json.loads(review_inputs[Path(args.request)])
         report = json.loads(review_inputs[Path(args.review)])
     except OSError, ValueError:
         request, report = {}, {}
+    try:
+        selected: dict[str, str] = {
+            role: name for role, name in validate_request(request).get("profiles", {}).items()
+        }
+    except ValueError:
+        selected = {}
+    policy, artifacts, policy_hash, tasks, records = inspect(
+        args.config, args.staging_dir, args.source_lock, args.evidence_dir, selected
+    )
     records.append(review_record(request, report, artifacts, policy_hash, tasks, args.review))
     result = core_result(
         "decompose.complete",
@@ -363,9 +482,9 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
             source_file = find_markdown_file(task, task["file"])
             if not source_file:
                 raise ValueError("Missing task Markdown")
-            shutil.copyfile(source_file, target / task["filename"])
+            file_reader.copy_file(Path(source_file), target / task["filename"])
         if len(tasks) > 1:
-            lock = json.loads(Path(args.source_lock).read_text(encoding="utf-8"))
+            lock = json.loads(file_reader.read_text(Path(args.source_lock), encoding="utf-8"))
             listing = "\n".join(f"- [{task['id']}]({task['filename']})" for task in tasks.values())
             manifest = {
                 "kind": "epic",
@@ -377,7 +496,7 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
                     for t in tasks.values()
                 ],
             }
-            graph = (Path(args.evidence_dir) / "graph.md").read_text(encoding="utf-8")
+            graph = file_reader.read_text(Path(args.evidence_dir) / "graph.md", encoding="utf-8")
             (target / "epic.md").write_text(
                 "# "
                 + args.bundle_id
@@ -394,15 +513,18 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
                 + "\n```\n",
                 encoding="utf-8",
             )
-        if binding(args.config, args.staging_dir, args.source_lock)[1:] != (artifacts, policy_hash):
+        if binding(args.config, args.staging_dir, args.source_lock, selected)[1:] != (
+            artifacts,
+            policy_hash,
+        ):
             raise ValueError("Inputs changed before final assembly")
         # Require copied bytes to equal reviewed bytes, not merely unchanged filenames.
         for task in tasks.values():
-            if (target / task["filename"]).read_bytes() != Path(
-                find_markdown_file(task, task["file"]) or ""
-            ).read_bytes():
+            if file_reader.read_bytes(target / task["filename"]) != file_reader.read_bytes(
+                Path(find_markdown_file(task, task["file"]) or "")
+            ):
                 raise ValueError("Task bytes changed while copying")
-        if any(path.read_bytes() != content for path, content in review_inputs.items()):
+        if any(file_reader.read_bytes(path) != content for path, content in review_inputs.items()):
             raise ValueError("Review inputs changed during assembly")
         if destination.exists():
             raise ValueError("Destination appeared during assembly")
@@ -419,11 +541,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--request", required=True)
     parser.add_argument("--evidence-dir", required=True)
     parser.add_argument("--review")
+    parser.add_argument("--author-done")
+    parser.add_argument("--repair-done")
+    parser.add_argument("--previous-request")
     parser.add_argument("--bundle-id")
+    parser.add_argument("--decomposer-profile")
+    parser.add_argument("--reviewer-profile")
     for key in ("run-id", "assignment-id", "author-id", "reviewer-id"):
         parser.add_argument("--" + key)
     args = parser.parse_args()
-    for path in (args.request, args.evidence_dir, args.review):
+    for path in (
+        args.request,
+        args.evidence_dir,
+        args.review,
+        args.author_done,
+        args.repair_done,
+        args.previous_request,
+    ):
         if path and Path(path).resolve().is_relative_to(Path(args.staging_dir).resolve()):
             parser.error("Review/evidence files must be outside staging task inputs")
     if args.action == "assemble" and (not args.review or not args.bundle_id):

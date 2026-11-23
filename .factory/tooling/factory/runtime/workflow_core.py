@@ -5,10 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
+from factory import file_reader
 
 
 class Invalid(ValueError):
@@ -18,6 +22,27 @@ class Invalid(ValueError):
 def require(condition: object, message: str) -> None:
     if not condition:
         raise Invalid(message)
+
+
+@contextmanager
+def lock(path: Path, *, create_parents: bool = True, wait: bool = False) -> Iterator[None]:
+    """The kernel releases ownership when a caller dies. Keep one stable lock inode."""
+    if create_parents:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as file:
+        try:
+            if sys.platform != "win32":
+                import fcntl
+
+                fcntl.flock(file.fileno(), fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+            else:
+                import msvcrt
+
+                file.seek(0)
+                msvcrt.locking(file.fileno(), msvcrt.LK_LOCK if wait else msvcrt.LK_NBLCK, 1)
+        except OSError as exc:
+            raise Invalid("Ledger locked; retry after the current transaction") from exc
+        yield
 
 
 def acceptance_guard[**P, R](function: Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
@@ -31,8 +56,12 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def identity(value: object) -> str:
+    return digest(json.dumps(value, sort_keys=True, ensure_ascii=False).encode())
+
+
 def read_json(path: str | Path) -> Any:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return json.loads(file_reader.read_text(Path(path), encoding="utf-8"))
 
 
 def atomic_json(path: str | Path, value: object) -> None:
@@ -75,5 +104,9 @@ def snapshot(workspace: str | Path, scope: list[str]) -> dict[str, str]:
     for rel in scope:
         p = relative(workspace, rel)
         require(not p.is_symlink() and not p.is_dir(), f"Scope must contain real files: {rel}")
-        result[rel] = digest(p.read_bytes()) if p.exists() else "DELETED"
+        if p.exists():
+            with file_reader.open_binary(p) as f:
+                result[rel] = hashlib.file_digest(f, "sha256").hexdigest()
+        else:
+            result[rel] = "DELETED"
     return result

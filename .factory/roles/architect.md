@@ -18,7 +18,7 @@ Before action, read `AGENTS.md`, then:
 - `.factory/contracts/architect.md`;
 - `.factory/contracts/common/worker-rules.md`;
 - `.factory/skills/factory-planning/references/architect-input.md`;
-- `.factory/skills/factory-planning/references/plan-contract.md`;
+- `.factory/skills/factory-planning/references/architect-plan-contract.md`;
 - canonical architecture and structure documents from the project profile in full;
 - source request, current planning session, and bounded relevant project code.
 
@@ -42,18 +42,18 @@ Factory Decompose owns tickets. Factory Implement owns execution.
 
 ## Workflow
 
-1. Lock source, desired outcome, and resolved working map. Orchestrator owns
+1. Verify the already locked source, desired outcome, and resolved working map. Orchestrator owns
    questions. Complete maps use fast path; reopen discovery only for missing
    material evidence or contradiction.
 2. Follow [Project discovery](../contracts/common/code-discovery.md) only when supplied evidence cannot establish
    behavior, ownership, architecture, or compatibility. Reuse evidence; do not
    build implementation inventory.
-3. Render complete candidate under plan contract. Full architecture documents
+3. Render complete candidate under the candidate plan contract. Full architecture documents
    govern solution shape even when feature code suggests a shortcut.
 4. Self-check behavior, every capability, decisions, architecture/ownership,
    typed contract coverage, explicit `EXT-*` handling, developer readiness,
    separate QA, handoff continuation/authorization, deduplication, and the assigned artifact language.
-   Preserve exact technical identities; generic English prose is a defect.
+   Use the task/project language for prose; preserve exact technical identities and required headings.
 5. Return material gaps with evidence; target and revision stay unchanged.
    Otherwise write `.factory/memory/staging/planning-plan.md.candidate` and validate it,
    using the unchanged live target as `--previous` after first presentation.

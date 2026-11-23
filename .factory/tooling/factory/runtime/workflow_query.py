@@ -1,10 +1,14 @@
-"""Read-only projection of the next workflow actions; caller holds the ledger lock."""
+"""Project next workflow actions and deliver the Teacher outbox under the ledger lock."""
 
 from pathlib import Path
 from typing import Any, Protocol
 
-from factory.runtime import command_worker, escalation, report_history
+from factory.runtime import command_worker, teacher
 from factory.runtime.contracts import ExecutionReceipt, Node, State
+from factory.runtime.history import report_history
+from factory.runtime.knowledge.teacher_job_repository import TeacherJobRepository
+from factory.runtime.packets.content import pending_packet_confirmations
+from factory.runtime.scheduling import escalation
 from factory.runtime.workflow_config import check_config
 from factory.runtime.workflow_core import Invalid, require
 from factory.runtime.workflow_graph import (
@@ -20,10 +24,14 @@ class QueryLedger(Protocol):
     def active_commands(self, state: State) -> dict[str, ExecutionReceipt]: ...
     def acceptance_task(self, state: State, nodes: dict[str, Node], node_id: str) -> Task: ...
     def claim_pool(self, state: State, nodes: dict[str, Node], node_id: str) -> str: ...
-    def check_completion(self, state: State) -> None: ...
+    def check_completion(
+        self, state: State, *, config_error: str | None = None, config_checked: bool = False
+    ) -> None: ...
 
 
-def next_actions(ledger: QueryLedger, state: State, after: str | None) -> dict[str, Any]:
+def next_actions(
+    ledger: QueryLedger, state: State, after: str | None, *, jobs: TeacherJobRepository
+) -> dict[str, Any]:
     require(
         after is None or after.startswith(state["run_id"] + ":"),
         "Cursor belongs to a different run",
@@ -57,20 +65,29 @@ def next_actions(ledger: QueryLedger, state: State, after: str | None) -> dict[s
             if any(n["id"] in active and n.get("agent") == key for n in state["graph"]["nodes"])
         },
         "commands": commands,
+        "after_archive": teacher.finalizer(ledger.root, state, jobs=jobs),
+        "pending_teacher_events": teacher.pending(ledger.root, jobs=jobs),
+        "pending_packet_confirmations": pending_packet_confirmations(state),
     }
     results = {}
     ready, accepts = [], []
     blockers: dict[str, str] = {}
     corrections: dict[str, list[str]] = {}
+    config_error = None
     if state["status"] == "active":
         nodes = validate_graph(state["graph"], state["config"], ledger.root)
         try:
             check_config(state)
-            validate_assignment_lineage(
-                state["graph"], state["config"], state.get("corrections", [])
-            )
         except Invalid as exc:
-            blockers["run"] = str(exc)
+            config_error = str(exc)
+            blockers["run"] = config_error
+        if config_error is None:
+            try:
+                validate_assignment_lineage(
+                    state["graph"], state["config"], state.get("corrections", [])
+                )
+            except Invalid as exc:
+                blockers["run"] = str(exc)
         for key, current in state["nodes"].items():
             report = current.get("report")
             if report and current.get("dispatch_id") not in state.get("processed_results", []):
@@ -105,7 +122,7 @@ def next_actions(ledger: QueryLedger, state: State, after: str | None) -> dict[s
     completion = False
     if state["status"] == "active" and not active:
         try:
-            ledger.check_completion(state)
+            ledger.check_completion(state, config_error=config_error, config_checked=True)
             completion = True
         except Invalid as exc:
             blockers["completion"] = str(exc)

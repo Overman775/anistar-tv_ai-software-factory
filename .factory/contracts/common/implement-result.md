@@ -1,31 +1,7 @@
 # Implement result and stage boundaries
 
+Read [Implement handoff evidence](implement-handoff.md) for required fields, snapshots and write-stage evidence.
 
-Required fields: run_id, task_id, slice_id, node_id, dispatch_id, source_hash,
-terminal:true, outcome:PASS|FAIL|BLOCKED, summary, files, checks, stage_result.
-Copy identities from the assignment. Use the displayed `finish_requirements`.
-`files` covers every authoritative task path with SHA-256 or DELETED.
-For projected integration work, `task.scope` shows the worker's local paths.
-Use `prepare-report` to capture the full authoritative snapshot at handoff.
-`checks` contains actual results, never planned commands masquerading as evidence.
-At author handoff, the worker may call `workflow.py prepare-report NODE DRAFT [RECEIPT_ID ...]`.
-Use `-` for DRAFT to read JSON from stdin when no assigned draft path is available.
-The draft carries run_id, dispatch_id, source_hash and node_id from the assignment,
-author fields and any observation checks,
-but no `files` field. The helper checks the bound dispatch, adds selected current
-required receipts, derives task_id and slice_id, and captures scope files. PASS
-requires passed receipts; FAIL/BLOCKED may include authentic fresh FAIL/BLOCKED
-receipts without relabeling them. An invalid source snapshot permits a FAIL/BLOCKED handoff. PASS requires an
-intact snapshot, and finish records observed drift for a terminal failure. Save its `result` as the report. The coordinator
-must not use this helper to refresh a returned report or manufacture a fresh handoff; request
-a new author handoff instead. `finish` still checks freshness. Existing reports remain valid.
-Failed/blocked work is preserved. ACP/CLI transport success is not work success.
-
-A work/docs node without an applicable command gate and without project-checks
-edits only its allowed files and returns
-stage_result:WRITES_READY, outcome:PASS, checks:[]; this is an intermediate handoff.
-Do not run codegen/static/test/build commands without the reservation.
-Required checks are deferred to the assigned verification node, never waived.
 For a command-capable assignment follow the supplied check-execution contract.
 Final role Done Signals apply only after its assigned verification completes.
 Review requires an independent APPROVE for PASS; known FAIL/BLOCKED stage results

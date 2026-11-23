@@ -11,14 +11,15 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from factory.runtime.assignment import implement_packet, validate_packet
-from factory.runtime.check_process import Process, execute_check
+from factory.runtime.commands.process import Process, execute_check
 from factory.runtime.contracts import EscalationPolicy
-from factory.runtime.escalation_policy import correction_decision
+from factory.runtime.scheduling.assignment import implement_packet, validate_packet
+from factory.runtime.scheduling.escalation_policy import correction_decision
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, atomic_json
+from factory.runtime.workflow_core import Invalid
 from factory.runtime.workflow_graph import validate_graph
 from tests.factory.runtime import workflow_fixture
+from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
 
 _TOOLS = Path(__file__).resolve().parents[3] / "bin"
 
@@ -28,7 +29,7 @@ class ToolBoundaryTests(unittest.TestCase):
         files = [
             "tooling/bin/workflow.py",
             "gates/skills/planning/validate_plan.py",
-            "tooling/factory/runtime/assignment.py",
+            "tooling/factory/runtime/scheduling/assignment.py",
             "tooling/factory/checks/command.py",
             "tooling/factory/checks/contracts.py",
             "tooling/factory/tasks/contracts.py",
@@ -37,9 +38,14 @@ class ToolBoundaryTests(unittest.TestCase):
             "tooling/factory/runtime/workflow_config.py",
             "tooling/factory/runtime/workflow_graph.py",
             "tooling/factory/runtime/workflow_query.py",
+            "tooling/factory/runtime/run_journal.py",
+            "tooling/factory/runtime/transitions/checks.py",
+            "tooling/factory/runtime/transitions/packets.py",
+            "tooling/factory/runtime/transitions/reports.py",
+            "tooling/factory/runtime/transitions/revisions.py",
             "tooling/factory/runtime/workflow_sources.py",
-            "tooling/factory/runtime/check_process.py",
-            "tooling/factory/runtime/escalation_policy.py",
+            "tooling/factory/runtime/commands/process.py",
+            "tooling/factory/runtime/scheduling/escalation_policy.py",
             "tooling/factory/planning/plan_document.py",
             "tooling/factory/planning/plan_rules.py",
             "tooling/factory/planning/plan_revision.py",
@@ -91,13 +97,13 @@ class ToolBoundaryTests(unittest.TestCase):
     def test_corrupt_persisted_types_fail_before_a_transition_or_write(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
         fixture.init()
-        state = json.loads(fixture.ledger.path.read_text())
+        state = json.loads(record_bytes(fixture.ledger))
         state["counters"] = {"label:tests": "zero"}
-        atomic_json(fixture.ledger.path, state)
-        before = fixture.ledger.path.read_bytes()
+        overwrite(fixture.ledger, state)
+        before = record_bytes(fixture.ledger)
         with self.assertRaisesRegex(Invalid, "Invalid persisted state.*counters"):
             fixture.ledger.claim("write-label")
-        self.assertEqual(before, fixture.ledger.path.read_bytes())
+        self.assertEqual(before, record_bytes(fixture.ledger))
 
     def test_disabled_escalation_survives_state_roundtrip(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
@@ -115,15 +121,15 @@ class ToolBoundaryTests(unittest.TestCase):
         fixture.g["sources"]["request"]["plan_revision"] = "one"
         with self.assertRaisesRegex(Invalid, "Invalid workflow graph.*plan_revision"):
             fixture.init()
-        self.assertFalse(fixture.ledger.path.exists())
+        self.assertFalse(has_current(fixture.ledger))
         fixture.g["sources"]["request"].pop("plan_revision")
         state = fixture.init()
-        before = fixture.ledger.path.read_bytes()
+        before = record_bytes(fixture.ledger)
         invalid = json.loads(json.dumps(state))
         invalid["counters"] = {"label:tests": "zero"}
         with self.assertRaisesRegex(Invalid, "Invalid persisted state.*counters"):
             fixture.ledger.save(invalid, "invalid")
-        self.assertEqual(before, fixture.ledger.path.read_bytes())
+        self.assertEqual(before, record_bytes(fixture.ledger))
 
     def test_ledger_rejects_unknown_nested_fields_and_bool_counter(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
@@ -135,7 +141,7 @@ class ToolBoundaryTests(unittest.TestCase):
             with self.subTest(path=path):
                 raw = json.loads(json.dumps(state))
                 raw["nodes"]["write-label"][path] = value
-                fixture.ledger.path.write_text(json.dumps(raw))
+                overwrite(fixture.ledger, raw)
                 with self.assertRaisesRegex(Invalid, rf"nodes\.\*.*{location}") as caught:
                     fixture.ledger.read()
                 self.assertNotIn("secret input", str(caught.exception))
@@ -162,7 +168,7 @@ class ToolBoundaryTests(unittest.TestCase):
                         validate_graph(graph, f.config, f.root)
                     with self.assertRaisesRegex(Invalid, rf"tasks\.\*\.{field}"):
                         f.ledger.init(graph, f.config)
-                    self.assertFalse(f.ledger.path.exists())
+                    self.assertFalse(has_current(f.ledger))
 
         for field in ("id", "task", "stage", "agent", "depends_on"):
             graph = deepcopy(f.g)
@@ -170,14 +176,14 @@ class ToolBoundaryTests(unittest.TestCase):
             with self.subTest(node_field=field):
                 with self.assertRaisesRegex(Invalid, rf"nodes\.0\.{field}"):
                     f.ledger.init(graph, f.config)
-                self.assertFalse(f.ledger.path.exists())
+                self.assertFalse(has_current(f.ledger))
 
     def test_persisted_assignment_enforces_full_nested_contract(self) -> None:
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         f.init()
         f.start("write-label")
         current = f.ledger.read()
-        original = f.ledger.path.read_bytes()
+        original = record_bytes(f.ledger)
         for key, payload, reason in (
             (
                 "task",
@@ -203,29 +209,29 @@ class ToolBoundaryTests(unittest.TestCase):
                 invalid["nodes"]["write-label"]["assignment"][key] = payload
                 with self.assertRaisesRegex(Invalid, reason):
                     f.ledger.save(invalid, "invalid")
-                self.assertEqual(original, f.ledger.path.read_bytes())
-                atomic_json(f.ledger.path, invalid)
+                self.assertEqual(original, record_bytes(f.ledger))
+                overwrite(f.ledger, invalid)
                 with self.assertRaisesRegex(Invalid, reason):
                     f.ledger.read()
-                f.ledger.path.write_bytes(original)
+                overwrite(f.ledger, json.loads(original))
 
     def test_ledger_requires_source_locks_added_during_intake(self) -> None:
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         self.assertNotIn("hash", f.g["sources"]["request"])
         validate_graph(f.g, f.config, f.root)
         f.init()
-        original = f.ledger.path.read_bytes()
+        original = record_bytes(f.ledger)
         for field in ("hash", "content_hash", "snapshot", "kind", "execution_mode"):
             with self.subTest(field=field):
                 invalid = json.loads(original)
                 del invalid["graph"]["sources"]["request"][field]
                 with self.assertRaisesRegex(Invalid, rf"graph\.sources\.\*\.{field}"):
                     f.ledger.save(invalid, "invalid")
-                self.assertEqual(original, f.ledger.path.read_bytes())
-                atomic_json(f.ledger.path, invalid)
+                self.assertEqual(original, record_bytes(f.ledger))
+                overwrite(f.ledger, invalid)
                 with self.assertRaisesRegex(Invalid, rf"graph\.sources\.\*\.{field}"):
                     f.ledger.read()
-                f.ledger.path.write_bytes(original)
+                overwrite(f.ledger, json.loads(original))
 
     def test_packet_rejects_invalid_owned_projections_before_publishing(self) -> None:
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
@@ -262,7 +268,9 @@ class ToolBoundaryTests(unittest.TestCase):
             ),
         ):
             with self.subTest(producer=producer, reason=reason):
-                with patch("factory.runtime.assignment." + producer, return_value=payload):
+                with patch(
+                    "factory.runtime.scheduling.assignment." + producer, return_value=payload
+                ):
                     with self.assertRaisesRegex(Invalid, reason):
                         f.ledger.prepare_packet("write-label")
                 self.assertEqual(state, f.ledger.read())
@@ -277,7 +285,7 @@ class ToolBoundaryTests(unittest.TestCase):
         f.start("verify-label")
         f.ledger.run_check("verify-label", "behavior")
         state = f.ledger.read()
-        original = f.ledger.path.read_bytes()
+        original = record_bytes(f.ledger)
         [rid] = state["executions"]
         for location in ("graph", "assignment task", "assignment allowed", "execution"):
             for field in ("id", "kind", "category", "criteria", "method", "execution"):
@@ -302,13 +310,13 @@ class ToolBoundaryTests(unittest.TestCase):
                     with self.subTest(location=location, field=field, missing=missing):
                         with self.assertRaisesRegex(Invalid, reason):
                             f.ledger.save(raw, "invalid check spec")
-                        self.assertEqual(original, f.ledger.path.read_bytes())
-                        atomic_json(f.ledger.path, raw)
+                        self.assertEqual(original, record_bytes(f.ledger))
+                        overwrite(f.ledger, raw)
                         with self.assertRaisesRegex(Invalid, reason):
                             f.ledger.read()
                         with self.assertRaisesRegex(Invalid, reason):
                             f.ledger.prepare_packet("verify-label")
-                        f.ledger.path.write_bytes(original)
+                        overwrite(f.ledger, json.loads(original))
         self.assertEqual([], list(f.ledger.dir.glob("*.packet.json")))
         self.assertIn("sha256", f.ledger.prepare_packet("verify-label"))
 
@@ -319,7 +327,7 @@ class ToolBoundaryTests(unittest.TestCase):
         f.ledger.finish("write-label", f.report("write-label"))
         f.start("verify-label")
         state = f.ledger.read()
-        original = f.ledger.path.read_bytes()
+        original = record_bytes(f.ledger)
         packet = implement_packet(state, "verify-label")
         self.assertEqual(packet, validate_packet(packet))
         for invalid in ({}, None, {**packet["task"]["required_checks"][0], "execution": None}):
@@ -330,11 +338,11 @@ class ToolBoundaryTests(unittest.TestCase):
         projected = deepcopy(packet["task"])
         projected["required_checks"][0].pop("id")
         with (
-            patch("factory.runtime.assignment.projected_task", return_value=projected),
+            patch("factory.runtime.scheduling.assignment.projected_task", return_value=projected),
             self.assertRaisesRegex(Invalid, r"required_checks\.0\..*\.id"),
         ):
             f.ledger.prepare_packet("verify-label")
-        self.assertEqual(original, f.ledger.path.read_bytes())
+        self.assertEqual(original, record_bytes(f.ledger))
         self.assertEqual([], list(f.ledger.dir.glob("*.packet.json")))
 
     def test_graph_distinguishes_observation_and_command_specs(self) -> None:
@@ -345,12 +353,12 @@ class ToolBoundaryTests(unittest.TestCase):
         f.g["tasks"]["label"]["required_checks"][0] = invalid_command
         with self.assertRaisesRegex(Invalid, r"required_checks\.0\.tests\.execution.*argv"):
             f.init()
-        self.assertFalse(f.ledger.path.exists())
+        self.assertFalse(has_current(f.ledger))
         observation = {**command, "kind": "observation"}
         f.g["tasks"]["label"]["required_checks"][0] = observation
         with self.assertRaisesRegex(Invalid, r"required_checks\.0\.observation\..*extra field"):
             f.init()
-        self.assertFalse(f.ledger.path.exists())
+        self.assertFalse(has_current(f.ledger))
         del observation["execution"]
         f.init()
         f.start("write-label")

@@ -6,7 +6,6 @@ import argparse
 import ast
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -14,6 +13,8 @@ import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from factory import file_reader
+from factory.environment import settings
 from factory.paths import FACTORY_ROOT, TOOLS
 
 OFFLINE = ("lint", "format", "types", "imports", "yaml-lint", "yaml-contracts", "tests", "dry-run")
@@ -33,8 +34,6 @@ def source_files() -> list[Path]:
     """Enumerate owned files explicitly, including hidden paths and unexecuted code."""
     roots = [
         TOOLS,
-        FACTORY_ROOT / "tooling/factory",
-        FACTORY_ROOT / "tooling/tests",
         FACTORY_ROOT / "gates",
         FACTORY_ROOT / "project/gates",
         FACTORY_ROOT / "project/examples/gates",
@@ -63,11 +62,26 @@ def source_digest() -> str:
     digest = hashlib.sha256()
     files: list[Path] = []
     for directory, dirs, names in FACTORY_ROOT.walk():
-        dirs[:] = [name for name in dirs if name not in {".venv", ".python"}]
+        dirs[:] = [
+            name
+            for name in dirs
+            if name not in {".venv", ".python"}
+            and not (directory == FACTORY_ROOT and name == "diagnostics")
+        ]
+        parts = directory.relative_to(FACTORY_ROOT).parts
+        if parts == ("memory",):
+            dirs[:] = [d for d in dirs if d == "lessons"]
+            names = [n for n in names if n == "USER.md"]
+        elif parts == ("memory", "lessons"):
+            dirs[:] = [d for d in dirs if d in {"project", "factory"}]
+            names = []
+        elif parts[:2] == ("memory", "lessons"):
+            dirs.clear()
+            names = [n for n in names if n == ".gitkeep" or n.endswith(".md")]
         files.extend(directory / name for name in names)
     for file in sorted(files):
         parts = file.relative_to(FACTORY_ROOT).parts
-        if parts[0] == "memory" or {
+        if {
             ".venv",
             ".python",
             ".venv.setup.lock",
@@ -79,21 +93,25 @@ def source_digest() -> str:
             "htmlcov",
         }.intersection(parts):
             continue
+        if parts == (".env",):
+            continue
         if file.name.startswith(".coverage") or file.suffix in {".pyc", ".pyo"}:
             continue
         if not file.is_file() and not file.is_symlink():
             continue
         digest.update(str(file.relative_to(FACTORY_ROOT)).encode())
         digest.update(b"\0")
-        digest.update(str(file.readlink()).encode() if file.is_symlink() else file.read_bytes())
+        digest.update(
+            str(file.readlink()).encode() if file.is_symlink() else file_reader.read_bytes(file)
+        )
         digest.update(b"\0")
     return digest.hexdigest()
 
 
 def prepare_coverage(reports: Path) -> Path:
-    configuration = tomllib.loads((TOOLS / "pyproject.toml").read_text(encoding="utf-8"))["tool"][
-        "coverage"
-    ]
+    configuration = tomllib.loads(
+        file_reader.read_text(TOOLS / "pyproject.toml", encoding="utf-8")
+    )["tool"]["coverage"]
     configuration["run"]["source"] = [
         str((TOOLS / source).resolve()) for source in configuration["run"]["source"]
     ]
@@ -110,13 +128,13 @@ def prepare_coverage(reports: Path) -> Path:
 def verify_subprocess_coverage(reports: Path) -> None:
     """The launcher --check branch runs only in test subprocesses, never in the parent."""
     source = TOOLS / "bootstrap.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
+    tree = ast.parse(file_reader.read_text(source, encoding="utf-8"))
     line = next(
         node.body[0].lineno
         for node in ast.walk(tree)
         if isinstance(node, ast.If) and ast.unparse(node.test) == "args[1:] == ['--check']"
     )
-    report = json.loads((reports / "coverage.json").read_text(encoding="utf-8"))
+    report = json.loads(file_reader.read_text(reports / "coverage.json", encoding="utf-8"))
     covered = next(
         (
             value
@@ -129,10 +147,9 @@ def verify_subprocess_coverage(reports: Path) -> None:
         raise ValueError("Coverage missed the real python.sh/python.cmd --check subprocess")
 
 
-def commands(stage: str, reports: Path) -> list[list[str]]:
+def commands(stage: str, reports: Path, files: list[str]) -> list[list[str]]:
     python = [sys.executable, "-E", "-s", "-B", "-m"]
     config = str(TOOLS / "pyproject.toml")
-    files = [str(p) for p in source_files()]
     if stage == "lint":
         return [[*python, "ruff", "check", "--no-cache", "--config", config, *files]]
     if stage == "format":
@@ -202,16 +219,17 @@ def commands(stage: str, reports: Path) -> list[list[str]]:
     raise ValueError(f"Unknown stage: {stage}")
 
 
-def run_stage(stage: str, reports: Path) -> StageResult:
+def run_stage(stage: str, reports: Path, files: list[str]) -> StageResult:
     coverage_file = prepare_coverage(reports) if stage == "tests" else reports / ".coverage"
     log = reports / f"{stage}.log"
     try:
-        planned = commands(stage, reports)
+        planned = commands(stage, reports, files)
     except (OSError, ValueError) as exc:
         log.write_text(f"FAIL: {exc}\n", encoding="utf-8")
         return StageResult(stage, "FAIL", 1, [], str(log), [f"FAIL: {exc}"])
     environment = dict(
-        os.environ,
+        settings(),
+        OTEL_SDK_DISABLED="true",
         COVERAGE_FILE=str(coverage_file),
         COVERAGE_RCFILE=str(reports / "coverage.toml"),
     )
@@ -244,7 +262,7 @@ def run_stage(stage: str, reports: Path) -> StageResult:
             if completed.returncode:
                 output.flush()
                 end = output.tell()
-                with log.open("rb") as source:
+                with file_reader.open_binary(log) as source:
                     source.seek(max(start, end - 16000))
                     excerpt = source.read(end - source.tell()).decode("utf-8", errors="replace")
                 excerpt = "\n".join(excerpt.splitlines()[-80:])
@@ -274,9 +292,10 @@ def run_stage(stage: str, reports: Path) -> StageResult:
 def check(stages: list[str], reports: Path) -> int:
     reports.mkdir(parents=True, exist_ok=True)
     before = source_digest()
+    files = [str(p) for p in source_files()] if set(stages) & {"lint", "format", "types"} else []
     results = []
     for stage in stages:
-        result = run_stage(stage, reports)
+        result = run_stage(stage, reports, files)
         results.append(result)
         print(f"{stage}: {result.status} ({result.log})", flush=True)
         if result.status != "PASS":

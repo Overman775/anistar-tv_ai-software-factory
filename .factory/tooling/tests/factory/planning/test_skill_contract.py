@@ -10,6 +10,7 @@ from tests.fixture_bundle import ROOT as FIXTURE_ROOT
 ROOT = FACTORY_ROOT.parent
 SKILL = ROOT / ".factory/skills/factory-planning/SKILL.md"
 CONTRACT = ROOT / ".factory/skills/factory-planning/references/plan-contract.md"
+PLAN_CONTENT = CONTRACT.with_name("plan-content.md")
 SESSION = ROOT / ".factory/skills/factory-planning/references/session-contract.md"
 VALIDATOR = ROOT / ".factory/gates/skills/planning/validate_plan.py"
 ARCHITECT = ROOT / ".factory/roles/architect.md"
@@ -56,6 +57,13 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("[plan contract](references/plan-contract.md)", read(SKILL))
         self.assertIn("[validator](../../gates/skills/planning/validate_plan.py)", read(SKILL))
 
+    def test_architect_and_coordinator_use_one_plan_template(self) -> None:
+        self.assertIn("## Canonical Template", read(PLAN_CONTENT))
+        for reference in (CONTRACT, CONTRACT.with_name("architect-plan-contract.md")):
+            text = read(reference)
+            self.assertIn("(plan-content.md)", text)
+            self.assertNotIn("## Canonical Template", text)
+
     def test_trigger_boundary_skips_clear_ticket_but_routes_ambiguity(self) -> None:
         skill = read(SKILL)
         for marker in (
@@ -68,7 +76,7 @@ class SkillContractTest(unittest.TestCase):
 
     def test_no_plan_and_delegated_planning_are_distinct(self) -> None:
         skill = read(SKILL)
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         session = read(SESSION)
         for marker in (
             "`no plan`, `no plan needed`",
@@ -85,7 +93,8 @@ class SkillContractTest(unittest.TestCase):
     def test_architect_is_planning_owned_and_developer_roles_are_excluded(self) -> None:
         skill = read(SKILL)
         self.assertIn("`architect` is Factory Planning-owned", skill)
-        self.assertIn("`.factory/memory/staging/planning-plan.md`", skill)
+        self.assertIn("`.factory/memory/staging/planning-plan.md.candidate`", skill)
+        self.assertIn("coordinator's change classification", skill)
         self.assertIn("Do not invoke Developer, TestWriter, Reviewer", skill)
         self.assertIn("No `task-decomposition-planner`", skill)
 
@@ -94,8 +103,19 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("planning-plan.md", content)
         self.assertNotIn("implementation-plan.md", content)
 
+    def test_architect_receives_nonsemantic_revision_evidence(self) -> None:
+        candidate = read(
+            ROOT / ".factory/skills/factory-planning/references/architect-plan-contract.md"
+        )
+        normalized = " ".join(candidate.split())
+        self.assertIn(
+            '--change-kind nonsemantic --change-evidence "{specific rationale}"', normalized
+        )
+        self.assertIn("using the coordinator's evidence", normalized)
+        self.assertIn("classification or required evidence is missing", normalized)
+
     def test_paths_and_transactional_contract_are_explicit(self) -> None:
-        content = read(SKILL) + read(CONTRACT)
+        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT))
         normalized = " ".join(content.split())
         for marker in (
             ".factory/memory/staging/planning-session.md",
@@ -116,7 +136,7 @@ class SkillContractTest(unittest.TestCase):
         )
 
     def test_human_first_sections_are_exact(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         sections = (
             "## What changes",
             "## How it works",
@@ -151,7 +171,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Full architecture documents\n   govern solution shape", architect)
 
     def test_pseudocode_is_optional_natural_language(self) -> None:
-        content = read(SKILL) + read(CONTRACT)
+        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT))
         for marker in (
             "Pseudocode is optional",
             "state machine, reducer, schema, or\nalgorithm",
@@ -161,7 +181,7 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(marker, content)
 
     def test_decisions_are_settled_choices_and_facts_externals_stay_separate(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         session = read(SESSION)
         for marker in (
             "`USER_DECISION`",
@@ -183,7 +203,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("- No significant decisions.", contract)
 
     def test_planning_owns_capabilities_not_decomposition_fields(self) -> None:
-        content = read(SKILL) + read(CONTRACT)
+        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT))
         for marker in (
             "stable capabilities/requirements (`CAP-{NN}`)",
             "does not own task/slice IDs",
@@ -194,7 +214,7 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(marker, content)
 
     def test_metadata_is_minimal_without_question_counters(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         metadata_block = contract.split("Use exactly these metadata keys:", 1)[1].split("```", 2)[1]
         expected = {
             "plan_id",
@@ -210,7 +230,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("No question budgets, counters", contract)
 
     def test_api_evidence_is_typed_and_fingerprint_stays_internal(self) -> None:
-        content = read(SKILL) + read(CONTRACT)
+        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT))
         for marker in (
             "`backend_api`",
             "`platform_plugin_api`",
@@ -226,7 +246,7 @@ class SkillContractTest(unittest.TestCase):
 
     def test_plan_is_durable_seed_and_implementation_detail_stays_downstream(self) -> None:
         skill = read(SKILL)
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         detail_contract = read(DETAIL_CONTRACT)
         for marker in (
             "durable semantic execution seed",
@@ -247,7 +267,9 @@ class SkillContractTest(unittest.TestCase):
         self.assertNotIn("## Consumer Rules", detail_contract)
 
     def test_preflight_removes_duplication_without_length_target(self) -> None:
-        content = " ".join((read(SKILL) + read(CONTRACT) + read(SESSION)).split())
+        content = " ".join(
+            (read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION)).split()
+        )
         for marker in (
             "section-role deduplication",
             "Section-role deduplication map",
@@ -300,21 +322,23 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("wait timeout means only", read(CHECKPOINT).lower())
 
     def test_developer_blocking_externals_get_conditional_readiness_matrix(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         self.assertIn("prevents implementation of named capabilities", contract)
         self.assertIn("| Capability | Current readiness | Start condition |", contract)
         self.assertIn("QA/release do not require the matrix", contract)
         self.assertIn("Do not add readiness tables by quota", contract)
 
     def test_acceptance_and_qa_are_separate(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         self.assertIn("### Developer acceptance and readiness", contract)
         self.assertIn("### QA checks", contract)
         self.assertNotIn("### Developer acceptance readiness", contract)
         self.assertNotIn("### QA checklist", contract)
 
     def test_recursive_questions_live_before_first_revision(self) -> None:
-        content = read(SKILL) + read(CONTRACT) + read(SESSION) + read_validator()
+        content = (
+            read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION) + read_validator()
+        )
         for marker in (
             "After every answer, update the working map and run an impact scan",
             "newly revealed branch",
@@ -333,7 +357,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("live target unchanged", contract)
 
     def test_single_canonical_plan_preserves_approved_git_history(self) -> None:
-        content = read(CONTRACT)
+        content = read(CONTRACT) + read(PLAN_CONTENT)
         self.assertIn("do not create revision-specific plan files", content)
         self.assertIn("explicit", content)
         self.assertIn("immutable Git commit", content)
@@ -341,7 +365,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("--change-kind nonsemantic --change-evidence", content)
 
     def test_candidate_preflight_returns_semantic_gaps_to_session(self) -> None:
-        content = read(SKILL) + read(CONTRACT) + read(SESSION)
+        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION)
         for marker in (
             "semantic preflight",
             "semantic gap",
@@ -363,7 +387,9 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(marker, content)
 
     def test_strict_quality_gates_cover_capabilities_externals_and_handoff(self) -> None:
-        content = read(SKILL) + read(CONTRACT) + read(ARCHITECT) + read_validator()
+        content = (
+            read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(ARCHITECT) + read_validator()
+        )
         for marker in (
             "Every declared capability must\nbe covered by at least one typed row",
             "explicit non-empty `handling:`",
@@ -397,7 +423,7 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(marker, skill)
 
     def test_delegated_approval_reuses_existing_metadata_contract(self) -> None:
-        contract = read(CONTRACT)
+        contract = read(CONTRACT) + read(PLAN_CONTENT)
         metadata_block = contract.split("Use exactly these metadata keys:", 1)[1].split("```", 2)[1]
         self.assertNotIn("approval_mode", metadata_block)
         self.assertNotIn("approval_evidence", metadata_block)

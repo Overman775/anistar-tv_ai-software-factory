@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NamedTuple
 
 from pydantic import ConfigDict, StringConstraints, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
+
+from factory.markdown import split_row as split_row
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -124,10 +126,23 @@ def error(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
 
 
-def parse_metadata(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
+def split_metadata_block(text: str) -> tuple[str, str]:
+    heading = re.search(r"(?m)^## ", text)
+    if heading is None:
+        return text, ""
+    return text[: heading.start()], text[heading.start() :]
+
+
+class ParsedPlanHeader(NamedTuple):
+    raw: dict[str, str]
+    validated: PlanMetadata | None
+    errors: list[dict[str, str]]
+
+
+def parse_plan_header(text: str) -> ParsedPlanHeader:
     metadata: dict[str, str] = {}
     errors: list[dict[str, str]] = []
-    prefix = text.split("\n## ", 1)[0]
+    prefix, _ = split_metadata_block(text)
     for line in prefix.splitlines():
         match = re.match(r"^([a-z][a-z0-9_]*):\s*(.*?)\s*$", line)
         if not match:
@@ -138,8 +153,9 @@ def parse_metadata(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
         metadata[key] = value
 
     try:
-        METADATA.validate_python(metadata)
+        validated = METADATA.validate_python(metadata)
     except ValidationError as exc:
+        validated = None
         for issue in exc.errors(include_input=False, include_context=False, include_url=False):
             key = str(issue["loc"][0])
             if issue["type"] == "missing":
@@ -151,7 +167,12 @@ def parse_metadata(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
                 errors.append(
                     error(METADATA_ERRORS.get(key, "METADATA_INVALID"), f"{key}: {issue['msg']}")
                 )
-    return metadata, errors
+    return ParsedPlanHeader(metadata, None if errors else validated, errors)
+
+
+def parse_metadata(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
+    header = parse_plan_header(text)
+    return header.raw, header.errors
 
 
 def extract_section(text: str, heading: str) -> str:
@@ -170,10 +191,6 @@ def declared_capabilities(text: str) -> set[str]:
             extract_section(text, "## What changes"),
         )
     )
-
-
-def split_row(line: str) -> list[str]:
-    return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
 def is_separator(cells: list[str]) -> bool:

@@ -82,6 +82,19 @@ class WorkspaceTests(unittest.TestCase):
             self.assertIn("Container workspace is not implemented", result.stderr)
         self.assertFalse((self.root / ".factory/memory/state/workflow.json").exists())
 
+    def test_preparation_writes_diagnostics_only_in_selected_worktree(self) -> None:
+        self.mode("worktree")
+        self.git("init", "-q")
+        (self.root / ".factory/.gitignore").unlink(missing_ok=True)
+        self.git("add", ".")
+        self.git("commit", "-qm", "Fixture")
+        result = self.invoke("prepare-workspace")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        target = Path(json.loads(result.stdout)["result"]["workspace"])
+        journal = Path(".factory/diagnostics/journal.sqlite3")
+        self.assertFalse((self.root / journal).exists())
+        self.assertTrue((target / journal).is_file())
+
     def test_worktree_uses_committed_checkout_and_reuses_prepared_directory(self) -> None:
         self.mode("worktree")
         self.git("init", "-q")

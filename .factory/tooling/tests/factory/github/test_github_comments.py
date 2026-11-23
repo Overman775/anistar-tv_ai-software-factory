@@ -84,10 +84,13 @@ class CommentsTest(unittest.TestCase):
     def test_api_failure_does_not_claim_not_found_or_fallback(self) -> None:
         with patch(
             "factory.github.fetch_note.subprocess.run",
-            return_value=subprocess.CompletedProcess([], 1, "", "permission denied"),
+            return_value=subprocess.CompletedProcess(
+                [], 1, "", "permission denied\nAuthorization: secret-canary"
+            ),
         ) as run:
-            with self.assertRaisesRegex(RuntimeError, "permission denied"):
+            with self.assertRaisesRegex(RuntimeError, "permission denied") as failure:
                 fetch_comments("review", 8)
+        self.assertNotIn("secret-canary", str(failure.exception))
         self.assertEqual(run.call_count, 1)
 
     def test_invalid_page_fails(self) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import concurrent.futures
 import json
 import os
@@ -12,10 +13,17 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 
+from factory.database.sqlite import sqlite_diagnostic_journal as journal
+from factory.diagnostics.events import event
+from factory.diagnostics.records import OPERATIONS
+from factory.logging_config import diagnostic_operation
 from factory.paths import BIN, TOOLING_ROOT
 from factory.runtime import command_worker
-from factory.runtime.workflow_core import Invalid, atomic_json
+from factory.runtime.knowledge.cli import command_parser
+from factory.runtime.workflow_cli import build_parser
+from factory.runtime.workflow_core import Invalid
 from tests.factory.runtime import workflow_fixture
+from tests.factory.runtime.store_fixture import overwrite
 
 CLI = BIN / "workflow.py"
 ACP = BIN / "acpx_adapter.py"
@@ -34,6 +42,97 @@ class JournalCliTests(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+        )
+
+    def test_parsed_workflow_and_lesson_actions_have_diagnostic_names(self) -> None:
+        for parser, prefix in ((build_parser(), ""), (command_parser(), "lessons.")):
+            actions = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+            names = {prefix + name for name in actions.choices if name != "diagnostics"}
+            self.assertLessEqual(names, OPERATIONS)
+
+    def test_lesson_index_failure_can_be_traced_without_search_text(self) -> None:
+        index = self.root / ".factory/memory/cache/lessons.sqlite3"
+        index.parent.mkdir(exist_ok=True, parents=True)
+        index.write_bytes(b"unreadable index" * 100)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BIN / "lessons.py"),
+                "--workspace",
+                str(self.root),
+                "search_lessons",
+                "private-search-canary",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        invocation = re.search(r"invocation: ([a-f0-9]+)", result.stderr)
+        assert invocation is not None, result.stderr
+        page = self.cli("diagnostics", "--invocation", invocation.group(1))
+        records = json.loads(page.stdout)["records"]
+        self.assertEqual(records[0]["error_code"], "database_corrupt")
+        self.assertIn(
+            ("database_failed", "lesson_index", "database_corrupt"),
+            [(r["event"], r.get("component"), r.get("error_code")) for r in records],
+        )
+        self.assertNotIn("private-search-canary", page.stdout)
+        self.assertNotIn(str(self.root), page.stdout)
+        recent = self.cli("diagnostics", "--operation", "lessons.search_lessons", "--limit", "1")
+        first = json.loads(recent.stdout)
+        self.assertEqual(first["records"], records[:1])
+        next_page = self.cli(
+            "diagnostics",
+            "--operation",
+            "lessons.search_lessons",
+            "--cursor",
+            str(first["next_cursor"]),
+        )
+        self.assertEqual(json.loads(next_page.stdout)["records"], records[1:])
+
+    def test_search_keeps_result_when_workflow_store_cannot_record_evidence(self) -> None:
+        (self.root / ".factory/memory/workflow.sqlite3").write_bytes(b"bad store" * 100)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BIN / "lessons.py"),
+                "--workspace",
+                str(self.root),
+                "search_lessons",
+                "nothing-matches-this-word",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [])
+        records = json.loads(
+            self.cli("diagnostics", "--operation", "lessons.search_lessons").stdout
+        )["records"]
+        self.assertEqual(
+            [r["event"] for r in records],
+            ["operation_completed", "lesson_trace_unavailable", "database_failed"],
+        )
+        self.assertEqual(records[-1]["component"], "workflow_store")
+        self.assertEqual(len({r["invocation_id"] for r in records}), 1)
+
+    def test_nested_invocations_restore_the_outer_workspace(self) -> None:
+        other = self.root / "nested"
+        other.mkdir()
+        with diagnostic_operation(self.root, "context"):
+            with diagnostic_operation(other, "project.checks"):
+                pass
+            event("operation_completed")
+        outer = self.cli("diagnostics", "--operation", "context")
+        inner = self.cli("diagnostics", "--operation", "project.checks", workspace=other)
+        self.assertEqual(len(json.loads(outer.stdout)["records"]), 2)
+        self.assertEqual(len(json.loads(inner.stdout)["records"]), 1)
+        self.assertEqual(
+            json.loads(self.cli("diagnostics", "--operation", "project.checks").stdout)["records"],
+            [],
         )
 
     def test_success_failure_and_secret_exclusion(self) -> None:
@@ -59,6 +158,60 @@ class JournalCliTests(unittest.TestCase):
         self.assertNotIn("secret-canary", page.stdout)
         by_dispatch = self.cli("diagnostics", "--dispatch", dispatch)
         self.assertEqual(len(json.loads(by_dispatch.stdout)["records"]), 1)
+
+    def test_journal_baseline_preserves_existing_records(self) -> None:
+        for version in (0, 1):
+            with self.subTest(version=version):
+                workspace = self.root / f"legacy-{version}"
+                path = journal.database_path(workspace)
+                path.parent.mkdir(parents=True)
+                with closing(sqlite3.connect(path)) as db, db:
+                    db.execute(journal.JOURNAL_TABLE)
+                    db.execute("INSERT INTO records VALUES (17,'old',NULL,NULL,'{}')")
+                    db.execute(f"PRAGMA user_version={version}")
+                self.assertEqual(journal.snapshot(workspace), ["{}"])
+                journal.prepare(workspace)
+                with closing(sqlite3.connect(path)) as db:
+                    self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (2,))
+                    self.assertEqual(
+                        db.execute("SELECT * FROM records").fetchone(),
+                        (17, "old", None, None, "{}", None),
+                    )
+                self.assertEqual(journal.delivery_window(workspace, "test"), (0, 0))
+
+    def test_pause_and_resume_are_recorded(self) -> None:
+        pause = self.cli("pause", "user request")
+        paused_state = self.fixture.ledger.read()
+        resume = self.cli("resume")
+        resumed_state = self.fixture.ledger.read()
+        page = self.cli("diagnostics", "--run", self.run_id)
+        self.assertEqual(pause.returncode, 0, pause.stderr)
+        self.assertEqual(resume.returncode, 0, resume.stderr)
+        for action, result in (("pause", pause), ("resume", resume)):
+            with self.subTest(action=action):
+                self.assertEqual(result.stderr, "")
+        self.assertTrue(json.loads(pause.stdout)["ok"])
+        self.assertTrue(json.loads(resume.stdout)["ok"])
+        self.assertEqual(paused_state["pause_reason"], "user request")
+        self.assertNotIn("pause_reason", resumed_state)
+        self.assertEqual(page.returncode, 0, page.stderr)
+        records = json.loads(page.stdout)["records"]
+        self.assertEqual(
+            [(record["operation"], record["event"]) for record in records],
+            [("resume", "resumed"), ("pause", "paused")],
+        )
+
+    def test_pause_and_resume_report_unavailable_journal(self) -> None:
+        (self.root / ".factory/diagnostics").write_text("unavailable")
+        for action in (("pause", "user request"), ("resume",)):
+            with self.subTest(action=action[0]):
+                result = self.cli(*action)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(json.loads(result.stdout)["ok"])
+                self.assertIn("Factory diagnostics unavailable", result.stderr)
+                state = self.fixture.ledger.read()
+                expected = "user request" if action[0] == "pause" else None
+                self.assertEqual(state.get("pause_reason"), expected)
 
     def test_acp_rejection_is_retrievable(self) -> None:
         result = subprocess.run(
@@ -96,7 +249,7 @@ class JournalCliTests(unittest.TestCase):
         fixture.init()
         state = fixture.ledger.read()
         state["graph"]["sources"]["request"]["snapshot"] = "changed secret-canary"
-        atomic_json(fixture.ledger.path, state)
+        overwrite(fixture.ledger, state)
         result = subprocess.run(
             [sys.executable, str(CLI), "--workspace", str(fixture.root), "claim", "write-label"],
             capture_output=True,
@@ -138,7 +291,7 @@ class JournalCliTests(unittest.TestCase):
         report_path = fixture.root / "report.json"
         state = fixture.ledger.read()
         state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
-        atomic_json(fixture.ledger.path, state)
+        overwrite(fixture.ledger, state)
 
         report_path.write_text(json.dumps({**report, "dispatch_id": "0" * 32}))
         stale = self.cli("finish", node, str(report_path), workspace=fixture.root)
@@ -248,7 +401,9 @@ class JournalCliTests(unittest.TestCase):
     def test_busy_journal_flushes_after_workflow_unlock(self) -> None:
         self.cli("claim", "missing")
         path = self.root / ".factory/diagnostics/journal.sqlite3"
-        state_path = self.root / ".factory/memory/state/workflow.json"
+        from factory.runtime.workflow import Ledger
+
+        ledger = Ledger(self.root)
         lock_path = self.root / ".factory/memory/state/workflow.lock"
         code = "\n".join(
             [
@@ -256,8 +411,8 @@ class JournalCliTests(unittest.TestCase):
                 "sys.path.insert(0, sys.argv[1])",
                 "from factory.runtime import workflow_cli",
                 "original = workflow_cli.initialize",
-                "def initialize(workspace, operation):",
-                "    handler = original(workspace, operation)",
+                "def initialize(workspace, operation, *, store):",
+                "    handler = original(workspace, operation, store=store)",
                 "    print('READY', flush=True)",
                 "    sys.stdin.readline()",
                 "    return handler",
@@ -282,7 +437,7 @@ class JournalCliTests(unittest.TestCase):
                 deadline = time.monotonic() + 0.8
                 unlocked = False
                 while time.monotonic() < deadline:
-                    state = json.loads(state_path.read_text())
+                    state = ledger.read()
                     if state["nodes"]["write-label"]["status"] == "reserved":
                         try:
                             with command_worker.lock(lock_path):
@@ -300,13 +455,52 @@ class JournalCliTests(unittest.TestCase):
         records = json.loads(self.cli("diagnostics", "--run", self.run_id).stdout)["records"]
         self.assertIn("reserved", [record["event"] for record in records])
 
+    def test_otlp_snapshot_reads_validated_logs_and_links_the_existing_attempt(self) -> None:
+        def telemetry(*args: str) -> str:
+            return subprocess.check_output(
+                [sys.executable, str(BIN / "telemetry.py"), "--workspace", str(self.root), *args],
+                text=True,
+                env={**os.environ, "OTEL_SDK_DISABLED": "true"},
+            )
+
+        self.assertEqual(telemetry("journal"), "")
+        path = self.root / ".factory/diagnostics/journal.sqlite3"
+        self.assertFalse(path.exists())
+        self.assertEqual(self.cli("claim", "write-label").returncode, 0)
+        self.assertEqual(self.cli("claim", "missing").returncode, 1)
+        with closing(sqlite3.connect(path)) as db, db:
+            records = [
+                json.loads(raw) for (raw,) in db.execute("SELECT payload FROM records ORDER BY id")
+            ]
+            db.execute(
+                "INSERT INTO records (payload) VALUES (?)",
+                (json.dumps({**records[0], "prompt": "private-canary"}),),
+            )
+        output = telemetry("journal")
+        self.assertNotIn("private-canary", output)
+        self.assertEqual(output, telemetry("journal"))
+        logs = [
+            json.loads(line)["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
+            for line in output.splitlines()
+        ]
+        self.assertEqual([log["eventName"] for log in logs], [r["event"] for r in records])
+        timeline = json.loads(telemetry("show", "--run", self.run_id))["observations"]
+        attempt = next(item for item in timeline if item["name"] == "factory.attempt")
+        claim = next(log for log in logs if log["eventName"] == "reserved")
+        self.assertEqual(
+            (claim["traceId"], claim["spanId"]), (attempt["trace_id"], attempt["span_id"])
+        )
+        self.assertEqual(claim["severityNumber"], 9)
+        self.assertEqual(logs[-1]["severityNumber"], 17)
+        self.assertTrue(int(claim["timeUnixNano"]) > 0)
+
     def test_retention_and_interrupted_transaction(self) -> None:
         self.cli("claim", "missing")
         path = self.root / ".factory/diagnostics/journal.sqlite3"
         with closing(sqlite3.connect(path)) as db, db:
             db.executemany(
                 "INSERT INTO records (invocation_id, payload) VALUES (?, ?)",
-                [("old", "{}") for _ in range(501)],
+                [("old", "{}") for _ in range(5_001)],
             )
         code = (
             "import os,sqlite3,sys; c=sqlite3.connect(sys.argv[1]); "
@@ -320,7 +514,7 @@ class JournalCliTests(unittest.TestCase):
         self.assertEqual(failure.returncode, 1)
         self.assertNotIn("diagnostics unavailable", failure.stderr)
         with closing(sqlite3.connect(path)) as db, db:
-            self.assertEqual(db.execute("SELECT count(*) FROM records").fetchone()[0], 500)
+            self.assertEqual(db.execute("SELECT count(*) FROM records").fetchone()[0], 5_000)
             self.assertEqual(
                 db.execute("SELECT count(*) FROM records WHERE invocation_id='dead'").fetchone()[0],
                 0,
@@ -332,14 +526,14 @@ class JournalCliTests(unittest.TestCase):
         with closing(sqlite3.connect(path)) as db, db:
             payload = json.loads(db.execute("SELECT payload FROM records").fetchone()[0])
             db.execute("DELETE FROM records")
-            for i in range(500):
+            for i in range(5_000):
                 payload["node_id"] = f"node-{i}"
                 db.execute(
                     "INSERT INTO records (run_id, payload) VALUES (?, ?)",
                     (self.run_id, json.dumps(payload)),
                 )
         first = json.loads(self.cli("diagnostics", "--run", self.run_id).stdout)
-        self.assertEqual(first["records"][-1]["node_id"], "node-470")
+        self.assertEqual(first["records"][-1]["node_id"], "node-4970")
         for _ in range(20):
             self.cli("claim", "missing")
         second = json.loads(
@@ -347,7 +541,7 @@ class JournalCliTests(unittest.TestCase):
                 "diagnostics", "--run", self.run_id, "--cursor", str(first["next_cursor"])
             ).stdout
         )
-        self.assertEqual(second["records"][0]["node_id"], "node-469")
+        self.assertEqual(second["records"][0]["node_id"], "node-4969")
 
     def test_untrusted_read_fields_are_rejected(self) -> None:
         result = self.cli("claim", "missing")

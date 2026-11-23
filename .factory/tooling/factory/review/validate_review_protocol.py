@@ -11,34 +11,35 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
+from factory import file_reader
 from factory.gates.catalog import core_result
 from factory.gates.gate_contract import digest, evidence
-from factory.review.render_review_report import render_report
-from factory.review.review_contracts import CONFIDENCES as CONFIDENCES
-from factory.review.review_contracts import GATE_STATUSES as GATE_STATUSES
-from factory.review.review_contracts import (
+from factory.review.protocol.artifact_io import load_object
+from factory.review.protocol.contracts import CONFIDENCES as CONFIDENCES
+from factory.review.protocol.contracts import GATE_STATUSES as GATE_STATUSES
+from factory.review.protocol.contracts import (
     LENSES,
     UNIVERSAL_GATES,
     expected_gates,
     validate_manifest,
 )
-from factory.review.review_contracts import SEVERITIES as SEVERITIES
-from factory.review.review_contracts import VERDICTS as VERDICTS
-from factory.review.review_contracts import identity_errors as identity_errors
-from factory.review.review_diff import load_diff_context
-from factory.review.review_evidence import validate_evidence as validate_evidence
-from factory.review.review_evidence import validate_tool_results
-from factory.review.review_io import load_object
-from factory.review.review_lenses import validate_finding as validate_finding
+from factory.review.protocol.contracts import SEVERITIES as SEVERITIES
+from factory.review.protocol.contracts import VERDICTS as VERDICTS
+from factory.review.protocol.contracts import identity_errors as identity_errors
+from factory.review.protocol.diff import load_diff_context
+from factory.review.protocol.evidence import validate_evidence as validate_evidence
+from factory.review.protocol.evidence import validate_tool_results
+from factory.review.protocol.lenses import validate_finding as validate_finding
 
 # Compatibility exports: existing imports and command entry points stay valid.
-from factory.review.review_lenses import (
+from factory.review.protocol.lenses import (
     validate_lens,
 )
-from factory.review.review_qa import (
+from factory.review.protocol.qa import (
     apply_qa,
 )
-from factory.review.review_shapes import NormalizedFinding, ProtocolResult
+from factory.review.protocol.shapes import NormalizedFinding, ProtocolResult
+from factory.review.render_review_report import render_report
 
 PROTOCOL_RESULT = TypeAdapter[ProtocolResult](ProtocolResult)
 
@@ -66,6 +67,14 @@ def _collect_failing_commands(
                 failing_commands.append({"tool_id": tool_id, "command_index": index, **command})
 
 
+def validator_sources(package: Path) -> dict[str, str]:
+    """Identify each review policy module by its package-relative path."""
+    return {
+        path.relative_to(package).as_posix(): file_reader.read_text(path, encoding="utf-8")
+        for path in package.rglob("*.py")
+    }
+
+
 def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
     errors: list[str] = []
     try:
@@ -73,7 +82,7 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         manifest = {}
         errors.append(f"manifest: {exc}")
-    from factory.review.review_contracts import parse_manifest
+    from factory.review.protocol.contracts import parse_manifest
 
     try:
         manifest = dict(parse_manifest(manifest))
@@ -188,15 +197,14 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
         digest(
             {
                 "policy": manifest.get("project_policy"),
-                "validators": {
-                    p.name: p.read_text(encoding="utf-8")
-                    for p in Path(__file__).parent.glob("*.py")
-                },
+                "validators": validator_sources(Path(__file__).parent),
             }
         ),
         digest(
             {
-                str(p): Path(p).read_text(encoding="utf-8") if Path(p).is_file() else "MISSING"
+                str(p): file_reader.read_text(Path(p), encoding="utf-8")
+                if Path(p).is_file()
+                else "MISSING"
                 for p in [args.manifest, args.qa_output, *args.lens_output, *args.tool_result]
             }
         ),

@@ -1,4 +1,13 @@
-/memory/
+/memory/*
+!/memory/USER.md
+!/memory/lessons/
+/memory/lessons/*
+!/memory/lessons/project/
+!/memory/lessons/factory/
+/memory/lessons/*/*
+!/memory/lessons/*/*.md
+!/memory/lessons/*/.gitkeep
+/memory/lessons/*/*/
 /.venv/
 /.python/
 /.venv.setup.lock
@@ -11,3 +20,5 @@ __pycache__/
 htmlcov/
 
 /diagnostics/
+
+/.env

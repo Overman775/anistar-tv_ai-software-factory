@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import unittest
 
+from factory.markdown import split_row
 from factory.paths import FACTORY_ROOT
-from factory.planning.plan_revision import semantic_normal_form
+from factory.planning.plan_revision import semantic_normal_form, validate_transition
 from factory.planning.validate_plan import validate
 from tests.factory.planning.fixture_plan import PLAN
 
@@ -47,8 +48,40 @@ class ValidatePlanTest(unittest.TestCase):
         self.assertNotEqual(PLAN, multilingual)
         self.assertEqual([], validate(multilingual, phase="draft"))
 
+    def test_new_and_revised_candidates_preserve_language_and_identity(self) -> None:
+        russian = PLAN.replace(
+            "Trusted certificate authority for payment", "Доверенный центр для оплаты"
+        ).replace("allowed host opens", "разрешённый хост открывается")
+        for previous in (PLAN, russian):
+            with self.subTest(language="ru" if previous == russian else "en"):
+                self.assertEqual([], validate(previous, phase="draft"))
+                revised = previous.replace("revision: 1", "revision: 2").replace(
+                    "CAP-01 —", "CAP-01 — Updated: "
+                )
+                self.assertEqual([], validate(revised, phase="draft", previous_text=previous))
+                self.assertIn(
+                    "SEMANTIC_REVISION_INVALID",
+                    self.codes(revised.replace("revision: 2", "revision: 1"), previous=previous),
+                )
+
     def test_valid_draft_passes(self) -> None:
         self.assertEqual([], validate(PLAN))
+
+    def test_escaped_pipes_in_decisions_and_criteria(self) -> None:
+        text = PLAN.replace(
+            "Special trust verification is limited", r"Button A\|B is limited"
+        ).replace("Allowed host opens", r"Field type A\|B opens")
+        self.assertEqual([], validate(text))
+
+    def test_backslash_parity_controls_table_delimiters(self) -> None:
+        self.assertEqual([r"A\|B", "C"], split_row(r"| A\|B | C |"))
+        self.assertEqual([r"A\\", "B", "C"], split_row(r"| A\\|B | C |"))
+
+    def test_extra_columns_in_decisions_and_criteria_are_rejected(self) -> None:
+        decision = PLAN.replace("Special trust verification is limited", "Extra | decision")
+        criterion = PLAN.replace("Allowed host opens", "Extra | criterion")
+        self.assertIn("DECISION_ROW_INVALID", self.codes(decision))
+        self.assertIn("ACCEPTANCE_INVALID", self.codes(criterion))
 
     def test_valid_approved_plan_passes(self) -> None:
         approved = PLAN.replace("status: draft", "status: approved").replace(
@@ -116,6 +149,18 @@ class ValidatePlanTest(unittest.TestCase):
         codes = self.codes(broken)
         self.assertIn("FORBIDDEN_METADATA", codes)
         self.assertIn("HANDOFF_INVALID", codes)
+
+    def test_transition_requires_a_valid_header_on_both_revisions(self) -> None:
+        for field, issue in (
+            ("status: draft", "METADATA_DUPLICATE"),
+            ("unknown_field: value", "METADATA_EXTRA"),
+        ):
+            with self.subTest(field=field):
+                broken = PLAN.replace("revision: 1", f"revision: 1\n{field}", 1)
+                self.assertEqual(
+                    self.codes(broken, previous=PLAN), {issue, "TRANSITION_METADATA_INVALID"}
+                )
+                self.assertEqual(self.codes(PLAN, previous=broken), {"TRANSITION_METADATA_INVALID"})
 
     def test_capabilities_are_declared_and_references_resolve(self) -> None:
         missing = PLAN.replace(
@@ -318,6 +363,29 @@ Stop loading after failure
         self.assertIn("SEMANTIC_REVISION_INVALID", self.codes(changed, previous=PLAN))
         revised = changed.replace("revision: 1", "revision: 2")
         self.assertEqual([], validate(revised, previous_text=PLAN))
+
+    def test_transition_rejects_inconsistent_approval_on_either_snapshot(self) -> None:
+        approved = PLAN.replace("status: draft", "status: approved").replace(
+            "approved_revision: none", "approved_revision: 1"
+        )
+        bad_draft = PLAN.replace("approved_revision: none", "approved_revision: 999")
+        bad_approval = approved.replace("approved_revision: 1", "approved_revision: 999")
+        self.assertIn("TRANSITION_METADATA_INVALID", self.codes(approved, "approved", bad_draft))
+        self.assertIn(
+            "APPROVAL_INVARIANT_INVALID",
+            {issue["code"] for issue in validate_transition(PLAN, bad_approval)},
+        )
+        codes = [issue["code"] for issue in validate(bad_approval, "approved", PLAN)]
+        self.assertEqual(codes.count("APPROVAL_INVARIANT_INVALID"), 1)
+
+    def test_approval_preserves_metadata_like_lines_in_the_body(self) -> None:
+        previous = PLAN + "\n```yaml\nstatus: pending\napproved_revision: none\n```\n"
+        changed = previous.replace("status: pending", "status: complete")
+        self.assertIn("SEMANTIC_REVISION_INVALID", self.codes(changed, previous=previous))
+        approved = changed.replace("status: draft", "status: approved", 1).replace(
+            "approved_revision: none", "approved_revision: 1", 1
+        )
+        self.assertIn("APPROVAL_CONTENT_CHANGED", self.codes(approved, "approved", previous))
 
     def test_nonsemantic_edit_keeps_revision(self) -> None:
         formatted = PLAN.replace(

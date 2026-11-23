@@ -5,6 +5,7 @@ from typing import Annotated
 
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError
 
+from factory.markdown import split_row
 from factory.tasks.contracts import Criterion, Nonblank
 from factory.validation import validation_message
 
@@ -49,11 +50,7 @@ def plan_criteria(text: str) -> list[Criterion]:
     marker = "### Acceptance criteria"
     ensure(text.count(marker) == 1, "Missing/duplicate acceptance table")
     section = re.split(r"\n#{1,3} ", text.split(marker, 1)[1], maxsplit=1)[0]
-    rows = [
-        [c.strip() for c in line.strip().strip("|").split("|")]
-        for line in section.splitlines()
-        if line.strip().startswith("|")
-    ]
+    rows = [split_row(line) for line in section.splitlines() if line.strip().startswith("|")]
     ensure(
         rows and rows[0] == ["ID", "Applicability", "Criterion", "Verification"],
         "Invalid acceptance table header",
