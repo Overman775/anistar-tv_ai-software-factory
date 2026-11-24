@@ -22,18 +22,18 @@ import '../support/test_app.dart';
 
 void main() {
   testWidgets('authenticated shell passes a matching loaded profile image to the account avatar', (tester) async {
-    const imageUri = 'https://v30.astar.bz/uploads/avatar.jpg';
+    final imageUri = _origin.resolve('/uploads/avatar.jpg');
     final auth = FakeAuthRepository()
       ..restoreResult = const Result.success('Анна Каренина')
-      ..profileOrigin = Uri.parse('https://v30.astar.bz/')
-      ..profileResult = Result.success(AuthProfile(imageUri: Uri.parse(imageUri)));
+      ..profileOrigin = _origin
+      ..profileResult = Result.success(AuthProfile(imageUri: imageUri));
     addTearDown(auth.close);
 
     await pumpTvApp(tester, const AuthenticatedApp(), wrapInScaffold: false, overrides: _overrides(auth));
     await tester.pumpAndSettle();
 
     expect(find.byType(HomeScreen), findsOneWidget);
-    expect(_accountAvatarImageWithUrl(imageUri), findsOneWidget);
+    expect(_accountAvatarImageWithUrl(imageUri.toString()), findsOneWidget);
   });
 
   testWidgets('authenticated shell keeps initials when loaded metadata belongs to a different origin', (tester) async {
@@ -79,6 +79,7 @@ void main() {
   });
 
   testWidgets('loading metadata keeps initials, then exposes only the current matching image', (tester) async {
+    final imageUri = _origin.resolve('/current.jpg');
     final pending = Completer<Result<AuthProfile, Failure>>();
     final auth = FakeAuthRepository()
       ..restoreResult = const Result.success('Анна Каренина')
@@ -89,24 +90,24 @@ void main() {
     await tester.pump();
     _expectInitialsWithoutImage(tester);
 
-    pending.complete(Result.success(AuthProfile(imageUri: Uri.parse('https://v30.astar.bz/current.jpg'))));
+    pending.complete(Result.success(AuthProfile(imageUri: imageUri)));
     await tester.pumpAndSettle();
-    expect(_accountAvatarImageWithUrl('https://v30.astar.bz/current.jpg'), findsOneWidget);
+    expect(_accountAvatarImageWithUrl(imageUri.toString()), findsOneWidget);
   });
 
   testWidgets('account and generation mismatches clear the routed avatar without replacing the router', (tester) async {
-    const imageUri = 'https://v30.astar.bz/current.jpg';
+    final imageUri = _origin.resolve('/current.jpg');
     final auth = FakeAuthRepository()
       ..restoreResult = const Result.success('Анна Каренина')
       ..profileOrigin = _origin
-      ..profileResult = Result.success(AuthProfile(imageUri: Uri.parse(imageUri)));
+      ..profileResult = Result.success(AuthProfile(imageUri: imageUri));
     final settle = tester.pumpAndSettle;
     addTearDown(auth.close);
     await pumpTvApp(tester, const AuthenticatedApp(), wrapInScaffold: false, overrides: _overrides(auth));
     await settle();
     final app = find.byType(AuthenticatedApp);
     final avatar = _accountAvatarImage();
-    final matchingImage = _accountAvatarImageWithUrl(imageUri);
+    final matchingImage = _accountAvatarImageWithUrl(imageUri.toString());
     final router = tester.widget<AuthenticatedApp>(app);
     expect(matchingImage, findsOneWidget);
     void expectFallbackWithoutRouterReplacement() {
@@ -129,7 +130,7 @@ void main() {
   });
 }
 
-final Uri _origin = Uri.parse('https://v30.astar.bz/');
+final Uri _origin = Uri.parse('https://avatar.example/');
 
 void _expectInitialsWithoutImage(WidgetTester tester) {
   expect(find.text('АК'), findsOneWidget);
@@ -148,7 +149,7 @@ Finder _accountAvatarImageWithUrl(String imageUrl) => find.descendant(
 );
 
 List<Override> _overrides(FakeAuthRepository auth) => [
-  anistarMirrorManagerProvider.overrideWithValue(null),
+  anistarActiveMirrorProvider.overrideWithBuild((_, _) => _origin),
   authRepositoryProvider.overrideWithValue(auth),
   catalogRepositoryProvider.overrideWithValue(const FakeCatalogScreenRepository()),
   catalogBrowseRepositoryProvider.overrideWithValue(

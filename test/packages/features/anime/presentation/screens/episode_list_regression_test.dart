@@ -8,6 +8,7 @@ import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_sc
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/anime_layout.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/episode_card.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:core/data.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -103,8 +104,8 @@ void main() {
   }
 
   for (final size in [const Size(640, 360), compactTvSize, wideTvSize, const Size(1920, 1080)]) {
-    for (final scale in [1.0, 1.3]) {
-      testWidgets('three equal loading/ready columns at $size with text $scale', (tester) async {
+    for (final (scale, account) in [(1.0, false), (1.3, false), (1.3, true)]) {
+      testWidgets('three equal loading/ready columns at $size text $scale account=$account', (tester) async {
         final pending = Completer<Result<AnimeScreenData, Failure>>();
         await pumpTvApp(
           tester,
@@ -115,18 +116,43 @@ void main() {
           size: size,
           wrapInScaffold: false,
           overrides: [
+            if (account) authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
             animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
           ],
         );
         await tester.pumpAndSettle();
         expect(find.text('Аниме'), findsOneWidget);
-        expect(find.byType(TvSkeleton), findsOneWidget);
-        final placeholders = find.byType(TvSkeletonBox);
+        final semantics = tester.ensureSemantics();
+        final details = find.byKey(const ValueKey('anime-details-loading'));
+        final detailsBox = find.descendant(of: details, matching: find.byType(TvSkeletonBox));
+        final invisibleSizing = find.descendant(
+          of: details,
+          matching: find.byWidgetPredicate((widget) => widget is Opacity && widget.opacity == 0),
+        );
+        final detailsLabel = find.text('Подробнее');
+        expect(detailsBox, findsOneWidget);
+        expect(detailsLabel, findsOneWidget);
+        expect(find.descendant(of: invisibleSizing, matching: detailsLabel), findsOneWidget);
+        expect(detailsLabel.hitTestable(), findsNothing);
+        expect(find.bySemanticsLabel('Подробнее'), findsNothing);
+        semantics.dispose();
+        final loadingGesture = find.descendant(of: details, matching: find.byType(GestureDetector)).first;
+        expect(Focus.of(tester.element(loadingGesture)).canRequestFocus, isFalse);
+        final detailsSize = tester.getSize(detailsBox);
+        final favoriteSlot = find.byKey(const ValueKey('anime-favorite-loading'));
+        expect(favoriteSlot, account ? findsOneWidget : findsNothing);
+        expect(find.text('Серии'), findsOneWidget);
+        final loadingHeader = tester.getTopLeft(find.text('Серии'));
+        final placeholders = find.descendant(
+          of: find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Загрузка серий'),
+          matching: find.byType(TvSkeletonBox),
+        );
         expect(placeholders, findsNWidgets(3));
         final loadingRects = List.generate(3, (index) => tester.getRect(placeholders.at(index)));
         expect(find.byType(EpisodeCard), findsNothing);
         pending.complete(Result.success(_data(8)));
         await tester.pumpAndSettle();
+        expect(tester.getSize(find.widgetWithText(AppButton, 'Подробнее')), detailsSize);
         final readyGrid = tester.widget<SliverGrid>(find.byType(SliverGrid)).gridDelegate;
         expect(readyGrid, isA<SliverGridDelegateWithFixedCrossAxisCount>());
         final ready = readyGrid as SliverGridDelegateWithFixedCrossAxisCount;
@@ -140,6 +166,12 @@ void main() {
         final third = _card(6);
         final rects = [first, second, third].map(tester.getRect).toList();
         expect(rects.map((rect) => rect.top).toSet(), hasLength(1));
+        // Initial TV focus may reveal the row. Compare at the same scroll offset.
+        final readyOffset = tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+        expect(rects.first.top + readyOffset, closeTo(loadingRects.first.top, 0.001));
+        final readyHeader = tester.getTopLeft(find.text('Серии'));
+        expect(readyHeader.dx, loadingHeader.dx);
+        expect(readyHeader.dy + readyOffset, closeTo(loadingHeader.dy, 0.001));
         expect(rects.map((rect) => rect.width), everyElement(closeTo(rects.first.width, 0.001)));
         expect(rects.first.width, closeTo(loadingRects.first.width, 0.001));
         expect(rects[0].right + ready.crossAxisSpacing, closeTo(rects[1].left, 0.001));

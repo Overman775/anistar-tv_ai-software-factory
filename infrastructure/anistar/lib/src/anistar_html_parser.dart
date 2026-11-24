@@ -20,6 +20,7 @@ final class AnistarHtmlParser {
   static final _linkedPathPattern = RegExp(r'^(?:(?:https?:)?//([^/?#]+))?([^?#]+)$', caseSensitive: false);
   static final _titlePathPattern = RegExp(r'^/(\d+-[^/\\?#]*)\.html$');
   static final _encodedTitleSeparators = RegExp('%(?:2f|5c|2e|25)', caseSensitive: false);
+  static final _invalidLocationCharacters = RegExp(r'[\x00-\x20\x7f]');
   static final _detailMetadataFilter = RegExp('^/filter/(author|director|year)/');
 
   final Uri baseUri;
@@ -325,6 +326,16 @@ final class AnistarHtmlParser {
     final id = int.tryParse(slug?.split('-').first ?? '');
 
     return id == null || id <= 0 ? (null, null) : (id, slug);
+  }
+
+  String? canonicalDetailSlug(String? location, int animeId) {
+    final href = location?.trim();
+    if (baseUri.scheme != 'https' || href == null || _invalidLocationCharacters.hasMatch(href)) {
+      return null;
+    }
+    final (targetId, slug) = _titleIdentity(_linkedPath(href, _uri(href)));
+
+    return targetId == animeId ? slug : null;
   }
 
   String? _linkedPath(String? href, Uri? uri) {

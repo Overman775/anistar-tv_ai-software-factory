@@ -7,9 +7,9 @@ import 'anistar_failure.dart';
 import 'anistar_html_parser.dart';
 import 'html_decoder.dart';
 
-/// Only discovers the numbered astar.bz family. Probes never carry a session.
+/// Only discovers the numbered astar.pw family. Probes never carry a session.
 final class AnistarMirrorManager {
-  static const storageKey = 'anistar.mirror.astar.bz.version';
+  static const storageKey = 'anistar.mirror.astar.pw.version';
   final SharedPreferencesStorage storage;
   final int maxNextVersions;
   static const _unavailable = AnistarFailure(
@@ -143,12 +143,12 @@ final class AnistarMirrorManager {
     if (uri.scheme != 'https' || uri.hasPort || uri.userInfo.isNotEmpty) {
       return null;
     }
-    final match = RegExp(r'^v([1-9]\d{0,3})\.astar\.bz$').firstMatch(uri.host);
+    final match = RegExp(r'^v([1-9]\d{0,3})\.astar\.pw$').firstMatch(uri.host);
 
     final digits = match?.group(1);
 
     return digits == null ? null : int.tryParse(digits);
   }
 
-  static Uri _at(int version) => Uri.parse('https://v$version.astar.bz/');
+  static Uri _at(int version) => Uri.parse('https://v$version.astar.pw/');
 }

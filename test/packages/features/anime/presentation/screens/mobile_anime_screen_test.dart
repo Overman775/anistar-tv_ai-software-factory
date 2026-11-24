@@ -7,6 +7,7 @@ import 'package:anistar_tv/packages/features/anime/domain/models/anime_part.dart
 import 'package:anistar_tv/packages/features/anime/domain/models/anime_screen_data.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/screens/anime_screen.dart';
 import 'package:anistar_tv/packages/features/anime/presentation/widgets/mobile_anime_content.dart';
+import 'package:anistar_tv/packages/features/auth/auth_providers.dart';
 import 'package:anistar_tv/packages/features/catalog/domain/models/catalog_filter.dart';
 import 'package:core/data.dart';
 import 'package:flutter/semantics.dart';
@@ -43,6 +44,73 @@ final _data = AnimeScreenData(
 );
 
 void main() {
+  for (final (width, scale, authenticated, wraps) in [
+    (320.0, 2.0, false, false),
+    (320.0, 2.0, true, true),
+    (360.0, 1.0, true, false),
+  ]) {
+    testWidgets('loading card preserves episode position at width $width, scale $scale, account=$authenticated', (
+      tester,
+    ) async {
+      final pending = Completer<Result<AnimeScreenData, Failure>>();
+      await pumpMobileApp(
+        tester,
+        const AnimeScreen(animeId: 1, slug: 'test', fallbackTitle: _title, onEpisodeTap: _ignoreEpisode),
+        size: Size(width, 844),
+        textScale: scale,
+        disableAnimations: true,
+        wrapInScaffold: false,
+        overrides: [
+          if (authenticated) authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
+          animeRepositoryProvider.overrideWithValue(FakeAnimeScreenRepository(load: (_, _) => pending.future)),
+        ],
+      );
+      await tester.pumpAndSettle();
+      final semantics = tester.ensureSemantics();
+      final favoriteSlot = find.byKey(const ValueKey('anime-favorite-loading'));
+      expect(favoriteSlot, authenticated ? findsOneWidget : findsNothing);
+      final details = find.byKey(const ValueKey('anime-details-loading'));
+      final detailsBox = find.descendant(of: details, matching: find.byType(TvSkeletonBox));
+      final invisibleSizing = find.descendant(
+        of: details,
+        matching: find.byWidgetPredicate((widget) => widget is Opacity && widget.opacity == 0),
+      );
+      final detailsLabel = find.text('Подробнее');
+      expect(detailsBox, findsOneWidget);
+      expect(detailsLabel, findsOneWidget);
+      expect(find.descendant(of: invisibleSizing, matching: detailsLabel), findsOneWidget);
+      expect(detailsLabel.hitTestable(), findsNothing);
+      expect(find.bySemanticsLabel('Подробнее'), findsNothing);
+      semantics.dispose();
+      final detailsRect = tester.getRect(detailsBox);
+      final heading = find.text('Серии');
+      final loadingHeading = tester.getTopLeft(heading);
+      final firstPlaceholder = find
+          .descendant(
+            of: find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Загрузка серий'),
+            matching: find.byType(TvSkeletonBox),
+          )
+          .first;
+      final loadingEpisodeY = tester.getTopLeft(firstPlaceholder).dy;
+      if (authenticated) {
+        expect(tester.getTopLeft(favoriteSlot).dy, wraps ? greaterThan(detailsRect.top) : detailsRect.top);
+      }
+
+      pending.complete(Result.success(_data));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(heading), loadingHeading);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('mobile-episode-5'))).dy, loadingEpisodeY);
+      final readyDetails = find.widgetWithText(AppButton, 'Подробнее');
+      expect(readyDetails.hitTestable(), findsOneWidget);
+      expect(tester.getRect(readyDetails), detailsRect);
+      if (authenticated) {
+        final favoriteButton = find.byKey(const ValueKey('favorite-button-1'));
+        expect(tester.getTopLeft(favoriteButton).dy, wraps ? greaterThan(detailsRect.top) : detailsRect.top);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('short mobile landscape can scroll to an episode', (tester) async {
     await pumpMobileApp(
       tester,

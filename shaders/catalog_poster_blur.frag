@@ -23,5 +23,5 @@ void main() {
     }
   }
 
-  fragColor = color / (float(quality * directions) - 15.0);
+  fragColor = color / float(1 + directions * quality);
 }

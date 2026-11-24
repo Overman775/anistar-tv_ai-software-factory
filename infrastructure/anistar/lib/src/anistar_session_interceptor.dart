@@ -84,8 +84,13 @@ final class AnistarSessionInterceptor extends Interceptor {
         if (generation != _session.generation) {
           throw const AnistarFailure(message: 'Запрос относится к завершённой сессии.');
         }
+        final status = response.statusCode ?? 0;
         final data = response.data;
-        if (_session.account != null && options.extra['anistarAuth'] != true && data is List<int>) {
+        if (status >= 200 &&
+            status < 300 &&
+            _session.account != null &&
+            options.extra['anistarAuth'] != true &&
+            data is List<int>) {
           final source = HtmlDecoder.decode(data, response.headers.value('content-type'));
           final document = html.parse(source);
           if (AnistarAuthHtml.isGuestDocument(document) &&

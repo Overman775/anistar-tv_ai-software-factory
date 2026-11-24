@@ -18,6 +18,10 @@ import 'html_decoder.dart';
 import 'parsed_episode.dart';
 
 final class AnistarSource {
+  static const _detailRedirectStatuses = {301, 302, 303, 307, 308};
+  static const _maxDetailRedirects = 3;
+  static final _detailSlugPattern = RegExp(r'^(\d+)-[^/\\?#]*$');
+
   final Uri baseUri;
   final Dio _dio;
   final AnistarSearchSource _search;
@@ -108,15 +112,31 @@ final class AnistarSource {
     }
   }
 
-  Future<AnistarAnimeDetailsDto> details(String slug) => _details(slug);
+  Future<AnistarAnimeDetailsDto> details(String slug) => _details(slug, expectedAccess: _accessGeneration?.call());
 
   Future<AnistarAnimeDetailsDto> _details(String slug, {int? expectedAccess}) async {
-    if (!RegExp(r'^\d+-[^/?#]*$').hasMatch(slug)) {
+    final idText = _detailSlugPattern.firstMatch(slug)?.group(1);
+    final animeId = idText == null ? null : int.tryParse(idText);
+    if (animeId == null || animeId <= 0) {
       throw const AnistarFailure(message: 'Некорректный адрес аниме.');
     }
-    final source = await _html('$slug.html', expectedAccess: expectedAccess);
+    final parser = AnistarHtmlParser(baseUri);
+    final visited = {slug};
+    var currentSlug = slug;
+    for (var hop = 0; hop <= _maxDetailRedirects; hop++) {
+      final response = await _htmlPage('$currentSlug.html', expectedAccess: expectedAccess, allowDetailRedirect: true);
+      if (!_detailRedirectStatuses.contains(response.statusCode)) {
+        return parser.details(_decodeHtml(response), currentSlug);
+      }
+      final location = response.headers['location']?.singleOrNull;
+      final nextSlug = parser.canonicalDetailSlug(location, animeId);
+      if (nextSlug == null || !visited.add(nextSlug)) {
+        throw const AnistarFailure(message: 'AniStar вернул неподдерживаемое перенаправление карточки.');
+      }
+      currentSlug = nextSlug;
+    }
 
-    return AnistarHtmlParser(baseUri).details(source, slug);
+    throw const AnistarFailure(message: 'AniStar слишком много раз перенаправил карточку.');
   }
 
   Future<AnistarCatalogPageDto> favorites(int page) async {
@@ -252,7 +272,15 @@ final class AnistarSource {
     }
   }
 
-  Future<String> _html(String path, {Map<String, String>? sortCookies, int? expectedAccess}) async {
+  Future<String> _html(String path, {Map<String, String>? sortCookies, int? expectedAccess}) async =>
+      _decodeHtml(await _htmlPage(path, sortCookies: sortCookies, expectedAccess: expectedAccess));
+
+  Future<Response<List<int>>> _htmlPage(
+    String path, {
+    Map<String, String>? sortCookies,
+    int? expectedAccess,
+    bool allowDetailRedirect = false,
+  }) async {
     _verifyAccess(expectedAccess);
     final Response<List<int>> response;
     try {
@@ -260,6 +288,8 @@ final class AnistarSource {
         path,
         options: Options(
           responseType: ResponseType.bytes,
+          followRedirects: allowDetailRedirect ? false : null,
+          validateStatus: allowDetailRedirect ? _validateDetailStatus : null,
           extra: {'anistarSortCookies': ?sortCookies, AnistarSessionInterceptor.expectedAccessKey: ?expectedAccess},
           headers: {
             'Accept': 'text/html',
@@ -289,6 +319,14 @@ final class AnistarSource {
     if (response.headers.value('cf-mitigated') == 'challenge') {
       throw const AnistarFailure(message: 'AniStar запросил проверку браузера. Попробуйте другое зеркало.');
     }
+
+    return response;
+  }
+
+  static bool _validateDetailStatus(int? status) =>
+      status != null && ((status >= 200 && status < 300) || _detailRedirectStatuses.contains(status));
+
+  static String _decodeHtml(Response<List<int>> response) {
     final data = response.data;
     if (data == null) {
       throw const AnistarFailure(message: 'AniStar вернул пустую страницу.');

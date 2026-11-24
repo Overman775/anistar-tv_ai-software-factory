@@ -134,15 +134,19 @@ void main() {
     final pending = Completer<Result<AnimeScreenData, Failure>>();
     await _openDetails(tester, pending.future);
 
+    final episodeLoading = find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.label == 'Загрузка серий',
+    );
+    final episodeSkeleton = find.descendant(of: episodeLoading, matching: find.byType(TvSkeleton));
     expect(find.text('Известное название'), findsOneWidget);
-    expect(find.byType(TvSkeleton), findsOneWidget);
+    expect(episodeSkeleton, findsOneWidget);
     expect(find.byType(Hero), findsNothing);
     expect(find.byType(EpisodeCard), findsNothing);
 
     pending.complete(Result.success(_readyData()));
     await tester.pumpAndSettle();
     expect(find.text('Полное название'), findsOneWidget);
-    expect(find.byType(TvSkeleton), findsNothing);
+    expect(episodeLoading, findsNothing);
     expect(find.byType(Hero), findsNothing);
     expect(find.byType(AnimeHero), findsNothing);
     expect(find.byType(EpisodeCard), findsOneWidget);

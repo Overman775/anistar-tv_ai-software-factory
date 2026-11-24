@@ -328,6 +328,11 @@ Future<void> _runRedesignScene(
   if (scene == 'home' || scene == 'browse') {
     expect(find.byType(MediaCardBookmark), findsOneWidget);
   }
+  if (mobile && scene == 'detail') {
+    final detailsButton = find.widgetWithText(AppButton, 'Подробнее');
+    final favoriteButton = find.byKey(const ValueKey('favorite-button-1'));
+    expect(tester.getTopLeft(favoriteButton).dy, tester.getTopLeft(detailsButton).dy);
+  }
   await expectScreenGolden('redesign_$scene', profile: profile, textScale: textScale);
   if (scene == 'detail') {
     if (mobile) {

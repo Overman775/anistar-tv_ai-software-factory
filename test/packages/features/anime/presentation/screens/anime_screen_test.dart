@@ -214,7 +214,8 @@ void main() {
     expect(reload.hitTestable(), findsOneWidget);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();
-    expect(find.byType(TvSkeleton), findsOneWidget);
+    final loadingDetails = find.byKey(const ValueKey('anime-details-loading'));
+    expect(find.descendant(of: loadingDetails, matching: find.byType(TvSkeletonBox)), findsOneWidget);
     expect(reload, findsNothing);
     await tester.sendKeyEvent(LogicalKeyboardKey.select);
     await tester.pumpAndSettle();

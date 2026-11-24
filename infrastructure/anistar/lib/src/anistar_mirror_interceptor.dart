@@ -18,8 +18,11 @@ final class AnistarMirrorInterceptor extends Interceptor {
   void onResponse(Response<Object?> response, ResponseInterceptorHandler handler) {
     final uri = response.requestOptions.uri;
     final status = response.statusCode ?? 0;
-    final location = response.headers.value('location');
-    final redirected = status >= 300 && status < 400 && location != null && uri.resolve(location).origin != uri.origin;
+    final location = status >= 300 && status < 400 ? response.headers['location']?.singleOrNull : null;
+    final reference = location == null ? null : Uri.tryParse(location);
+    final target = reference == null ? null : uri.resolveUri(reference);
+    final redirected =
+        target != null && (target.scheme != uri.scheme || target.host != uri.host || target.port != uri.port);
     if (response.headers.value('cf-mitigated') != 'challenge' && !redirected) {
       handler.next(response);
 

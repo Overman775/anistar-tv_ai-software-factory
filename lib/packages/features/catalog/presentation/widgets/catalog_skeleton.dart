@@ -5,9 +5,10 @@ import 'catalog_layout.dart';
 
 /// The first-page placeholders reserve the same poster geometry as the rail.
 class CatalogSkeleton extends StatelessWidget {
-  const CatalogSkeleton({this.title = 'Каталог аниме', super.key});
+  const CatalogSkeleton({this.title = 'Каталог аниме', this.trailingInset = 0, super.key});
 
   final String title;
+  final double trailingInset;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +25,7 @@ class CatalogSkeleton extends StatelessWidget {
         children: [
           Expanded(
             child: Padding(
-              padding: EdgeInsets.fromLTRB(anchor, CatalogLayout.inspectorTopPadding, anchor, 0),
+              padding: EdgeInsets.fromLTRB(anchor, CatalogLayout.inspectorTopPadding, anchor + trailingInset, 0),
               child: Align(
                 alignment: Alignment.topLeft,
                 child: FractionallySizedBox(

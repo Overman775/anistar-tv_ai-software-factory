@@ -3,6 +3,7 @@ import 'package:ui_kit/ui_kit.dart';
 
 import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_screen_data.dart';
+import 'anime_card_actions.dart';
 import 'anime_hero.dart';
 import 'episode_card.dart';
 
@@ -51,24 +52,11 @@ class MobileAnimeContent extends StatelessWidget {
       children: [
         Semantics(header: true, child: Text(data.details.title, style: AppContentTypography.detailTitleOf(context))),
         const SizedBox(height: AppSpacing.lg),
-        Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: [
-            Semantics(
-              expanded: expanded,
-              child: AppButton(
-                label: 'Подробнее',
-                variant: AppButtonVariant.neutral,
-                icon: RotatedBox(
-                  quarterTurns: expanded ? 3 : 1,
-                  child: const AppIcon(AppIconType.chevronRight, size: 20),
-                ),
-                onPressed: onToggleDetails,
-              ),
-            ),
-            ?favoriteAction,
-          ],
+        AnimeCardActions(
+          showFavorite: favoriteAction != null,
+          expanded: expanded,
+          onToggleDetails: onToggleDetails,
+          favoriteAction: favoriteAction,
         ),
         disclosure,
         const SizedBox(height: AppSpacing.xl),

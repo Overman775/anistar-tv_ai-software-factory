@@ -6,7 +6,6 @@ import 'package:core/data.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:sizer/sizer.dart';
 import 'package:ui_kit/ui_kit.dart';
 
 import '../../../auth/auth_providers.dart';
@@ -20,6 +19,7 @@ import '../../domain/models/anime_episode.dart';
 import '../../domain/models/anime_part.dart';
 import '../../domain/models/anime_screen_data.dart';
 import '../../domain/repositories/anime_repository.dart';
+import '../widgets/anime_card_actions.dart';
 import '../widgets/anime_detail_filter_actions.dart';
 import '../widgets/anime_detail_filter_groups.dart';
 import '../widgets/anime_hero.dart';
@@ -372,9 +372,8 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
     );
   }
 
-  Widget _readyBody(BuildContext context, AnimeScreenData data) {
+  Widget _readyBody(BuildContext context, AnimeScreenData data, bool hasAccount) {
     final tv = AppLayoutScope.isTvOf(context);
-    final hasAccount = ref.watch(authAccessProvider).canUseAccount;
     final watched = hasAccount ? ref.watch(watchedEpisodesProvider(widget.animeId)).asData?.value : null;
     final favorite = hasAccount
         ? FavoriteButton(
@@ -423,26 +422,12 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
                   header: true,
                   child: Text(data.details.title, style: AppContentTypography.detailTitleOf(context)),
                 ),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    Semantics(
-                      expanded: _expanded,
-                      child: AppButton(
-                        label: 'Подробнее',
-                        variant: AppButtonVariant.neutral,
-                        focusNode: _detailsFocus,
-                        adaptiveTv: true,
-                        icon: RotatedBox(
-                          quarterTurns: _expanded ? 3 : 1,
-                          child: AppIcon(AppIconType.chevronRight, size: 2.78.vmin.clamp(18.0, 20.0)),
-                        ),
-                        onPressed: _toggleDetails,
-                      ),
-                    ),
-                    ?favorite,
-                  ],
+                AnimeCardActions(
+                  showFavorite: favorite != null,
+                  expanded: _expanded,
+                  onToggleDetails: _toggleDetails,
+                  detailsFocus: _detailsFocus,
+                  favoriteAction: favorite,
                 ),
               ],
             ),
@@ -745,10 +730,14 @@ class _AnimeScreenState extends ConsumerState<AnimeScreen> with SingleTickerProv
         (_, _) => _onSourceChanged(),
       );
     final tv = AppLayoutScope.isTvOf(context);
+    final hasAccount = ref.watch(authAccessProvider).canUseAccount;
     final body = switch ((_data, _loadError)) {
-      (final data?, _) => _readyBody(context, data),
+      (final data?, _) => _readyBody(context, data, hasAccount),
       (_, final message?) => _errorBody(context, message),
-      _ => tv ? AnimeSkeleton(title: widget.fallbackTitle) : MobileAnimeSkeleton(title: widget.fallbackTitle),
+      _ =>
+        tv
+            ? AnimeSkeleton(title: widget.fallbackTitle, showFavorite: hasAccount)
+            : MobileAnimeSkeleton(title: widget.fallbackTitle, showFavorite: hasAccount),
     };
     _scheduleInitialFocus();
 

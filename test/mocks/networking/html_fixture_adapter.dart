@@ -8,11 +8,17 @@ final class HtmlFixtureAdapter implements HttpClientAdapter {
   final List<RequestOptions> requests = [];
   final int statusCode;
   final Map<String, List<String>> responseHeaders;
+  final Map<String, ({int statusCode, Map<String, List<String>> headers})> overrides;
   bool _closed = false;
 
   bool get isClosed => _closed;
 
-  HtmlFixtureAdapter(this.responses, {this.statusCode = 200, this.responseHeaders = const {}});
+  HtmlFixtureAdapter(
+    this.responses, {
+    this.statusCode = 200,
+    this.responseHeaders = const {},
+    this.overrides = const {},
+  });
 
   @override
   Future<ResponseBody> fetch(
@@ -25,13 +31,15 @@ final class HtmlFixtureAdapter implements HttpClientAdapter {
     }
     requests.add(options);
     final html = responses[options.uri.path];
+    final override = overrides[options.uri.path];
 
     return ResponseBody.fromBytes(
-      utf8.encode(html ?? 'Not found'),
-      html == null ? 404 : statusCode,
+      utf8.encode(html ?? (override == null ? 'Not found' : '')),
+      override?.statusCode ?? (html == null ? 404 : statusCode),
       headers: {
         'content-type': ['text/html; charset=UTF-8'],
         ...responseHeaders,
+        ...?override?.headers,
       },
     );
   }

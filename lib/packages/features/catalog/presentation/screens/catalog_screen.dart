@@ -224,7 +224,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
 
   Widget _buildState(BuildContext context, CatalogState state) {
     if (state is CatalogInitial || state is CatalogLoading) {
-      return CatalogSkeleton(title: _railTitle);
+      return CatalogSkeleton(title: _railTitle, trailingInset: _inspectorTrailingInset(context));
     }
     if (state is CatalogFailure && state.items.isEmpty) {
       return TvStateView(
@@ -269,7 +269,7 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
         return CatalogInspector(
           anime: anime,
           immediate: _inspectImmediately,
-          trailingInset: widget.filter == null ? 0 : _sortMaxWidth(context) + AppSpacing.md,
+          trailingInset: _inspectorTrailingInset(context),
           actions: _inspectorActions(anime, canUseAccount, isFavorite(anime)),
           lastGenreFocus: _lastGenreFocus,
           onGenreTap: widget.onFilterSelected == null ? null : _openGenre,
@@ -942,6 +942,9 @@ class CatalogScreenState extends ConsumerState<CatalogScreen> with SingleTickerP
 
     return KeyEventResult.handled;
   }
+
+  double _inspectorTrailingInset(BuildContext context) =>
+      widget.filter == null ? 0 : _sortMaxWidth(context) + AppSpacing.md;
 
   double _sortMaxWidth(BuildContext context) => MediaQuery.sizeOf(context).width / 3;
 

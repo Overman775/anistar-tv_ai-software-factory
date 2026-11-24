@@ -230,6 +230,11 @@ class FilterRoute extends GoRouteData with $FilterRoute {
   const FilterRoute({required this.path, required this.title, this.destination = HomeDestination.genres});
 
   @override
+  Page<void> buildPage(BuildContext context, GoRouterState state) => AppLayoutScope.isTvOf(context)
+      ? NoTransitionPage<void>(key: state.pageKey, child: build(context, state))
+      : super.buildPage(context, state);
+
+  @override
   Widget build(BuildContext context, GoRouterState state) => Consumer(
     builder: (context, ref, _) {
       final mobile = !AppLayoutScope.isTvOf(context);

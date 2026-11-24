@@ -5,7 +5,7 @@ abstract final class AnistarMirrorConfig {
 
   static Uri resolve(String configuredUrl) {
     final value = configuredUrl.trim();
-    final uri = Uri.tryParse(value.isEmpty ? 'https://v30.astar.bz/' : value);
+    final uri = Uri.tryParse(value.isEmpty ? 'https://v1.astar.pw/' : value);
     if (uri == null ||
         uri.scheme != 'https' ||
         !uri.hasAuthority ||

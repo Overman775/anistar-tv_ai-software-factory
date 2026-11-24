@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('both entry points use the direct HTTPS mirror by default', () {
-    expect(AnistarMirrorConfig.resolve(''), Uri.parse('https://v30.astar.bz/'));
+    expect(AnistarMirrorConfig.resolve(''), Uri.parse('https://v1.astar.pw/'));
     expect(AnistarMirrorConfig.resolve('https://mirror.test'), Uri.parse('https://mirror.test/'));
   });
 

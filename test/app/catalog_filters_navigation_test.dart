@@ -19,6 +19,7 @@ import 'package:anistar_tv/packages/features/catalog/presentation/screens/genres
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/anime_card.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_inspector_copy.dart';
 import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_navigation_rail.dart';
+import 'package:anistar_tv/packages/features/catalog/presentation/widgets/catalog_skeleton.dart';
 import 'package:anistar_tv/packages/features/home/presentation/home_destination.dart';
 import 'package:anistar_tv/packages/features/home/presentation/screens/tv_route_shell.dart';
 import 'package:app_logging/app_logging.dart';
@@ -107,12 +108,15 @@ void main() {
     ) async {
       final router = AppRouter(AppLogger.logger);
       addTearDown(router.dispose);
+      final pending = Completer<Result<AnimePage, Failure>>();
       final repository = FakeCatalogBrowseRepository(
-        load: (_, page) => const FakeCatalogScreenRepository().getPage(page),
+        load: (_, page) => fromDetail && page == 1 ? pending.future : const FakeCatalogScreenRepository().getPage(page),
       );
       await pumpTvApp(
         tester,
         MaterialApp.router(routerConfig: router.router, theme: AppTheme.darkTheme),
+        size: fromDetail ? const Size(640, 360) : compactTvSize,
+        textScale: fromDetail ? 1.3 : null,
         wrapInScaffold: false,
         overrides: [
           authAccessProvider.overrideWithValue(const AuthenticatedAccess('test')),
@@ -184,6 +188,26 @@ void main() {
       final sourceFocus = FocusManager.instance.primaryFocus;
       expect(sourceFocus?.debugLabel, 'Комедия');
       await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      if (fromDetail) {
+        await tester.pump();
+        final skeleton = find.byType(CatalogSkeleton);
+        final sort = find.byKey(const ValueKey('catalog-sort'));
+        for (final elapsed in [Duration.zero, const Duration(milliseconds: 80), const Duration(milliseconds: 100)]) {
+          if (elapsed != Duration.zero) await tester.pump(elapsed);
+          expect(skeleton, findsOneWidget);
+          expect(find.byType(AnimeScreen), findsNothing);
+          final sortBounds = tester.getRect(sort);
+          final parts = find.descendant(of: skeleton, matching: find.byType(TvSkeletonBox));
+          expect(parts, findsWidgets);
+          for (final part in parts.evaluate()) {
+            expect(
+              tester.getRect(find.byElementPredicate((element) => identical(element, part))).overlaps(sortBounds),
+              isFalse,
+            );
+          }
+        }
+        pending.complete(await const FakeCatalogScreenRepository().getPage(1));
+      }
       await tester.pumpAndSettle();
       expect(repository.requests, [('/anime/comedy/', 1)]);
       expect(tester.widget<CatalogScreen>(find.byType(CatalogScreen)).filter?.path, comedyFilter.path);
