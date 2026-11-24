@@ -254,7 +254,7 @@ controller, скрытие пароля, открытие системной к�
 
 ### U05. Последовательно использовать общий заголовок секции
 
-Развить существующий [TvSectionHeader](../../lib/packages/ui_kit/lib/src/widgets/tv_section_header.dart)
+Развить существующий [TvSectionHeader](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/8b4815be09aa559f3413194fb0475484f4196d75/lib/packages/ui_kit/lib/src/widgets/tv_section_header.dart)
 до общего компонента, например `AppSectionHeader`: роль TV/mobile,
 `Semantics(header: true)`, необязательная подпись и действие. «Сюжет», «Серии»
 и «Порядок просмотра» сейчас также собираются вручную через `Text`/`Semantics`.
@@ -265,7 +265,7 @@ controller, скрытие пароля, открытие системной к�
 
 ### U06. Один форматтер подписи серии
 
-Существующий [EpisodeCaption](../../lib/packages/features/anime/presentation/widgets/episode_caption.dart)
+Существующий [EpisodeCaption](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/8b4815be09aa559f3413194fb0475484f4196d75/lib/packages/features/anime/presentation/widgets/episode_caption.dart)
 устраняет повтор «Серия N» с нормализацией регистра и пробелов.
 [PlayerEpisodeChoicesDialog](../../lib/packages/features/player/presentation/widgets/player_episode_choices_dialog.dart)
 формирует подпись отдельно, сравнивает строки буквально и повторяет это
@@ -298,7 +298,7 @@ Semantics и масштаб текста. Риск низкий–средний
 
 ### U08. Заменить MobileEpisodeRow на EpisodeCard
 
-[MobileEpisodeRow](../../lib/packages/features/anime/presentation/widgets/mobile_episode_row.dart)
+[MobileEpisodeRow](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/8b4815be09aa559f3413194fb0475484f4196d75/lib/packages/features/anime/presentation/widgets/mobile_episode_row.dart)
 повторяет [EpisodeCard](../../lib/packages/features/anime/presentation/widgets/episode_card.dart):
 подпись, изображение, Semantics и отметку просмотра. Отличается высотой 92,
 которую `EpisodeCard` уже принимает через `episodeHeight`.
@@ -321,7 +321,7 @@ TV-карточке и мобильных подробностях.
 
 ### U10. Очистить лишнее и сохранить границы UI Kit
 
-- Удалить неиспользуемый [AnimeMetadataChip](../../lib/packages/features/anime/presentation/widgets/anime_metadata_chip.dart) после повторного поиска вызовов.
+- Удалить неиспользуемый [AnimeMetadataChip](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/8b4815be09aa559f3413194fb0475484f4196d75/lib/packages/features/anime/presentation/widgets/anime_metadata_chip.dart) после повторного поиска вызовов.
 - `AnimeCard`, `EpisodeCard`, `FavoriteButton`, `AnimeFilterChip` оставить в features: они связывают UI с моделями и действиями приложения.
 - `AccountIdentity` уже переиспользуется из `common`; перенос в UI Kit пока даёт мало пользы.
 - Убедительного кандидата на обратный перенос готового виджета из UI Kit в feature аудит не выявил. Не придумывать перенос ради симметрии.

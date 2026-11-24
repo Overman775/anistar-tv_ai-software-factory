@@ -1,72 +1,44 @@
 # 📚 Документация | AniStar TV
 
-Выберите документ по вопросу, с которым работаете. Описание приложения и быстрый запуск находятся в [главном README](../README.md).
+Начните с документа по своей задаче. Описание приложения и быстрый запуск находятся в [главном README](../README.md).
 
-## Руководства для разработки
+## Действующие контракты и руководства
 
-| Что нужно выяснить | Документ |
+| Задача | Что читать |
 | :--- | :--- |
-| Как проверить, установить или обновить окружение проекта с выбором компонентов | [AniStar Install](../.agents/skills/anistar-install/SKILL.md) |
-| Как разделены слои, зависимости и DI | [Архитектурные принципы](01_architecture_principles.md) |
-| Что означают предметные термины и состояния | [Доменный глоссарий](01_01_domain_glossary.md) |
-| Какая фича владеет правилом и как взаимодействуют фичи | [Ответственность фич](01_02_feature_responsibilities.md) |
-| Где разместить код и как связаны пакеты | [Структура проекта](02_project_structure.md) |
-| Какие правила соблюдать в Dart, асинхронном коде и TV UI | [Code Style](03_codestyle_and_rules.md) |
-| Как взаимодействуют transport, сайт, сессия и native playback | [Сеть и HLS](04_network_and_playback.md) |
-| Как выбрать проверки, собрать приложение и разобраться в сбое | [Разработка и тестирование](05_development_and_testing.md) |
-| Как поручить работу агентам и проверить их результат | [AI Software Factory](07_ai_tooling.md) |
-| Какую команду использовать для запуска, генерации или обслуживания | [Melos tooling](melos_tooling.md) |
-| Как работать с ветками, коммитами и версией приложения | [Git и версии](vcs_guidelines.md) |
-| Как настроить локальную Android production-подпись и сборку без ключа | [Android-подпись](android_signing.md) |
-| Где посмотреть адаптивный UI-прототип и handoff-документ | [Прототип](../prototype/index.html), [DESIGN-HANDOFF](../prototype/DESIGN-HANDOFF.md) |
+| Понять назначение и ограничения приложения | [Продукт](../PRODUCT.md) |
+| Изменить поведение фичи | [Глоссарий](01_01_domain_glossary.md), [ответственность фич](01_02_feature_responsibilities.md) и [спецификация своей фичи](specs/README.md) |
+| Изменить TV/мобильный интерфейс | [ADR-0008](adr/0008-youtube-tv-interaction-reference.md), [контракты интерфейса](specs/README.md#интерфейс), [визуальный прототип](../prototype/index.html) и [handoff](../prototype/DESIGN-HANDOFF.md). Код приложения находится в `lib/` |
+| Найти правило архитектуры или размещения кода | [Архитектурные принципы](01_architecture_principles.md), [структура проекта](02_project_structure.md), [реестр ADR](adr/README.md) |
+| Связать зависимости и определить владельца ресурса | [DI и жизненный цикл](01_03_di_and_lifecycle.md) |
+| Проверить требования к Dart, асинхронности и TV UI | [Правила кода](03_codestyle_and_rules.md) |
+| Разобраться с сетью, сессией или HLS | [Сеть и воспроизведение](04_network_and_playback.md) |
+| Подготовить окружение приложения | [AniStar Install](../.agents/skills/anistar-install/SKILL.md) |
+| Выбрать проверку и запустить полный gate | [Разработка и тестирование](05_development_and_testing.md), [команды Melos](melos_tooling.md) |
+| Проверить раскладку или обновить эталон | [Widget-тесты и goldens](05_01_widget_and_golden_tests.md) |
+| Проверить реальный сайт или CDN | [Live-проверки AniStar](05_02_live_testing.md) |
+| Запустить E2E или настроить его входы | [Тестовые сценарии](../integration_test/README.md), [E2E runners и фикстуры](../tool/e2e/README.md) |
+| Установить Git hooks или запустить сканеры | [Git hooks и проверки безопасности](git_hooks_and_security.md) |
+| Подготовить сборку или выпуск | [Android-подпись](android_signing.md), [Git и версии](vcs_guidelines.md) |
+| Поручить работу агентам | [AI Software Factory](07_ai_tooling.md), [локальные инструменты Graphify](../tool/graphify/README.md) |
+| Написать руководство, ADR, спецификацию, intent или README | [Шаблоны документов](templates/README.md) |
 
-## Продукт, контракты и решения
+## Публичные интерфейсы пакетов
 
-| Вопрос | Источник |
+| Пакет | Что искать |
 | :--- | :--- |
-| Для кого приложение, какие у него возможности и ограничения | [Описание продукта](../PRODUCT.md) |
-| Как должна работать конкретная функция | [Спецификации](specs/README.md) |
-| Почему выбрана архитектура и какие ограничения приняты | [Реестр ADR](adr/README.md) |
+| [Core](../infrastructure/core/README.md) | `Result`, `Failure`, границы зависимостей |
+| [Networking](../infrastructure/networking/README.md) | HTTP transport, `BaseRepository`, interceptors и lifecycle |
+| [Storage](../infrastructure/storage/README.md) | Preferences, secure storage и передача зависимостей |
+| [App Logging](../infrastructure/app_logging/README.md) | Инициализация логов, observers и файловый output |
+| [AniStar](../infrastructure/anistar/README.md) | `AnistarClient` и нормализованный контракт |
+| [UI Kit](../lib/packages/ui_kit/README.md) | Тема, компоненты, focus, анимации и ресурсы |
 
-Для изменений интерфейса отправная точка — [ADR-0008](adr/0008-youtube-tv-interaction-reference.md) и связанные с ним TV- и мобильные контракты.
+## Исходные намерения, планы и задачи
 
-Общие UI-правила и карта дизайна собраны в [визуальной системе](specs/11_visual_system.md); поведение поиска описывает [спецификация 13](specs/13_search.md), а полной карточки аниме — [спецификация 12](specs/12_anime_details.md). Прототип в `../prototype/` служит визуальным справочником; приложение реализуется в `lib/`.
+Открывайте эти материалы для контекста конкретного изменения. Действующее поведение ищите в спецификациях, решения — в ADR.
 
-## Намерения изменений
-
-[Полный список intent](intents/README.md) — пожелания по интерфейсу, поведению, исправлению багов и инструментам разработки.
-
-## Согласованные планы
-
-- [Редизайн AniStar TV — редакция 3](plans/prototype-redesign-2026-11-12.md).
-- [Workflow редизайна и распределение ролей](plans/prototype-redesign-2026-11-12.workflow.md).
-
-## Задачи реализации
-
-- [Редизайн AniStar TV — эпик и 20 задач](tasks/prototype-redesign-2026-11-12/epic.md).
-- [Повышение версии и changelog после приёмки редизайна](tasks/redesign-release-preparation/21-redesign-version-changelog.md).
-
-## Пакеты
-
-README пакетов описывают публичные входы, условия использования и проверки в пределах своего пакета.
-
-| Пакет | Что искать в README |
-| :--- | :--- |
-| [Core](../infrastructure/core/README.md) | Нейтральные Result и Failure, границы зависимостей |
-| [Networking](../infrastructure/networking/README.md) | HTTP transport, BaseRepository, interceptors и lifecycle |
-| [Storage](../infrastructure/storage/README.md) | Preferences, secure storage и передача runtime-экземпляров |
-| [App Logging](../infrastructure/app_logging/README.md) | Инициализация логирования, уровни, observers и файловый output |
-| [AniStar](../infrastructure/anistar/README.md) | AnistarClient, публичные библиотеки и нормализованный контракт данных |
-| [UI Kit](../lib/packages/ui_kit/README.md) | Тема, компоненты, focus, анимации и ресурсы приложения |
-
-## Тестовые наборы и инструменты
-
-| Материал | Назначение |
-| :--- | :--- |
-| [Integration tests](../integration_test/README.md) | Android TV/mobile и отдельный iOS Simulator fixture E2E |
-| [E2E tooling](../tool/e2e/README.md) | Запуск Android/iOS runners, окружение, fixtures, media и отчёты |
-| [Graphify tooling](../tool/graphify/README.md) | Локальный патч извлечения, его применение и проверка |
-
-## Написание документации
-
-[Указатель шаблонов](templates/README.md) помогает выбрать формат руководства, ADR, спецификации, intent или README. Подробные инструкции и заготовки находятся там же. Ссылайтесь на документ, который описывает правило, вместо копирования его в соседние README.
+- [Намерения изменений](intents/README.md).
+- [Редизайн AniStar TV, редакция 3](plans/prototype-redesign-2026-11-12.md) · [эскиз workflow](plans/prototype-redesign-2026-11-12.workflow.md) · [эпик и 20 задач](tasks/prototype-redesign-2026-11-12/epic.md) · [подготовка выпуска](tasks/redesign-release-preparation/21-redesign-version-changelog.md).
+- [Исправление TV-навигации, ленты и визуальных состояний, редакция 3](plans/tv-navigation-and-catalog-bugfixes.md).
+- [Общие профили полноэкранных goldens, редакция 1](plans/golden-screen-profiles.md).

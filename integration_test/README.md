@@ -13,7 +13,7 @@ TV- и mobile-наборы проверяют важные пользовате�
 | Сеть и вход | `network_smoke_test.dart` | Явно запускаемая live-проверка сети и входа без изменения избранного |
 | TV motion | `navigation_motion_test.dart` | Отдельная проверка нативного renderer TV-переходов |
 
-Entry points fixture-наборов запускаются через скрипты из [`tool/e2e`](../tool/e2e/README.md#запуск-runners). Там описаны AVD, команды, предварительные проверки, side effects, cleanup и отчёты. Live-процедура и её ограничения приведены в [руководстве по разработке и тестированию](../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+Entry points fixture-наборов запускаются через скрипты из [`tool/e2e`](../tool/e2e/README.md#запуск-runners). Там описаны AVD, команды, предварительные проверки, side effects, cleanup и отчёты. Live-процедура и её ограничения приведены в [руководстве по live-проверкам](../docs/05_02_live_testing.md).
 
 Общие fixtures, transport и storage используют harness из `support/e2e_harness.dart`. Touch helpers находятся в `support/mobile_controls.dart`, remote helpers — в `support/remote_controls.dart`. Runner определяет системный профиль нативно и использует фактический viewport. Наборы не принуждают UI к TV/mobile-профилю или искусственному размеру.
 
@@ -45,7 +45,7 @@ Android TV/mobile входят в обязательный `test:e2e`. iOS fixtu
 `fvm dart run melos run test:e2e`, который последовательно запускает оба набора
 без фильтра. Параметры runners и структуру отчётов см. в
 [E2E tooling](../tool/e2e/README.md#запуск-runners) и
-[руководстве по разработке и тестированию](../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона).
+[руководстве по разработке и тестированию](../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-телефона-и-ios-simulator).
 
 Опциональный `tv` запускает только компоновочную диагностику на выбранном iPad Simulator. Runner задаёт TV profile через test-only define; производственное приложение не выбирает TV по ширине. Эта проверка не подтверждает поддержку iPad, tvOS или Apple TV remote.
 
@@ -78,4 +78,4 @@ Flutter `viewInsets` и `MediaQuery.viewInsets` не являются oracle д�
 
 ## Навигация
 
-[Запуск runners, fixtures и отчёты](../tool/e2e/README.md), [команды и полный контекст проверки](../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона).
+[Запуск runners, fixtures и отчёты](../tool/e2e/README.md), [команды и полный контекст проверки](../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-телефона-и-ios-simulator).

@@ -16,7 +16,7 @@
 
 ## Проверка доступности
 
-На стартовом экране, перед проверкой сохранённой сессии, выполняется anonymous GET `/anime/`. Dedicated Dio не использует session interceptor, cookies или credentials. Connect/receive/send timeout каждого probe — по 4 секунды; redirects выключены, TLS-проверка включена. Внешний вид стартового состояния не меняет сетевой порядок и описан в [визуальной системе](11_visual_system.md) и [спецификации входа](01_authentication.md).
+Для зеркал vN перед проверкой сохранённой сессии выполняется анонимный GET `/anime/`. Фиксированный origin пропускает probe. Отдельный Dio работает без session interceptor, cookies, credentials и transport retry. Connect, receive и send timeout каждого probe составляют по 4 секунды. Redirects выключены, TLS-проверка включена. Стартовый экран описан в [визуальной системе](11_visual_system.md) и [спецификации входа](01_authentication.md).
 
 Зеркало подтверждается только при HTTP 200, отсутствии cf challenge и успешном парсинге непустого каталога. HTML с ошибкой, реклама без пригодных карточек, пустая HTML и redirect не подтверждают зеркало. После успеха `ensureAvailable` не выполняет HTTP при каждом обращении.
 
@@ -30,7 +30,7 @@ Cancel, bad certificate, 401, 404 и 429 сами по себе не запус�
 
 1. Recovery принимает только отказ текущего origin. Отказ CDN, другого домена или уже покинутого зеркала не меняет current. Сначала повторно проверяется каталог current. Если он здоров, origin сохраняется: отказ одной карточки/API не означает отказ сайта, поиск прекращается.
 2. Если каталог current не подтверждён, проверяются `current+1`, `+2`, `+3`, `+4` по порядку, не выходя за 9999. Это максимум пять probes вместе с current.
-3. Сохраняется первый подтверждённый номер. Непроверенный кандидат не кешируется. Current обновляется и change публикуется только после успешной записи.
+3. Сохраняется первый подтверждённый номер. Непроверенный кандидат не кешируется. Current должен обновиться после успешной записи. Событие change публикуется только при смене origin. Менеджер ждёт завершения `SharedPreferencesStorage.set`, но обёртка игнорирует `false` от `setInt`. При таком отказе смена в текущем процессе возможна без подтверждённого сохранения для следующего запуска.
 4. Если диапазон исчерпан, сохраняется прежняя версия, возвращается AnistarFailure и устанавливается cooldown на одну минуту. До окончания cooldown новые поиски не запускаются; после него ручной запрос может повторить ограниченный цикл.
 
 Одновременные вызовы делят одну in-flight операцию. Отсутствие интернета не отличимо от отказа всех зеркал и тоже заканчивается ограниченной ошибкой. Нет понижения версии, неограниченного сканирования или поиска другого доменного семейства. Location redirect не используется как доверенный адрес для переноса данных.
@@ -43,11 +43,11 @@ Cookies старого origin не копируются. Отдельная со
 
 Поиск зеркал имеет отдельный бюджет от transport retry и [player refresh](04_playback.md). Нельзя исправлять HLS 403 перебором зеркал в native CDN-клиенте.
 
-StartupScreen показывает этап проверки доступности и сохраняет ошибку поиска с ручным повтором. После успешного поиска он переходит к проверке сессии; форма входа появляется только для гостя. При signIn сохраняется `ensureAvailable` как защита доступности. Успешный startup probe не дублируется, пока менеджер считает зеркало проверенным.
+StartupScreen показывает этап проверки доступности и сохраняет ошибку поиска с ручным повтором. После подтверждения зеркала он переходит к проверке сессии. Дальнейший переход задаёт [контракт входа](01_authentication.md#старт-и-экран-входа). При signIn сохраняется `ensureAvailable` как защита доступности. Успешный startup probe не дублируется, пока менеджер считает зеркало проверенным.
 
 ## Источники и границы подтверждения
 
-- [Manager](../../infrastructure/anistar/lib/src/anistar_mirror_manager.dart), [interceptor](../../infrastructure/anistar/lib/src/anistar_mirror_interceptor.dart), [active mirror](../../infrastructure/anistar/lib/src/anistar_active_mirror.dart), [composition](../../lib/app/app_container.dart).
-- [Поиск и cache](../../test/infrastructure/anistar/anistar_mirror_manager_test.dart), [POST 503 / redirect 302 и session isolation](../../test/app/mirror_switch_test.dart).
+- [Конфигурация](../../infrastructure/anistar/lib/src/anistar_mirror_config.dart), [manager](../../infrastructure/anistar/lib/src/anistar_mirror_manager.dart), [interceptor](../../infrastructure/anistar/lib/src/anistar_mirror_interceptor.dart), [active mirror](../../infrastructure/anistar/lib/src/anistar_active_mirror.dart), [composition](../../lib/app/app_container.dart).
+- [Допустимые origins](../../test/infrastructure/anistar/anistar_mirror_config_test.dart), [поиск и cache](../../test/infrastructure/anistar/anistar_mirror_manager_test.dart), [redirect карточки, сбой POST и session isolation](../../test/app/mirror_switch_test.dart).
 
 Отказы зеркал проверены Dio fixtures. Реальная блокировка и авторизованный live-переход на новое зеркало отдельно не воспроизводились. Android E2E использует фиксированный localhost, поэтому не является end-to-end проверкой сканирования реальных зеркал.

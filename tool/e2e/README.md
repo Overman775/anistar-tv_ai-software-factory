@@ -10,6 +10,23 @@ Android runners запускают integration tests против локальн
 
 Melos выбирает доступный совместимый Python interpreter автоматически. Для другого interpreter задайте `ANISTAR_PYTHON`. При прямом запуске Python scripts настройте `PATH` на Python 3.10 или новее: tooling использует аннотации `str | None`, несовместимые с системным Python 3.9.
 
+## Directional Pad эмулятора
+
+Для `Extended Controls → Directional Pad` включите оба параметра ниже в `~/.android/avd/<name>.avd/config.ini`.
+
+```ini
+hw.dPad=yes
+hw.keyboard=yes
+```
+
+Выполните **Cold Boot** или запустите `emulator -avd <name> -no-snapshot-load`. Cold Boot сохраняет данные AVD. Preflight проверяет четыре стрелки на одном hardware input device через `getevent -pl`. Для отдельной диагностики запустите проверку напрямую.
+
+```bash
+python3 tool/e2e/emulator_input.py --adb "$ANDROID_HOME/platform-tools/adb" --device emulator-5556
+```
+
+Нажмите стрелки и OK в самой панели. `adb shell input keyevent` и Flutter `sendKeyEvent` обходят аппаратный input эмулятора.
+
 ## Запуск runners
 
 | Набор | Команда |
@@ -44,7 +61,7 @@ ANISTAR_TEST_SELECTORS_JSON='["--plain-name","search submits"]' fvm dart run mel
 
 Не сочетайте JSON-переменную с selector arguments. Публичный `test:e2e`
 отклоняет её и всегда выполняет полный gate. Подробности host selectors и
-ограничений полного gate находятся в [Melos tooling](../../docs/melos_tooling.md#2-проверки).
+ограничений полного gate находятся в [Melos tooling](../../docs/melos_tooling.md#2-проверки-и-тесты).
 
 Фильтр разрешён только для отдельного platform runner. `scripts/e2e-all.sh` и
 публичный `test:e2e` принимают только два необязательных device arguments и
@@ -136,10 +153,8 @@ bash scripts/regenerate_e2e_media.sh
 
 ## Живой сайт
 
-Live не входит в offline-прогон. Запускайте его только явно командой `bash scripts/e2e-tv.sh live`; по умолчанию она использует `.private/credentials/live-test.json` из корня проекта. В VS Code доступна задача **Flutter: Live Android E2E**. Подготовьте файл по процедуре в [руководстве разработки и тестирования](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом); шаблон без credentials находится в `env/live-test.example.json`. Весь `.private/` и legacy-файлы `env/*.local.json` исключены из Git для защиты от случайного добавления. Runner читает live credentials из `.private/credentials/` по умолчанию; legacy-файлы он не использует. Live harness передаёт credentials через Dart define и заполняет форму входа.
-
-Live требует отдельного тестового аккаунта и может менять серверную историю просмотренных серий. Не запускайте изменение реального избранного как скрытый повтор offline-теста. Ограничения и полный протокол приведены в [проверке с живым аккаунтом](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+Для явно порученного live-прогона используйте `bash scripts/e2e-tv.sh live` и отдельный тестовый аккаунт. Полный сценарий оставляет отметки в серверной истории. [Подготовка credentials, команды и ограничения](../../docs/05_02_live_testing.md).
 
 ## Навигация
 
-[Сценарии, покрытие и правила изоляции](../../integration_test/README.md), [команды и контекст Android E2E](../../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-и-телефона), [полная live-процедура](../../docs/05_development_and_testing.md#9-проверка-с-живым-аккаунтом).
+[Сценарии, покрытие и правила изоляции](../../integration_test/README.md), [команды и контекст Android E2E](../../docs/05_development_and_testing.md#5-интеграционные-тесты-android-tv-телефона-и-ios-simulator), [полная live-процедура](../../docs/05_02_live_testing.md).

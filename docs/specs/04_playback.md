@@ -12,9 +12,9 @@
 
 Поддерживается только онлайн HLS через Flutter `video_player` и native player: Android использует Media3, iOS — AVFoundation. Chrome, WebView, parser-сервер, proxy, MP4 download и offline playlist не участвуют. Наличие iOS runner и успешная Simulator-сборка сами по себе не подтверждают работу HLS; для этого нужен выбранный iOS native fixture E2E.
 
-Перед открытием источника repository получает свежий player HTML. Выбранная серия определяется номером, качество — files её объекта. Поддерживаемые значения качества — `360` и `720`; доступный поток любого из них открывается native player как HLS независимо от суффикса URL. Если запрошенного качества нет, выбирается наибольшее доступное для этой серии; `requestedQuality` и `selectedQuality` хранятся раздельно. Отсутствующие серия или поток дают Failure.
+Перед открытием источника repository получает свежий player HTML. Выбранная серия определяется номером, качество — `files` её объекта. Поддерживаемые значения — `360` и `720`. При открытии маршрута запрашивается `720`. Если запрошенного качества нет, выбирается наибольшее доступное для этой серии. `requestedQuality` и `selectedQuality` хранятся раздельно. Отсутствующая серия, недопустимые или повторяющиеся номера либо отсутствие поддерживаемого потока дают Failure.
 
-`PlaybackSession` содержит `manifestUri`, заголовки, доступные качества и один неизменяемый список `PlaybackEpisode`, включая название, превью и подтверждённое состояние просмотра. Номера и набор отмеченных серий вычисляются из этого списка. Список не копируется в отдельные параллельные коллекции session. Необязательный `expiresAt` остаётся metadata. Signed URL сохраняется полностью, включая `+`, запятые, path и query. Клиент не генерирует Key. `end` разбирается как Unix seconds, если значение поддерживается DateTime. Неверный или слишком большой timestamp не мешает открыть целый URI.
+`PlaybackSession` содержит `manifestUri`, заголовки, доступные качества и один неизменяемый список `PlaybackEpisode` в порядке возрастания номера. Элемент включает название, превью и подтверждённое состояние просмотра для аккаунта. Номера и набор отмеченных серий вычисляются из этого списка. Signed URL сохраняется полностью, включая `+`, запятые, path и query. Клиент не генерирует Key. `end` разбирается как Unix seconds, если значение поддерживается DateTime. Неверный или слишком большой timestamp не мешает открыть целый URI.
 
 Поле `expiresAt` — только metadata. Оно не гарантирует срок действия ссылки и не запускает отдельный таймер refresh.
 
@@ -30,7 +30,7 @@ Referer — URL player page текущего origin с animeId. Заголово
 
 ## Открытие, смена источника и завершение
 
-Инициализация controller ограничена 35 секундами. Новый controller создаётся после освобождения прежнего. Идентификатор операции защищает от запоздавших результатов при Back, смене route, серии и качества. Результат уже закрытой операции не обновляет UI и не запускает проигрывание.
+Вызов `initialize()` controller ограничен 35 секундами. При замене потока плеер ждёт освобождения текущего controller перед созданием нового. Идентификатор операции защищает от запоздавших результатов при Back, смене route, серии и качества. Уже на начале обратного перехода экран помечен закрытым, поэтому поздняя инициализация не запускает видео или запись отметки просмотра.
 
 Первое открытие начинает серию с начала и запускает воспроизведение после initialization; во время воспроизведения позиция продвигается по состоянию native player. Смена качества сохраняет позицию и playing/paused state. Смена серии начинает с нуля. Изменение animeId/episode в route открывает новый источник с нуля.
 
@@ -66,7 +66,7 @@ Controls остаются видимыми во время выбора цели
 
 Отдельные кнопки ±10 секунд сохраняют прямой seek. Мобильные кнопки и scrubbing сохраняют [контракт мобильного плеера](10_mobile_interaction.md#5-мобильный-плеер).
 
-Кнопки предыдущей и следующей серии выбирают ближайший доступный номер ниже/выше текущего, включая пропуски нумерации. На границе списка недоступная кнопка скрыта и исключена из фокуса. Переключение использует обычную смену серии: позиция сбрасывается, качество сохраняется, прежний native controller освобождается. Кнопки player используют общие визуальные роли UI Kit. Панели серий и качества плеера закрываются по Left без применения черновика и возвращают фокус к видео. Общее управление левым меню определяет [TV-контракт](06_tv_interaction.md); эта формулировка не задаёт поведение сортировки каталога.
+Кнопки предыдущей и следующей серии выбирают ближайший доступный номер ниже или выше текущего, включая пропуски нумерации. На границе списка недоступная кнопка скрыта и исключена из фокуса. При смене серии позиция сбрасывается, `requestedQuality` сохраняется, а доступное `selectedQuality` подбирается заново. Прежний controller освобождается. Кнопки player используют общие визуальные роли UI Kit. На TV Left закрывает панель серий или качества без смены потока и возвращает фокус к видео. Общее управление левым меню определяет [TV-контракт](06_tv_interaction.md).
 
 ## Удержание экрана и lifecycle
 
@@ -74,7 +74,7 @@ Controls остаются видимыми во время выбора цели
 
 Pause и native stop немедленно снимают флаг через listener. Play/resume включает его снова при выполнении условий. Завершение, runtime/command error, смена источника, повторная загрузка и dispose снимают флаг. Back снимает его в начале обратного перехода, до dispose. Обычная страница поверх player снимает удержание; возврат к играющему player восстанавливает его. Каталог, вход и остальные обычные экраны не включают флаг.
 
-Экран сам владеет lifecycle pause/resume. Любой выход из `resumed` снимает флаг и ставит видео на паузу; возвращение возобновляет только видео, игравшее перед уходом. Пользовательская пауза сохраняется. Поздняя initialization в фоне не запускает видео и не включает удержание. Native Activity дополнительно очищает флаг при `onPause`, удалении Flutter engine и уничтожении Activity; запоздалая команда включения в фоне отклоняется.
+Экран сам владеет lifecycle pause/resume. Выход из `resumed` снимает флаг и ставит инициализированное видео на паузу. При возвращении плеер продолжает видео, которое играло перед уходом или должно было запуститься после инициализации. Пользовательская пауза сохраняется. Инициализация, завершившаяся в фоне, откладывает запуск до возвращения и не включает удержание. Native Activity дополнительно очищает флаг при `onPause`, отсоединении Flutter engine и уничтожении Activity. Команда включения в фоне оставляет флаг снятым.
 
 Android использует только флаг текущего окна, без `WAKE_LOCK`, изменения системного timeout, `SHOW_WHEN_LOCKED`, `TURN_SCREEN_ON` или отключения keyguard. Ручная блокировка устройства сохраняется. Этот механизм рекомендован Android для активного видео и предотвращения TV Ambient Mode: [Keep the screen on](https://developer.android.com/develop/background-work/background-tasks/awake/screen-on).
 
@@ -95,6 +95,6 @@ HTML и native `errorDescription` с signed URL не попадают в UI ил
 ## Источники и границы подтверждения
 
 - [Playback repository](../../lib/packages/features/player/data/repositories/anistar_playback_repository.dart), [PlaybackSession](../../lib/packages/features/player/domain/models/playback_session.dart), [PlaybackEpisode](../../lib/packages/features/player/domain/models/playback_episode.dart), [player screen](../../lib/packages/features/player/presentation/screens/player_screen.dart), [budget](../../lib/packages/features/player/domain/models/playback_refresh_budget.dart).
-- [Session tests](../../test/packages/features/player/data/repositories/anistar_playback_repository_test.dart), [lifecycle tests](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [Android E2E](../../integration_test/app_e2e_test.dart), [iOS fixture E2E](../../integration_test/ios_e2e_test.dart), [live smoke](../../integration_test/direct_android_test.dart).
+- [Session tests](../../test/packages/features/player/data/repositories/anistar_playback_repository_test.dart), [lifecycle и seek](../../test/packages/features/player/presentation/screens/player_screen_test.dart), [выбор качества](../../test/packages/features/player/presentation/screens/player_quality_choice_test.dart), [панель серий](../../test/packages/features/player/presentation/player_episode_choices_dialog_test.dart), [Android TV E2E](../../integration_test/app_e2e_test.dart), [мобильный E2E](../../integration_test/mobile_e2e_test.dart), [iOS fixture E2E](../../integration_test/ios_e2e_test.dart), [live Android](../../integration_test/direct_android_test.dart).
 
 Проверка native HLS на эмуляторе не подтверждает аппаратный декодер физического TV. Fixture отказ и refresh не подтверждают естественное суточное expiry; эти уровни проверяются и отражаются в отчёте отдельно. Границы описаны в [разработке и тестировании](../05_development_and_testing.md#10-результаты-и-границы-проверки).

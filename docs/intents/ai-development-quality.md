@@ -318,7 +318,7 @@ analyze не обнаружил нарушений действующих 77 Fre
    приложения и не делает это первым приоритетом.
 
 7. **Уточнить судьбу неиспользуемых файлов.** Для
-   [`AnimeMetadataChip`](../../lib/packages/features/anime/presentation/widgets/anime_metadata_chip.dart)
+   [`AnimeMetadataChip`](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/9be545ba514c827d0b6ca2c3c463f72fe578857d/lib/packages/features/anime/presentation/widgets/anime_metadata_chip.dart)
    и [`FavoriteRibbon`](../../lib/packages/features/catalog/presentation/widgets/favorite_ribbon.dart)
    проверить ссылки, продуктовый смысл и запланированных потребителей. Удалять
    только после подтверждения, что компоненты больше не нужны. Сохранить

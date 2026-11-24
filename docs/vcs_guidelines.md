@@ -1,55 +1,26 @@
 # 🌿 Git и версии | AniStar TV
 
-Это руководство описывает ветки и сообщения коммитов, общую версию Android/iOS-приложения и подготовку релиза. Версию и публикацию меняют только в рамках соответствующего явного поручения.
+Руководство описывает локальный Git workflow, единую версию приложения и подготовку релиза.
 
 ## 1. Ветки и изменения
 
-Проект использует Conventional Commits и ветку `main`. Ветка `develop` отсутствует. CI/CD и Fastlane не настроены.
+Обычно ответвляйтесь от актуального `main`. Используйте `feature/<description>`, `fix/<description>`, `chore/<description>` или `codex/<description>`. Для стабилизации допустимы `release/vX.Y.Z` и `hotfix/vX.Y.Z`. Для стека веток согласуйте базу и цель каждой PR. Ветки задач в общей feature-ветке сливайте без squash, чтобы сохранить SHA зависимостей. Для готовой задачи в `main` допустим squash.
 
-Новая задача обычно ответвляется от актуального `main`. Используйте осмысленные
-`feature/<description>`, `fix/<description>`, `chore/<description>` или имеющийся
-`codex/<description>`. Для отдельной стабилизации допустимы `release/vX.Y.Z` и
-`hotfix/vX.Y.Z`. Создавать такие ветки для обычного tooling изменения не требуется.
-
-Если работа действительно ведётся стеком веток, явно согласуйте базу/цель каждой
-PR. Ветки задач в общей ветке фичи сливаются без squash, чтобы сохранить SHA
-зависимостей. Готовая логическая задача в `main` может использовать squash.
-В проекте нет проверенного обязательного GitLab/epic/develop процесса.
-
-Коммит и заголовок PR: `type(scope): description`. Типы: `feat`, `fix`,
-`refactor`, `docs`, `style`, `test`, `chore`, `perf`, `build`.
-
-Scope означает имя реально изменённого пакета (`anistar_tv`, `anistar`, `core`,
-`networking`, `storage`, `app_logging`, `ui_kit`). `root` обозначает общее tooling.
-Фичи под `lib/packages/features` не отдельные pub-пакеты: scope `anistar_tv`.
-ID задачи добавляется только если такая задача существует.
-
-Примеры: `fix(anistar_tv): preserve player focus`, `chore(root): add Melos tooling`.
-При squash проверьте итоговое сообщение. `vcs:check` проверяет whitespace diff.
-Команда не навязывает branch names и не изменяет Git.
+Для коммита и заголовка PR используйте Conventional Commits в форме `type(scope): description`. Типы — `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`, `perf`, `build`. Scope — имя изменённого pub-пакета, включая `anistar_tv` для фич приложения, или `root` для общего tooling. ID указывайте для существующей задачи. При squash проверьте итоговое сообщение.
 
 ---
 
 ## 2. Единая версия приложения
 
-Корневой `pubspec.yaml`: `version: X.Y.Z+N` служит единственным источником версии
-Android и iOS приложения. CHANGELOG описывает конкретный выпуск. README содержит
-назначение и запуск проекта. Пакеты workspace не публикуются самостоятельно.
-Их существующие `0.0.1` сохраняются.
-Не запускайте общее bump всех пакетов ради версии APK.
+Корневой [pubspec.yaml](../pubspec.yaml) задаёт версию Android/iOS в формате `X.Y.Z+N`. Независимая публикация workspace-пакетов для этого workflow не предусмотрена. Версии вложенных пакетов сохраняйте при bump приложения.
 
-- Исправление совместимого поведения: PATCH.
-- Новый совместимый функционал: MINOR.
-- Несовместимое изменение пользовательского/публичного контракта: MAJOR.
-- Docs/test/style/chore/refactor сами по себе не требуют bump приложения.
+| Изменение | Bump |
+| :--- | :--- |
+| Совместимое исправление | PATCH |
+| Совместимый функционал | MINOR |
+| Несовместимое изменение пользовательского или публичного контракта | MAJOR |
 
-Conventional Commits помогают выбирать уровень, но не запускают автоматический
-релиз. Проект уже 1.x и использует стабильное версионирование.
-Стабильная версия использует три числа без leading zeros и prerelease суффиксов.
-
-`N` должно быть положительным целым. При новом распространяемом артефакте оно строго растёт,
-в том числе при сохранении X.Y.Z. Локальные повторные сборки/проверки версию не меняют.
-В отсутствие CI счётчик обновляется явно владельцем релиза.
+Изменения docs/test/style/chore/refactor сами по себе не требуют bump. Стабильная версия содержит три числа без ведущих нулей и prerelease-суффиксов. `N` — положительное целое. Оно строго растёт для нового распространяемого артефакта, даже если `X.Y.Z` прежнее. Локальные сборки для проверки используют текущую версию.
 
 ---
 
@@ -59,112 +30,29 @@ Conventional Commits помогают выбирать уровень, но не
 fvm dart run melos run version:show
 fvm dart run melos run version:check --include-private
 fvm dart run melos run version:plan -- patch
-fvm dart run melos run version:plan -- minor
-fvm dart run melos run version:plan -- major
-fvm dart run melos run version:plan -- build
-# Пример будущей версии; по умолчанию только preview:
 fvm dart run melos run version:set -- --app-version 1.1.2 --build-number 5
 ```
 
-`plan` предлагает текущий build + 1. `set` отклоняет уменьшение X.Y.Z и любой
-нерастущий build. По умолчанию `set` выполняет dry-run. Только после явного поручения
-подготовить новую версию добавьте `--write`: обновится только корневой pubspec.
-Пакеты, lockfile, CHANGELOG, Git index/commits/tags/remotes не меняются командой.
-
-CHANGELOG заполняется отдельно по реально завершённым изменениям. Проверки
-version tooling тестируют запись в temporary directory, а не в checkout.
-
-`version:check` — приватная команда. Запускайте её явно с `--include-private`.
-Остальные команды `version:*` доступны обычным способом. Встроенный `melos version` рассчитан на
-автоматическое версионирование пакетов и может писать changelog/commit/tag.
-Это не выбранный workflow приложения.
-[Поведение встроенной команды](https://melos.invertase.dev/commands/version).
+`version:plan` принимает `patch`, `minor`, `major` и `build`, предлагает текущий build + 1. `version:set` по умолчанию делает preview и отклоняет уменьшение `X.Y.Z` или нерастущий build. Пример указывает условную версию. Добавьте `--write` только по явному поручению подготовить новую версию. Команда запишет только корневой pubspec. CHANGELOG заполните отдельно по завершённым изменениям. Для проверки diff используйте `fvm dart run melos run vcs:check`. Встроенный `melos version` может изменить пакеты, changelog и Git.
 
 ---
 
 ## 4. Подготовка будущего релиза
 
-Только по отдельному поручению владельца: проверить исходную ветку и diff,
-выбрать X.Y.Z/N, сделать preview, явно записать версию, заполнить CHANGELOG,
-пройти `check`, fixture E2E обеих платформ и обычную release APK сборку с freshness
-проверкой. Production APK-команда подписывает локальным ключом и проверяет его
-публичный pin; команда unsigned compilation не создаёт готовый production-релиз. Перед
-распространением проверьте signing config и вручную проверьте приложение на
-физическом TV. Подробнее см. [руководство Android-подписи](android_signing.md).
-Tag `vX.Y.Z`, commit, PR/merge, push и публикация выполняются отдельно. Настройка
-tooling и локальная сборка не разрешают выполнять их.
+По отдельному поручению владельца проверьте исходную ветку и diff. Выберите версию, проверьте preview, запишите версию и заполните [CHANGELOG](../CHANGELOG.md). [Полный gate](05_development_and_testing.md#2-проверки-и-сборка) включает `check`, TV/mobile fixture E2E и сборку подписанного production APK. Проверьте [подпись и версию APK](android_signing.md) и выполните ручной smoke на физическом TV перед распространением.
+
+Tag `vX.Y.Z`, commit, PR/merge, push и публикация требуют отдельного поручения. Сборка для проверки и unsigned compilation служат локальной проверке.
 
 ---
 
 ## 5. Локальные Git hooks
 
-Lefthook запускает локальные проверки перед commit и push. Graphify отдельно
-устанавливает native hooks после commit, checkout, merge и rewrite, чтобы
-обслуживать локальный граф. Локальные hooks не обеспечивают серверное
-требование: сервер Git не запускает hooks из checkout.
-`pre-commit` проверяет staged diff на whitespace-ошибки и офлайн сканирует
-staged изменения на secrets. Проверка secrets также запрещает staged локальные
-credentials и Android signing files. Закреплённый Dart SDK проверяет формат
-Dart-файлов, которые Lefthook передал как изменённые.
-Formatter читает содержимое из рабочего дерева и не меняет файлы или index.
-Частично staged файл проверяется целиком по текущему рабочему содержимому, которое
-может отличаться от содержимого в index.
+`pre-commit` проверяет staged diff на whitespace, секреты и запрещённые файлы. Формат Dart проверяется для staged путей по содержимому рабочего дерева. `pre-push` сканирует committed историю и запускает полный `check` на рабочем дереве. Fixture E2E, APK и live запускаются отдельно. [Настройка и проверки безопасности](git_hooks_and_security.md).
 
-`pre-push` сначала сканирует всю локальную committed историю на secrets, затем
-запускает полный `check` на текущем рабочем дереве.
-Чистое дерево не требуется. Незакоммиченные изменения могут повлиять на результат,
-поэтому локальный check может отличаться от отправленного commit. В `check` входит
-сравнение golden baselines, но не их обновление. Hooks не запускают fixture E2E,
-сборку APK или live-проверки. Состав `check` описан в
-[руководстве Melos](melos_tooling.md#2-проверки-и-тесты).
+<a id="установка"></a>
 
-### Установка
+[Установка Lefthook и сканеров](git_hooks_and_security.md#установка).
 
-Установите FVM и SDK проекта до запуска Melos-команд. Установите Lefthook через
-Homebrew, чтобы запускать Git hooks. Для сканирования secrets, зависимостей и
-кода установите Gitleaks, OSV-Scanner и Semgrep:
+<a id="ручной-запуск"></a>
 
-```bash
-brew install lefthook gitleaks osv-scanner semgrep
-```
-
-Установленные CLI обязательны для соответствующих проверок. Если нужный CLI
-отсутствует, проверка завершается ошибкой.
-
-До установки проверьте существующие custom hooks и настройку `core.hooksPath`.
-Сохраните их конфигурацию и действия. Не используйте принудительную установку
-или сброс существующих hooks.
-
-После clone один раз из корня проекта установите Git hooks:
-
-```bash
-lefthook install
-```
-
-Graphify необязателен. Если он установлен, отдельно выполните `graphify hook install`
-из корня проекта. Эта команда устанавливает hooks `post-commit`, `post-checkout`,
-`post-merge` и `post-rewrite`, merge driver `graphify` и правило
-`graphify-out/graph.json merge=graphify` в `.gitattributes`. Эти hooks дополняют
-Lefthook и не изменяют его `pre-commit` и `pre-push`. Подробности приведены в
-[руководстве Graphify](../tool/graphify/README.md).
-
-Полный `check` использует закреплённый Flutter SDK, DCM и Python 3.10+ для Python
-tooling/version задач. Подготовка среды описана в
-[руководстве Melos](melos_tooling.md#1-подготовка-и-быстрый-запуск).
-
-### Ручной запуск
-
-Из корня проекта можно проверить конфигурацию или выполнить hook-команды отдельно:
-
-```bash
-lefthook validate
-bash scripts/lefthook.sh run pre-commit
-lefthook run pre-push --force
-fvm dart run melos run check
-```
-
-Для ручного `pre-commit` используйте wrapper: он отключает auto-stash Lefthook,
-чтобы проверка читала рабочие файлы без скрытия unstaged изменений. Полный профиль
-запускайте через `fvm dart run melos run check`; эту же команду вызывает `pre-push`.
-Lefthook содержит только Git hooks. При ручном запуске `pre-push` вне push-контекста
-используйте `--force`, если Lefthook пропускает hook без push-файлов.
+[Ручной запуск хуков](git_hooks_and_security.md#2-ручной-запуск).

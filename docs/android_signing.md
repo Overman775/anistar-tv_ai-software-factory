@@ -1,28 +1,10 @@
 # 🔐 Android-подпись | AniStar TV
 
-Production APK собирается локально с постоянным ключом AniStar TV. Команда сборки
-проверяет сертификат, идентификатор приложения и версию перед успешным завершением.
-Production `applicationId` — `com.anistar.tv`; dev использует `com.anistar.tv.dev`.
-Эти Android IDs не меняют namespace `com.anistar.anistar_tv`, MethodChannel или
-certificate pin. Новое приложение устанавливается отдельно от прежнего ID, без
-переноса его локальных данных.
-Общие команды описаны в
-[руководстве Melos](melos_tooling.md#4-запуск-приложения-и-сборка).
+Production APK подписывается постоянным ключом AniStar TV. Android application ID — `com.anistar.tv`, dev — `com.anistar.tv.dev`. Namespace `com.anistar.anistar_tv` и MethodChannel сохраняются. Установка прежнего приложения с другим ID хранит данные отдельно. [Сборки Melos](melos_tooling.md#4-запуск-приложения-и-сборка).
 
 ## 1. Локальная production-сборка
 
-Сборка production APK по умолчанию использует локальную конфигурацию Gradle.
-Запускайте команду из корня проекта:
-
-```bash
-fvm dart run melos run build:android:prod:apk
-```
-
-Gradle по умолчанию читает приватный файл
-`.private/signing/key.properties` внутри корня проекта. Разместите keystore
-`release.jks` рядом с ним. Относительный `storeFile` разрешается от каталога
-properties-файла, поэтому эту конфигурацию можно переносить вместе с проектом.
-Файл использует четыре стандартных поля:
+Владелец ключа размещает `release.jks` рядом с `.private/signing/key.properties` и локально заполняет четыре поля по образцу.
 
 ```properties
 storeFile=release.jks
@@ -31,55 +13,32 @@ keyAlias=<key-alias>
 keyPassword=<key-password>
 ```
 
-`ANISTAR_ANDROID_SIGNING_PROPERTIES` может указать другой абсолютный путь к
-properties-файлу за пределами checkout. Внешний `storeFile` может быть абсолютным
-или относительным к каталогу этого properties-файла. Локальная конфигурация
-внутри проекта разрешена только в `.private/`; весь каталог `.private/` исключён
-из Git. Установите права `0700` для `.private/` и `.private/signing/`, а права
-`0600` — для `key.properties` и keystore. Владелец ключа создаёт и заполняет эти
-файлы локально.
+Gradle разрешает относительный `storeFile` от каталога properties-файла. Для внешнего properties-файла задайте абсолютный путь через `ANISTAR_ANDROID_SIGNING_PROPERTIES`. Внутри checkout оба файла разрешены только в `.private/`, который исключён из Git. Задайте права `0700` для каталогов `.private/` и `.private/signing/`, `0600` для properties и keystore.
 
-Gradle загружает credentials только для явного production release build. Режим
-`unsigned` отключает production signing config; Android по-прежнему подписывает
-debug builds SDK debug key, а dev release остаётся unsigned. Debug и dev-команды
-не читают production credentials. Отсутствующий или неверный local signing input
-завершает production APK сборку ошибкой. Production release не использует debug key.
+```bash
+fvm dart run melos run build:android:prod:apk
+```
+
+Запускайте из корня. Для подписанного prod release оставьте `ANISTAR_ANDROID_SIGNING_MODE` незаданным или задайте `local`. При неверной или отсутствующей конфигурации сборка завершается ошибкой. Debug использует SDK debug key. Dev release и прямой Gradle запуск по умолчанию остаются unsigned.
+
+---
 
 ## 2. Проверка APK и сборка без production credentials
 
-Production APK-команда проверяет свежесть AOT/JNI, затем запускает
-`tool/signing/android_signing.py`. Проверка сверяет единственный SHA-256 сертификат
-подписанта с доверенным публичным pin в `android/signing-certificate.json`, а также
-проверяет `applicationId`, версию из корневого `pubspec.yaml` и release-флаги
-`debuggable`/`testOnly`.
+После сборки wrapper проверяет свежесть AOT/JNI и запускает [проверку подписи](../tool/signing/android_signing.py). Она сверяет SHA-256 единственного сертификата подписанта с доверенным публичным [pin](../android/signing-certificate.json), а также проверяет application ID, версию из корневого pubspec и флаги `debuggable` и `testOnly`.
 
-Для локальной проверки compilation без production credentials используйте отдельную команду:
+Для локальной проверки compilation без ключа запустите unsigned сборку.
 
 ```bash
 fvm dart run melos run build:android:prod:apk:unsigned
 ```
 
-Она сохраняет AOT/JNI freshness check и проверяет APK metadata и отсутствие
-production-подписи. Результат этой команды не является готовым production-релизом.
+Команда проверяет свежесть AOT/JNI, metadata и отсутствие подписи. Готовый production-релиз требует подписанного APK. Production App Bundle использует тот же Gradle signing contract. Wrapper с `apksigner` проверяет pin только для APK.
 
-Сборка App Bundle использует тот же Gradle signing contract, когда выбран
-production release mode. Текущая проверка pin использует `apksigner` и применяется
-к APK; wrapper не запускает её для AAB. Отдельная проверка или выпуск AAB здесь
-не описаны.
+---
 
 ## 3. Ключ, резервная копия и обновление приложения
 
-Локальная сборка использует постоянный production key. Существующая зашифрованная
-резервная копия остаётся без изменений. Отдельно сохраняйте данные, нужные для
-восстановления доступа. После восстановления разместите keystore и
-`key.properties` в `.private/signing/`. Если восстановленный properties-файл
-содержит старый абсолютный `storeFile`, замените его на `release.jks`. Установите
-права `0700` для `.private/` и `.private/signing/`, а `0600` для файлов. До
-использования проверьте, что восстановленный ключ соответствует публичному pin.
-Запись восстановления храните в `.private/signing/RECOVERY-PRIVATE.txt`.
+Доступ к зашифрованной резервной копии ключа храните отдельно. После восстановления поместите keystore и `key.properties` в `.private/signing/`. Замените старый абсолютный `storeFile` на `release.jks`, восстановите права из раздела 1 и проверьте соответствие публичному pin. Запись восстановления храните в `.private/signing/RECOVERY-PRIVATE.txt`.
 
-Production APK и `prod` debug APK имеют одинаковый `applicationId`, но используют
-разные сертификаты. Android отклонит production APK как обновление такой
-debug-сборки. APK можно собрать и проверить до решения о переустановке. Если
-владелец выберет переустановку, удаление приложения сотрёт его локальные данные.
-Dev flavor имеет отдельный `applicationId` `com.anistar.tv.dev`.
+Prod debug и production APK имеют одинаковый application ID и разные сертификаты. Android отклонит такое обновление. Соберите и проверьте APK до решения о переустановке. Удаление прежней установки сотрёт её локальные данные.
