@@ -1,7 +1,7 @@
 # Подробности аниме, переходы по метаданным и частям
 
 - **ID:** anime-disclosure-navigation-08
-- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](<../../plans/prototype-redesign-2026-11-12.md>)
+- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/f0a50ff5f0d75c8c3f810041724bb909e765b564/docs/plans/prototype-redesign-2026-11-12.md)
 - **Covers capabilities:** CAP-01, CAP-04, CAP-05
 - **Acceptance criteria:** AC-09, AC-10, AC-11
 - **Contribution to plan criteria:** AC-01

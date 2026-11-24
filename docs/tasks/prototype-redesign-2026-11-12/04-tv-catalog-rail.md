@@ -1,7 +1,7 @@
 # TV-каталог с закреплённой лентой и сведениями
 
 - **ID:** tv-catalog-rail-04
-- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](<../../plans/prototype-redesign-2026-11-12.md>)
+- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/f0a50ff5f0d75c8c3f810041724bb909e765b564/docs/plans/prototype-redesign-2026-11-12.md)
 - **Covers capabilities:** CAP-01, CAP-02, CAP-03
 - **Acceptance criteria:** AC-04
 - **Contribution to plan criteria:** AC-01, AC-02, AC-03, AC-06

@@ -39,6 +39,4 @@
 Открывайте эти материалы для контекста конкретного изменения. Действующее поведение ищите в спецификациях, решения — в ADR.
 
 - [Намерения изменений](intents/README.md).
-- [Редизайн AniStar TV, редакция 3](plans/prototype-redesign-2026-11-12.md) · [эскиз workflow](plans/prototype-redesign-2026-11-12.workflow.md) · [эпик и 20 задач](tasks/prototype-redesign-2026-11-12/epic.md) · [подготовка выпуска](tasks/redesign-release-preparation/21-redesign-version-changelog.md).
-- [Исправление TV-навигации, ленты и визуальных состояний, редакция 3](plans/tv-navigation-and-catalog-bugfixes.md).
-- [Общие профили полноэкранных goldens, редакция 1](plans/golden-screen-profiles.md).
+- [Эпик и 20 задач редизайна](tasks/prototype-redesign-2026-11-12/epic.md) · [подготовка выпуска](tasks/redesign-release-preparation/21-redesign-version-changelog.md).

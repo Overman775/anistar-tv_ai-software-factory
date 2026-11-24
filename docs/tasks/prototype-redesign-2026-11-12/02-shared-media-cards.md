@@ -1,7 +1,7 @@
 # Общие карточки аниме и серий
 
 - **ID:** shared-media-cards-02
-- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](<../../plans/prototype-redesign-2026-11-12.md>)
+- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/f0a50ff5f0d75c8c3f810041724bb909e765b564/docs/plans/prototype-redesign-2026-11-12.md)
 - **Covers capabilities:** CAP-01, CAP-06
 - **Acceptance criteria:** —
 - **Contribution to plan criteria:** AC-02

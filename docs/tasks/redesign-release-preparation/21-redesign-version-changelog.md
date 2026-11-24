@@ -1,7 +1,7 @@
 # Повысить версию AniStar TV и описать выпуск с редизайном
 
 - **ID:** redesign-version-changelog-21
-- **Plan source:** [Редизайн AniStar TV, редакция 3](../../plans/prototype-redesign-2026-11-12.md), контекст выпуска. Задача добавлена отдельным поручением пользователя.
+- **Plan source:** [Редизайн AniStar TV, редакция 3](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/f0a50ff5f0d75c8c3f810041724bb909e765b564/docs/plans/prototype-redesign-2026-11-12.md), контекст выпуска. Задача добавлена отдельным поручением пользователя.
 - **Covers capabilities:** —
 - **Acceptance criteria:** —
 - **Contribution to plan criteria:** —

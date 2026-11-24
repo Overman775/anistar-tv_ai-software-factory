@@ -1,7 +1,7 @@
 # «Смотреть» запускает известную серию или открывает карточку
 
 - **ID:** tv-watch-shortcut-13
-- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](<../../plans/prototype-redesign-2026-11-12.md>)
+- **Plan source:** `prototype-redesign-2026-11-12`, revision 3, [approved plan](https://github.com/Overman775/anistar-tv_ai-software-factory/blob/f0a50ff5f0d75c8c3f810041724bb909e765b564/docs/plans/prototype-redesign-2026-11-12.md)
 - **Covers capabilities:** CAP-02, CAP-04, CAP-07
 - **Acceptance criteria:** AC-14
 - **Contribution to plan criteria:** —
