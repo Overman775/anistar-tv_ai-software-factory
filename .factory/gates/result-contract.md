@@ -20,7 +20,7 @@ model output, assess semantic truth or grant execution permissions.
 Generate the current core + project map (no commands are executed):
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/catalog.py
+.factory/tooling/bin/cli catalog
 ```
 
 Core definitions come from the same catalog used by executors; project additions

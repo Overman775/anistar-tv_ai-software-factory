@@ -3,18 +3,37 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
 import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
+from itertools import takewhile
 from pathlib import Path
 
 if __name__ == "__main__" and sys.version_info[:2] != (3, 14):
-    sys.exit("BLOCKED: Python 3.14 required; see .factory/tooling/README.md (Python setup).")
+    message = "Python 3.14 required. Select an installed Python 3.14 with FACTORY_SETUP_PYTHON."
+    if "--json" in takewhile(lambda arg: arg != "--", sys.argv[1:]):
+        print(
+            json.dumps(
+                {"ok": False, "error": {"code": "environment_not_ready", "message": message}}
+            )
+        )
+        sys.exit(1)
+    sys.exit("BLOCKED: " + message)
 
 from typing import NotRequired, TypedDict
+
+from factory.cli_output import (
+    LAUNCHER,
+    configure_process_io,
+    emit_error,
+    emit_json,
+    json_requested,
+    output_mode,
+)
 
 TOOLS = Path(__file__).resolve().parent
 AGENTS = TOOLS.parent
@@ -95,18 +114,20 @@ def check(*, read_bytes: Callable[[Path], bytes] = Path.read_bytes) -> None:
     if (AGENTS / ".venv.setup.lock").exists():
         raise RuntimeError("Python setup in progress; wait for it to finish")
     if sys.version_info[:2] != (3, 14):
-        raise RuntimeError("Python 3.14 required; see tooling/README.md")
+        raise RuntimeError("Python 3.14 required; recreate the venv with Python 3.14")
     if (
         ENV.is_symlink()
         or Path(sys.prefix).resolve() != ENV.resolve()
         or sys.prefix == sys.base_prefix
     ):
         raise RuntimeError(
-            "Use the factory project venv via tooling/bin/python.sh or tooling/bin/python.cmd"
+            "Use the project launcher at .factory/tooling/bin/cli (Windows: cli.cmd)"
         )
     marker = json.loads(read_bytes(MARKER).decode("utf-8")) if MARKER.is_file() else {}
-    if not marker or marker != identity(marker.get("development", False), read_bytes=read_bytes):
-        raise RuntimeError("Factory environment missing/stale/moved; rerun bootstrap.py setup")
+    if not isinstance(marker, dict) or marker != identity(
+        marker.get("development", False), read_bytes=read_bytes
+    ):
+        raise RuntimeError(f"Factory environment missing/stale/moved; run {LAUNCHER} setup")
     import yaml
 
     if not Path(yaml.__file__).resolve().is_relative_to(ENV.resolve()):
@@ -118,6 +139,7 @@ def setup(
     development: bool = False,
     *,
     has_active_workflow: Callable[[Path], bool] | None = None,
+    json_mode: bool = False,
 ) -> None:
     import venv
 
@@ -206,19 +228,54 @@ def setup(
         )
         (Path(site) / "factory-bundle.pth").write_text(bundle_site_line(TOOLS), encoding="ascii")
         for command in commands:
-            subprocess.run(command, check=True, env=env)
+            subprocess.run(command, check=True, env=env, stdout=sys.stderr if json_mode else None)
     finally:
         lock.unlink()
 
 
+def _cli_args(args: list[str]) -> list[str]:
+    """Recover Windows arguments that cmd.exe would expand or split."""
+    if not args or args[0] != "--argv-base64":
+        return args
+    if len(args) < 2:
+        raise ValueError("Missing encoded launcher arguments")
+    token = args[1]
+    payload = json.loads(base64.b64decode(token + "=" * (-len(token) % 4), b"-_", validate=True))
+    if not isinstance(payload, list) or not all(
+        isinstance(arg, str) and "\x00" not in arg for arg in payload
+    ):
+        raise ValueError("Invalid encoded launcher arguments")
+    return [*payload, *args[2:]]
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    # The platform launcher forwards the original argv, including leading flags.
+    if args[:1] == ["--json"]:
+        while args[:1] == ["--json"]:
+            args.pop(0)
+        args.insert(1, "--json")
+    as_json = json_requested(args)
     try:
-        if args in (["setup"], ["setup", "--dev"]):
-            setup("--dev" in args)
-            print(
-                "Factory Python ready. Use tooling/bin/python.sh (Unix) or tooling/bin/python.cmd (Windows)."
-            )
+        if args and args[0] == "setup":
+            from factory.cli_help import setup_parser
+
+            with output_mode(as_json):
+                options = setup_parser().parse_args(args[1:])
+            setup(options.dev, json_mode=as_json)
+            if as_json:
+                emit_json(
+                    {
+                        "ok": True,
+                        "result": {
+                            "environment": str(ENV),
+                            "python": str(interpreter()),
+                            "development": options.dev,
+                        },
+                    }
+                )
+            else:
+                print(f"Factory Python ready. Run `{LAUNCHER} help agents`.")
             return 0
         if args in (["_ready"], ["_ready", "--dev"]):
             if (
@@ -240,27 +297,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             MARKER.write_text(json.dumps(identity("--dev" in args)) + "\n", encoding="utf-8")
             # Setup still owns its lock; ordinary run/check is blocked until release.
             return 0
-        if not args or args[0] != "run":
-            raise RuntimeError("Usage: bootstrap.py setup | run [Python arguments]")
-        check()
-        if args[1:] == ["--check"]:
-            print(json.dumps({"status": "PASS", "executable": sys.executable}))
-            return 0
-        if len(args) == 1:
-            raise RuntimeError("Provide a script, -m module, or --check")
-        safe_path = ["-P"] if args[1] in {"-m", "-c"} else []
-        return subprocess.run(
-            [sys.executable, "-E", "-s", "-B", *safe_path, *args[1:]],
-            env=clean_environment(),
-            check=False,
-        ).returncode
+        if args and args[0] == "cli":
+            forwarded = _cli_args(args[1:])
+            as_json = json_requested(forwarded)
+            check()
+            return subprocess.run(
+                [sys.executable, "-E", "-s", "-B", "-P", "-m", "factory.cli", *forwarded],
+                env=clean_environment(),
+                check=False,
+            ).returncode
+        raise RuntimeError(f"Run the project launcher at {LAUNCHER}")
     except (OSError, ValueError, RuntimeError, ImportError, subprocess.CalledProcessError) as exc:
-        print(
-            "BLOCKED: " + str(exc) + "\nSee .factory/tooling/README.md (Python setup).",
-            file=sys.stderr,
-        )
+        next_action = f"Run {LAUNCHER} setup --help from the project root for setup options."
+        if as_json:
+            code = "setup_failed" if args[:1] == ["setup"] else "environment_not_ready"
+            emit_error(code, str(exc), next_action=next_action)
+            return 1
+        print(f"BLOCKED: {exc}\n{next_action}", file=sys.stderr)
         return 1
 
 
 if __name__ == "__main__":
+    configure_process_io(sys.argv[1:])
     sys.exit(main())

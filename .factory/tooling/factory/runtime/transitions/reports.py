@@ -49,7 +49,15 @@ def prepare_report(
         node = next((n for n in state["graph"]["nodes"] if n["id"] == node_id), None)
         if node is None or node_id not in state["nodes"]:
             raise Invalid("Unknown report node")
+        dispatch_id = state["nodes"][node_id].get("dispatch_id")
         if isinstance(draft, dict):
+            if (
+                dispatch_id is not None
+                and draft.get("run_id") == state["run_id"]
+                and draft.get("node_id") == node_id
+                and draft.get("dispatch_id") == dispatch_id
+            ):
+                journal.diagnostic_attempt = (node_id, dispatch_id)
             require("files" not in draft, "Existing evidence cannot be refreshed")
         report = parse_report_draft(draft)
         report.pop("observed_source_drift", None)

@@ -5,10 +5,10 @@ from __future__ import annotations
 import platform
 import shutil
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Literal
 
-from factory.paths import FACTORY_ROOT
 from factory.project.profile_rules import project_checks
 from factory.runtime import command_worker
 from factory.runtime.commands.evidence import active_commands
@@ -31,10 +31,11 @@ def run_check(
     request_id: str | None = None,
     *,
     expected_dispatch: str | None = None,
-) -> CommandResult | PendingCheck:
+    dry_run: bool = False,
+) -> CommandResult | PendingCheck | dict[str, object]:
     """Persist intent, run outside the ledger lock, then reconcile real process facts."""
     process = None
-    with journal.locked():
+    with nullcontext() if dry_run else journal.locked():
         state = journal.read()
         current = state["nodes"][node_id]
         dispatch_id = current.get("dispatch_id")
@@ -42,25 +43,43 @@ def run_check(
             expected_dispatch is None or expected_dispatch == dispatch_id,
             "Execution request dispatch is stale",
         )
+        if dispatch_id is not None:
+            journal.diagnostic_attempt = (node_id, dispatch_id)
         request_id = check_id if request_id is None else request_id
-        executions = state.setdefault("executions", {})
+        executions = state.get("executions", {})
         rid = CheckExecution.request_key(state["run_id"], node_id, dispatch_id, request_id)
         record = executions.get(rid)
         if record is not None:
             CheckExecution(rid, record).require_same_check(check_id)
         else:
             record = _check_intent(journal, state, node_id, check_id, rid, request_id)
-            executions[rid] = record
-            journal.save(state, "check_started", node=node_id, execution_id=rid)
-            # Start after the intent commit. The supervisor cannot execute until it
-            # acquires the ledger lock, rechecks the intent and registers ownership.
-            try:
-                process = command_worker.launch(
-                    journal.root, FACTORY_ROOT / "tooling/bin/workflow.py", rid, record
-                )
-            except OSError:
-                # No owner exists yet. Reconcile or explicitly abandon the intent.
-                return CheckExecution(rid, record).pending()
+            if not dry_run:
+                relative(journal.root, record["output"]).parent.mkdir(parents=True, exist_ok=True)
+                state.setdefault("executions", {})[rid] = record
+                journal.save(state, "check_started", node=node_id, execution_id=rid)
+                # Start after the intent commit. The supervisor cannot execute until it
+                # acquires the ledger lock, rechecks the intent and registers ownership.
+                try:
+                    process = command_worker.launch(journal.root, rid, record)
+                except OSError:
+                    # No owner exists yet. Reconcile or explicitly abandon the intent.
+                    return CheckExecution(rid, record).pending()
+        if dry_run:
+            stages = [stage["spec"] for stage in record.get("composite_stages", [])]
+            return {
+                "dry_run": True,
+                "run_id": state["run_id"],
+                "node_id": node_id,
+                "dispatch_id": dispatch_id,
+                "request_id": request_id,
+                "execution_id": rid,
+                "existing_result": executions[rid]["status"] if rid in executions else None,
+                "stages": [
+                    {"check_id": spec["id"], **spec["execution"]}
+                    for spec in (stages or [record["spec"]])
+                ],
+                "input_scope": record["input_scope"],
+            }
     if process is not None:
         process.wait()
     return reconcile_check(journal, rid)
@@ -156,7 +175,7 @@ def _check_intent(
         )
     )
     output = f".factory/memory/history/{state['run_id']}/checks/{rid}.log"
-    relative(journal.root, output).parent.mkdir(parents=True, exist_ok=True)
+    relative(journal.root, output)
     return {
         "run_id": state["run_id"],
         "node_id": node_id,
@@ -170,7 +189,7 @@ def _check_intent(
         "request_id": request_id,
         "output": output,
         "environment": {
-            "platform": platform.platform(),
+            "platform": "-".join((platform.system(), platform.release(), platform.machine())),
             "python": platform.python_version(),
             "executable": shutil.which(execution["argv"][0]) if execution["argv"] else None,
         },
@@ -256,6 +275,7 @@ def reconcile_check(
                 if "output_hash" in entry
             ),
             node=node_id,
+            dispatch_id=record["dispatch_id"],
             execution_id=rid,
             result=parent["result"],
         )

@@ -10,20 +10,41 @@ import subprocess
 import sys
 import tempfile
 import tomllib
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal, NotRequired, TypedDict
 
 from factory import file_reader
+from factory.cli_output import emit_json
 from factory.environment import settings
 from factory.paths import FACTORY_ROOT, TOOLS
 
-OFFLINE = ("lint", "format", "types", "imports", "yaml-lint", "yaml-contracts", "tests", "dry-run")
+OFFLINE = ("lint", "format", "types", "imports", "yaml-lint", "yaml-contracts", "tests")
+
+
+class StageReport(TypedDict):
+    stage: str
+    status: Literal["PASS", "BLOCKED", "FAIL"]
+    exit_code: int | None
+    commands: list[list[str]]
+    log: str | None
+    diagnostics: NotRequired[list[str]]
+
+
+class CheckerReport(TypedDict):
+    status: Literal["PASS", "FAIL"]
+    python: str
+    executable: str
+    source: str
+    source_sha256: str
+    source_unchanged: bool
+    stages: list[StageReport]
 
 
 @dataclass(frozen=True)
 class StageResult:
     stage: str
-    status: str
+    status: Literal["PASS", "BLOCKED", "FAIL"]
     exit_code: int | None
     commands: list[list[str]]
     log: str
@@ -126,13 +147,13 @@ def prepare_coverage(reports: Path) -> Path:
 
 
 def verify_subprocess_coverage(reports: Path) -> None:
-    """The launcher --check branch runs only in test subprocesses, never in the parent."""
+    """The bootstrap CLI dispatch branch runs only in launcher subprocesses."""
     source = TOOLS / "bootstrap.py"
     tree = ast.parse(file_reader.read_text(source, encoding="utf-8"))
     line = next(
         node.body[0].lineno
         for node in ast.walk(tree)
-        if isinstance(node, ast.If) and ast.unparse(node.test) == "args[1:] == ['--check']"
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "args and args[0] == 'cli'"
     )
     report = json.loads(file_reader.read_text(reports / "coverage.json", encoding="utf-8"))
     covered = next(
@@ -144,7 +165,7 @@ def verify_subprocess_coverage(reports: Path) -> None:
         None,
     )
     if covered is None or line not in covered["executed_lines"]:
-        raise ValueError("Coverage missed the real python.sh/python.cmd --check subprocess")
+        raise ValueError("Coverage missed the unified CLI launcher subprocess")
 
 
 def commands(stage: str, reports: Path, files: list[str]) -> list[list[str]]:
@@ -200,8 +221,6 @@ def commands(stage: str, reports: Path, files: list[str]) -> list[list[str]]:
             [*python, "coverage", "report", "--rcfile", config],
             [*python, "coverage", "json", "--rcfile", config, "-o", str(reports / "coverage.json")],
         ]
-    if stage == "dry-run":
-        return [[*python, "factory.diagnostics.dry_run"]]
     if stage == "audit":
         return [
             [
@@ -289,20 +308,21 @@ def run_stage(stage: str, reports: Path, files: list[str]) -> StageResult:
     )
 
 
-def check(stages: list[str], reports: Path) -> int:
+def check(stages: list[str], reports: Path, *, as_json: bool = False, retain: bool = True) -> int:
     reports.mkdir(parents=True, exist_ok=True)
     before = source_digest()
     files = [str(p) for p in source_files()] if set(stages) & {"lint", "format", "types"} else []
     results = []
+    progress = sys.stderr if as_json else sys.stdout
     for stage in stages:
         result = run_stage(stage, reports, files)
         results.append(result)
-        print(f"{stage}: {result.status} ({result.log})", flush=True)
+        print(f"{stage}: {result.status} ({result.log})", flush=True, file=progress)
         if result.status != "PASS":
-            print("\n".join(result.diagnostics), flush=True)
+            print("\n".join(result.diagnostics), flush=True, file=progress)
     after = source_digest()
     passed = before == after and all(result.status == "PASS" for result in results)
-    summary = {
+    summary: CheckerReport = {
         "status": "PASS" if passed else "FAIL",
         "python": sys.version,
         "executable": sys.executable,
@@ -310,33 +330,56 @@ def check(stages: list[str], reports: Path) -> int:
         "source_sha256": before,
         "source_unchanged": before == after,
         "stages": [
-            {key: value for key, value in asdict(result).items() if key != "diagnostics"}
+            {
+                "stage": result.stage,
+                "status": result.status,
+                "exit_code": result.exit_code,
+                "commands": result.commands,
+                "log": result.log,
+            }
             for result in results
         ],
     }
-    (reports / "result.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
-    print(
-        json.dumps({"status": summary["status"], "report": str(reports / "result.json")}),
-        flush=True,
-    )
+    report = reports / "result.json"
+    report.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    if as_json:
+        for stage_report, result in zip(summary["stages"], results, strict=True):
+            if not retain:
+                stage_report["log"] = None
+            if result.status != "PASS":
+                stage_report["diagnostics"] = result.diagnostics
+        emit_json({**summary, "report": str(report) if retain else None})
+    else:
+        print(json.dumps({"status": summary["status"], "report": str(report)}), flush=True)
     return 0 if passed else 1
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--stage", action="append", choices=(*OFFLINE, "audit"))
     parser.add_argument(
         "--report-dir", type=Path, help="Explicit destination for logs and coverage"
     )
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     stages = args.stage or list(OFFLINE)
+    as_json = getattr(args, "json", False)
     if args.report_dir:
         reports = args.report_dir.resolve()
         if reports.is_relative_to(FACTORY_ROOT) or FACTORY_ROOT.is_relative_to(reports):
             parser.error("Reports must not overlap the installed factory")
-        return check(stages, reports)
+        return check(stages, reports, as_json=as_json)
     with tempfile.TemporaryDirectory(prefix="factory-checks-") as directory:
-        return check(stages, Path(directory))
+        return check(stages, Path(directory), as_json=as_json, retain=False)
+
+
+def main() -> int:
+    parser = build_parser()
+    return run(parser.parse_args(), parser)
 
 
 if __name__ == "__main__":

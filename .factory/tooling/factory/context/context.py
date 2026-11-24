@@ -8,6 +8,7 @@ factory_files derives frozen dependencies from those same rules.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from collections.abc import Callable, Mapping
@@ -261,8 +262,6 @@ def factory_files(config: Config) -> list[str]:
             "contracts/common/project-policy.md",
             "adapters/common.md",
             "adapters/worker/native-packet.md",
-            "tooling/bin/context.py",
-            "tooling/bin/lessons.py",
             "roles/teacher.md",
             "skills/factory-lessons/SKILL.md",
             "skills/factory-lessons/references/dispatch.md",
@@ -270,14 +269,13 @@ def factory_files(config: Config) -> list[str]:
             "skills/factory-lessons/references/edit.md",
             "skills/factory-lessons/references/refresh.md",
             "skills/factory-meta-retune-lessons/SKILL.md",
-            "tooling/bin/acpx_adapter.py",
         ]
     )
     result.update(
         [
             "tooling/bootstrap.py",
-            "tooling/bin/python.sh",
-            "tooling/bin/python.cmd",
+            "tooling/bin/cli",
+            "tooling/bin/cli.cmd",
             "tooling/requirements.txt",
         ]
     )
@@ -632,13 +630,10 @@ def build(
         ) from None
 
 
-def main() -> None:
-    # Planning/Decompose use their own source gates; this command only assembles context.
-    import argparse
-
-    from factory.runtime.workflow_config import load_config
-
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=".factory/factory.yaml")
     parser.add_argument("--workspace", default=".")
     parser.add_argument("--process", choices=sorted(PROCESS_ROLES), required=True)
@@ -647,7 +642,12 @@ def main() -> None:
     parser.add_argument(
         "assignment", help="JSON with source, exact artifact/write paths and read documents"
     )
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    from factory.runtime.workflow_config import load_config
+
     try:
         with diagnostic_operation(args.workspace, "context"):
             assignment = json.loads(file_reader.read_text(Path(args.assignment), encoding="utf-8"))
@@ -675,7 +675,14 @@ def main() -> None:
             )
             print(json.dumps(packet, ensure_ascii=False, indent=2))
     except (ValueError, KeyError, OSError) as exc:
+        if getattr(args, "json", False):
+            raise
         parser.exit(1, f"BLOCKED: {exc}\n")
+
+
+def main() -> None:
+    parser = build_parser()
+    run(parser.parse_args(), parser)
 
 
 if __name__ == "__main__":

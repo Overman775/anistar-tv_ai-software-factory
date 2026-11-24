@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from factory.adapters import acpx_adapter
 from factory.adapters.acpx_adapter import DoctorConfig, doctor, executable
+from factory.cli import main as cli_main
 
 _TOOLS = Path(__file__).resolve().parents[3] / "bin"
 
@@ -55,6 +56,20 @@ class DoctorTests(unittest.TestCase):
                 self.assertEqual(bool(report["errors"]), bool(expected))
                 self.assertEqual(report["live_handshake"], "NOT_RUN")
             self.assertFalse((Path(directory) / ".factory/memory").exists())
+            output = io.StringIO()
+            with (
+                patch.object(acpx_adapter, "load_config", return_value=config),
+                redirect_stdout(output),
+            ):
+                self.assertEqual(
+                    cli_main(["acpx", "--workspace", directory, "doctor", "--json"]), 1
+                )
+            response = json.loads(output.getvalue())
+            self.assertFalse(response["ok"])
+            self.assertEqual(response["error"]["code"], "executable_unavailable")
+            self.assertEqual(
+                response["error"]["message"], "Unavailable ACP executables for missing"
+            )
 
     def test_selected_route_still_requires_client_and_rejects_unknown(self) -> None:
         config: DoctorConfig = {

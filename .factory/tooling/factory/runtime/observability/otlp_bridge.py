@@ -11,7 +11,7 @@ from email.utils import parsedate_to_datetime
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from itertools import batched, islice
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 from urllib.parse import urlsplit
 
 from google.protobuf.message import DecodeError
@@ -282,13 +282,33 @@ def export(
     secrets: SecretReader | None = None,
 ) -> int:
     try:
+        status = export_status(root, follow, consumer, env_file, secrets=secrets)
+    except SinkError as exc:
+        if exc.code != "receiver_rejected":
+            print(str(exc), file=sys.stderr)
+        return 1
+    if status == "disabled":
+        print("Factory OTLP disabled", file=sys.stderr)
+    return 0
+
+
+def export_status(
+    root: Path,
+    follow: bool,
+    consumer: str,
+    env_file: Path | None,
+    *,
+    secrets: SecretReader | None = None,
+) -> Literal["disabled", "completed", "stopped", "interrupted"]:
+    try:
         config = export_policy.active_settings(root)
     except OSError, ValueError:
-        print("Invalid telemetry configuration in .factory/factory.yaml", file=sys.stderr)
-        return 1
+        raise SinkError(
+            "Invalid telemetry configuration in .factory/factory.yaml",
+            code="invalid_telemetry_config",
+        ) from None
     if not config:
-        print("Factory OTLP disabled", file=sys.stderr)
-        return 0
+        return "disabled"
     handler = initialize(root, "telemetry.export")
     failed = True
     try:
@@ -317,12 +337,14 @@ def export(
             try:
                 rejected = _deliver(root, traces, logs, consumer)
                 if rejected:
-                    event("operation_failed", error_code="receiver_rejected")
-                    return 1
+                    raise SinkError(
+                        f"OTLP receiver rejected {rejected} records",
+                        code="receiver_rejected",
+                    )
                 if not follow:
                     failed = False
                     event("operation_completed")
-                    return 0
+                    return "completed"
                 backoff = 1
                 delay = 1.0
             except SinkError as exc:
@@ -343,27 +365,27 @@ def export(
                 time.sleep(delay)
             config = export_policy.active_settings(root)
         failed = False
-        return 0
+        return "stopped"
     except (OSError, ValueError, SinkError) as exc:
         event(
             "operation_failed",
             error_code=exc.code if isinstance(exc, SinkError) else error_code(exc),
         )
         if isinstance(exc, SinkError):
-            print(str(exc), file=sys.stderr)
-            return 1
+            raise
         if isinstance(exc, MissingSecret):
-            print(f"Missing telemetry credential: {exc.args[0]}", file=sys.stderr)
-            return 1
+            raise SinkError(
+                f"Missing telemetry credential: {exc.args[0]}",
+                code="missing_telemetry_credential",
+            ) from None
         # The receiver URL, headers and persisted source records may contain secrets.
-        print(
+        raise SinkError(
             "OTLP export failed. Check the receiver configuration, access and workflow database.",
-            file=sys.stderr,
-        )
-        return 1
+            code="telemetry_export_failed",
+        ) from None
     except KeyboardInterrupt:
         failed = False
-        return 0
+        return "interrupted"
     except BaseException as exc:
         event("operation_failed", error_code=error_code(exc))
         raise

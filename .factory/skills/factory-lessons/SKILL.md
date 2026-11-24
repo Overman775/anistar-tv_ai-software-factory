@@ -5,7 +5,7 @@ description: "Manage project or factory lessons on owner request: remember an ob
 
 # Manage lessons
 
-Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/lessons.py` from the checkout.
+Use `.factory/tooling/bin/cli lessons` from the checkout.
 Register `user INCIDENT SOURCE OBSERVATION` with the actual message reference and relevant excerpt.
 Reuse the case incident if known, otherwise the message reference. Keep the exact inputs on retry.
 Select the operation at intake:

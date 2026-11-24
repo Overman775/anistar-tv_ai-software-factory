@@ -24,10 +24,10 @@ Source access and tracker tools come from the environment; project instructions 
 
 Resolve target, immutable base/head and full diff, or exact feature files.
 Read [scope rules](references/scope-and-modes.md). Pin the accepted project policy
-with project.py review-policy, never candidate policy. Resolve coordinator rules:
+with `cli project review-policy`, never candidate policy. Resolve coordinator rules:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process code-review --audience coordinator --policy-snapshot POLICY.json --scope PATH
+.factory/tooling/bin/cli project context --process code-review --audience coordinator --policy-snapshot POLICY.json --scope PATH
 ```
 
 For PRs always read title and complete description, linked tasks/incidents and relevant
@@ -51,7 +51,7 @@ Additional requirements cannot be silently waived. Capture scoped bytes, check i
 and exact contextual source excerpts/files needed for evidence outside the diff.
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/skills/factory-code-review/scripts/review_run.py init --input REQUEST.json --run .factory/memory/state/reviews/UNIQUE_ID
+.factory/tooling/bin/cli review run init --input REQUEST.json --run .factory/memory/state/reviews/UNIQUE_ID
 ```
 
 Use a new directory for each identity. The plan derives all mandatory criteria and
@@ -60,16 +60,16 @@ and changed mandatory commands block validation. Definitions do not derive from 
 
 ## 3. Execute and inspect
 
-Use `review_run.py check --id CHECK_ID --run RUN` for each planned command in dependency
+Use `cli review run check --id CHECK_ID --run RUN` for each planned command in dependency
 order. The coordinator owns command execution; reviewers use actual results and never
 claim to execute them. Failed commands and unavailable checks remain distinct.
 Commands must be appropriate for read-only review; mutating checks need separate scope.
 
-Create each assignment with `review_run.py assignment --id DIRECTION --run RUN`;
+Create each assignment with `cli review run assignment --id DIRECTION --run RUN`;
 save the returned JSON and package it with the `profile` value from that assignment:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process code-review --role reviewer --profile PROFILE_FROM_ASSIGNMENT ASSIGNMENT.json
+.factory/tooling/bin/cli context --process code-review --role reviewer --profile PROFILE_FROM_ASSIGNMENT ASSIGNMENT.json
 ```
 
 Keep three independent assignments, in parallel or sequentially according to available slots:
@@ -88,7 +88,7 @@ Missing implementation uses requirement evidence, never a fabricated diff line.
 Distinguish a demonstrated violation from an engineering recommendation; a code smell
 alone does not prove a defect or justify a new abstraction.
 
-Submit each returned result with `review_run.py submit --id DIRECTION --input RESULT.json --run RUN`.
+Submit each returned result with `cli review run submit --id DIRECTION --input RESULT.json --run RUN`.
 Assignment identity is `review_id + base_sha + head_sha + scope_hash + canonical lens`.
 A valid COMPLETE terminalizes that assignment. Retry only same FAILED/invalid assignment
 once, after explicit failure; never restart healthy assignments or replace a running agent.
@@ -104,7 +104,7 @@ No automatic merging based only on criterion/location. Any significant new disco
 can be added by QA under the same evidence requirements.
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/skills/factory-code-review/scripts/review_run.py finish --input QA.json --run RUN
+.factory/tooling/bin/cli review run finish --input QA.json --run RUN
 ```
 
 Return the generated JSON and Markdown from the same validated result. Missing or stale

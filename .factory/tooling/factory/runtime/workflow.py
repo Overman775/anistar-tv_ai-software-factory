@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, Literal, cast
+from contextlib import nullcontext
+from typing import Any, Literal, cast, overload
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
@@ -219,7 +220,7 @@ class Ledger(RunJournal):
             processed = state.setdefault("processed_results", [])
             if dispatch_id not in processed:
                 processed.append(dispatch_id)
-                self.save(state, "result_acknowledged", node=node_id)
+                self.save(state, "result_acknowledged", node=node_id, dispatch_id=dispatch_id)
 
     def next_actions(self, after: str | None = None) -> dict[str, Any]:
         with self.locked():
@@ -250,8 +251,8 @@ class Ledger(RunJournal):
         check_contention(s, nodes, n, p, has_active_commands=bool(self.active_commands(s)))
         return p
 
-    def claim(self, node_id: str) -> dict[str, object]:
-        with self.locked():
+    def claim(self, node_id: str, *, dry_run: bool = False) -> dict[str, object]:
+        with nullcontext() if dry_run else self.locked():
             s = self.read()
             require(s["status"] == "active", "Run is not active")
             check_config(s)
@@ -260,6 +261,18 @@ class Ledger(RunJournal):
             n, current = nodes[node_id], s["nodes"][node_id]
             p = self.claim_pool(s, nodes, node_id)
             profile_id = s["graph"]["agents"][agent_key(n)]["profile"]
+            assignment = report_history.assignment(s, n, self.finish_requirements(s, n))
+            if dry_run:
+                return {
+                    "dry_run": True,
+                    "run_id": s["run_id"],
+                    "node_id": node_id,
+                    "profile": profile_id,
+                    "pool": p,
+                    "attempt": current["attempt"] + 1,
+                    "current_status": current["status"],
+                    "planned_status": "reserved",
+                }
             current.update(
                 {
                     "status": "reserved",
@@ -270,7 +283,7 @@ class Ledger(RunJournal):
                     "attempt": current["attempt"] + 1,
                 }
             )
-            current["assignment"] = report_history.assignment(s, n, self.finish_requirements(s, n))
+            current["assignment"] = assignment
             self.save(
                 s,
                 "reserved",
@@ -304,6 +317,7 @@ class Ledger(RunJournal):
                 s, "bound", node=node_id, dispatch_id=v["dispatch_id"], handle=handle, model=model
             )
 
+    @overload
     def run_check(
         self,
         node_id: str,
@@ -311,9 +325,36 @@ class Ledger(RunJournal):
         request_id: str | None = None,
         *,
         expected_dispatch: str | None = None,
-    ) -> CommandResult | PendingCheck:
+        dry_run: Literal[False] = False,
+    ) -> CommandResult | PendingCheck: ...
+
+    @overload
+    def run_check(
+        self,
+        node_id: str,
+        check_id: str,
+        request_id: str | None = None,
+        *,
+        expected_dispatch: str | None = None,
+        dry_run: bool,
+    ) -> CommandResult | PendingCheck | dict[str, object]: ...
+
+    def run_check(
+        self,
+        node_id: str,
+        check_id: str,
+        request_id: str | None = None,
+        *,
+        expected_dispatch: str | None = None,
+        dry_run: bool = False,
+    ) -> CommandResult | PendingCheck | dict[str, object]:
         return checks.run_check(
-            self, node_id, check_id, request_id, expected_dispatch=expected_dispatch
+            self,
+            node_id,
+            check_id,
+            request_id,
+            expected_dispatch=expected_dispatch,
+            dry_run=dry_run,
         )
 
     @staticmethod
@@ -427,9 +468,20 @@ class Ledger(RunJournal):
     ) -> None:
         revisions.reintake(self, graph, reason, authorization, documents=documents)
 
-    def retry(self, node_id: str, stage: str, reason: str, terminal_evidence: str) -> None:
-        with self.locked():
+    def retry(
+        self,
+        node_id: str,
+        stage: str,
+        reason: str,
+        terminal_evidence: str,
+        *,
+        dry_run: bool = False,
+    ) -> dict[str, object] | None:
+        with nullcontext() if dry_run else self.locked():
             s = self.read()
+            require(
+                s["status"] == "active", "Terminal run is immutable; start a new authorized run"
+            )
             require(not s.get("pause_reason"), "Run is paused by user")
             nodes = {n["id"]: n for n in s["graph"]["nodes"]}
             n, v = nodes[node_id], s["nodes"][node_id]
@@ -463,8 +515,31 @@ class Ledger(RunJournal):
                 ),
                 "Reconcile dependent workers first",
             )
+            if dry_run:
+                return {
+                    "dry_run": True,
+                    "run_id": s["run_id"],
+                    "node_id": node_id,
+                    "stage": stage,
+                    "reason": reason,
+                    "terminal_evidence": terminal_evidence,
+                    "budget": {
+                        "key": budget.key,
+                        "used": budget.used,
+                        "limit": budget.limit,
+                        "planned_used": budget.used + 1,
+                    },
+                    "affected": {
+                        key: {
+                            "dispatch_id": s["nodes"][key].get("dispatch_id"),
+                            "current_status": s["nodes"][key]["status"],
+                            "planned_status": "pending",
+                        }
+                        for key in sorted(affected)
+                    },
+                }
             budget.spend()
-            for k in affected:
+            for k in sorted(affected):
                 old = s["nodes"][k]
                 s["events"].append(
                     {
@@ -483,6 +558,7 @@ class Ledger(RunJournal):
                 reason=reason,
                 terminal_evidence=terminal_evidence,
             )
+        return None
 
     def correct(self, node_id: str, request: object) -> CorrectionRecord:
         with self.locked():
@@ -768,9 +844,3 @@ class Ledger(RunJournal):
                 if directory.is_dir() and not any(directory.iterdir()):
                     directory.rmdir()
             self.runs.release_current(self.root, s["run_id"])
-
-
-if __name__ == "__main__":
-    from factory.runtime.workflow_cli import main
-
-    main()

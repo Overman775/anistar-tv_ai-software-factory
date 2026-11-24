@@ -10,8 +10,10 @@ import unittest
 from typing import Literal
 from unittest.mock import patch
 
+from factory.cli import main as cli_main
 from factory.github.fetch_note import fetch_comments, find_context, main, validate_comments
 from factory.github.fetch_recent_notes import recent
+from tests import CLI
 
 
 class CommentsTest(unittest.TestCase):
@@ -80,6 +82,37 @@ class CommentsTest(unittest.TestCase):
         self.assertIn(">>> #2", out.getvalue())
         self.assertIn("side=RIGHT commit=abc", out.getvalue())
         self.assertNotIn("#3", out.getvalue())
+
+    def test_note_json_reads_pipe_and_preserves_comment_thread(self) -> None:
+        root = {"id": 1, "body": "First\nSecond", "path": "a.dart", "line": None}
+        reply = {"id": 2, "in_reply_to_id": 1, "body": "Ответ"}
+        result = subprocess.run(
+            [*CLI, "pr", "note", "review", "2", "--json"],
+            input=json.dumps([reply, root, {"id": 3}]),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(
+            {"kind": "review", "target": reply, "thread_root": 1, "thread": [root, reply]},
+            json.loads(result.stdout),
+        )
+
+    def test_recent_notes_json_preserves_newest_order_and_empty_collection(self) -> None:
+        latest = {"id": 2, "created_at": "2026-11-24", "body": "Latest"}
+        for comments, expected in (([{"id": 1}, latest], [latest]), ([], [])):
+            with (
+                self.subTest(comments=comments),
+                patch("factory.github.fetch_recent_notes.fetch_comments", return_value=comments),
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                self.assertEqual(
+                    0, cli_main(["pr", "recent-notes", "issue", "8", "-n", "1", "--json"])
+                )
+                self.assertEqual(
+                    {"kind": "issue", "pr": 8, "comments": expected}, json.loads(output.getvalue())
+                )
 
     def test_api_failure_does_not_claim_not_found_or_fallback(self) -> None:
         with patch(

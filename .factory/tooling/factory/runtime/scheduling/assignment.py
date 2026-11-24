@@ -10,6 +10,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
 from factory.context import context
+from factory.runtime.agent_commands import check_commands
 from factory.runtime.contracts import (
     FindingView,
     LockedSource,
@@ -62,6 +63,7 @@ class ImplementPacket(context.ContextPacket):
     review_findings: dict[str, FindingView]
     correction: escalation.WorkerCorrection
     report_path: NotRequired[str]
+    check_commands: NotRequired[list[dict[str, str]]]
 
 
 IMPLEMENT_PACKET = TypeAdapter[ImplementPacket](ImplementPacket)
@@ -203,4 +205,17 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         )
     )
     packet["task"] = projected_task(task, node, obligations)
+    if "project-checks" in node.get("resources", []):
+        packet["check_commands"] = [
+            check_commands(
+                Path(state["workspace"]),
+                state["config"]["_path"],
+                state["run_id"],
+                node_id,
+                current["dispatch_id"],
+                check["id"],
+            )
+            for check in obligations["allowed_checks"]
+            if check["kind"] != "observation"
+        ]
     return dict(validate_packet(packet))

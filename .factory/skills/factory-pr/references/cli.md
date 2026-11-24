@@ -43,16 +43,15 @@ it. A PR request does not authorize approval, merge, branch deletion or release.
 
 ## Existing read-only comment helpers
 
-The retained scripts use `gh api` GET, paginate all pages and fail on API,
+The comment helpers use `gh api` GET, paginate all pages and fail on API,
 parse or incomplete-thread errors. Run from the checkout root:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_note.py review NOTE_ID N --repo OWNER/REPO
-sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_note_context.py review NOTE_ID N --repo OWNER/REPO
-sh .factory/tooling/bin/python.sh .factory/skills/factory-pr/scripts/fetch_recent_notes.py issue N -n 10 --repo OWNER/REPO
+.factory/tooling/bin/cli pr note review NOTE_ID N --repo OWNER/REPO
+.factory/tooling/bin/cli pr recent-notes issue N -n 10 --repo OWNER/REPO
 ```
 
-The first two also accept a flat comment array on stdin when PR number is omitted.
+`pr note` accepts a flat comment array on stdin when the PR number is omitted.
 Use `issue` for conversation comments and `review` for inline comments. Recent
 helpers sort all pages before limiting; formal reviews use `/pulls/N/reviews`.
 

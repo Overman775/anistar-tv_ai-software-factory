@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
-import sys
 import unittest
 from pathlib import Path
 from typing import Any
@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 from factory.database.port import DatabaseBackend
 from factory.database.provider import use_database
 from factory.database.sqlite import sqlite_history_repository, workflow_db
+from factory.diagnostics.query import read_journal
+from factory.logging_config import diagnostic_operation
 from factory.runtime.contracts import PacketRef
 from factory.runtime.history.task_records import read_evidence
 from factory.runtime.packets.content import (
@@ -24,6 +26,7 @@ from factory.runtime.packets.content import (
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid, digest
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
 
@@ -215,9 +218,13 @@ class FilePacketTests(unittest.TestCase):
                     "write-label", meta, chunk["acknowledgement"], chunk["materials"]
                 )
         self.assertFalse(self.f.ledger.read()["nodes"]["write-label"].get("packet_confirmed"))
-        self.f.ledger.confirm_packet(
-            "write-label", meta, chunk["acknowledgement"], chunk["materials"]
-        )
+        with diagnostic_operation(self.f.root, "confirm-packet"):
+            for _ in range(2):
+                self.f.ledger.confirm_packet(
+                    "write-label", meta, chunk["acknowledgement"], chunk["materials"]
+                )
+        records = read_journal(self.f.root, "dispatch_id", meta["dispatch_id"], 0, 30)["records"]
+        self.assertEqual([record["event"] for record in records], ["packet_confirmed"])
         self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
 
     def test_rejects_bootstrap_digest_content_and_symlink_tampering(self) -> None:
@@ -250,11 +257,9 @@ class FilePacketTests(unittest.TestCase):
     def test_cli_returns_complete_first_chunk_and_bound_status(self) -> None:
         self.bind()
         b = self.prepare()
-        module = "factory.runtime.workflow"
         argv = [
-            sys.executable,
-            "-m",
-            module,
+            *CLI,
+            "workflow",
             "--workspace",
             str(self.f.root),
             "read-packet",
@@ -270,13 +275,45 @@ class FilePacketTests(unittest.TestCase):
             "--chunk",
             "1",
         ]
-        run = subprocess.run(argv, capture_output=True, text=True, check=True)
+        run = subprocess.run(argv, capture_output=True, check=True)
         chunk = json.loads(run.stdout)["result"]
         self.assertEqual(chunk["ordinal"], 1)
         self.assertEqual(chunk["binding"], "running")
         self.assertFalse(chunk["ready_for_work"])
         self.assertTrue(chunk["content"].startswith("{"))
+        read_command = (
+            shlex.split(b["read_command"])
+            if b["read_shell"] == "POSIX shell"
+            else [*argv, "--json"]
+        )
+        replay = subprocess.run(read_command, capture_output=True, check=True)
+        self.assertEqual(run.stdout, replay.stdout)
+        self.assertEqual(
+            read_journal(self.f.root, "operation", "read-packet", 0, 30)["records"], []
+        )
+        argv[-1] = "2"
+        denied = subprocess.run(
+            argv + ["--ack", "private-token", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(denied.returncode, 1)
+        response = json.loads(denied.stdout)
+        self.assertFalse(response["ok"])
+        self.assertEqual(response["error"]["code"], "packet_ack_mismatch")
+        (error,) = read_journal(self.f.root, "operation", "read-packet", 0, 30)["records"]
+        self.assertEqual(
+            (error["error_code"], error["dispatch_id"]), ("packet_ack_mismatch", b["dispatch_id"])
+        )
+        self.assertNotIn("private-token", json.dumps(error))
+        self.assertEqual(
+            delivery_state(self.f.root, self.meta(b), chunk["total"]),
+            {"served": 1, "acknowledged": 0},
+        )
         self.assertIn("read-packet", b["read_command"])
+        self.assertIn("--json", b["read_command"])
+        self.assertIn("--json", b["confirm_command"])
 
     def test_workspace_instruction_edit_preserves_read_and_reprepare(self) -> None:
         self.bind()
@@ -287,11 +324,12 @@ class FilePacketTests(unittest.TestCase):
         self.assertEqual(b, self.prepare())
 
     def test_windows_bootstrap_uses_powershell_and_native_launcher(self) -> None:
-        with patch("factory.runtime.packets.content.platform.system", return_value="Windows"):
+        with patch("factory.runtime.agent_commands.platform.system", return_value="Windows"):
             result = self.prepare()
         self.assertEqual(result["read_shell"], "PowerShell")
-        self.assertIn(".factory\\.venv\\Scripts\\python.exe", result["read_command"])
-        self.assertIn("bootstrap.py", result["read_command"])
+        self.assertIn(".factory\\tooling\\bin\\cli.cmd", result["read_command"])
+        self.assertIn("'workflow'", result["read_command"])
+        self.assertIn("'--json' 'read-packet'", result["read_command"])
         self.assertTrue(result["read_command"].startswith("& "))
 
     def test_external_source_edit_preserves_packet(self) -> None:

@@ -3,7 +3,7 @@
 Read [shared coordinator adapter rules](common.md) before dispatch.
 
 This adapter implements configured `runner: acpx` through
-`.factory/tooling/bin/acpx_adapter.py`; it shares the same orchestration/role contracts
+`.factory/tooling/bin/cli acpx`; it shares the same orchestration/role contracts
 as native agents. ACP is the protocol, acpx is the client, and `opencode acp`
 is the configured OpenCode entry point. None is a replacement for workflow policy.
 
@@ -17,8 +17,8 @@ from the configured slot limit.
 ## Setup and preflight
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py doctor
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py setup opencode
+.factory/tooling/bin/cli acpx doctor
+.factory/tooling/bin/cli acpx setup opencode
 ```
 
 Setup validates executable and merges only `agents.opencode.argv` into the consumer
@@ -50,19 +50,19 @@ own dispatch/staging; a context packet alone does not provide an ACP session dri
 1. Parent `claim`s a ready node. Native and connection pools use the limits in
    the active YAML. Each pool is shared across roles. Do not use one ACP session for
    parallel agents; ZCode can preempt a concurrent turn in the same session.
-2. `acpx_adapter.py prepare NODE` uses the shared context builder to write role/contract,
+2. `cli acpx prepare NODE` uses the shared context builder to write role/contract,
    worker adapter, applicable stage rules, source assignment and actual required
    project documents to a unique prompt file. Coordinator policies stay with the parent.
    It returns the session name and command argv. Passing a filename without
    reading its content would not load instructions; the helper sends the content.
-3. For a new logical agent epoch run `acpx_adapter.py run NODE create`, then
-   `... run NODE show`. Creation is journalled first and cannot be blindly
+3. For a new logical agent epoch run `cli acpx run NODE create`, then
+   `cli acpx run NODE show`. Creation is journalled first and cannot be blindly
    repeated. Inspect session/model/permission evidence. For continuation reuse
    the existing epoch/session; do not run create again.
-4. `workflow.py bind NODE SESSION_NAME ACTUAL_MODEL` persists verified identity.
+4. `cli workflow bind NODE SESSION_NAME ACTUAL_MODEL` persists verified identity.
    For native this handle is a host ID; for this adapter it is the prepared
    unique `(connection, absolute cwd, session name)` identity.
-5. `acpx_adapter.py run NODE prompt` launches the argv with `subprocess`, no shell.
+5. `cli acpx run NODE prompt` launches the argv with `subprocess`, no shell.
    It journals dispatch before sending, stores stdout/stderr and never marks
    the node complete. Parent waits responsively, examines the actual response,
    validates role evidence and calls workflow finish.
@@ -84,8 +84,8 @@ process/session. Completion of one does not establish the others' completion.
 Use the exposed command wait mechanism; inspect backend status when reconciliation
 requires it. Do not resend a prompt merely to request a progress update.
 
-`... run NODE status|show` inspects; `cancel` requests cancellation; `close`
-soft-closes the saved session. Parent uses cancel/close only when authorized by
+Use `cli acpx run NODE status` or `cli acpx run NODE show` to inspect.
+The `cancel` action requests cancellation, and `close` soft-closes the saved session. Parent uses cancel/close only when authorized by
 checkpoint contract. These commands never release workflow ownership by
 themselves. Local PID/session status is not definitive proof of backend
 termination. Confirm terminal protocol result plus workspace/artifact state.
@@ -104,7 +104,7 @@ local ledger is not a distributed semaphore. Do not enable acpx flows as a
 parallel/durable scheduler without separate verified support.
 
 The adapter returns live stdout/stderr paths plus `run_id`, `dispatch_id`, `stdout_ref` and
-`stderr_ref`. Use the refs with `workflow.py export-artifact RUN REF NEW_FILE` after
+`stderr_ref`. Use the refs with `cli workflow export-artifact RUN REF NEW_FILE` after
 cleanup. The journal stores the original output, including partial output from an interrupted
 call. Raw output and frozen assignments can contain sensitive source. The separate usage
 snapshot includes only session IDs, attempt metadata and provider counters. While a transport

@@ -74,7 +74,7 @@ In Implement and standalone Review, use accepted document text from the packet
 as baseline context. Read current files when inspecting the candidate.
 
 Use project lessons on demand in the assigned checkout. For a relevant past
-case run `sh .factory/tooling/bin/python.sh .factory/tooling/bin/lessons.py search_lessons "QUERY"`.
+case run `.factory/tooling/bin/cli lessons search "QUERY"`.
 For an Implement assignment append `--run RUN_ID --dispatch DISPATCH_ID` from your packet, including on a delegated lookup.
 Use a short symptom in the task language. Keep secrets, personal data and copied logs out of queries.
 If no returned card fits the condition (including an empty list), try once more for
@@ -86,8 +86,8 @@ Treat the returned 0–3 lessons as guidance scoped by their conditions.
 
 If you also need a previous task’s evidence, add `--include-history` to a lookup. History is optional. Results label the source as
 `lesson` or `case`. A case links an accepted past report with its exact attempt.
-Copy the case's `report_ref` object to a temporary JSON file and use
-`workflow.py read-report REF.json` through the same launcher. Check the report's
+Copy the case's `report_ref` object to a temporary JSON file and run
+`cli workflow read-report REF.json`. Check the report's
 conditions against the current assignment and verify any reused approach here.
 A case supplies historical context. Current requirements and evidence still govern.
 

@@ -133,22 +133,20 @@ def _write_violations_json(
     parent_task_cycles: list[str] | None = None,
     deferred_cycles: list[str] | None = None,
     mixed_relation_cycles: list[str] | None = None,
-) -> None:
+) -> Violations:
     _ensure_directory(output_dir)
     violations_file = os.path.join(output_dir, "violations.json")
+    result = VIOLATIONS.validate_python(
+        {
+            "cycles": dependency_cycles or [],
+            "parent_task_cycles": parent_task_cycles or [],
+            "deferred_cycles": deferred_cycles or [],
+            "mixed_relation_cycles": mixed_relation_cycles or [],
+            "violations": messages,
+        }
+    )
     atomic_write_text(
         violations_file,
-        json.dumps(
-            VIOLATIONS.validate_python(
-                {
-                    "cycles": dependency_cycles or [],
-                    "parent_task_cycles": parent_task_cycles or [],
-                    "deferred_cycles": deferred_cycles or [],
-                    "mixed_relation_cycles": mixed_relation_cycles or [],
-                    "violations": messages,
-                }
-            ),
-            indent=2,
-            ensure_ascii=False,
-        ),
+        json.dumps(result, indent=2, ensure_ascii=False),
     )
+    return result

@@ -14,19 +14,18 @@ from contextlib import closing
 from pathlib import Path
 
 from factory.database.sqlite import sqlite_diagnostic_journal as journal
+from factory.database.sqlite import workflow_db
 from factory.diagnostics.events import event
-from factory.diagnostics.records import OPERATIONS
+from factory.diagnostics.records import OPERATIONS, decode_record, valid_record
 from factory.logging_config import diagnostic_operation
-from factory.paths import BIN, TOOLING_ROOT
+from factory.paths import TOOLING_ROOT
 from factory.runtime import command_worker
 from factory.runtime.knowledge.cli import command_parser
 from factory.runtime.workflow_cli import build_parser
 from factory.runtime.workflow_core import Invalid
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import overwrite
-
-CLI = BIN / "workflow.py"
-ACP = BIN / "acpx_adapter.py"
 
 
 class JournalCliTests(unittest.TestCase):
@@ -37,17 +36,29 @@ class JournalCliTests(unittest.TestCase):
         self.run_id = self.fixture.ledger.read()["run_id"]
 
     def cli(self, *args: str, workspace: Path | None = None) -> subprocess.CompletedProcess[str]:
+        group = "checks" if args[0] == "run" else "workflow"
         return subprocess.run(
-            [sys.executable, str(CLI), "--workspace", str(workspace or self.root), *args],
+            [*CLI, group, "--workspace", str(workspace or self.root), *args],
             capture_output=True,
             text=True,
             check=False,
         )
 
     def test_parsed_workflow_and_lesson_actions_have_diagnostic_names(self) -> None:
-        for parser, prefix in ((build_parser(), ""), (command_parser(), "lessons.")):
+        for parser, prefix in (
+            (build_parser(), ""),
+            (build_parser(checks=True), ""),
+            (command_parser(), "lessons."),
+        ):
             actions = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
-            names = {prefix + name for name in actions.choices if name != "diagnostics"}
+            names = {
+                prefix + (sub.get_default("action") or name)
+                for name, sub in actions.choices.items()
+                if name not in {"diagnostics", "explain"}
+            }
+            if "lessons.search" in names:
+                names.remove("lessons.search")
+                names.add("lessons.search_lessons")
             self.assertLessEqual(names, OPERATIONS)
 
     def test_lesson_index_failure_can_be_traced_without_search_text(self) -> None:
@@ -56,11 +67,11 @@ class JournalCliTests(unittest.TestCase):
         index.write_bytes(b"unreadable index" * 100)
         result = subprocess.run(
             [
-                sys.executable,
-                str(BIN / "lessons.py"),
+                *CLI,
+                "lessons",
                 "--workspace",
                 str(self.root),
-                "search_lessons",
+                "search",
                 "private-search-canary",
             ],
             capture_output=True,
@@ -96,11 +107,11 @@ class JournalCliTests(unittest.TestCase):
         (self.root / ".factory/memory/workflow.sqlite3").write_bytes(b"bad store" * 100)
         result = subprocess.run(
             [
-                sys.executable,
-                str(BIN / "lessons.py"),
+                *CLI,
+                "lessons",
                 "--workspace",
                 str(self.root),
-                "search_lessons",
+                "search",
                 "nothing-matches-this-word",
             ],
             capture_output=True,
@@ -179,6 +190,84 @@ class JournalCliTests(unittest.TestCase):
                     )
                 self.assertEqual(journal.delivery_window(workspace, "test"), (0, 0))
 
+    def test_real_check_lifecycle_uses_one_execution_and_dispatch(self) -> None:
+        f = self.fixture
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        node = "verify-label"
+        f.start(node)
+        dispatch = f.ledger.read()["nodes"][node]["dispatch_id"]
+        result = self.cli("run", node, "behavior", "--request", "fixture", "--dispatch", dispatch)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        execution = json.loads(result.stdout)["result"]["execution_id"]
+        self.assertRegex(execution, r"^[0-9a-f]{64}$")
+        page = self.cli("diagnostics", "--dispatch", dispatch)
+        records = json.loads(page.stdout)["records"]
+        self.assertEqual(
+            [r["event"] for r in records], ["check_finished", "check_process", "check_started"]
+        )
+        self.assertTrue(
+            all(r["execution_id"] == execution and r["run_id"] == self.run_id for r in records)
+        )
+        self.assertEqual(records[0]["outcome"], "PASS")
+        self.assertNotIn("diagnostics unavailable", result.stderr)
+        for candidate in (execution[:32], "x" * 64):
+            legacy = dict(records[0], execution_id=candidate)
+            self.assertFalse(valid_record(legacy))
+            self.assertEqual(decode_record(json.dumps(legacy)) is not None, len(candidate) == 32)
+
+    def test_rejections_attribute_only_verified_attempts(self) -> None:
+        node = "write-label"
+        self.fixture.start(node)
+        dispatch = self.fixture.ledger.read()["nodes"][node]["dispatch_id"]
+        path = self.root / "draft.json"
+        for supplied, confirmed in ((dispatch, True), ("0" * 32, False)):
+            check = self.cli(
+                "run", node, "private-check", "--request", "fixture", "--dispatch", supplied
+            )
+            draft = self.fixture.report(node)
+            draft.pop("files")
+            draft["dispatch_id"] = supplied
+            path.write_text(json.dumps(draft))
+            report = self.cli("prepare-report", node, str(path), "private-unknown-receipt")
+            for failure, code in (
+                (check, "check_resource_missing" if confirmed else "stale_dispatch"),
+                (report, "receipt_unavailable" if confirmed else "stale_report"),
+            ):
+                self.assertEqual(failure.returncode, 1, failure.stdout)
+                match = re.search(r"invocation: ([a-f0-9]+)", failure.stderr)
+                assert match is not None, failure.stderr
+                page = self.cli("diagnostics", "--invocation", match.group(1))
+                (record,) = json.loads(page.stdout)["records"]
+                self.assertEqual(record["error_code"], code)
+                self.assertEqual(record.get("dispatch_id"), dispatch if confirmed else None)
+                self.assertEqual((record["node_id"], record["run_id"]), (node, self.run_id))
+                self.assertNotIn("private", page.stdout)
+
+    def test_late_result_acknowledges_only_the_original_dispatch(self) -> None:
+        node = "write-label"
+        f = self.fixture
+        f.start(node)
+        first = f.ledger.read()["nodes"][node]["dispatch_id"]
+        f.ledger.finish(node, f.report(node))
+        f.ledger.retry(node, "tests", "Retry", "Prior work ended")
+        f.start(node)
+        current = f.ledger.read()["nodes"][node].copy()
+        for bad_node, bad_dispatch in (("verify-label", first), (node, current["dispatch_id"])):
+            self.assertNotEqual(self.cli("ack-result", bad_node, bad_dispatch).returncode, 0)
+        for _ in range(2):
+            self.assertEqual(self.cli("ack-result", node, first).returncode, 0)
+        state = f.ledger.read()
+        self.assertEqual(state["processed_results"], [first])
+        self.assertEqual(state["nodes"][node], current)
+        events = [e for e in state["events"] if e["event"] == "result_acknowledged"]
+        self.assertEqual([e.get("dispatch_id") for e in events], [first])
+        page = self.cli("diagnostics", "--operation", "ack-result")
+        records = json.loads(page.stdout)["records"]
+        self.assertEqual(
+            [r.get("dispatch_id") for r in records if r["event"] == "result_acknowledged"], [first]
+        )
+
     def test_pause_and_resume_are_recorded(self) -> None:
         pause = self.cli("pause", "user request")
         paused_state = self.fixture.ledger.read()
@@ -215,7 +304,7 @@ class JournalCliTests(unittest.TestCase):
 
     def test_acp_rejection_is_retrievable(self) -> None:
         result = subprocess.run(
-            [sys.executable, str(ACP), "--workspace", str(self.root), "prepare", "missing"],
+            [*CLI, "acpx", "--workspace", str(self.root), "prepare", "missing"],
             capture_output=True,
             text=True,
             check=False,
@@ -251,7 +340,7 @@ class JournalCliTests(unittest.TestCase):
         state["graph"]["sources"]["request"]["snapshot"] = "changed secret-canary"
         overwrite(fixture.ledger, state)
         result = subprocess.run(
-            [sys.executable, str(CLI), "--workspace", str(fixture.root), "claim", "write-label"],
+            [*CLI, "workflow", "--workspace", str(fixture.root), "claim", "write-label"],
             capture_output=True,
             text=True,
             check=False,
@@ -260,8 +349,8 @@ class JournalCliTests(unittest.TestCase):
         assert match is not None
         page = subprocess.run(
             [
-                sys.executable,
-                str(CLI),
+                *CLI,
+                "workflow",
                 "--workspace",
                 str(fixture.root),
                 "diagnostics",
@@ -346,8 +435,8 @@ class JournalCliTests(unittest.TestCase):
         )
         result = subprocess.run(
             [
-                sys.executable,
-                str(ACP),
+                *CLI,
+                "acpx",
                 "--workspace",
                 str(self.root),
                 "--config",
@@ -458,12 +547,13 @@ class JournalCliTests(unittest.TestCase):
     def test_otlp_snapshot_reads_validated_logs_and_links_the_existing_attempt(self) -> None:
         def telemetry(*args: str) -> str:
             return subprocess.check_output(
-                [sys.executable, str(BIN / "telemetry.py"), "--workspace", str(self.root), *args],
+                [*CLI, "telemetry", "--workspace", str(self.root), *args],
                 text=True,
                 env={**os.environ, "OTEL_SDK_DISABLED": "true"},
             )
 
         self.assertEqual(telemetry("journal"), "")
+        self.assertEqual(json.loads(telemetry("journal", "--json")), [])
         path = self.root / ".factory/diagnostics/journal.sqlite3"
         self.assertFalse(path.exists())
         self.assertEqual(self.cli("claim", "write-label").returncode, 0)
@@ -479,6 +569,10 @@ class JournalCliTests(unittest.TestCase):
         output = telemetry("journal")
         self.assertNotIn("private-canary", output)
         self.assertEqual(output, telemetry("journal"))
+        self.assertEqual(
+            json.loads(telemetry("journal", "--json")),
+            [json.loads(line) for line in output.splitlines()],
+        )
         logs = [
             json.loads(line)["resourceLogs"][0]["scopeLogs"][0]["logRecords"][0]
             for line in output.splitlines()
@@ -493,6 +587,27 @@ class JournalCliTests(unittest.TestCase):
         self.assertEqual(claim["severityNumber"], 9)
         self.assertEqual(logs[-1]["severityNumber"], 17)
         self.assertTrue(int(claim["timeUnixNano"]) > 0)
+
+    def test_telemetry_json_errors_for_corrupt_local_databases(self) -> None:
+        journal_path = journal.database_path(self.root)
+        journal_path.parent.mkdir(exist_ok=True, parents=True)
+        journal_path.write_bytes(b"unreadable diagnostics")
+        (self.root / workflow_db.DATABASE).write_bytes(b"unreadable observations")
+        for command, code in (
+            (["journal"], "journal_unavailable"),
+            (["show", "--run", self.run_id], "observations_unavailable"),
+        ):
+            with self.subTest(command=command):
+                result = subprocess.run(
+                    [*CLI, "telemetry", "--workspace", str(self.root), *command, "--json"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 1)
+                response = json.loads(result.stdout)
+                self.assertFalse(response["ok"])
+                self.assertEqual(response["error"]["code"], code)
 
     def test_retention_and_interrupted_transaction(self) -> None:
         self.cli("claim", "missing")

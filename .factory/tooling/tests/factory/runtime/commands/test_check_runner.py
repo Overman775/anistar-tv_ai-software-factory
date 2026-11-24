@@ -16,10 +16,9 @@ from factory.project.profile_rules import required_checks
 from factory.runtime.history.task_records import read_evidence
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_core import Invalid, digest
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import overwrite
-
-_TOOLS = Path(__file__).resolve().parents[4] / "bin"
 
 
 class CheckRunnerTests(unittest.TestCase):
@@ -218,12 +217,15 @@ class CheckRunnerTests(unittest.TestCase):
 
     def test_prepare_report_cli_accepts_stdin_and_rejects_non_object(self) -> None:
         f = self.ready()
-        workflow = [sys.executable, "-m", "factory.runtime.workflow", "--workspace", str(f.root)]
+        workflow = [*CLI, "workflow", "--workspace", str(f.root)]
         dispatch = f.ledger.read()["nodes"]["verify-label"]["dispatch_id"]
         checked = subprocess.run(
             [
-                *workflow,
-                "run-check",
+                *CLI,
+                "checks",
+                "--workspace",
+                str(f.root),
+                "run",
                 "verify-label",
                 "behavior",
                 "--request",

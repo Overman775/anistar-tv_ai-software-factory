@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from factory.cli_output import json_mode
 from factory.database.port import DatabaseBackend
 from factory.database.provider import current_database
 from factory.diagnostics.events import event
@@ -41,11 +42,13 @@ def capture_case(
     )
 
 
-def command_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+def command_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     sub = parser.add_subparsers(dest="command", required=True)
-    search = sub.add_parser("search_lessons", help="Search active lessons and optionally history")
+    search = sub.add_parser("search", help="Search active lessons and optionally history")
     search.add_argument("query")
     search.add_argument("--run", help="Run ID from the assignment packet")
     search.add_argument("--dispatch", help="Dispatch ID from the same packet")
@@ -119,13 +122,17 @@ def command_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = command_parser()
-    args = parser.parse_args()
+    run(parser.parse_args(), parser)
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     root = args.workspace.resolve()
     database = current_database()
     result: object
     try:
-        with diagnostic_operation(args.workspace, "lessons." + args.command):
-            if args.command == "search_lessons":
+        operation = "search_lessons" if args.command == "search" else args.command
+        with diagnostic_operation(args.workspace, "lessons." + operation):
+            if args.command == "search":
                 query = f"{args.query} {args.english}"
                 matches = [
                     match.model_dump()
@@ -213,4 +220,6 @@ def main() -> None:
                 result = {"complete": True}
             print(json.dumps(result, ensure_ascii=False))
     except (OSError, ValueError) as exc:
+        if json_mode.get():
+            raise
         parser.exit(1, f"Cannot process lessons: {exc}\n")

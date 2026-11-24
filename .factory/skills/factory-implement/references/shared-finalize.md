@@ -15,7 +15,7 @@
    of assignments and reasons, checks with file scope/hash, findings/retries,
    user decisions, outstanding work and measured usage (`null` if unknown).
 5. Save additional required evidence under the run's history directory. Then
-   `workflow.py archive completed "<summary>"` publishes verified terminal history and returns its path.
+   `cli workflow archive completed "<summary>"` publishes verified terminal history and returns its path.
    Record the run ID together with the returned workflow database path.
    On failure retain state. Keep secrets out of summaries and additional evidence. The journal retains raw transport output, which may already contain sensitive data.
 6. After successful archival, dispatch the [final Teacher review](../../../workflow/orchestration.md#teacher-at-run-completion)

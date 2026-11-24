@@ -9,7 +9,6 @@ import subprocess
 import sys
 import time
 from copy import deepcopy
-from pathlib import Path
 from unittest import TestCase, skipUnless
 from unittest.mock import patch
 
@@ -20,10 +19,9 @@ from factory.runtime import command_worker
 from factory.runtime.history import report_history
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_core import Invalid
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import overwrite
-
-CLI = Path(__file__).resolve().parents[3] / "bin/workflow.py"
 
 
 class RetroTransitionsTests(TestCase):
@@ -227,11 +225,11 @@ class RetroTransitionsTests(TestCase):
         )
         runner = subprocess.Popen(
             [
-                sys.executable,
-                str(CLI),
+                *CLI,
+                "checks",
                 "--workspace",
                 str(f.root),
-                "run-check",
+                "run",
                 "verify-label",
                 "behavior",
                 "--request",

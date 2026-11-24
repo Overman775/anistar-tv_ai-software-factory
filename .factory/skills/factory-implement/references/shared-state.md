@@ -1,7 +1,7 @@
 # Workflow state
 
 One current ledger row in `.factory/memory/workflow.sqlite3` belongs to the active
-implementation run in a checkout. `workflow.py` owns atomic ledger transitions.
+implementation run in a checkout. `cli workflow` owns atomic ledger transitions.
 The graph is supplied by the orchestrator; no separate pipeline.md can declare
 success. Planning/decomposition keep their existing staging contracts.
 

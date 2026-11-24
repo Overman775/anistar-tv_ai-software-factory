@@ -41,6 +41,7 @@ from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from factory.runtime.workflow_graph import expand_intake_checks, validate_graph
 from factory.tasks.contracts import TaskSelection
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import has_current, overwrite
 
@@ -583,8 +584,8 @@ class ProjectTests(unittest.TestCase):
                 def cli(value: str, root: Path = root) -> subprocess.CompletedProcess[str]:
                     return subprocess.run(
                         [
-                            sys.executable,
-                            str(ROOT / "tooling/bin/project.py"),
+                            *CLI,
+                            "project",
                             "--workspace",
                             str(root),
                             "review-policy",
@@ -657,8 +658,8 @@ class ProjectTests(unittest.TestCase):
         policy_file.write_text(json.dumps(pinned), encoding="utf-8")
         result = subprocess.run(
             [
-                sys.executable,
-                str(ROOT / "tooling/bin/project.py"),
+                *CLI,
+                "project",
                 "--workspace",
                 str(self.root),
                 "context",

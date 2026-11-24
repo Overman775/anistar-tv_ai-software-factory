@@ -18,9 +18,9 @@ from factory.review.protocol.diff import parse_diff
 from factory.review.protocol.evidence import validate_evidence
 from factory.review.render_review_report import render_report
 from factory.review.validate_review_protocol import validator_sources
+from tests import CLI
 from tests.factory.review.fixture_protocol import (
     SCRIPTS,
-    TOOL_RUNNER,
     ProtocolFixture,
     binary_evidence,
     command,
@@ -550,8 +550,9 @@ class CurrentProtocolScenarios(unittest.TestCase):
                 output = fixture.root / f"runner-{tool_id}.json"
                 completed = subprocess.run(
                     [
-                        sys.executable,
-                        str(TOOL_RUNNER),
+                        *CLI,
+                        "review",
+                        "checks",
                         "--manifest",
                         str(manifest_path),
                         "--tool-id",
@@ -575,8 +576,9 @@ class CurrentProtocolScenarios(unittest.TestCase):
             ]:
                 completed = subprocess.run(
                     [
-                        sys.executable,
-                        str(TOOL_RUNNER),
+                        *CLI,
+                        "review",
+                        "checks",
                         "--manifest",
                         str(manifest_path),
                         "--tool-id",

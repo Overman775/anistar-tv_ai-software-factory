@@ -11,7 +11,7 @@ from pathlib import Path
 from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
-from factory.paths import FACTORY_ROOT
+from factory.environment import bundle_python_environment
 from factory.runtime.contracts import LockedSource, Source
 from factory.runtime.reports import acceptance
 from factory.runtime.workflow_core import (
@@ -84,16 +84,22 @@ def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> L
             # Provenance authenticity and semantic scope are checked by the parent,
             # like actual user authorization elsewhere in this ledger.
         else:
-            validator = FACTORY_ROOT / "gates/skills/planning/validate_plan.py"
             check = subprocess.run(
                 [
                     sys.executable,
-                    str(validator),
+                    "-P",
+                    "-s",
+                    "-B",
+                    "-m",
+                    "factory.cli",
+                    "planning",
+                    "validate",
                     "--plan",
                     str(relative(root, src["path"])),
                     "--phase",
                     "approved",
                 ],
+                env=bundle_python_environment(),
                 capture_output=True,
                 text=True,
                 check=False,

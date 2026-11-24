@@ -14,7 +14,13 @@ from typing import Any, ClassVar
 from unittest.mock import patch
 
 import bootstrap as runtime
-from factory.paths import FACTORY_ROOT, TOOLS
+from factory.paths import TOOLS
+from tests import CLI
+
+SETUP_COMMAND = f".factory/tooling/bin/{Path(CLI[0]).name} setup"
+SETUP_HELP = (
+    r".\.factory\tooling\bin\cli.cmd setup --help" if os.name == "nt" else f"{SETUP_COMMAND} --help"
+)
 
 
 class RuntimeTests(unittest.TestCase):
@@ -57,6 +63,15 @@ class RuntimeTests(unittest.TestCase):
         package = cls.tools / "factory"
         package.mkdir()
         shutil.copy2(TOOLS / "factory/__init__.py", package / "__init__.py")
+        shutil.copy2(TOOLS / "factory/cli_output.py", package / "cli_output.py")
+        (package / "cli.py").write_text(
+            "import json, sys\n"
+            "def main(args):\n"
+            "    print(json.dumps([sys.prefix, args]))\n"
+            "    return 17 if args == ['exit'] else 0\n"
+            "if __name__ == '__main__': sys.exit(main(sys.argv[1:]))\n",
+            encoding="utf-8",
+        )
         cls.bundle_path = Path(site) / "factory-bundle.pth"
         cls.bundle_path.write_text(runtime.bundle_site_line(package.parent), encoding="ascii")
         subprocess.run(
@@ -68,9 +83,7 @@ class RuntimeTests(unittest.TestCase):
         self, *args: Any, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         command = (
-            [str(self.tools / "bin/python.cmd")]
-            if os.name == "nt"
-            else ["sh", str(self.tools / "bin/python.sh")]
+            [str(self.tools / "bin/cli.cmd")] if os.name == "nt" else [str(self.tools / "bin/cli")]
         )
         return subprocess.run(
             [*command, *args], cwd=self.root, env=env, capture_output=True, text=True, timeout=30
@@ -80,94 +93,60 @@ class RuntimeTests(unittest.TestCase):
         env = dict(
             os.environ, PYTHONHOME="/does/not/exist", PYTHONPATH="/does/not/exist", LC_ALL="C"
         )
-        result = self.launch(
-            "-c",
-            "import sys,yaml,json; print(json.dumps([sys.prefix,sys.argv[1:]]))",
-            "space value",
-            "кириллица",
-            env=env,
-        )
+        result = self.launch("space value", "кириллица", env=env)
         self.assertEqual(result.returncode, 0, result.stderr)
         prefix, args = json.loads(result.stdout)
         self.assertEqual(Path(prefix).resolve(), self.environment.resolve())
         self.assertEqual(args, ["space value", "кириллица"])
-        self.assertEqual(self.launch("-c", "raise SystemExit(17)").returncode, 17)
+        self.assertEqual(self.launch("exit").returncode, 17)
 
-    def test_installed_launcher_check_from_an_unrelated_directory(self) -> None:
-        command = (
-            [str(TOOLS / "bin/python.cmd")]
-            if os.name == "nt"
-            else ["sh", str(TOOLS / "bin/python.sh")]
-        )
+    def test_installed_cli_from_unrelated_directory_uses_its_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             collision = Path(directory) / "factory"
             collision.mkdir()
             (collision / "__init__.py").touch()
             result = subprocess.run(
-                [*command, "--check"], cwd=directory, capture_output=True, text=True, timeout=30
-            )
-            self.assertEqual(0, result.returncode, result.stderr)
-            self.assertEqual("PASS", json.loads(result.stdout)["status"])
-            result = subprocess.run(
-                [*command, "-c", "import factory; print(factory.__file__)"],
+                [*CLI, "help", "--json"],
                 cwd=directory,
                 capture_output=True,
                 text=True,
                 timeout=30,
             )
             self.assertEqual(0, result.returncode, result.stderr)
-            self.assertEqual(
-                (TOOLS / "factory/__init__.py").resolve(), Path(result.stdout.strip()).resolve()
-            )
-
-    def test_entry_points_load_from_an_unrelated_directory(self) -> None:
-        scripts = (
-            "tooling/bin/catalog.py",
-            "tooling/bin/dry_run.py",
-            "tooling/bin/acpx_adapter.py",
-            "tooling/bin/context.py",
-            "tooling/bin/workflow.py",
-            "tooling/bin/project.py",
-            "tooling/bin/check.py",
-            "gates/skills/code-review/run_tool_checks.py",
-            "gates/skills/code-review/validate_review_protocol.py",
-            "gates/skills/planning/validate_plan.py",
-            "gates/skills/decompose/prepare_metadata.py",
-            "gates/skills/decompose/assemble.py",
-            "gates/skills/decompose/generate_task_graph.py",
-            "skills/factory-pr/scripts/fetch_note.py",
-            "skills/factory-pr/scripts/fetch_note_context.py",
-            "skills/factory-pr/scripts/fetch_recent_notes.py",
-            "skills/factory-code-review/scripts/review_run.py",
-        )
-        command = (
-            [str(TOOLS / "bin/python.cmd")]
-            if os.name == "nt"
-            else ["sh", str(TOOLS / "bin/python.sh")]
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            for script in scripts:
-                with self.subTest(script=script):
-                    result = subprocess.run(
-                        [*command, str(FACTORY_ROOT / script), "--help"],
-                        cwd=directory,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                    )
-                    self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(1, json.loads(result.stdout)["schema_version"])
 
     def test_changed_requirements_fail_without_running_target(self) -> None:
         requirements = self.tools / "requirements.txt"
         original = requirements.read_bytes()
         try:
             requirements.write_bytes(original + b"\n# change\n")
-            result = self.launch("-c", 'print("MUST_NOT_RUN")')
+            result = self.launch("MUST_NOT_RUN")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("stale", result.stderr)
+            self.assertIn(SETUP_HELP, result.stderr)
             self.assertNotIn("MUST_NOT_RUN", result.stdout)
         finally:
             requirements.write_bytes(original)
+
+    def test_corrupt_readiness_marker_reports_setup_help_in_text_and_json(self) -> None:
+        marker = self.environment / ".factory-ready.json"
+        original = marker.read_bytes()
+        try:
+            for content in (b"{", b"[]", b"[1]"):
+                with self.subTest(content=content):
+                    marker.write_bytes(content)
+                    result = self.launch("help")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stdout, "")
+                    self.assertIn(SETUP_HELP, result.stderr)
+                    result = self.launch("help", "--json")
+                    self.assertEqual(result.returncode, 1)
+                    self.assertEqual(result.stderr, "")
+                    error = json.loads(result.stdout)["error"]
+                    self.assertEqual(error["code"], "environment_not_ready")
+                    self.assertIn(SETUP_HELP, error["next_action"])
+        finally:
+            marker.write_bytes(original)
 
     def test_missing_or_wrong_bundle_blocks_launch(self) -> None:
         original = self.bundle_path.read_bytes()
@@ -179,36 +158,72 @@ class RuntimeTests(unittest.TestCase):
             for content in (b"", runtime.bundle_site_line(other).encode("ascii")):
                 with self.subTest(content=content):
                     self.bundle_path.write_bytes(content)
-                    result = self.launch("-c", 'print("MUST_NOT_RUN")')
+                    result = self.launch("MUST_NOT_RUN")
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn("Factory package missing or from another bundle", result.stderr)
                     self.assertNotIn("MUST_NOT_RUN", result.stdout)
         finally:
             self.bundle_path.write_bytes(original)
 
+    def test_missing_runtime_dependency_blocks_command_dispatch(self) -> None:
+        yaml = self.bundle_path.parent / "yaml"
+        hidden = yaml.with_name("yaml-hidden")
+        yaml.rename(hidden)
+        try:
+            result = self.launch("MUST_NOT_RUN")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("No module named 'yaml'", result.stderr)
+            self.assertNotIn("MUST_NOT_RUN", result.stdout)
+        finally:
+            hidden.rename(yaml)
+
     def test_missing_environment_has_no_system_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             tools = Path(directory) / ".factory/tooling/bin"
             tools.mkdir(parents=True)
-            for name in ("python.sh", "python.cmd"):
+            for name in ("cli", "cli.cmd"):
                 shutil.copy2(TOOLS / "bin" / name, tools / name)
-            cmd = (
-                [str(tools / "python.cmd")] if os.name == "nt" else ["sh", str(tools / "python.sh")]
-            )
+            cmd = [str(tools / ("cli.cmd" if os.name == "nt" else "cli"))]
             result = subprocess.run(
                 [*cmd, "-c", 'print("MUST_NOT_RUN")'], capture_output=True, text=True
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn("MUST_NOT_RUN", result.stdout)
             self.assertFalse((tools.parent.parent / ".venv").exists())
+            for args in (["workflow", "status", "--json"], ["--json", "workflow", "status"]):
+                with self.subTest(args=args):
+                    result = subprocess.run([*cmd, *args], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1)
+                    error = json.loads(result.stdout)["error"]
+                    self.assertEqual(error["code"], "environment_not_ready")
+                    self.assertIn(SETUP_COMMAND, error["message"])
+            result = subprocess.run([*cmd, "--", "--json"], capture_output=True, text=True)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("not ready", result.stderr)
+            self.assertIn(SETUP_COMMAND, result.stderr)
+
+    def test_invalid_setup_interpreter_reports_json_before_creating_environment(self) -> None:
+        for args in (["setup", "--json"], ["--json", "setup"]):
+            with self.subTest(args=args):
+                result = self.launch(
+                    *args,
+                    env=dict(os.environ, FACTORY_SETUP_PYTHON=str(self.root / "missing-python")),
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(json.loads(result.stdout)["error"]["code"], "setup_failed")
 
     def test_setup_lock_blocks_launch(self) -> None:
         lock = self.root / ".factory/.venv.setup.lock"
         lock.touch()
         try:
-            result = self.launch("--check")
+            result = self.launch("help")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("in progress", result.stderr)
+            result = self.launch("workflow", "status", "--json")
+            self.assertEqual(result.returncode, 1)
+            error = json.loads(result.stdout)["error"]
+            self.assertEqual(error["code"], "environment_not_ready")
+            self.assertIn("in progress", error["message"])
         finally:
             lock.unlink()
 

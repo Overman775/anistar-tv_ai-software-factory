@@ -10,11 +10,46 @@ from pathlib import Path
 import yaml
 
 from factory import file_reader
-from factory.diagnostics.dry_run import copy_bundle
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, parse_yaml
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
+
+
+def copy_bundle(source: Path, target: Path) -> None:
+    """Copy owned runtime inputs only; never copy user settings or project data."""
+    ignored = shutil.ignore_patterns(
+        "__pycache__",
+        "*.py[cod]",
+        "tests",
+        ".DS_Store",
+        ".venv",
+        ".python",
+        ".venv.setup.lock",
+        ".ruff_cache",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".coverage*",
+        "htmlcov",
+    )
+    for name in ("roles", "contracts", "gates", "workflow", "adapters", "tooling"):
+        shutil.copytree(source / name, target / name, ignore=ignored, symlinks=True)
+    # Exercise the distributed structure without copying real user or lesson data.
+    for rel in ("USER.md", "lessons/factory/.gitkeep", "lessons/project/.gitkeep"):
+        blank = target / "memory" / rel
+        blank.parent.mkdir(parents=True, exist_ok=True)
+        blank.touch()
+    for skill in (
+        "factory-lessons",
+        "factory-meta-retune-lessons",
+        "factory-planning",
+        "factory-implement",
+        "factory-decompose",
+        "factory-code-review",
+    ):
+        shutil.copytree(
+            source / "skills" / skill, target / "skills" / skill, ignore=ignored, symlinks=True
+        )
 
 
 def source_files(agents: Path = FACTORY_ROOT) -> list[Path]:

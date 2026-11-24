@@ -6,7 +6,7 @@ import sqlite3
 import subprocess
 import sys
 import unittest
-from contextlib import closing, redirect_stderr
+from contextlib import closing, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import StringIO
@@ -27,13 +27,13 @@ from opentelemetry.proto.logs.v1.logs_pb2 import LogRecord
 from opentelemetry.proto.trace.v1.trace_pb2 import Span
 
 from factory.adapters.acpx_adapter import install_connection, prepare_prompt, run_operation
+from factory.cli import main as cli_main
 from factory.database.sqlite import sqlite_diagnostic_journal as journal
 from factory.database.sqlite import sqlite_export_feed, workflow_db
 from factory.diagnostics.diagnostic_journal import LogRow
 from factory.diagnostics.events import event
 from factory.environment import use_environment
 from factory.logging_config import diagnostic_operation
-from factory.paths import BIN
 from factory.runtime import teacher
 from factory.runtime.lessons import Lesson, search_lessons
 from factory.runtime.observability import export_policy
@@ -46,6 +46,7 @@ from factory.runtime.observability.otlp_bridge import Receiver, drain, retry_aft
 from factory.runtime.observability.otlp_projection import project
 from factory.runtime.state_io import parse_state
 from factory.secret_reader import SecretReader
+from tests import CLI
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
 
 
@@ -161,8 +162,8 @@ class OtlpTests(unittest.TestCase):
     def show(self, run: str, *options: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
-                sys.executable,
-                str(BIN / "telemetry.py"),
+                *CLI,
+                "telemetry",
                 "show",
                 "--run",
                 run,
@@ -333,6 +334,49 @@ class OtlpTests(unittest.TestCase):
                 self.assertEqual(db.execute(f"SELECT count(*) FROM {table}").fetchone(), (0,))
         self.assertFalse(self.requests)
 
+    def test_timeline_distinguishes_replaced_pass_and_acceptance(self) -> None:
+        run = self.f.init()["run_id"]
+        node = "write-label"
+        self.f.start(node)
+        first = self.f.ledger.read()["nodes"][node]["dispatch_id"]
+        self.f.ledger.finish(node, self.f.report(node))
+        self.f.ledger.retry(node, "tests", "private-retry-reason", "private-evidence")
+        # There is no current assignment between retry and the next reservation.
+        attempt = next(item for item in self.local(run) if item["name"] == "factory.attempt")
+        self.assertFalse(attempt["attributes"]["factory.attempt.current"])
+        graph = self.f.ledger.read()["graph"]
+        graph["tasks"]["label"]["scope"].append("lib/new.txt")
+        self.f.ledger.revise(graph, "private-revision-reason")
+        self.f.complete()
+        self.f.ledger.archive("completed", "fixture")
+        self.f.ledger.clean()
+        records = self.local(run)
+        milestones = records[0]["events"]
+        self.assertEqual(
+            [e["name"] for e in milestones],
+            ["factory.run.retry", "factory.run.revised", "factory.run.accepted"],
+        )
+        self.assertEqual(
+            milestones[0]["attributes"], {"factory.node.id": node, "factory.retry.stage": "tests"}
+        )
+        attempts = [item for item in records if item["name"] == "factory.attempt"]
+        self.assertEqual(len(attempts), 3)
+        for item in attempts:
+            fields = item["attributes"]
+            self.assertEqual(fields["factory.outcome"], "PASS")
+            self.assertEqual(
+                fields["factory.attempt.current"], fields["factory.dispatch.id"] != first
+            )
+            self.assertTrue(item["reports"])
+        self.assertNotIn("private-", str(records))
+        self.assertEqual(self.bridge().returncode, 0)
+        root = next(span for span in self.spans if span.name == "factory.run")
+        self.assertEqual(
+            [(e.name, e.time_unix_nano) for e in root.events],
+            [(e["name"], e["time_ns"]) for e in milestones],
+        )
+        self.assertNotIn("private-", str(self.spans))
+
     def test_dev_and_disabled_work_is_never_replayed(self) -> None:
         self.development.return_value = True
         search_lessons(self.f.root, "development")
@@ -393,8 +437,8 @@ class OtlpTests(unittest.TestCase):
     def test_disabled_follow_exits_before_loading_secrets_or_connecting(self) -> None:
         result = subprocess.run(
             [
-                sys.executable,
-                str(BIN / "telemetry.py"),
+                *CLI,
+                "telemetry",
                 "--workspace",
                 str(self.f.root),
                 "--follow",
@@ -733,21 +777,27 @@ class OtlpTests(unittest.TestCase):
         self.responses = [429, 200]
         self.retry_after = "17"
         search_lessons(self.f.root, "throttle")
-        args = ["telemetry", "--workspace", str(self.f.root), "--follow"]
+        args = ["telemetry", "--workspace", str(self.f.root), "--follow", "--json"]
         waits: list[float] = []
+        output = StringIO()
 
         def wait(delay: float) -> None:
+            self.assertEqual(output.getvalue(), "")
             waits.append(delay)
             if len(waits) == 2:
                 self.config.write_text("telemetry: {enabled: false}\n", encoding="utf-8")
 
         with (
-            patch.object(sys, "argv", args),
             use_environment({"TEST_TOKEN": "private"}),
             patch("factory.runtime.observability.otlp_bridge.time.sleep", side_effect=wait),
             redirect_stderr(StringIO()),
+            redirect_stdout(output),
         ):
-            self.assertEqual(main(), 0)
+            self.assertEqual(cli_main(args), 0)
+        self.assertEqual(
+            json.loads(output.getvalue()),
+            {"status": "stopped", "consumer": "default", "follow": True},
+        )
         self.assertEqual(waits, [17.0, 1.0])
         self.assertEqual(len(self.spans), 2)
         self.assertEqual(self.spans[0], self.spans[1])

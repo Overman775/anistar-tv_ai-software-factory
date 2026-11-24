@@ -44,8 +44,9 @@ their executable wrappers alongside other run dependencies. Any package change,
 including an unrelated module, blocks continuation as drift. Compatibility of saved
 runs with an updated factory is not automatic.
 
-For a new module, start with the [package map](../../../tooling/README.md#find-the-owner-of-a-change).
-Place it with the feature that owns the rule and follow that feature's tests.
+Trace a command from the [CLI registry](../../../tooling/factory/cli.py) or
+the [Ledger API](../../../tooling/factory/runtime/workflow.py) to its owning
+feature. Place a new module with that feature and follow its tests.
 When moving code, check callers, CLI wrappers, input locks, import contracts and
 eval fixtures for paths assembled from directory and file names.
 
@@ -97,8 +98,8 @@ The design rationale comes from *Architecture Patterns with Python*.
   is a discovery failure. Test contracts, meaningful failures and boundaries.
 - Coverage.py: explicit source scope, including unexecuted modules; branch reporting
   and verified subprocess collection through the actual launcher. No universal quota.
-- Safe dry run: shipped entry points, temporary project profile, no live models,
-  credentials, network or changes to working project data. Verify these restrictions.
+- Preparation tests use shipped entry points and temporary project profiles without
+  live models, credentials, network or changes to working project data.
 - Pip-audit: separate online audit of resolved runtime/dev dependencies when they
   change and before delivery. Unavailable advisory data is not a successful audit.
 
@@ -108,8 +109,9 @@ standalone Bandit and a second type checker are not mandatory.
 
 ## Execution and environments
 
-Use [Python setup and launchers](../../../tooling/README.md); do not fall back to a
-global interpreter. Run `check.py` through that launcher after explicit `setup --dev`.
+Use the [project launcher](../../factory-install/references/integration.md#interpreter)
+for `cli setup --dev` and `cli tooling check`. Run `cli tooling check --help`
+for checker arguments.
 Use `--stage` for a focused check and `--stage audit` for the separate online audit.
 Keep retained reports in an explicitly selected directory outside the factory.
 Factory checks use explicit factory configuration, not the consumer application's.

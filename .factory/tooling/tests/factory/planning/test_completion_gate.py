@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from factory.paths import FACTORY_ROOT
+from tests import CLI
 from tests.factory.planning.fixture_plan import PLAN
-
-SCRIPT = FACTORY_ROOT / "gates/skills/planning/validate_plan.py"
 
 
 class CompletionGateTest(unittest.TestCase):
@@ -30,8 +27,9 @@ class CompletionGateTest(unittest.TestCase):
                     )
                     result = subprocess.run(
                         [
-                            sys.executable,
-                            str(SCRIPT),
+                            *CLI,
+                            "planning",
+                            "validate",
                             "--plan",
                             str(plan),
                             "--previous",
@@ -55,7 +53,7 @@ class CompletionGateTest(unittest.TestCase):
                     "approved_revision: none", "approved_revision: 1"
                 )
             )
-            command = [sys.executable, str(SCRIPT), "--plan", str(plan), "--phase", "approved"]
+            command = [*CLI, "planning", "validate", "--plan", str(plan), "--phase", "approved"]
             preflight = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(0, preflight.returncode, preflight.stderr)
             result = json.loads(preflight.stdout)

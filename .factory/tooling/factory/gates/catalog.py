@@ -67,10 +67,15 @@ def core_result(
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(FACTORY_ROOT / "factory.yaml"))
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace) -> None:
     from factory.project.profile_io import load_profile
     from factory.project.project import configured_profile
 
@@ -87,6 +92,11 @@ def main() -> None:
             }
         )
     print(json.dumps(rows, ensure_ascii=False, indent=2))
+
+
+def main() -> None:
+    parser = build_parser()
+    run(parser.parse_args())
 
 
 if __name__ == "__main__":

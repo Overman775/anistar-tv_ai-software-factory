@@ -6,8 +6,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from factory.diagnostics.dry_run import copy_bundle
 from factory.paths import FACTORY_ROOT
+from factory.yaml_checks import copy_bundle
 
 # Test-only lifetime: all suites share immutable fixture inputs, never consumer settings.
 _directory = tempfile.TemporaryDirectory(prefix="factory-test-fixture-")

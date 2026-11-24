@@ -30,6 +30,7 @@ from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid, digest, read_json, snapshot
 from factory.runtime.workflow_graph import diagram, validate_graph
 from factory.runtime.workflow_sources import lock_source
+from tests import CLI
 from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
 from tests.fixture_bundle import ROOT as ROOT
@@ -40,6 +41,31 @@ _TOOLS = Path(__file__).resolve().parents[3] / "bin"
 class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def setUp(self) -> None:
         WorkflowFixture.__init__(self, self.addCleanup)
+
+    def test_cli_diagram_json_exposes_graph_and_current_dispatch_status(self) -> None:
+        self.init()
+        self.ledger.claim("write-label")
+        argv = [*CLI, "workflow", "--workspace", str(self.root), "diagram"]
+        default = subprocess.run(argv, capture_output=True, text=True, check=True)
+        machine = subprocess.run([*argv, "--json"], capture_output=True, text=True, check=True)
+        state = self.ledger.read()
+        self.assertTrue(default.stdout.startswith("sequenceDiagram\n"))
+        self.assertEqual(
+            json.loads(machine.stdout),
+            {
+                "ok": True,
+                "result": {
+                    "run_id": state["run_id"],
+                    "status": "active",
+                    "graph": state["graph"],
+                    "node_statuses": {
+                        "write-label": "reserved",
+                        "verify-label": "pending",
+                        "accept-label": "pending",
+                    },
+                },
+            },
+        )
 
     def test_orchestrator_alias_is_optional_and_must_be_known(
         self,
@@ -80,8 +106,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         graph.write_text(json.dumps(self.g))
         snapshot = self.root / "config.json"
         command = [
-            sys.executable,
-            str(_TOOLS / "workflow.py"),
+            *CLI,
+            "workflow",
             "--workspace",
             str(self.root),
             "--config",
@@ -175,7 +201,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         path = self.config_file(lambda c: None)
         self.config = load_config(path)
         self.init()
-        adapter = path.parent / "tooling/bin/acpx_adapter.py"
+        adapter = path.parent / "tooling/factory/adapters/acpx_adapter.py"
         self.assertIn(str(adapter.resolve()), self.config["_files"])
         adapter.write_text(adapter.read_text() + "\n# Changed transport implementation\n")
         before = self.ledger.read()
@@ -349,7 +375,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         policy.unlink()
         user.write_text("Replaced owner instructions", encoding="utf-8")
         (self.root / "AGENTS.md").write_text("Candidate instructions")
-        command = [sys.executable, str(_TOOLS / "workflow.py"), "--workspace", str(self.root)]
+        command = [*CLI, "workflow", "--workspace", str(self.root)]
         for args, accepted in (
             (["read-instructions", "-", "workflow/alternate-router.txt"], "Accepted router"),
             (["read-project"], "Fixture workspace."),
@@ -831,17 +857,25 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_registry_merge_preserves_other_settings(self) -> None:
         self.fake_acp()
-        (self.root / ".acpxrc.json").write_text(
-            json.dumps({"ttl": 47, "agents": {"other": {"argv": ["other"]}}})
+        target = self.root / ".acpxrc.json"
+        original = json.dumps({"ttl": 47, "agents": {"other": {"argv": ["other"]}}})
+        target.write_text(original)
+        preview = install_connection(self.config, self.root, "zcode", dry_run=True)
+        self.assertTrue(preview.pop("would_write"))
+        self.assertFalse((self.root / ".factory/memory/state/acpx-setup.lock").exists())
+        self.assertEqual(target.read_text(), original)
+        self.assertEqual(install_connection(self.config, self.root, "zcode"), preview)
+        self.assertFalse(
+            install_connection(self.config, self.root, "zcode", dry_run=True)["would_write"]
         )
-        install_connection(self.config, self.root, "zcode")
         current = read_json(self.root / ".acpxrc.json")
         self.assertEqual(current["ttl"], 47)
         self.assertIn("other", current["agents"])
         current["agents"]["zcode"] = {"argv": ["different"]}
         (self.root / ".acpxrc.json").write_text(json.dumps(current))
-        with self.assertRaisesRegex(Invalid, "alias differs"):
-            install_connection(self.config, self.root, "zcode")
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run), self.assertRaisesRegex(Invalid, "alias differs"):
+                install_connection(self.config, self.root, "zcode", dry_run=dry_run)
 
     def test_connection_cannot_silently_ignore_mcp_or_environment_settings(self) -> None:
         for field in ("env", "mcpServers", "mcp_config"):

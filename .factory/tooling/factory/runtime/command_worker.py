@@ -71,13 +71,22 @@ def artifact(root: Path, record: ExecutionReceipt, suffix: str) -> Path:
 
 def launch(
     root: Path,
-    wrapper: Path,
     execution_id: str,
     record: ExecutionReceipt,
 ) -> subprocess.Popen[bytes]:
     with artifact(root, record, ".supervisor.log").open("ab") as diagnostics:
         return subprocess.Popen(
-            [sys.executable, str(wrapper), "--workspace", str(root), "_check-worker", execution_id],
+            [
+                sys.executable,
+                "-E",
+                "-s",
+                "-B",
+                "-P",
+                "-m",
+                "factory.runtime.command_worker",
+                str(root),
+                execution_id,
+            ],
             stdin=subprocess.DEVNULL,
             stdout=diagnostics,
             stderr=diagnostics,
@@ -282,3 +291,17 @@ def facts(root: Path, execution_id: str, record: ExecutionReceipt) -> dict[str, 
         return dict(result)
     except ValidationError as exc:
         raise Invalid(validation_message("Invalid command evidence", exc, PROCESS_FACTS)) from None
+
+
+def main() -> None:
+    """Start the private supervisor in the same Python environment as the workflow."""
+    from factory.logging_config import diagnostic_operation
+    from factory.runtime.run_journal import RunJournal
+
+    workspace, execution_id = sys.argv[1:]
+    with diagnostic_operation(workspace, "_check-worker"):
+        supervise(RunJournal(workspace), execution_id)
+
+
+if __name__ == "__main__":
+    main()

@@ -3,17 +3,16 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 import yaml
 
-from factory.paths import BIN
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from factory.runtime.workspace import check_workspace
+from tests import CLI
 from tests.fixture_bundle import ROOT
 
 
@@ -36,8 +35,8 @@ class WorkspaceTests(unittest.TestCase):
         root = workspace or self.root
         return subprocess.run(
             [
-                sys.executable,
-                str(BIN / "workflow.py"),
+                *CLI,
+                "workflow",
                 "--workspace",
                 str(root),
                 "--config",
@@ -88,10 +87,13 @@ class WorkspaceTests(unittest.TestCase):
         (self.root / ".factory/.gitignore").unlink(missing_ok=True)
         self.git("add", ".")
         self.git("commit", "-qm", "Fixture")
+        journal = Path(".factory/diagnostics/journal.sqlite3")
+        preview = self.invoke("prepare-workspace", "--dry-run")
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        self.assertFalse((self.root / journal).exists())
         result = self.invoke("prepare-workspace")
         self.assertEqual(result.returncode, 0, result.stderr)
         target = Path(json.loads(result.stdout)["result"]["workspace"])
-        journal = Path(".factory/diagnostics/journal.sqlite3")
         self.assertFalse((self.root / journal).exists())
         self.assertTrue((target / journal).is_file())
 
@@ -115,7 +117,22 @@ class WorkspaceTests(unittest.TestCase):
         dirty = self.invoke("prepare-workspace")
         self.assertNotEqual(dirty.returncode, 0)
         self.assertIn("requires a clean checkout", dirty.stderr)
+        journal = self.root / ".factory/diagnostics/journal.sqlite3"
+        journal_before_preview = journal.read_bytes()
+        dirty_preview = self.invoke("prepare-workspace", "--dry-run")
+        self.assertNotEqual(dirty_preview.returncode, 0)
+        self.assertIn("requires a clean checkout", dirty_preview.stderr)
         source.write_text("before", encoding="utf-8")
+
+        worktrees = self.git("worktree", "list", "--porcelain")
+        preview = self.invoke("prepare-workspace", "--dry-run")
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        plan = json.loads(preview.stdout)["result"]
+        self.assertTrue(plan["would_create"])
+        self.assertEqual(plan["head"], original)
+        self.assertFalse(Path(plan["workspace"]).exists())
+        self.assertEqual(journal.read_bytes(), journal_before_preview)
+        self.assertEqual(self.git("worktree", "list", "--porcelain"), worktrees)
 
         result = self.invoke("prepare-workspace")
         self.assertEqual(result.returncode, 0, result.stderr)

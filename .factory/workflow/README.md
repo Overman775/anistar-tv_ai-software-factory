@@ -3,15 +3,17 @@
 The parent agent is the scheduler. These Python helpers load YAML, validate a
 proposed graph, reserve local resources, preserve evidence/counters and invoke
 ACP and declared required check commands. They are not a daemon, sandbox, semantic verifier or cross-machine queue.
-Prepare Python 3.14 with the [factory setup](../tooling/README.md#python-setup).
+Prepare Python 3.14 with [factory setup](../skills/factory-install/references/integration.md#interpreter).
 Run commands from the consumer checkout. `--workspace` can select another
 checkout; `--config` can select another factory YAML. Do not run application work
 inside the Lab snapshot, which has no AniStar source or Flutter toolchain.
 
 ## Tool layout
 
-Executable helpers and tests live in [`../tooling/`](../tooling/README.md).
-This directory contains process instructions and the operation reference.
+From the project root, run `.factory/tooling/bin/cli help agents` for the
+agent entry points or `.factory/tooling/bin/cli workflow --help` for workflow
+commands. On native Windows use `.\.factory\tooling\bin\cli.cmd`. The shorthand
+`cli` below means the corresponding project-local launcher.
 
 ## Workspace selection
 
@@ -19,7 +21,7 @@ For a new Implement run, the coordinator calls this before taking a config
 snapshot, preparing the graph or starting any worker:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py prepare-workspace
+.factory/tooling/bin/cli workflow prepare-workspace
 ```
 
 `execution.workspace: shared` uses the current checkout and is the default when
@@ -28,7 +30,7 @@ omitted. `worktree` creates a sibling Git worktree on a new
 settings and task inputs, with no tracked changes or nonignored untracked files.
 It does not copy ignored files or install anything. Use the returned directory
 and config for every Implement participant and command, applying regular
-[Python setup](../tooling/README.md#python-setup) and the selected adapter setup
+[factory setup](../skills/factory-install/references/integration.md#interpreter) and the selected adapter setup
 there as necessary. If a nondefault config was selected, keep passing the returned
 config path. Initialize project dependencies there according to project rules.
 
@@ -44,11 +46,13 @@ index; Git data are shared and process access is governed by the actual host.
 
 ## Configuration and preparation
 
+Set `CONFIG_SNAPSHOT` to a writable path in OS temporary storage.
+
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config > "$CONFIG_SNAPSHOT"
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py read-instructions "$CONFIG_SNAPSHOT" roles/orchestrator.md
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py validate workflow.json
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py init workflow.json --config-pin "$CONFIG_SNAPSHOT"
+.factory/tooling/bin/cli workflow config > "$CONFIG_SNAPSHOT"
+.factory/tooling/bin/cli workflow read-instructions "$CONFIG_SNAPSHOT" roles/orchestrator.md
+.factory/tooling/bin/cli workflow validate workflow.json
+.factory/tooling/bin/cli workflow init workflow.json --config-pin "$CONFIG_SNAPSHOT"
 ```
 
 The CLI passes the decoded snapshot to `Ledger.init(graph, config, config_pin=...)`. The Python entry point checks the path and file hashes before creating the run.
@@ -110,10 +114,10 @@ Role ownership and mandatory project command choice are also semantic checks.
 ## Native/ACP dispatch and results
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py claim write-label
+.factory/tooling/bin/cli workflow claim write-label
 # Parent inspects actual host capacity and uses selected adapter to start/continue.
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py bind write-label ACTUAL_HANDLE ACTUAL_MODEL
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py finish write-label /path/to/result.json
+.factory/tooling/bin/cli workflow bind write-label ACTUAL_HANDLE ACTUAL_MODEL
+.factory/tooling/bin/cli workflow finish write-label /path/to/result.json
 ```
 
 Claim is atomic and creates `dispatch_id` before external side effects. It blocks
@@ -129,13 +133,13 @@ The parent validates those interfaces before acceptance. Native delivers the ful
 packet inline or by the file route below; ACP persists it in its prompt.
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py accept accept-label
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py archive completed "Brief outcome"
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py clean
+.factory/tooling/bin/cli workflow accept accept-label
+.factory/tooling/bin/cli workflow archive completed "Brief outcome"
+.factory/tooling/bin/cli workflow clean
 ```
 
 The workflow ledger lives in `.factory/memory/workflow.sqlite3` from intake through
-cleanup. Use `workflow.py show` to inspect the current run. A successful close
+cleanup. Use `cli workflow show` to inspect the current run. A successful close
 commits the terminal state and the final Teacher job together. Cancellation commits
 the state alone. Cleanup releases the current run slot. Search reads the published
 rows from the database. Query `closed_steps` for each final node and
@@ -151,9 +155,12 @@ counter is SQL NULL. Aggregate costs per currency from the session view.
 To inspect or extract saved evidence, use the logical path returned by the first command:
 
 ```sh
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py list-artifacts RUN_ID
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py export-artifact RUN_ID LOGICAL_PATH NEW_FILE
+.factory/tooling/bin/cli workflow list-artifacts RUN_ID
+.factory/tooling/bin/cli workflow export-artifact RUN_ID LOGICAL_PATH NEW_FILE
 ```
+
+The export writes the verified bytes to `NEW_FILE` and returns its path in
+`result.output`, including when called with `--json`.
 
 To restore closed runs, finish cleanup, stop writers and copy `.factory/memory/workflow.sqlite3`
 to the same location in the destination. Run `verify-history RUN_ID`. For case search in the relocated checkout use
@@ -163,12 +170,12 @@ User instructions and lesson cards travel separately in Git.
 ## Repair, revision and recovery
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py unknown write-label "Lost transport outcome"
+.factory/tooling/bin/cli workflow unknown write-label "Lost transport outcome"
 # Reconcile actual runtime/files first; evidence below must be real.
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py retry write-label recovery "Reason" "Proof old writer stopped"
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py revise /path/to/revised-graph.json "Reason for technical change"
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py reintake /path/to/revised-graph.json "User changed the baseline" "Reference to actual authorization" --document docs/development.md
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py replace-session author "Reason" "Proof old session stopped" "Handoff summary"
+.factory/tooling/bin/cli workflow retry write-label recovery "Reason" "Proof old writer stopped"
+.factory/tooling/bin/cli workflow revise /path/to/revised-graph.json "Reason for technical change"
+.factory/tooling/bin/cli workflow reintake /path/to/revised-graph.json "User changed the baseline" "Reference to actual authorization" --document docs/development.md
+.factory/tooling/bin/cli workflow replace-session author "Reason" "Proof old session stopped" "Handoff summary"
 ```
 
 Retry invalidates downstream nodes and retains old results in events. Stage is
@@ -193,7 +200,7 @@ When BugHunter traces a blocked TestWriter failure to production code, submit
 the revision and the test retry together, before Developer edits the files:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py revise /path/to/revised-graph.json "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
+.factory/tooling/bin/cli workflow revise /path/to/revised-graph.json "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
 ```
 
 Identify the exact failure in the diagnosis and explain the owner's responsibility
@@ -224,11 +231,13 @@ without memory. Reviewers never inherit an author's session.
 
 ## Sequence view
 
-The graph carries `"after_archive": "teacher"` from intake. Omitted input uses this default. The run-level step depends on successful archival of all accepted tasks. `workflow.py next` reports its status and the exact job ID once queued. Cancelled runs show `skipped`.
+The graph carries `"after_archive": "teacher"` from intake. Omitted input uses this default. The run-level step depends on successful archival of all accepted tasks. `cli workflow status` reports its status and the exact job ID once queued. Cancelled runs show `skipped`.
 
-Render with `workflow.py diagram`; the projection uses unique logical-agent
-lifelines and dispatch/dependency order. It is a human view, never an alternative
-source of statuses. The configured [router](router.md) selects roles, team composition
+Render with `cli workflow diagram`; the projection uses unique logical-agent
+lifelines and dispatch/dependency order. With `--json`, the workflow result contains
+`run_id`, `status`, the locked `graph`, and `node_statuses` keyed by node ID.
+Use `cli workflow status` for scheduling and recovery actions. The configured
+[router](router.md) selects roles, team composition
 and model profiles; `factory.yaml` supplies the available options. See `.factory/workflow/orchestration.md` for interpretation and loops.
 
 ## ACP
@@ -326,21 +335,23 @@ TestWriter have junior/middle/senior profiles sharing one procedure and contract
 The annotated example additionally shows ZCode/GLM and Pi/DeepSeek; verify
 backend IDs, credentials and required tools before selecting them.
 
-After `claim NODE`, `workflow.py packet NODE` saves the generated inline packet in SQLite and returns it. It
-uses `context.py` to return role/contract, worker adapter, shared assignment,
+After `claim NODE`, `cli workflow packet NODE` saves the generated inline packet in SQLite and returns it. It
+uses `cli context` to return role/contract, worker adapter, shared assignment,
 stage-specific rules, project documents, locked source, dependency results and
 review findings, task-scoped correction/replacement history, assignment IDs,
 model and capabilities for a generic agent. Only a worker-facing projection of
 the profile is included; routing/escalation and transport policy stay with the parent.
 Each `instructions` entry records path/hash/reason/audience alongside its content.
 Router, orchestration, coordinator checkpoint and this full README stay with the parent.
-For native file delivery, run `workflow.py prepare-packet NODE` after claim.
+For native file delivery, run `cli workflow prepare-packet NODE` after claim.
 Spawn the intended worker with a wait-only instruction. Bind its real handle and
 model, run `prepare-packet NODE` again, and send the resulting bootstrap only to
-that bound worker sharing this workspace. Follow the named shell and preserve
+that bound worker sharing this workspace. The generated read and confirmation
+commands request JSON for success and recovery. Follow the named shell and preserve
 `--recipient`. Each response includes at most 5,500 UTF-8 content bytes and its serialized JSON
-is capped at 12,000 UTF-8 bytes, including escapes, metadata and newline. Set a
-tool output limit of at least 12,000 tokens and use one call per response. If
+is capped at 12,000 UTF-8 bytes, including escapes, metadata and newline.
+`read-packet --json` uses the same byte representation. Set a tool output limit
+of at least 12,000 tokens and use one call per response. If
 output is missing or truncated, replay the same command with a sufficient
 display budget. Advance with `--ack` only after the entire response is visible.
 If the receipt is lost, restart at chunk one. Append the final response's
@@ -411,7 +422,7 @@ failures or selects zero tests still needs semantic review.
 After claim/bind of a node with `project-checks`, run:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py run-check verify-label behavior --request behavior-first --dispatch "$dispatch_id"
+.factory/tooling/bin/cli checks run verify-label behavior --request behavior-first --dispatch "$dispatch_id"
 ```
 
 The coordinator or the bound role may call this helper; it does not call an LLM
@@ -433,7 +444,7 @@ existing node retry budgets when correcting/recovering work.
 
 The runner rejects checks while any prepared native delivery is reserved or
 running without confirmation. `next` lists their node IDs in
-`pending_packet_confirmations`; a rejected `run-check` also names them. Finish
+`pending_packet_confirmations`; a rejected `checks run` also names them. Finish
 those deliveries before a synchronous check
 and start new deliveries after it. Wait outside the ledger lock and reconcile a
 failed or unknown delivery through normal recovery.
@@ -474,7 +485,7 @@ staging, approvals and result formats. Their coordinators prepare a JSON assignm
 with `source`, exact input/output paths, allowed writes and mandatory `read` paths:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/context.py --process planning --role architect --profile architect assignment.json
+.factory/tooling/bin/cli context --process planning --role architect --profile architect assignment.json
 ```
 
 Use the process/role/profile actually selected by the owning skill. The CLI
@@ -501,8 +512,8 @@ JSON decision (paths below belong to the consuming project's state directory):
 ```
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py correct write-label .factory/memory/state/correction.json
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py resume-task label "Verified resolution or human decision"
+.factory/tooling/bin/cli workflow correct write-label .factory/memory/state/correction.json
+.factory/tooling/bin/cli workflow resume-task label "Verified resolution or human decision"
 ```
 
 `correct` supports profiles with escalation in Implement. Cause is
@@ -563,7 +574,7 @@ proposed additions.
 The coordinator obtains explicit user approval of the candidate and records its
 evidence. Check the original hashes and apply the approved update through the project's
 scoped procedure.
-Then call `workflow.py resume-approved NODE REQUEST_ID APPROVAL_EVIDENCE`.
+Then call `cli workflow resume-approved NODE REQUEST_ID APPROVAL_EVIDENCE`.
 The helper checks that the task scope matches the approved candidate and that
 the request is current. It adds only authorized candidate paths to the scope,
 revalidates the graph, consumes the request and reopens all completed verification
@@ -604,16 +615,17 @@ Planning, Decompose and standalone Review retain their own artifact validators.
 
 ## Reconcile an active run
 
-`workflow.py next` lists unacknowledged results, runnable nodes, acceptance
+`cli workflow status` lists unacknowledged results, runnable nodes, acceptance
 actions, dispatches, command ownership, correction routes and blockers.
-`status` is an alias. Repeat with `--after CURSOR` for an unchanged response.
+`next` remains an alias. Pass the returned cursor as `--after CURSOR` to detect
+an unchanged response.
 Reconcile recorded handles and unknown dispatches before retry. Read immutable
 reports with `read-report REF.json`, then acknowledge a processed result with
 `ack-result NODE DISPATCH_ID`. `pause REASON` and `resume` record the user's
 decision. Final completion requires successful `archive completed SUMMARY`.
 The native adapter depends on the host coordinator for launches and wakeups.
 
-Use `reconcile-check EXECUTION_ID` after a runner or coordinator interruption.
+Use `checks reconcile EXECUTION_ID` after a runner or coordinator interruption.
 Use `--abandon-unstarted` only to abandon an intent with no registered owner.
 The runner records intent before launch and binds the resource to the process
 group or Job Object until termination. Use a new `--request` for an intentional

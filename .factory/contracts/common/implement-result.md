@@ -35,7 +35,7 @@ open questions; distinguish facts from hypotheses. Preserve exact paths, interfa
 and evidence references in existing fields without repeating checks. Keep full logs
 in artifacts; include paths and necessary failure excerpts.
 
-Use `workflow.py read-report REF.json` with the exact `report_ref` object when
+Use `cli workflow read-report REF.json` with the exact `report_ref` object when
 full predecessor evidence is needed. The helper checks content and dispatch
 identity and supports archived references. Read every supplied mandatory
 instruction and keep consequential caveats in the next handoff. Prior PASS

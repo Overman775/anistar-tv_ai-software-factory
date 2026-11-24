@@ -11,24 +11,232 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import yaml
+
+from factory.adapters.acpx_adapter import prepare_prompt
+from factory.paths import FACTORY_ROOT
+from factory.project.profile_io import material_entries
 from factory.runtime.commands.process import Process, execute_check
-from factory.runtime.contracts import EscalationPolicy
+from factory.runtime.contracts import EscalationPolicy, Graph
 from factory.runtime.scheduling.assignment import implement_packet, validate_packet
 from factory.runtime.scheduling.escalation_policy import correction_decision
+from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from factory.runtime.workflow_graph import validate_graph
+from factory.yaml_checks import copy_bundle
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
 
-_TOOLS = Path(__file__).resolve().parents[3] / "bin"
+
+def configuration() -> dict[str, Any]:
+    profile = dict(
+        role="roles/generalist.md",
+        contract="contracts/generalist.md",
+        capabilities=dict(read=True, edit=True, commands=True, web=False),
+        enforcement="instructions",
+        mcp=[],
+    )
+    return dict(
+        project="project/project.yaml",
+        router="workflow/router.md",
+        orchestration="workflow/orchestration.md",
+        native={"max_parallel_agents": 1},
+        execution={
+            "retry_budgets": dict(
+                static=0, tests=0, docs=0, recovery=0, review=dict(feature=0, other=0)
+            ),
+            "on_budget_exhausted": "human",
+        },
+        models={"fixture": {"id": "fixture-model"}},
+        profiles={
+            "generalist": dict(
+                profile,
+                default="native",
+                variants={
+                    "native": dict(model="fixture", adapter="native"),
+                    "acp": dict(model="fixture", adapter="acp"),
+                },
+            )
+        },
+        adapters={
+            "native": dict(
+                harness="codex",
+                runner="native",
+                instructions="adapters/codex.md",
+                worker_instructions="adapters/worker/codex.md",
+            ),
+            "acp": dict(
+                harness="fixture",
+                runner="acpx",
+                connection="fixture",
+                instructions="adapters/acpx.md",
+                worker_instructions="adapters/worker/acpx.md",
+            ),
+        },
+        acpx={
+            "command": "fixture-never-execute",
+            "connections": {
+                "fixture": dict(
+                    command="fixture-never-execute",
+                    args=[],
+                    max_parallel_agents=1,
+                    permissions="deny-all",
+                )
+            },
+        },
+    )
+
+
+def graph(profile: str) -> Graph:
+    return dict(
+        sources={
+            "request": {
+                "text": "Inspect the fixture only.",
+                "acceptance": [
+                    dict(
+                        id="AC-01",
+                        applies_to="global",
+                        requirement="Fixture remains readable",
+                        verification="Observe fixture contents",
+                    )
+                ],
+            }
+        },
+        agents={"author": dict(role="generalist", profile=profile)},
+        tasks={
+            "fixture": dict(
+                slice="fixture",
+                source="request",
+                outcome="Readable fixture",
+                reason="Disposable preparation probe",
+                risk="low",
+                kind="fix",
+                independent_review=False,
+                scope=["sample.txt"],
+                depends_on=[],
+                acceptance_ids=["AC-01"],
+                required_checks=[
+                    dict(
+                        id="observe",
+                        category="acceptance",
+                        criteria=["AC-01"],
+                        kind="observation",
+                        method="Read disposable sample",
+                    )
+                ],
+            )
+        },
+        nodes=[
+            dict(
+                id="work",
+                task="fixture",
+                stage="work",
+                agent="author",
+                depends_on=[],
+                owns=["sample.txt"],
+                resources=[],
+            ),
+            dict(
+                id="verify",
+                task="fixture",
+                stage="verify",
+                agent="author",
+                depends_on=["work"],
+                owns=[],
+                resources=["project-checks"],
+            ),
+            dict(
+                id="accept",
+                task="fixture",
+                stage="accept",
+                agent=None,
+                depends_on=["verify"],
+                owns=[],
+                resources=[],
+            ),
+        ],
+    )
 
 
 class ToolBoundaryTests(unittest.TestCase):
+    def test_disposable_project_prepares_native_and_acp_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = root / ".factory"
+            copy_bundle(FACTORY_ROOT, bundle)
+            project = bundle / "project"
+            project.mkdir()
+            rule = "FIXTURE_PROJECT_RULE: preserve sample.txt."
+            (project / "rules.md").write_text(rule + "\n", encoding="utf-8")
+            policy = dict(
+                id="fixture",
+                rules={
+                    audience: [dict(id="fixture-" + audience, file="rules.md")]
+                    for audience in ("coordinator", "worker")
+                },
+            )
+            (project / "project.yaml").write_text(yaml.safe_dump(policy), encoding="utf-8")
+            config_file = bundle / "factory.yaml"
+            config_file.write_text(yaml.safe_dump(configuration()), encoding="utf-8")
+            config = load_config(config_file)
+            with (
+                patch("subprocess.Popen", side_effect=AssertionError("External process forbidden")),
+                patch("os.system", side_effect=AssertionError("Shell forbidden")),
+                patch("socket.socket", side_effect=AssertionError("Network forbidden")),
+            ):
+                for route in ("native", "acp"):
+                    with self.subTest(route=route):
+                        workspace = root / route
+                        workspace.mkdir()
+                        (workspace / "AGENTS.md").write_text(
+                            "Disposable workflow fixture.\n", encoding="utf-8"
+                        )
+                        sample = workspace / "sample.txt"
+                        sample.write_text("fixture\n", encoding="utf-8")
+                        entries = material_entries(
+                            config["_project"],
+                            workspace,
+                            process="implement",
+                            audience="coordinator",
+                            scope=["sample.txt"],
+                        )
+                        self.assertIn(rule, "\n".join(entry["content"] for entry in entries))
+                        ledger = Ledger(workspace)
+                        ledger.init(graph(route), config)
+                        ledger.claim("work")
+                        if route == "native":
+                            packet = ledger.packet("work")
+                            content = "\n".join(
+                                entry["content"] for entry in packet["instructions"]
+                            )
+                        else:
+                            prepared = prepare_prompt(ledger, "work")
+                            content = Path(prepared["prompt"]).read_text(encoding="utf-8")
+                            self.assertEqual("fixture-never-execute", prepared["create"][0])
+                        self.assertIn(rule, content)
+                        self.assertEqual("fixture\n", sample.read_text(encoding="utf-8"))
+
+    def test_fixture_bundle_omits_local_tooling_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source, target = (Path(directory) / name for name in ("source", "target"))
+            copy_bundle(FACTORY_ROOT, source)
+            artifacts = (".ruff_cache/cache", ".coverage.tmp", "htmlcov/index.html", "module.pyo")
+            for name in artifacts:
+                path = source / "tooling" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("local", encoding="utf-8")
+            copy_bundle(source, target)
+            for name in artifacts:
+                self.assertFalse((target / "tooling" / name).exists())
+            self.assertTrue((target / "tooling/factory/runtime/history/task_records.py").is_file())
+
     def test_extracted_runtime_and_plan_rules_are_frozen_before_dispatch(self) -> None:
         files = [
-            "tooling/bin/workflow.py",
-            "gates/skills/planning/validate_plan.py",
+            "tooling/bin/cli",
+            "tooling/bin/cli.cmd",
+            "tooling/factory/cli.py",
+            "tooling/factory/planning/validate_plan.py",
             "tooling/factory/runtime/scheduling/assignment.py",
             "tooling/factory/checks/command.py",
             "tooling/factory/checks/contracts.py",

@@ -31,7 +31,46 @@ working in that workflow; otherwise follow repository instructions and task auth
 
 For Python changes, read [Python tooling](references/python.md).
 For factory-owned YAML changes, read [YAML tooling](references/yaml.md).
-For setup and actual commands, read [tools](../../tooling/README.md).
+Follow [interpreter setup](../factory-install/references/integration.md#interpreter).
+Use the project launcher's `help --json` catalog and `COMMAND --help` for command
+arguments and supported modes.
+
+## Public CLI commands
+
+Register every new command in the project CLI. Keep text `--help` and JSON help
+in sync through the shared parser. Describe when to use the command, required
+inputs, effects and output. Give a runnable example. An agent can inspect the
+command with `cli COMMAND --help --json` without supplying inputs or running it.
+
+Define arguments, including their `help=` text, in the feature's parser. For a new
+handler add `command(name, build_parser, run)` to the appropriate group in
+[routes()](../../tooling/factory/cli.py). Use `parser_command` when `run` also takes
+the parser. For a subcommand handled by an existing feature parser, extend that
+parser and its handler. The shared CLI supplies `--help` and `--json`.
+
+Add one `details(...)` entry for the canonical command in its
+[help family](../../tooling/factory/cli_metadata/). Give its purpose,
+prerequisites, effects and example arguments. The renderer supplies the launcher
+and command path. Use `""` for an example that takes no arguments. Include
+`writes=` for affected state, `external=` for external calls or processes, and
+`default_output=` if execution defaults to a format other than the group's text
+or the leaf's JSON. Aliases share the canonical entry. For a working example, see
+[`pr recent-notes`](../../tooling/factory/cli_metadata/operations.py) and its
+[handler](../../tooling/factory/github/fetch_recent_notes.py).
+
+Every command must also support `cli COMMAND --json` for execution. Write one
+UTF-8 JSON value to stdout on completion. Send progress to stderr. Use the shared
+CLI error format and exit codes. Preserve a gate's structured verdict.
+
+Offer `--dry-run` when an agent can usefully preview a change or a job before
+committing to it. Use the command's real inputs and validation, show the planned
+effects, and stop before writes, dispatch or attempt consumption. Recheck the
+preconditions on execution. Read-only queries need no preview.
+
+Through the project launcher, check text and JSON help, the entry in
+`cli help --json`, and a successful and a rejected JSON invocation. Parse stdout
+and check the exit code. Where `supports_dry_run` is true, test `--dry-run --json`
+on disposable data and verify the plan and absence of side effects.
 
 ## Python architecture
 
@@ -59,7 +98,7 @@ Use existing runners and checks. Run checks relevant to changed behavior and cal
 use the aggregate tooling checker when available. Missing target checks remain
 explicit gaps, not success. Do not invent commands, silently install dependencies
 or weaken configuration to obtain a pass. Setup follows existing authorization.
-Tests and dry run use disposable data; live integration evidence is separate.
+Tests use disposable data; live integration evidence is separate.
 
 If delegating, pass the target, task, allowed writes, applicable contracts,
 language reference and required checks explicitly. Do not assume skill inheritance.
@@ -72,5 +111,5 @@ areas. Record the tested revision or source state, including uncommitted changes
 execution environment and exact commands with results. No separate report file required.
 Distinguish implementation from verified readiness. Preserve contract changes
 in the source-owned documentation and repair affected references. Before completion,
-synchronize affected installed-bundle contracts, command examples and
-[tooling documentation](../../tooling/README.md) with the verified implementation.
+synchronize affected installed-bundle contracts, CLI help and command examples
+with the verified implementation.

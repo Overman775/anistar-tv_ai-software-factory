@@ -137,8 +137,10 @@ def validate(
     return errors
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--phase", choices=("draft", "approved"), default="draft")
     parser.add_argument("--previous", type=Path)
@@ -155,7 +157,10 @@ def main() -> int:
         type=Path,
         help="Coordinator review/approval evidence; without it only machine preflight runs",
     )
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
 
     text = file_reader.read_bytes(args.plan).decode("utf-8")
     previous = file_reader.read_bytes(args.previous).decode("utf-8") if args.previous else None
@@ -237,6 +242,11 @@ def main() -> int:
         if args.completion_review
         else (0 if not errors else 1)
     )
+
+
+def main() -> int:
+    parser = build_parser()
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

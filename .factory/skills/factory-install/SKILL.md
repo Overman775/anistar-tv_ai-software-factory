@@ -45,12 +45,12 @@ for supported local methods; do not silently fall back to global installation.
 4. Apply [exclusions](references/exclusions.md) before any graph build. Keep factory
    and project settings indexable while excluding factory implementation and local
    artifacts. Graph construction and hooks require inclusion in the authorized scope.
-5. Run [verification](references/verification.md), including the disposable dry run
-   with the actual interpreter available to the agent. Report installed, configured,
+5. Run [verification](references/verification.md), including command discovery
+   from the agent session. Report installed, configured,
    verified and blocked capabilities separately; do not claim live checks from fixtures.
 
 For updates or repair also read [maintenance](references/maintenance.md).
-Diagnosis performs read-only inspection; the dry run may create only its disposable
-temporary data. Never run a version/doctor command that silently installs missing tools.
+Diagnosis performs read-only inspection. Avoid version or doctor commands that
+silently install missing tools.
 Report actual versions, changes, checks and remaining user actions in chat. No automatic
 commit, push, publication, project setup, global system upgrade or migration to current.

@@ -11,6 +11,7 @@ from factory.runtime.observability.acp_tools import summarize_tools
 from factory.runtime.observability.acpx_usage import ArchiveUsage
 from factory.runtime.observability.export_feed import (
     CheckObservation,
+    Correction,
     LessonApplication,
     ObservationSource,
     RunEvent,
@@ -93,9 +94,10 @@ def _run(
     events = db.execute(
         """SELECT value ->> '$.event',value ->> '$.at',value ->> '$.node',
           value ->> '$.dispatch_id',value ->> '$.outcome',value ->> '$.status',
-          value ->> '$.role',value ->> '$.harness'
+          value ->> '$.role',value ->> '$.harness',value ->> '$.stage',
+          value ->> '$.decision',value ->> '$.target'
           FROM runs,json_each(record,?) WHERE run_id=?
-          AND value ->> '$.event' IN ('created','reserved','finished','reconciled','archived') ORDER BY CAST(key AS INTEGER)""",
+          AND value ->> '$.event' IN ('created','reserved','finished','reconciled','archived','retry','revised','accepted','correction_decided') ORDER BY CAST(key AS INTEGER)""",
         (event_path, run),
     )
     eligible_search = "" if local else "AND f.eligible=1"
@@ -129,6 +131,28 @@ def _run(
         status,
         at,
         [RunEvent(*row) for row in events],
+        [
+            Correction(*row)
+            for row in db.execute(
+                """SELECT c.value ->> '$.node_id',c.value ->> '$.decision',
+                       c.value ->> '$.from_profile',c.value ->> '$.to_profile',c.value ->> '$.cause',
+                       c.value ->> '$.identity[1]',c.value ->> '$.identity[2]',c.value ->> '$.identity[3]'
+                   FROM runs,json_each(record,?) c WHERE run_id=?
+                   AND c.value ->> '$.cause' IN ('static','tests','docs','review')
+                   AND json_type(c.value,'$.from_profile')='text'
+                   AND json_array_length(c.value,'$.identity')=4
+                   ORDER BY CAST(c.key AS INTEGER)""",
+                (base + ".corrections", run),
+            )
+        ],
+        {
+            dispatch
+            for (dispatch,) in db.execute(
+                """SELECT n.value ->> '$.dispatch_id' FROM runs,json_each(record,?) n
+                   WHERE run_id=? AND n.value ->> '$.dispatch_id' IS NOT NULL""",
+                (base + ".nodes", run),
+            )
+        },
         [
             LessonApplication(
                 dispatch,

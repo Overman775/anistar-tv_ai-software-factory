@@ -76,7 +76,7 @@ it with head_sha and read linked source tasks using project instructions.
 ## Accepted project policy
 
 Before calculating scope_hash, attach the complete accepted `project_policy`
-snapshot produced by `project.py review-policy --revision FULL_BASE_SHA`. Branch/PR
+snapshot produced by `cli project review-policy --revision FULL_BASE_SHA`. Branch/PR
 source is `git:<base_sha>`; feature needs an explicit prior accepted snapshot.
 The snapshot hash is part of scope_hash. Helpers reject missing/corrupt policy.
 Pass the snapshot and exact scope_files in Reviewer assignments; rules and documents

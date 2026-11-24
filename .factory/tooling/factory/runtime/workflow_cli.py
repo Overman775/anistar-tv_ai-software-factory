@@ -12,13 +12,14 @@ from typing import Any
 from factory import file_reader
 from factory.context.context import accepted_bytes, accepted_path
 from factory.database.provider import current_database
+from factory.database.sqlite.workflow_db import read_only
 from factory.diagnostics.events import event
 from factory.diagnostics.query import read_journal
 from factory.diagnostics.records import error_code
 from factory.logging_config import diagnostic_operation, finish, initialize
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import material_entries
-from factory.runtime import command_worker
+from factory.runtime import workflow_query
 from factory.runtime.history import report_history
 from factory.runtime.knowledge.case_search import CaseIndex
 from factory.runtime.packets.content import packet_response
@@ -35,11 +36,13 @@ from factory.runtime.workflow_graph import (
 from factory.runtime.workspace import prepare_workspace
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None, *, checks: bool = False
+) -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__) if parser is None else parser
     p.add_argument("--workspace", default=".")
     p.add_argument("--config", default=str(FACTORY_ROOT / "factory.yaml"))
-    sub = p.add_subparsers(dest="action", required=True)
+    sub = p.add_subparsers(dest="action", metavar="COMMAND", title="commands", required=True)
 
     def command(
         name: str,
@@ -50,6 +53,31 @@ def build_parser() -> argparse.ArgumentParser:
         parser.set_defaults(command_handler=dispatch)
         return parser
 
+    if checks:
+        check = command("run", _dispatch_packets_checks, help="Run a registered check")
+        check.set_defaults(action="run-check")
+        check.add_argument("node")
+        check.add_argument("check_id")
+        check.add_argument(
+            "--request", required=True, help="Stable request ID; reuse it after a lost response"
+        )
+        check.add_argument(
+            "--dispatch", required=True, help="Dispatch ID from the bound worker packet"
+        )
+        check.add_argument("--dry-run", action="store_true", help="Preview the registered stages")
+        results = command("results", _dispatch_packets_checks, help="Read finished check receipts")
+        results.set_defaults(action="check-results")
+        results.add_argument("execution_id")
+        reconciled = command("reconcile", _dispatch_packets_checks, help="Recover a check result")
+        reconciled.set_defaults(action="reconcile-check")
+        reconciled.add_argument("execution_id")
+        reconciled.add_argument(
+            "--abandon-unstarted",
+            action="store_true",
+            help="Abandon a pending intent only if no process owner ever registered",
+        )
+        return p
+
     diagnostic = sub.add_parser("diagnostics")
     selectors = diagnostic.add_mutually_exclusive_group(required=True)
     selectors.add_argument("--invocation")
@@ -59,7 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostic.add_argument("--cursor", type=int, default=0)
     diagnostic.add_argument("--limit", type=int, default=30)
     command("config", _dispatch_setup)
-    sub.add_parser("prepare-workspace")
+    workspace = sub.add_parser("prepare-workspace")
+    workspace.add_argument("--dry-run", action="store_true", help="Preview workspace selection")
     instructions = command("read-instructions", _dispatch_setup)
     instructions.add_argument("pin", help="Config JSON or - for the active run")
     instructions.add_argument("paths", nargs="+")
@@ -82,7 +111,11 @@ def build_parser() -> argparse.ArgumentParser:
     approved.add_argument("request_id")
     approved.add_argument("evidence")
     command("show", _dispatch_workflow)
-    next_action = command("next", _dispatch_workflow, aliases=["status"])
+    explain = command("explain", _dispatch_workflow, help="Read evidence for one dispatch")
+    explain.add_argument("node")
+    explain.add_argument("--dispatch", required=True)
+    explain.add_argument("--run", help="Run ID for an archived or current attempt")
+    next_action = command("status", _dispatch_workflow, aliases=["next"])
     next_action.add_argument("--after")
     paused = command("pause", _dispatch_workflow)
     paused.add_argument("reason")
@@ -120,7 +153,10 @@ def build_parser() -> argparse.ArgumentParser:
     rep.add_argument("reason")
     rep.add_argument("terminal_evidence")
     rep.add_argument("handoff")
-    for name in ("claim", "accept", "packet"):
+    claim = command("claim", _dispatch_workflow)
+    claim.add_argument("node")
+    claim.add_argument("--dry-run", action="store_true", help="Check claim eligibility")
+    for name in ("accept", "packet"):
         command(name, _dispatch_workflow).add_argument("node")
     prepare = command("prepare-packet", _dispatch_packets_checks)
     prepare.add_argument("node")
@@ -147,16 +183,6 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("node")
     b.add_argument("handle")
     b.add_argument("model")
-    check = command("run-check", _dispatch_packets_checks)
-    check.add_argument("node")
-    check.add_argument("check_id")
-    check.add_argument("--request", required=True)
-    check.add_argument("--dispatch", required=True)
-    reconciled = command("reconcile-check", _dispatch_packets_checks)
-    reconciled.add_argument("execution_id")
-    reconciled.add_argument("--abandon-unstarted", action="store_true")
-    command("check-results", _dispatch_packets_checks).add_argument("execution_id")
-    command("_check-worker", _dispatch_packets_checks).add_argument("execution_id")
     command(
         "reset-history-index",
         _dispatch_workflow,
@@ -190,6 +216,7 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("stage")
     r.add_argument("reason")
     r.add_argument("terminal_evidence")
+    r.add_argument("--dry-run", action="store_true", help="Preview budget and affected nodes")
     retro = command(
         "record-retro",
         _dispatch_completion,
@@ -317,9 +344,21 @@ def _dispatch_workflow(
         result = None
     elif args.action == "show":
         result = ledger.read()
+    elif args.action == "explain":
+        result = workflow_query.explain(ledger, args.node, args.dispatch, args.run)
     elif args.action == "diagram":
-        print(diagram(ledger.read()))
-        return True, None
+        state = ledger.read()
+        if not getattr(args, "json", False):
+            print(diagram(state))
+            return True, None
+        result = {
+            "run_id": state["run_id"],
+            "status": state["status"],
+            "graph": state["graph"],
+            "node_statuses": {
+                node_id: dispatch["status"] for node_id, dispatch in state["nodes"].items()
+            },
+        }
     elif args.action == "resume-approved":
         ledger.resume_approved(args.node, args.request_id, args.evidence)
         result = None
@@ -338,7 +377,9 @@ def _dispatch_workflow(
     elif args.action == "replace-session":
         ledger.replace_session(args.agent, args.reason, args.terminal_evidence, args.handoff)
         result = None
-    elif args.action in {"claim", "accept", "packet"}:
+    elif args.action == "claim":
+        result = ledger.claim(args.node, dry_run=args.dry_run)
+    elif args.action in {"accept", "packet"}:
         result = getattr(ledger, args.action)(args.node)
     return False, result
 
@@ -371,15 +412,16 @@ def _dispatch_packets_checks(args: argparse.Namespace, ledger: Ledger) -> tuple[
         result = None
     elif args.action == "run-check":
         result = ledger.run_check(
-            args.node, args.check_id, args.request, expected_dispatch=args.dispatch
+            args.node,
+            args.check_id,
+            args.request,
+            expected_dispatch=args.dispatch,
+            dry_run=args.dry_run,
         )
     elif args.action == "reconcile-check":
         result = ledger.reconcile_check(args.execution_id, args.abandon_unstarted)
     elif args.action == "check-results":
         result = ledger.check_results(args.execution_id)
-    elif args.action == "_check-worker":
-        command_worker.supervise(ledger, args.execution_id)
-        return True, None
     elif args.action == "read-report":
         result = report_history.read(ledger.root, read_json(args.reference), history=ledger.history)
     elif args.action == "prepare-report":
@@ -400,8 +442,9 @@ def _dispatch_completion(args: argparse.Namespace, ledger: Ledger) -> tuple[bool
         ledger.resolve(args.node, args.status, args.evidence)
         result = None
     elif args.action == "retry":
-        ledger.retry(args.node, args.stage, args.reason, args.terminal_evidence)
-        result = None
+        result = ledger.retry(
+            args.node, args.stage, args.reason, args.terminal_evidence, dry_run=args.dry_run
+        )
     elif args.action == "record-retro":
         ledger.record_retro(args.run_id, args.incident, args.source, args.observation)
     elif args.action == "archive":
@@ -414,13 +457,34 @@ def _dispatch_completion(args: argparse.Namespace, ledger: Ledger) -> tuple[bool
 
 def main() -> None:
     p = build_parser()
-    args = p.parse_args()
+    run(p.parse_args(), p)
+
+
+def _result(value: object) -> None:
+    print(json.dumps({"ok": True, "result": value}, ensure_ascii=False, indent=2))
+
+
+def run(args: argparse.Namespace, p: argparse.ArgumentParser) -> None:
+    dry_run = getattr(args, "dry_run", False)
+    as_json = getattr(args, "json", False)
     if args.action == "prepare-workspace":
         try:
-            selected = prepare_workspace(Path(args.workspace).resolve(), load_config(args.config))
-            with diagnostic_operation(selected["workspace"], "prepare-workspace"):
-                print(json.dumps({"ok": True, "result": selected}, ensure_ascii=False, indent=2))
+            if dry_run:
+                with read_only():
+                    _result(
+                        prepare_workspace(
+                            Path(args.workspace).resolve(), load_config(args.config), dry_run=True
+                        )
+                    )
+            else:
+                selected = prepare_workspace(
+                    Path(args.workspace).resolve(), load_config(args.config)
+                )
+                with diagnostic_operation(selected["workspace"], "prepare-workspace"):
+                    _result(selected)
         except (Invalid, OSError, ValueError) as exc:
+            if as_json:
+                raise
             p.exit(1, f"BLOCKED: {exc}\n")
         return
     if args.action == "diagnostics":
@@ -437,6 +501,8 @@ def main() -> None:
             )
             print(json.dumps(read_journal(args.workspace, key, value, args.cursor, args.limit)))
         except (OSError, ValueError) as exc:
+            if as_json:
+                raise
             p.exit(1, f"BLOCKED: {exc}\n")
         return
     database = current_database()
@@ -447,6 +513,16 @@ def main() -> None:
         jobs=database.teacher,
         history=database.history,
     )
+    if dry_run or args.action == "explain":
+        try:
+            with read_only():
+                _, preview = args.command_handler(args, ledger)
+            _result(preview)
+        except (Invalid, KeyError, OSError, ValueError) as exc:
+            if as_json:
+                raise
+            p.exit(1, f"BLOCKED: {exc}\n")
+        return
     handler = initialize(args.workspace, args.action, store=database.diagnostics)
     failed = False
     result: object
@@ -461,20 +537,24 @@ def main() -> None:
         if args.action == "read-packet":
             sys.stdout.buffer.write(packet_response(result))
         else:
-            print(json.dumps({"ok": True, "result": result}, ensure_ascii=False, indent=2))
+            _result(result)
     except BaseException as exc:
         failed = True
         event(
             "operation_failed",
             error_code=error_code(exc),
             **(
-                ledger.failure_context(getattr(args, "node", None))
-                if args.action
-                not in {"init", "validate", "config", "read-instructions", "read-packet"}
+                ledger.failure_context(
+                    getattr(args, "node", None),
+                    expected_run=args.run_id
+                    if args.action in {"read-packet", "confirm-packet"}
+                    else None,
+                )
+                if args.action not in {"init", "validate", "config", "read-instructions"}
                 else {}
             ),
         )
-        if isinstance(exc, (Invalid, KeyError, OSError, ValueError)):
+        if not as_json and isinstance(exc, (Invalid, KeyError, OSError, ValueError)):
             p.exit(1, f"BLOCKED: {exc}\n")
         raise
     finally:

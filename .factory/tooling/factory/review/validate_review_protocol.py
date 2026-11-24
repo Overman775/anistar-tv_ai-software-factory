@@ -44,15 +44,21 @@ from factory.review.render_review_report import render_report
 PROTOCOL_RESULT = TypeAdapter[ProtocolResult](ProtocolResult)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--lens-output", type=Path, action="append", required=True)
     parser.add_argument("--tool-result", type=Path, action="append", default=[])
     parser.add_argument("--qa-output", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--report-output", type=Path, required=True)
-    return parser.parse_args()
+    return parser
+
+
+def parse_args() -> argparse.Namespace:
+    return build_parser().parse_args()
 
 
 def _collect_failing_commands(
@@ -221,7 +227,10 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
 
 
 def main() -> int:
-    args = parse_args()
+    return run(parse_args())
+
+
+def run(args: argparse.Namespace) -> int:
     result, exit_code = validate_protocol(args)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

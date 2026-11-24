@@ -73,8 +73,10 @@ def factory_inputs() -> set[Path]:
     files += list((FACTORY_ROOT / "tooling/factory").rglob("*.py"))
     files += list((FACTORY_ROOT / "contracts/common").rglob("*.md"))
     files += list((FACTORY_ROOT / "adapters/worker").rglob("*.md"))
-    files += list((FACTORY_ROOT / "gates/skills/decompose").glob("*.py"))
-    files += list((FACTORY_ROOT / "gates/skills/planning").glob("*.py"))
+    files += [
+        FACTORY_ROOT / name
+        for name in ("tooling/bootstrap.py", "tooling/bin/cli", "tooling/bin/cli.cmd")
+    ]
     return {safe_path(FACTORY_ROOT, p.relative_to(FACTORY_ROOT).as_posix()) for p in files}
 
 

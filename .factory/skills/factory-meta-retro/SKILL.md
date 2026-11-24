@@ -14,7 +14,7 @@ Read [communication rules](../../contracts/common/communication.md) for messages
 # Factory Meta Retro
 
 Read `.factory/contracts/common/project-policy.md`. Before dependent work, resolve
-project inputs with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process meta-retro --audience coordinator`
+project inputs with `.factory/tooling/bin/cli project context --process meta-retro --audience coordinator`
 (add `--scope PATH` for every known scope path). Read the returned instructions and
 actual applicable documents. Unknown scope retains obligations; it never waives them.
 
@@ -129,12 +129,12 @@ future agent could reuse. Ask which findings the owner wants Teacher to review.
 Finish with that proposal. An empty retro or a declined proposal ends here.
 
 On an explicit request to launch Teacher, use the factory launcher with
-`lessons.py retro INCIDENT SOURCE OBSERVATION --confirmed` for each selected
+`cli lessons retro INCIDENT SOURCE OBSERVATION --confirmed` for each selected
 finding. Follow [Teacher dispatch](../factory-lessons/references/dispatch.md)
 for the returned IDs only. Reuse the same inputs on retry.
 
 If the owner chooses to include a finding in an active Implement run’s final
-review, use `workflow.py record-retro RUN_ID INCIDENT SOURCE OBSERVATION`
+review, use `cli workflow record-retro RUN_ID INCIDENT SOURCE OBSERVATION`
 instead. Use the task’s `lesson_incident` when available. The run’s final
 Teacher assignment includes this note after successful archival. Until the
 owner chooses, leave the journal, queue and catalog untouched.

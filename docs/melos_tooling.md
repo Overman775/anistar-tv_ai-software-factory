@@ -21,7 +21,7 @@ fvm dart run melos run run:dev
 
 Melos использует `.fvm/flutter_sdk`, поддерживает `--sdk-path` и `MELOS_SDK_PATH`. Wrapper’ы проекта принимают `ANISTAR_FLUTTER_SDK` для другого пути к тому же закреплённому SDK. `scripts/with_python.sh` подбирает Python 3.10+ или использует `ANISTAR_PYTHON`. Для прямого запуска скриптов настройте `PATH`.
 
-Перед первым `test:tooling` или `check` подготовьте dev-окружение фабрики на Python 3.14 командой `python3.14 -E -s -B .factory/tooling/bootstrap.py setup --dev`. Проверка использует готовое окружение. См. [настройку Python фабрики](../.factory/tooling/README.md#python-setup).
+Перед первым `test:tooling` или `check` подготовьте dev-окружение фабрики на Python 3.14 командой `.factory/tooling/bin/cli setup --dev`. Проверка использует готовое окружение. См. [настройку Python фабрики](../.factory/skills/factory-install/references/integration.md#interpreter).
 
 Bootstrap запускает [необязательную подготовку Graphify](../tool/graphify/README.md). Отсутствие Graphify допустимо. Ошибка версии, патча или sidecar найденной установки останавливает bootstrap. Для Git hooks см. [настройку Lefthook](git_hooks_and_security.md#установка).
 

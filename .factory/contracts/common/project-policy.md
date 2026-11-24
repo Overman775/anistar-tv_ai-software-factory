@@ -10,7 +10,7 @@ For a new Implement intake or another process, the coordinator resolves project
 inputs before dependent work:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/project.py context --process PROCESS --audience coordinator --scope PATH
+.factory/tooling/bin/cli project context --process PROCESS --audience coordinator --scope PATH
 ```
 
 Repeat `--scope` for every affected path. No scope means unknown: conservatively
@@ -20,11 +20,11 @@ Preserve the output with the process evidence. The command rejects missing files
 invalid fields and duplicate IDs. Apply the process's own freshness rules.
 It reads project inputs without starting Implement or running project commands.
 
-After Implement intake, use the same launcher with `workflow.py read-project`.
+After Implement intake, use `cli workflow read-project`.
 Apply its accepted policy and instruction text. Read edited files directly when
 inspecting the candidate.
 
-Worker context.py resolves the same profile for process, role, stage and scope.
+Worker `cli context` resolves the same profile for process, role, stage and scope.
 Deliver its full packet. Rule selectors remain visible: a server rule does not
 become a UI-wide rule merely because both scopes share one Developer assignment.
 Explicit assignment reads supplement the profile; they cannot remove obligations.
@@ -78,7 +78,7 @@ still supplies task policy_decisions; no external decision provider is connected
 
 ## Checks and change control
 
-Use `project.py checks TASK.json [--final]` to populate project required_checks.
+Use `cli project checks TASK.json [--final]` to populate project required_checks.
 Add task acceptance checks separately. Apply [Decisions](decisions.md) when
 recording applicability answers or assigning their evaluation to an agent.
 Unknown is not false. The last integration task, or sole task of a one-task run,
@@ -98,7 +98,7 @@ can refresh accepted prose or existing decision definitions. Structural policy
 changes such as gate, check and selector changes apply at the next intake.
 
 Standalone review pins `project_policy` from the accepted base before reading
-candidate policy. Capture it with `project.py --workspace ROOT review-policy
+candidate policy. Capture it with `cli project --workspace ROOT review-policy
 --revision FULL_BASE_SHA`; copy the JSON into the manifest before calculating
 scope_hash. Branch/PR baseline matches base_sha. Feature review requires a prior
 accepted policy snapshot with explicit provenance. Missing baseline blocks review;
@@ -118,7 +118,7 @@ Generalist, universal backend/frontend/mobile roles, vertical slices and final
 independent Judge retain their contracts. Profile selection does not prove model
 quality, runtime tool availability or live application verification.
 
-Factory Python commands use `sh .factory/tooling/bin/python.sh` on macOS/Linux;
-on native Windows replace that prefix with `.\.factory\tooling\bin\python.cmd`.
-Use the project launcher, not system Python or shell activation. If unavailable,
+Run factory commands from the checkout root. The shorthand `cli` means
+`.factory/tooling/bin/cli` on macOS/Linux or `.\.factory\tooling\bin\cli.cmd` on
+native Windows. The launcher selects the factory environment. If unavailable,
 report setup pending; do not install dependencies while doing an unrelated task.

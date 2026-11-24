@@ -77,8 +77,9 @@ When discovery exit criteria hold:
    target.
 3. Semantic gaps return to this session and decision rules without consuming a
    revision. Machine-only defects get one internal repair and full check rerun.
-4. Run `validate_plan.py --phase draft`, with `--previous` after first
-   promotion. Atomically promote only after both checks pass.
+4. Run `.factory/tooling/bin/cli planning validate --phase draft --plan CANDIDATE --json`.
+   After first promotion, add `--previous PROMOTED_PLAN`.
+   Atomically promote only after both checks pass.
 
 First promoted user-reviewable plan is `revision: 1`. Before that promotion,
 answers, candidate rewrites, and machine-only fixes create no revision. After a

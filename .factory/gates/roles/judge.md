@@ -12,7 +12,7 @@ Implementation defects remain `NEEDS_WORK`.
 ## Final integration verification
 
 On an assigned `verify` node, execute all required final test/build/static commands
-using run-check. Prior successful verification is not an input requirement for
+using `cli checks run`. Prior successful verification is not an input requirement for
 this stage: it produces that evidence. Return the Implement verify result from
 `.factory/contracts/common/implement-result.md` and `.factory/contracts/common/check-execution.md` with required checks;
 APPROVE belongs only to the subsequent `review` node. Read combined requirements,

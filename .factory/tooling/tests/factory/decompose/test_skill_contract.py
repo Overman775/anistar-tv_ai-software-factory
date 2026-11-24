@@ -29,7 +29,7 @@ def read(path: Path) -> str:
 class FactoryDecomposeContractTest(unittest.TestCase):
     def test_skill_accepts_only_approved_planning_plan(self) -> None:
         skill = read(SKILL)
-        self.assertIn("validate_plan.py", skill)
+        self.assertIn("cli planning validate", skill)
         self.assertIn("BLOCKED_NO_APPROVED_PLAN", skill)
         self.assertIn("NEEDS_PLANNING", skill)
         self.assertIn("docs/plans/{plan_id}.md", skill)
@@ -184,7 +184,7 @@ class FactoryDecomposeContractTest(unittest.TestCase):
         review_contract = " ".join(
             read(FACTORY_ROOT / "gates/skills/decompose/review-contract.md").split()
         )
-        self.assertIn("`assemble.py review-request` as preflight", review_contract)
+        self.assertIn("`cli decompose assemble review-request` as preflight", review_contract)
         self.assertIn("Start TaskReviewer only after the request succeeds", review_contract)
         self.assertIn("Do not run a separate preflight in the normal route", review_contract)
         self.assertIn(

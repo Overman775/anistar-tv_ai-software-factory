@@ -1,7 +1,6 @@
 """Read one GitHub PR comment and its context; no remote writes.
 
-Usage: fetch_note.py {issue|review} NOTE_ID PR_NUMBER [--repo OWNER/REPO]
-Pipe mode: fetch_note.py {issue|review} NOTE_ID < comments.json
+Accepts saved comments on stdin when no pull request number is given.
 Issue comments have no REST thread/reply relation. Review comments do.
 """
 
@@ -16,6 +15,7 @@ from typing import Annotated, Literal, NotRequired, Protocol
 from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory.cli_output import emit_error, emit_json
 from factory.validation import validation_message
 
 Positive = Annotated[int, Field(gt=0)]
@@ -52,6 +52,13 @@ class Comment(TypedDict):
     original_commit_id: NotRequired[str]
     in_reply_to_id: NotRequired[int | None]
     html_url: NotRequired[str]
+
+
+class CommentThread(TypedDict):
+    kind: Literal["issue", "review"]
+    target: Comment
+    thread_root: int | None
+    thread: list[Comment]
 
 
 COMMENTS = TypeAdapter[list[Comment]](list[Comment], config=ConfigDict(strict=True))
@@ -174,13 +181,19 @@ def print_note(note: Comment, target_id: int | str | None = None) -> None:
     print(render_note(note, target_id))
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kind", choices=("issue", "review"))
     parser.add_argument("note_id", type=positive_id)
     parser.add_argument("pr", nargs="?", type=positive_id)
     parser.add_argument("--repo")
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
+    as_json = getattr(args, "json", False)
     try:
         comments = (
             fetch_comments(args.kind, args.pr, args.repo)
@@ -188,6 +201,19 @@ def main() -> int:
             else json.load(sys.stdin)
         )
         target, thread = find_context(comments, args.note_id, args.kind)
+        if as_json:
+            result: CommentThread = {
+                "kind": args.kind,
+                "target": target,
+                "thread_root": (
+                    next(note["id"] for note in thread if note.get("in_reply_to_id") is None)
+                    if args.kind == "review"
+                    else None
+                ),
+                "thread": thread,
+            }
+            emit_json(result)
+            return 0
         print(f"Kind: {args.kind}")
         print(
             f"Thread root: {thread[0]['id']}"
@@ -197,9 +223,17 @@ def main() -> int:
         for note in thread:
             print_note(note, target["id"])
     except (OSError, RuntimeError, ValueError) as error:
-        print(str(error), file=sys.stderr)
+        if as_json:
+            emit_error("pr_note", str(error))
+        else:
+            print(str(error), file=sys.stderr)
         return 1
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    return run(parser.parse_args())
 
 
 if __name__ == "__main__":

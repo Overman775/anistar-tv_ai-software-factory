@@ -11,6 +11,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from factory import file_reader
+from factory.cli_output import emit_error
 from factory.decompose.contracts import SourceLock
 from factory.decompose.graph.task_data import SOURCE_LOCK, normalized_plan_hash
 from factory.planning.plan_document import declared_capabilities, parse_metadata, parse_revision
@@ -40,15 +41,28 @@ def prepare(plan: Path, config: Path) -> SourceLock:
     return SOURCE_LOCK.validate_python(lock)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=Path(".factory/factory.yaml"))
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
     try:
         lock = prepare(args.plan, args.config)
     except (OSError, ValueError, KeyError, ValidationError) as exc:
-        print(f"Cannot prepare source lock: {exc}", file=sys.stderr)
+        if getattr(args, "json", False):
+            emit_error("decompose_source_lock", str(exc))
+        else:
+            print(f"Cannot prepare source lock: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(lock, ensure_ascii=False, indent=2))
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    return run(parser.parse_args())

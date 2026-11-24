@@ -6,6 +6,7 @@ import subprocess
 import uuid
 from collections.abc import Callable
 from pathlib import Path
+from typing import NotRequired, TypedDict
 
 from factory.environment import settings
 from factory.runtime.contracts import Config
@@ -14,10 +15,19 @@ from factory.runtime.workflow_core import Invalid, require
 BRANCH_PREFIX = "worktree/factory-"
 
 
+class WorkspaceSelection(TypedDict):
+    mode: str
+    workspace: str
+    config: str
+    would_create: NotRequired[bool]
+    head: NotRequired[str]
+
+
 def _git(root: Path, *args: str) -> str:
     env = dict(settings())
     for name in ("GIT_DIR", "GIT_COMMON_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         env.pop(name, None)
+    env["GIT_OPTIONAL_LOCKS"] = "0"
     result = subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, text=True, env=env, check=False
     )
@@ -71,12 +81,19 @@ def check_workspace(root: Path, config: Config) -> None:
 
 
 def prepare_workspace(
-    root: Path, config: Config, *, has_current: Callable[[Path], bool] | None = None
-) -> dict[str, str]:
+    root: Path,
+    config: Config,
+    *,
+    has_current: Callable[[Path], bool] | None = None,
+    dry_run: bool = False,
+) -> WorkspaceSelection:
     mode = config["execution"].get("workspace", "shared")
+    selected = WorkspaceSelection(mode=mode, workspace=str(root), config=config["_path"])
+    if dry_run:
+        selected["would_create"] = False
     if mode != "worktree":
         check_workspace(root, config)
-        return {"mode": mode, "workspace": str(root), "config": config["_path"]}
+        return selected
 
     config_rel = _worktree_config(root, config)
     if not _linked_factory_worktree(root):
@@ -100,6 +117,11 @@ def prepare_workspace(
         _git(root, "ls-files", "--error-unmatch", "--", config_rel.as_posix())
         key = uuid.uuid4().hex[:12]
         target = root.with_name(f"{root.name}-factory-{key}")
-        _git(root, "worktree", "add", "-b", BRANCH_PREFIX + key, "--", str(target), head)
-        root = target
-    return {"mode": mode, "workspace": str(root), "config": str(root / config_rel)}
+        selected["workspace"] = str(target)
+        selected["config"] = str(target / config_rel)
+        if dry_run:
+            selected["would_create"] = True
+            selected["head"] = head
+        else:
+            _git(root, "worktree", "add", "-b", BRANCH_PREFIX + key, "--", str(target), head)
+    return selected

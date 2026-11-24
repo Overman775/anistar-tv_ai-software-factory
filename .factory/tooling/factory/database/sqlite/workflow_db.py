@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from factory.database.sqlite.artifacts import Artifact, put
@@ -211,16 +212,32 @@ def _configure_collection(db: sqlite3.Connection, enabled: bool) -> None:
             VALUES ('{kind}',{ref},{at},1,{uid}); END""")
 
 
+_READ_ONLY = ContextVar("workflow_read_only", default=False)
+
+
+@contextmanager
+def read_only() -> Iterator[None]:
+    """Prevent workflow reads from creating or upgrading a database during preview."""
+    token = _READ_ONLY.set(True)
+    try:
+        yield
+    finally:
+        _READ_ONLY.reset(token)
+
+
 @contextmanager
 def database(root: Path, *, timeout: float = 5) -> Iterator[sqlite3.Connection]:
     path = relative(root, DATABASE)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    read_only = _READ_ONLY.get()
+    if not read_only:
+        path.parent.mkdir(parents=True, exist_ok=True)
     for suffix in ("-wal", "-shm", "-journal"):
         relative(root, DATABASE + suffix)
     try:
-        with closing(sqlite3.connect(path, timeout=timeout)) as db, db:
+        source = path.as_uri() + "?mode=ro" if read_only else path
+        with closing(sqlite3.connect(source, timeout=timeout, uri=read_only)) as db, db:
             db.execute("PRAGMA foreign_keys=ON")
-            if db.execute("PRAGMA user_version").fetchone()[0] in (0, 1):
+            if not read_only and db.execute("PRAGMA user_version").fetchone()[0] in (0, 1):
                 # Recheck under the write lock so simultaneous first opens share one schema.
                 db.execute("BEGIN IMMEDIATE")
                 version = db.execute("PRAGMA user_version").fetchone()[0]
@@ -255,14 +272,16 @@ def database(root: Path, *, timeout: float = 5) -> Iterator[sqlite3.Connection]:
                     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                 db.commit()
             require(
-                db.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+                db.execute("PRAGMA user_version").fetchone()[0]
+                in ({1, SCHEMA_VERSION} if read_only else {SCHEMA_VERSION})
                 and db.execute(
                     "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='lesson_search_evidence'"
                 ).fetchone()
                 is not None,
                 "Unsupported workflow database",
             )
-            _configure_collection(db, export_policy.enabled(root))
+            if not read_only:
+                _configure_collection(db, export_policy.enabled(root))
             yield db
     except sqlite3.Error as exc:
         event("database_failed", component="workflow_store", error_code=error_code(exc))

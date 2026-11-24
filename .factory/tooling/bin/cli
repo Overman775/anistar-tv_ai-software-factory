@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+TOOLS=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PYTHON="$TOOLS/../../.venv/bin/python"
+
+# Setup can run before the checkout environment exists.
+first_command=
+json=false
+for arg do
+    case "$arg" in
+        --) break ;;
+        --json) json=true ;;
+        *) if [ -z "$first_command" ]; then first_command=$arg; fi ;;
+    esac
+done
+
+fail() {
+    # Both values are fixed launcher messages, safe as JSON string literals.
+    if "$json"; then
+        printf '{"ok":false,"error":{"code":"%s","message":"%s"}}\n' "$1" "$2"
+    else
+        printf '%s\n' "$2" >&2
+    fi
+    exit 1
+}
+
+if [ "$first_command" = setup ]; then
+    if [ -n "${FACTORY_SETUP_PYTHON-}" ]; then
+        if [ ! -x "$FACTORY_SETUP_PYTHON" ]; then
+            fail setup_failed 'FACTORY_SETUP_PYTHON must point to an executable Python 3.14.'
+        fi
+        exec "$FACTORY_SETUP_PYTHON" -E -s -B "$TOOLS/../bootstrap.py" "$@"
+    fi
+    if ! command -v python3.14 >/dev/null 2>&1; then
+        fail setup_failed 'Factory setup needs python3.14 on PATH or FACTORY_SETUP_PYTHON.'
+    fi
+    exec python3.14 -E -s -B "$TOOLS/../bootstrap.py" "$@"
+fi
+if [ ! -x "$PYTHON" ]; then
+    fail environment_not_ready 'Factory Python is not ready. Run .factory/tooling/bin/cli setup.'
+fi
+exec "$PYTHON" -E -s -B "$TOOLS/../bootstrap.py" cli "$@"

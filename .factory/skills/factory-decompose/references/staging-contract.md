@@ -5,7 +5,7 @@
 After authoring the structured envelopes and Markdown prose, run:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/prepare_metadata.py \
+.factory/tooling/bin/cli decompose metadata \
   .factory/memory/staging/tasks .factory/memory/staging/decomposition-source.json \
   --checkpoint UNIQUE_CHECKPOINT_ID
 ```

@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,7 @@ from typing import Any
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, snapshot
 from factory.review.protocol.contracts import expected_gates as resolve_gates
+from tests import CLI
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
 
 POLICY = snapshot(
@@ -24,8 +24,6 @@ def expected_gates(paths: list[str]) -> dict[str, list[str]]:
 
 SCRIPTS = FACTORY_ROOT / "gates/skills/code-review"
 REPOSITORY_ROOT = SCRIPTS.parents[3]
-VALIDATOR = SCRIPTS / "validate_review_protocol.py"
-TOOL_RUNNER = SCRIPTS / "run_tool_checks.py"
 IDENTITY_FIELDS = (
     "schema_version",
     "review_id",
@@ -305,8 +303,9 @@ class ProtocolFixture:
             write_json(path, value)
         write_json(qa_path, self.qa)
         argv = [
-            sys.executable,
-            str(VALIDATOR),
+            *CLI,
+            "review",
+            "validate",
             "--manifest",
             str(manifest_path),
         ]

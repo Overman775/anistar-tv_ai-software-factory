@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from factory.diagnostics.events import event
 from factory.runtime.contracts import Dispatch, Node, State, agent_key
 from factory.runtime.history.artifact_ref import Artifact
 from factory.runtime.packets.content import (
@@ -132,6 +131,7 @@ def read_packet(
             packets=journal.packets,
             history=journal.history,
         )
+        journal.diagnostic_attempt = (node_id, expected["dispatch_id"])
         chunks = packet_chunks(data)
         total = len(chunks)
         require(type(chunk) is int and 1 <= chunk <= total, "Invalid packet chunk")
@@ -150,13 +150,6 @@ def read_packet(
         packet_response(response)
         serve_chunk(
             journal.root, expected, chunks, chunk, received, handle, packets=journal.packets
-        )
-        event(
-            "packet_chunk_served",
-            run_id=s["run_id"],
-            task_id=n["task"],
-            node_id=node_id,
-            dispatch_id=v["dispatch_id"],
         )
         return response
 
@@ -194,6 +187,7 @@ def confirm_packet(
             packets=journal.packets,
             history=journal.history,
         )
+        journal.diagnostic_attempt = (node_id, expected["dispatch_id"])
         confirm_delivery(
             journal.root, expected, data, received, materials, handle, packets=journal.packets
         )

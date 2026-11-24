@@ -4,7 +4,6 @@ import json
 import shutil
 import sqlite3
 import subprocess
-import sys
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
@@ -12,7 +11,6 @@ from unittest.mock import Mock, patch
 from factory.database.port import DatabaseBackend
 from factory.database.provider import current_database, use_database
 from factory.database.sqlite import artifacts, sqlite_history_repository
-from factory.paths import BIN
 from factory.runtime import teacher
 from factory.runtime.history import report_history
 from factory.runtime.history import task_records as memory
@@ -20,6 +18,7 @@ from factory.runtime.knowledge import case_search
 from factory.runtime.lessons import Lesson, catalog
 from factory.runtime.packets.content import PACKET_REFERENCE, delivery_state
 from factory.runtime.workflow_core import Invalid
+from tests import CLI
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
 
 
@@ -157,8 +156,8 @@ class HistoryStoreTests(unittest.TestCase):
         self.assertEqual(([], []), case_search.search_cases(restored, "iridium"))
         for cmd in ("verify-history", "rebind-history"):
             args = [
-                sys.executable,
-                str(BIN / "workflow.py"),
+                *CLI,
+                "workflow",
                 "--workspace",
                 str(restored),
                 cmd,
@@ -182,8 +181,8 @@ class HistoryStoreTests(unittest.TestCase):
         self.assertEqual([], teacher.pending(restored))
         subprocess.run(
             [
-                sys.executable,
-                str(BIN / "workflow.py"),
+                *CLI,
+                "workflow",
                 "--workspace",
                 str(restored),
                 "reset-history-index",
@@ -192,7 +191,7 @@ class HistoryStoreTests(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual([hit], case_search.search_cases(restored, "iridium")[0])
-        cli = [sys.executable, str(BIN / "workflow.py"), "--workspace", str(restored)]
+        cli = [*CLI, "workflow", "--workspace", str(restored)]
         listing = json.loads(subprocess.check_output([*cli, "list-artifacts", run]))["result"]
         self.assertTrue(
             {"packet", "report", "usage", "attachment"} <= {item["kind"] for item in listing}

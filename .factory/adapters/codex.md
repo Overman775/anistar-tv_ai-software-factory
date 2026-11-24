@@ -41,15 +41,15 @@ Read `.factory/factory.yaml`; resolve role → profile → adapter. The adapter 
 owns harness, runner, connection and instructions; the profile owns role files,
 model, capabilities, MCP allowlist and enforcement. For native use a generic
 spawned agent, never assume a registered named role. For Implement, after claim
-use `workflow.py prepare-packet NODE --with-diagnostics` and inspect diagnostics.
+use `cli workflow prepare-packet NODE --with-diagnostics` and inspect diagnostics.
 Spawn the intended worker with a wait-only instruction. Bind the returned actual
 handle and model, prepare the same packet again, then send its bound `bootstrap`
 to that handle. Start a fresh turn with `followup_task` if the worker is idle.
 The worker uses `read_command` within the stated display budget and confirms
 delivery before work. Wait for all outstanding confirmations before coordinator
-checks. Full inline `workflow.py packet NODE` remains available when its entire
+checks. Full inline `cli workflow packet NODE` remains available when its entire
 contents can be delivered.
-Planning/Decompose/Code Review use their owning skill’s `context.py` assignment
+Planning/Decompose/Code Review use their owning skill’s `cli context` assignment
 route and staging; do not add Implement claim/ledger to those processes.
 Use the configured exact model/effort through actual supported spawn fields.
 An ACP adapter routes to its configured instruction file and ACP helper.

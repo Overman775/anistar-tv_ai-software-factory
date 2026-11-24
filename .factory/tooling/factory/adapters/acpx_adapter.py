@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ACP transport helper. Reservation/acceptance remain in workflow.py."""
+"""ACP transport helper. Reservation and acceptance belong to the workflow ledger."""
 
 from __future__ import annotations
 
@@ -11,12 +11,13 @@ import subprocess
 
 # Direct CLI execution and import-by-path use the same tool modules.
 import sys
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import IO, Any, Literal, NotRequired, Protocol, TypedDict
 from uuid import uuid4
 
+from factory.cli_output import emit_error
 from factory.diagnostics.events import event
 from factory.diagnostics.records import error_code
 from factory.logging_config import finish, initialize
@@ -81,21 +82,34 @@ def executable(command: str, config_dir: str | Path) -> str:
     return found
 
 
-def install_connection(config: Config, workspace: str | Path, alias: str) -> dict[str, Any]:
+def install_connection(
+    config: Config, workspace: str | Path, alias: str, *, dry_run: bool = False
+) -> dict[str, Any]:
     """Explicit setup only. Preserve unrelated configuration; reject conflicts."""
     conn = config["acpx"]["connections"][alias]
     argv = [executable(conn["command"], Path(config["_path"]).parent), *conn.get("args", [])]
-    target = Path(workspace) / ".acpxrc.json"
-    require(not target.is_symlink(), "Symlink acpx config")
-    current = read_json(target) if target.exists() else {}
-    agents = current.setdefault("agents", {})
-    require(
-        alias not in agents or agents[alias] == {"argv": argv},
-        "Existing ACP alias differs; reconcile explicitly",
+    root = Path(workspace)
+    target = root / ".acpxrc.json"
+    guard = (
+        nullcontext() if dry_run else lock(relative(root, ".factory/memory/state/acpx-setup.lock"))
     )
-    agents[alias] = {"argv": argv}
-    atomic_json(target, current)
-    return {"path": str(target), "agent": alias, "argv": argv}
+    with guard:
+        require(not target.is_symlink(), "Symlink acpx config")
+        current = read_json(target) if target.exists() else {}
+        require(isinstance(current, dict), "Invalid ACP settings")
+        agents = current.setdefault("agents", {})
+        require(isinstance(agents, dict), "Invalid ACP agents registry")
+        require(
+            alias not in agents or agents[alias] == {"argv": argv},
+            "Existing ACP alias differs; reconcile explicitly",
+        )
+        result: dict[str, Any] = {"path": str(target), "agent": alias, "argv": argv}
+        if dry_run:
+            result["would_write"] = alias not in agents
+        elif alias not in agents:
+            agents[alias] = {"argv": argv}
+            atomic_json(target, current)
+        return result
 
 
 def assignment(state: State, node_id: str) -> tuple[Node, Profile, Connection, str]:
@@ -427,20 +441,44 @@ def doctor(config: DoctorConfig, connection: str | None = None) -> dict[str, Any
     return result
 
 
-def main() -> int:
-    p = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    p = parser or argparse.ArgumentParser(description=__doc__)
     p.add_argument("--workspace", default=".")
     p.add_argument("--config", default=str(FACTORY_ROOT / "factory.yaml"))
     sub = p.add_subparsers(dest="action", required=True)
     sub.add_parser("doctor").add_argument(
         "--connection", help="Check only this connection and the acpx client"
     )
-    sub.add_parser("setup").add_argument("connection")
+    setup = sub.add_parser("setup", help="Register the configured ACP connection in this checkout")
+    setup.add_argument("connection")
+    setup.add_argument(
+        "--dry-run", action="store_true", help="Show the proposed local registry change"
+    )
     sub.add_parser("prepare").add_argument("node")
     r = sub.add_parser("run")
     r.add_argument("node")
     r.add_argument("operation", choices=["create", "show", "status", "prompt", "cancel", "close"])
-    args = p.parse_args()
+    return p
+
+
+def run(args: argparse.Namespace, p: argparse.ArgumentParser) -> int:
+    as_json = getattr(args, "json", False)
+    if args.action == "setup" and args.dry_run:
+        try:
+            preview = install_connection(
+                load_config(args.config),
+                Path(args.workspace).resolve(),
+                args.connection,
+                dry_run=True,
+            )
+        except (Invalid, KeyError, OSError, ValueError) as exc:
+            if as_json:
+                raise
+            p.exit(1, f"BLOCKED: {exc}\n")
+        print(json.dumps(preview, ensure_ascii=False, indent=2))
+        return 0
     handler = initialize(args.workspace, "acp_" + args.action)
     failed = False
     ledger = Ledger(args.workspace)
@@ -454,11 +492,18 @@ def main() -> int:
             result = prepare_prompt(ledger, args.node)
         else:
             result = run_operation(ledger, args.node, args.operation)
-        print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.action == "doctor" and result["errors"]:
             failed = True
             event("operation_failed", error_code="executable_unavailable")
+            if as_json:
+                emit_error(
+                    "executable_unavailable",
+                    "Unavailable ACP executables for " + ", ".join(result["errors"]),
+                )
+            else:
+                print(json.dumps(result, ensure_ascii=False, indent=2))
             return 1
+        print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.action in {"setup", "doctor"}:
             event("operation_completed")
         return 0
@@ -473,11 +518,16 @@ def main() -> int:
                 else {}
             ),
         )
-        if isinstance(exc, (Invalid, KeyError, OSError, ValueError)):
+        if not as_json and isinstance(exc, (Invalid, KeyError, OSError, ValueError)):
             p.exit(1, f"BLOCKED: {exc}\n")
         raise
     finally:
         finish(handler, failed=failed)
+
+
+def main() -> int:
+    p = build_parser()
+    return run(p.parse_args(), p)
 
 
 if __name__ == "__main__":

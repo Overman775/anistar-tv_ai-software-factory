@@ -324,13 +324,13 @@ source is a separate intake.
 
 Apply this contract separately to every source/task in a fixed batch. Snapshot
 and hash in the workflow ledger are per source; task/node/dispatch IDs disambiguate
-reports. Referenced plan approval still requires validate_plan.py. Do not use one
+reports. Referenced plan approval still requires `cli planning validate`. Do not use one
 source hash or mutable singleton brief for unrelated tasks. Re-intake invalidates
 affected assignments/evidence and retains counters; it never silently approves
 new semantics. The execution graph is technical preparation under
 `.factory/workflow/orchestration.md`, not a second semantic plan.
 
-Use `workflow.py reintake` with the revised graph, reason and actual source/user
+Use `cli workflow reintake` with the revised graph, reason and actual source/user
 authorization evidence after quiescing writers. It relocks sources, revalidates
 approvals and invalidates old node evidence while preserving all counters. New
 tasks need a separate run; source revision is not a retry-budget reset.

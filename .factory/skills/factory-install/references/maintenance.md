@@ -1,8 +1,7 @@
 # Update, repair and diagnosis
 
-Diagnosis inventories without mutating installed settings. The disposable dry run
-is allowed as a local probe; external doctor commands may have side effects, inspect
-before invoking. Distinguish missing executable, wrong PATH/interpreter, incompatible
+Diagnosis inventories without mutating installed settings. Verify command discovery
+through the launcher. Inspect external doctor commands for side effects before invoking. Distinguish missing executable, wrong PATH/interpreter, incompatible
 version, authentication failure, quota and unavailable host capability.
 
 Repair the failing component only; retain working compatible dependencies. Repeating
@@ -21,7 +20,7 @@ replaced owned files/settings; remove obsolete owned files only after checking
 local changes. Preserve a partial result and recovery instructions if a step fails.
 No automatic updater or transactional rollback is claimed.
 
-Repeat relevant verification after changes: dry run for factory/Python changes,
+Repeat relevant verification after changes: CLI discovery and configuration validation for factory/Python changes,
 host discovery after skill wiring, selected transport after adapter/client changes,
 corpus checks after ignore changes. Newly excluded components are not silently
 reinstalled. Report actual versions, remaining blockers and restart requirements.
@@ -49,6 +48,6 @@ Keep the backup until verification completes. On interruption, stop writers, res
 all affected paths and links from that backup, verify hashes, then retry the inventory
 and comparison. A repeated install recognizes `.factory/` and preserves memory.
 
-When upgrading an existing configuration, merge missing Teacher profile and model entries from the example while preserving selected variants and existing aliases. Verify `lessons.py teacher-launch` in the installed checkout.
+When upgrading an existing configuration, merge missing Teacher profile and model entries from the example while preserving selected variants and existing aliases. Verify `cli lessons teacher-launch` in the installed checkout.
 
 Seed `.factory/memory/USER.md` empty only when missing. Preserve existing owner text and both lesson scopes on reinstall. Install factory-lessons for each enabled host. When migrating, replace the two previous factory-owned capture/refresh aliases and remove their obsolete factory skill directories after preserving local changes. The SQLite cache, Teacher queue and each run archive belong to the local checkout.

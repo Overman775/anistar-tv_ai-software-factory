@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 import unittest
 from collections.abc import Callable
 from copy import deepcopy
@@ -19,11 +18,9 @@ from factory.runtime.contracts import agent_key
 from factory.runtime.scheduling import escalation
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid, atomic_json
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import overwrite
-
-_TOOLS = Path(__file__).resolve().parents[4] / "bin"
-
 
 ROOT = workflow_fixture.ROOT
 
@@ -104,6 +101,55 @@ class EscalationTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "Budget exhausted"):
             f.ledger.resume_task("label", "try again")
 
+    def test_timeline_preserves_repeated_decisions_and_their_original_dispatches(self) -> None:
+        f = self.f
+        run = f.init()["run_id"]
+        expected = []
+        for decision in ("escalate", "retry", "human"):
+            request = self.fail_verification()
+            record = f.ledger.correct("write-label", request)
+            f.ledger.correct("write-label", request)
+            expected.append(
+                {
+                    "factory.node.id": "write-label",
+                    "factory.dispatch.id": request["author_dispatch_id"],
+                    "factory.correction.evidence_node": "verify-label",
+                    "factory.correction.evidence_dispatch": request["evidence_dispatch_id"],
+                    "factory.correction.cause": "tests",
+                    "factory.correction.from_profile": record["from_profile"],
+                    "factory.correction.to_profile": record["to_profile"],
+                    "factory.correction.decision": decision,
+                }
+            )
+        for archived in (False, True):
+            if archived:
+                f.ledger.archive("cancelled", "Fixture")
+                f.ledger.clean()
+            reply = subprocess.run(
+                [
+                    *CLI,
+                    "telemetry",
+                    "show",
+                    "--workspace",
+                    str(f.root),
+                    "--run",
+                    run,
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            root = json.loads(reply.stdout)["observations"][0]
+            self.assertEqual(
+                [
+                    e["attributes"]
+                    for e in root["events"]
+                    if e["name"] == "factory.run.correction_decided"
+                ],
+                expected,
+            )
+            self.assertNotIn(request["handoff"], reply.stdout)
+
     def test_replay_and_conflicting_diagnosis_cannot_spend_again(self) -> None:
         f = self.f
         f.init()
@@ -183,8 +229,8 @@ class EscalationTests(unittest.TestCase):
         atomic_json(path, graph)
         result = subprocess.run(
             [
-                sys.executable,
-                str(_TOOLS / "workflow.py"),
+                *CLI,
+                "workflow",
                 "--workspace",
                 str(f.root),
                 "revise",

@@ -1,6 +1,6 @@
 # Capture an observed case
 
-Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/lessons.py`
+Use `.factory/tooling/bin/cli lessons`
 from the project root. Run `packet EVENT` for the incident, sources and full
 catalog. For a completed run, review all entries in `event.incidents` together.
 Each entry contains its task reports, confirmed reuse and linked retrospective notes.
@@ -39,7 +39,7 @@ and conditions warrant a new card, an update to an existing card, or no change.
 For a reported problem with an existing card, reproduce the failed query or
 decision and hand a warranted repair to the coordinator as described below.
 
-Before drafting, run `search_lessons "SYMPTOM"` with the worker’s description
+Before drafting, run `cli lessons search "SYMPTOM"` with the worker’s description
 in the project language, including for English cards. Use words a worker knows
 before diagnosis. When the symptom can be described in that language, try ordinary
 wording without copying the exact English error. Include salient words from the

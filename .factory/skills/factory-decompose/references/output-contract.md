@@ -9,7 +9,7 @@ Never replace this with manual copying or reuse an old PASS after changes.
 Run the graph and project checks and bind the real author/reviewer assignment identities:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/assemble.py review-request \
+.factory/tooling/bin/cli decompose assemble review-request \
   --staging-dir .factory/memory/staging/tasks \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --request .factory/memory/staging/review-request.json \
@@ -46,7 +46,7 @@ set. A decomposer fast-fix instead supplies a fresh author's Done Signal.
 ## Transactional final assembly
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/assemble.py assemble \
+.factory/tooling/bin/cli decompose assemble assemble \
   --staging-dir .factory/memory/staging/tasks \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --request .factory/memory/staging/review-request.json \

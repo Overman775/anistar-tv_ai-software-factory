@@ -166,6 +166,49 @@ def session_spans(
         )
 
 
+def workflow_milestones(record: RunObservation) -> Iterator[ObservationEvent]:
+    # Both ordered lists are appended in the same correction transaction. Older
+    # incomplete histories can still expose the markers without inferring identities.
+    markers = [
+        (e.node, e.decision, e.target) for e in record.events if e.kind == "correction_decided"
+    ]
+    details = (
+        iter(record.corrections)
+        if markers == [(c.node, c.decision, c.to_profile) for c in record.corrections]
+        else iter(())
+    )
+    for event in record.events:
+        if event.kind not in {"retry", "revised", "accepted", "correction_decided"}:
+            continue
+        fields: dict[str, Scalar] = {}
+        if event.node:
+            fields["factory.node.id"] = event.node
+        if event.kind == "retry" and event.stage in {
+            "static",
+            "tests",
+            "docs",
+            "review",
+            "recovery",
+        }:
+            fields["factory.retry.stage"] = event.stage
+        if event.kind == "correction_decided":
+            if event.decision in {"blocked", "human", "retry", "escalate"}:
+                fields["factory.correction.decision"] = event.decision
+            if event.target:
+                fields["factory.correction.to_profile"] = event.target
+            if correction := next(details, None):
+                fields.update(
+                    {
+                        "factory.correction.from_profile": correction.from_profile,
+                        "factory.correction.cause": correction.cause,
+                        "factory.dispatch.id": correction.author_dispatch,
+                        "factory.correction.evidence_node": correction.evidence_node,
+                        "factory.correction.evidence_dispatch": correction.evidence_dispatch,
+                    }
+                )
+        yield ObservationEvent(f"factory.run.{event.kind}", int(event.at * 1_000_000_000), fields)
+
+
 def run_spans(record: RunObservation) -> Iterator[Observation]:
     run = record.run
     end = nanos(record.at) if record.at is not None else None
@@ -178,22 +221,23 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
     starts: dict[str, tuple[str, int, str | None, str | None]] = {}
     current: dict[str, str] = {}
     finishes: dict[str, tuple[int, str | None]] = {}
-    for event, at, node, dispatch, outcome, state, role, harness in record.events:
-        when = int(at * 1_000_000_000)
+    for entry in record.events:
+        event, node, dispatch = entry.kind, entry.node, entry.dispatch
+        when = int(entry.at * 1_000_000_000)
         if event == "archived":
             end = when
         elif event == "created":
             started = when
         elif event == "reserved" and node and dispatch:
             current[node] = dispatch
-            starts[dispatch] = node, when, role, harness
+            starts[dispatch] = node, when, entry.role, entry.harness
         elif (
             node is not None
             and node in current
-            and (event == "finished" or (event == "reconciled" and state == "blocked"))
+            and (event == "finished" or (event == "reconciled" and entry.status == "blocked"))
         ):
-            finishes[current[node]] = when, outcome or state
-    yield span(
+            finishes[current[node]] = when, entry.outcome or entry.status
+    run_span = span(
         "factory.run",
         run,
         root,
@@ -202,6 +246,8 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
         end,
         {**common, "factory.outcome": record.status},
     )
+    run_span.events.extend(workflow_milestones(record))
+    yield run_span
     for dispatch, (node, begin, role, harness) in starts.items():
         assignment = assignments.get(dispatch)
         # A missing terminal event gives only a reservation instant.
@@ -218,6 +264,7 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
                 "factory.node.id": node,
                 "factory.dispatch.id": dispatch,
                 "factory.outcome": result,
+                "factory.attempt.current": dispatch in record.current_dispatches,
                 "factory.role": role or (assignment.role if assignment else None),
                 "factory.harness": harness or (assignment.harness if assignment else None),
             },

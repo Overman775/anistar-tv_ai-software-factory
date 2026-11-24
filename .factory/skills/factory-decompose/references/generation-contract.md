@@ -11,7 +11,7 @@ creating staging files. Lock:
   "plan_revision": 2,
   "plan_hash": "sha256:...",
   "plan_content_hash": "sha256:...",
-  "project_policy_sha256": "profile composition hash from project.py context",
+  "project_policy_sha256": "profile composition hash from cli project context",
   "plan_path": "docs/plans/payment-trust.md",
   "capability_ids": ["CAP-01"],
   "acceptance_ids": ["AC-01"]
@@ -24,7 +24,7 @@ After the coordinator establishes approval, prepare the record from the applicat
 working directory, then save the output as the source lock:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/prepare_source_lock.py \
+.factory/tooling/bin/cli decompose source-lock \
   --plan docs/plans/payment-trust.md --config .factory/factory.yaml
 ```
 

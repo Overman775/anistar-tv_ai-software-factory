@@ -3,7 +3,7 @@
 Implement command nodes require an existing project-checks reservation and profile
 command capability. This file grants neither. Read actual project command definitions
 and `.factory/skills/factory-implement/references/project-checks.md` before commands.
-Run required commands with `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`.
+Run required commands with `.factory/tooling/bin/cli checks run NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`.
 Copy its returned result unchanged into checks, or select its execution ID in
 `prepare-report` and leave it out of draft checks. Do not do both: duplicate
 selected check IDs are rejected. CLI ok:true means a saved record,
@@ -23,7 +23,7 @@ independent APPROVE. Correct assertions and nonzero test selection need inspecti
 
 `verify` returns each required check's exact `id/category/kind/criteria/method`, plus
 `execution`, command/cwd/exit code, `execution_id` and the log reference returned
-by `workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`, or an observation. Copy runner results
+by `cli checks run NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID`, or an observation. Copy runner results
 unchanged; do not manufacture command evidence. Required commands need an
 `execution` definition before intake. `argv` is an argument array (no implicit
 shell), `cwd` is workspace-relative, timeout is a positive integer in seconds
@@ -83,7 +83,7 @@ honest evidence; full command recovery belongs to the coordinator.
 An assigned check may declare registered ordered `execution.stages` and an empty
 `argv`. The runner executes each registered read-only full stage once and records distinct
 child receipts, command results, input hashes and logs under the parent execution.
-Use `check-results EXECUTION_ID` to retrieve the parent and child results. Select the parent execution ID in `prepare-report` to include its recorded child
+Use `checks results EXECUTION_ID` to retrieve the parent and child results. Select the parent execution ID in `prepare-report` to include its recorded child
 receipts, or select individual receipt IDs explicitly. A stage that never ran has
 no receipt and cannot satisfy its gate. Judge uses its own
 assignment. A `codegen` command may declare exact owned `outputs`; the runner

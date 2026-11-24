@@ -7,7 +7,7 @@ Copy identities from the assignment. Use the displayed `finish_requirements`.
 For projected integration work, `task.scope` shows the worker's local paths.
 Use `prepare-report` to capture the authoritative snapshot at handoff.
 `checks` contains actual results, never planned commands masquerading as evidence.
-At author handoff, the worker may call `workflow.py prepare-report NODE DRAFT [RECEIPT_ID ...]`.
+At author handoff, the worker may call `cli workflow prepare-report NODE DRAFT [RECEIPT_ID ...]`.
 Use `-` for DRAFT to read JSON from stdin when no assigned draft path is available.
 The draft carries run_id, dispatch_id, source_hash and node_id from the assignment,
 author fields and any observation checks,

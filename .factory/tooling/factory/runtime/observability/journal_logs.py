@@ -1,4 +1,4 @@
-"""Encode a local diagnostic snapshot as newline-delimited OTLP JSON log requests."""
+"""Project a local diagnostic snapshot to OTLP JSON log requests."""
 
 import json
 from collections.abc import Iterator
@@ -60,7 +60,7 @@ def project_log(payload: str) -> JournalLog | None:
     )
 
 
-def journal_lines(root: Path, store: DiagnosticJournal) -> Iterator[str]:
+def journal_records(root: Path, store: DiagnosticJournal) -> Iterator[dict[str, object]]:
     resource = {"attributes": [{"key": "service.name", "value": {"stringValue": "overfactory"}}]}
     for payload in store.snapshot(root):
         record = project_log(payload)
@@ -80,6 +80,9 @@ def journal_lines(root: Path, store: DiagnosticJournal) -> Iterator[str]:
         if record.trace:
             log["traceId"], log["spanId"] = record.trace, record.span
         scope = {"scope": {"name": "overfactory.diagnostics"}, "logRecords": [log]}
-        yield json.dumps(
-            {"resourceLogs": [{"resource": resource, "scopeLogs": [scope]}]}, separators=(",", ":")
-        )
+        yield {"resourceLogs": [{"resource": resource, "scopeLogs": [scope]}]}
+
+
+def journal_lines(root: Path, store: DiagnosticJournal) -> Iterator[str]:
+    for record in journal_records(root, store):
+        yield json.dumps(record, separators=(",", ":"))

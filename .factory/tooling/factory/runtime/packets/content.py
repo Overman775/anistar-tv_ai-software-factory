@@ -2,8 +2,6 @@
 
 import json
 import os
-import platform
-import shlex
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -13,6 +11,7 @@ from pydantic import TypeAdapter, ValidationError
 from factory import file_reader
 from factory.context.context import WORKER_PROFILE_FIELDS
 from factory.database.provider import current_database
+from factory.runtime.agent_commands import command_shell, factory_command
 from factory.runtime.contracts import (
     Dispatch,
     Node,
@@ -315,10 +314,6 @@ def confirm_delivery(
 
 def packet_bootstrap(root: Path, s: State, n: Node, meta: PacketRef) -> dict[str, Any]:
     args = [
-        ".factory/tooling/bin/workflow.py",
-        "--workspace",
-        str(root),
-        "read-packet",
         meta["node_id"],
         meta["path"],
         meta["sha256"],
@@ -327,30 +322,15 @@ def packet_bootstrap(root: Path, s: State, n: Node, meta: PacketRef) -> dict[str
         meta["source_hash"],
         meta["revision"],
     ]
-    if platform.system() == "Windows":
-        # PowerShell single quotes prevent shell interpolation of workspace paths.
-        quote = lambda value: "'" + value.replace("'", "''") + "'"  # noqa: E731
-        prefix = [
-            ".\\.factory\\.venv\\Scripts\\python.exe",
-            "-E",
-            "-s",
-            "-B",
-            ".factory/tooling/bootstrap.py",
-            "run",
-        ]
-        shell = "PowerShell"
-    else:
-        quote = shlex.quote
-        prefix = ["sh", ".factory/tooling/bin/python.sh"]
-        shell = "POSIX shell"
+    shell = command_shell()
     recipient = s["nodes"][n["id"]].get("handle")
     if recipient:
         args.extend(["--recipient", recipient])
-    read_args = [*prefix, *args, "--chunk", "1"]
-    confirm_args = [*prefix, *args[:3], "confirm-packet", *args[4:]]
-    operator = "& " if shell == "PowerShell" else ""
-    command = operator + " ".join(map(quote, read_args))
-    confirm = operator + " ".join(map(quote, confirm_args))
+    config = s["config"]["_path"]
+    command = factory_command(
+        root, config, "workflow", "read-packet", *args, shell=shell, trailing=("--chunk", "1")
+    )
+    confirm = factory_command(root, config, "workflow", "confirm-packet", *args, shell=shell)
     return {
         **meta,
         "workspace": str(root),

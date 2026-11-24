@@ -46,9 +46,11 @@ class RunJournal:
         self.diagnostic_state: dict[str, Any] | None = None
         self.diagnostic_attempt: tuple[str, str] | None = None
 
-    def failure_context(self, node_id: object) -> dict[str, object]:
+    def failure_context(
+        self, node_id: object, *, expected_run: str | None = None
+    ) -> dict[str, object]:
         state = self.diagnostic_state
-        if state is None:
+        if state is None or (expected_run is not None and expected_run != state["run_id"]):
             return {}
         fields: dict[str, object] = {"run_id": state["run_id"]}
         if isinstance(node_id, str) and node_id in state["nodes"]:
@@ -61,6 +63,8 @@ class RunJournal:
         return lock(relative(self.root, ".factory/memory/state/workflow.lock"), wait=wait)
 
     def read(self) -> State:
+        self.diagnostic_state = None
+        self.diagnostic_attempt = None
         state = self.runs.get_current(self.root)
         self.diagnostic_state = {
             "run_id": state["run_id"],

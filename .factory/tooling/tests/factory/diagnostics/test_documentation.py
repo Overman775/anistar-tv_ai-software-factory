@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import shlex
 import subprocess
@@ -17,6 +16,7 @@ from markdown_it import MarkdownIt
 
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile
+from tests import CLI
 
 PARSER = MarkdownIt("commonmark", {"html": True})
 
@@ -103,7 +103,8 @@ def link_errors(root: Path, files: list[Path]) -> list[str]:
 
 class DocumentationTests(unittest.TestCase):
     def test_shipped_links(self) -> None:
-        files = [FACTORY_ROOT / "tooling/README.md"]
+        files = sorted((FACTORY_ROOT / "workflow").rglob("*.md"))
+        files += sorted((FACTORY_ROOT / "gates").rglob("*.md"))
         files += sorted((FACTORY_ROOT / "contracts").rglob("*.md"))
         files += sorted((FACTORY_ROOT / "project/rules").rglob("*.md"))
         for skill in sorted((FACTORY_ROOT / "skills").glob("factory-*")):
@@ -111,33 +112,19 @@ class DocumentationTests(unittest.TestCase):
         self.assertTrue(files)
         self.assertEqual([], link_errors(FACTORY_ROOT.parent, files))
 
-    def test_documented_dry_run_command(self) -> None:
-        readme = (FACTORY_ROOT / "tooling/README.md").read_text(encoding="utf-8")
-        tokens = PARSER.parse(readme)
-        heading = next(
-            i
-            for i, token in enumerate(tokens)
-            if token.type == "inline"
-            and token.content == "Dry run without a project or model calls"
-        )
-        command = next(
-            token.content
-            for token in tokens[heading + 1 :]
-            if token.type == "fence" and token.info == "bash"
-        )
-        args = shlex.split(command)
-        self.assertEqual(
-            args, ["sh", ".factory/tooling/bin/python.sh", "-B", ".factory/tooling/bin/dry_run.py"]
-        )
-        launcher = FACTORY_ROOT / "tooling/bin" / ("python.cmd" if os.name == "nt" else "python.sh")
-        script = FACTORY_ROOT / "tooling/bin/dry_run.py"
-        invocation = ([str(launcher)] if os.name == "nt" else ["sh", str(launcher)]) + [
-            "-B",
-            str(script),
+    def test_documented_command_discovery(self) -> None:
+        verification = FACTORY_ROOT / "skills/factory-install/references/verification.md"
+        tokens = PARSER.parse(verification.read_text(encoding="utf-8"))
+        examples = [
+            shlex.split(token.content)
+            for token in tokens
+            if token.type == "fence" and token.info in {"sh", "bash"}
         ]
+        args = [".factory/tooling/bin/cli", "help", "--json"]
+        self.assertIn(args, examples)
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
-                invocation,
+                [*CLI, *args[1:]],
                 cwd=directory,
                 capture_output=True,
                 text=True,
@@ -147,9 +134,9 @@ class DocumentationTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)
-        self.assertEqual(output["status"], "PASS")
-        self.assertEqual(output["model_calls"], 0)
-        self.assertEqual(len(output["checks"]), 7)
+        self.assertEqual(output["schema_version"], 1)
+        paths = {tuple(command["path"]) for command in output["commands"]}
+        self.assertTrue({("workflow", "config"), ("checks", "run"), ("tooling", "check")} <= paths)
 
     def test_linked_yaml_profile(self) -> None:
         rules = FACTORY_ROOT / "skills/factory-project-configure/references/rules.md"

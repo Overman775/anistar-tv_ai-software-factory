@@ -177,8 +177,10 @@ def review_snapshot(
         )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=".factory/factory.yaml")
     parser.add_argument("--workspace", default=".")
     sub = parser.add_subparsers(dest="action", required=True)
@@ -201,7 +203,10 @@ def main() -> None:
     )
     review.add_argument("--revision", required=True)
     review.add_argument("--profile-path", default=".factory/project/project.yaml")
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     result: object
     try:
         with diagnostic_operation(args.workspace, "project." + args.action):
@@ -280,7 +285,14 @@ def main() -> None:
                     }
             print(json.dumps(result, ensure_ascii=False, indent=2))
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
+        if getattr(args, "json", False) and isinstance(exc, (OSError, ValueError)):
+            raise
         parser.exit(1, f"BLOCKED: {exc}\n")
+
+
+def main() -> None:
+    parser = build_parser()
+    run(parser.parse_args(), parser)
 
 
 if __name__ == "__main__":

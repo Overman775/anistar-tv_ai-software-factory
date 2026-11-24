@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
+from factory.cli_output import emit_error
 from factory.paths import FACTORY_ROOT
 from factory.review.protocol.contracts import IDENTITY_FIELDS, validate_manifest
 from factory.review.protocol.diff import load_diff_context
@@ -271,11 +272,9 @@ def initialize(request: Path, run: Path) -> dict[str, Any]:
             if not Path(p).is_file():
                 raise ValueError(f"missing check input: {p}")
             paths.append(p)
-    paths += [str(p.resolve()) for p in (FACTORY_ROOT / "gates/skills/code-review").glob("*.py")]
     paths += [
         str(p.resolve())
         for directory, pattern in [
-            ("tooling/bin", "project.py"),
             ("contracts/common", "*.md"),
             ("skills/factory-code-review/references", "*.md"),
         ]
@@ -296,7 +295,10 @@ def initialize(request: Path, run: Path) -> dict[str, Any]:
         ]
     ]
     paths += [str(p.resolve()) for p in (FACTORY_ROOT / "tooling/factory").rglob("*.py")]
-    paths.append(str(FACTORY_ROOT / "skills/factory-code-review/scripts/review_run.py"))
+    paths.extend(
+        str(FACTORY_ROOT / path)
+        for path in ("tooling/bootstrap.py", "tooling/bin/cli", "tooling/bin/cli.cmd")
+    )
     paths.append(str(Path(__file__).resolve()))
     if manifest.get("diff_file"):
         paths.append(manifest["diff_file"])
@@ -319,8 +321,10 @@ def initialize(request: Path, run: Path) -> dict[str, Any]:
     return inspect(run, manifest)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
         choices=["init", "status", "assignment", "check", "submit", "finish", "recover-legacy"],
@@ -329,7 +333,26 @@ def main() -> None:
     parser.add_argument("--input", type=Path)
     parser.add_argument("--id")
     parser.add_argument("--legacy-owner-pid", type=int)
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
+    as_json = getattr(args, "json", False)
+    if as_json and args.action in {"init", "submit", "finish"} and args.input is None:
+        emit_error("review_run", f"review run {args.action} requires --input")
+        return 1
+    try:
+        _operate(args)
+    except (subprocess.CalledProcessError, StopIteration, TypeError) as exc:
+        if not as_json:
+            raise
+        message = str(exc) or f"Unknown review assignment or check: {args.id}"
+        emit_error("review_run", message)
+        return 1
+    return 0
+
+
+def _operate(args: argparse.Namespace) -> None:
     run = args.run.resolve()
     if args.action == "init":
         print(json.dumps(initialize(args.input, run), ensure_ascii=False))
@@ -444,6 +467,11 @@ def main() -> None:
             print(json.dumps(final_result, ensure_ascii=False, indent=2))
             return
         print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def main() -> None:
+    parser = build_parser()
+    raise SystemExit(run(parser.parse_args()))
 
 
 if __name__ == "__main__":

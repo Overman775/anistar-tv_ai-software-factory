@@ -250,12 +250,17 @@ def apply(staging: Path, source_lock: Path, checkpoint_id: str) -> dict[str, obj
             temporary.unlink(missing_ok=True)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("staging", type=Path)
     parser.add_argument("source_lock", type=Path)
     parser.add_argument("--checkpoint", required=True, help="new safe checkpoint ID")
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     try:
         print(
             json.dumps(
@@ -264,6 +269,11 @@ def main() -> None:
         )
     except (OSError, ValueError, KeyError, TypeError) as exc:
         parser.exit(1, f"BLOCKED: {exc}\n")
+
+
+def main() -> None:
+    parser = build_parser()
+    run(parser.parse_args(), parser)
 
 
 if __name__ == "__main__":

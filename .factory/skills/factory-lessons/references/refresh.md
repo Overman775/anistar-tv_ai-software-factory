@@ -1,6 +1,6 @@
 # Maintain the lesson catalog
 
-Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/lessons.py` in the assigned checkout. Read `packet EVENT` and compare the request, current cards and source evidence.
+Use `.factory/tooling/bin/cli lessons` in the assigned checkout. Read `packet EVENT` and compare the request, current cards and source evidence.
 
 For a reported retrieval or application failure, review the implicated card against the actual query or example. If a correction is warranted, hand the ID and failing example to the coordinator for targeted Edit with the original symptom or example. Leave the originating review pending for the coordinator to close after queuing the edit. For a catalog audit, review the rest only within the requested scope.
 

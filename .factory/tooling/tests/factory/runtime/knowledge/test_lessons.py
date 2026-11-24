@@ -4,7 +4,6 @@ import json
 import shutil
 import sqlite3
 import subprocess
-import sys
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +16,7 @@ from factory.adapters.acpx_adapter import prepare_prompt
 from factory.database.port import DatabaseBackend
 from factory.database.provider import current_database, use_database
 from factory.database.sqlite import workflow_db
-from factory.paths import BIN, FACTORY_ROOT
+from factory.paths import FACTORY_ROOT
 from factory.runtime import lessons, teacher
 from factory.runtime.history import report_history
 from factory.runtime.knowledge.case_search import search_cases
@@ -26,6 +25,7 @@ from factory.runtime.lessons import BASE, Lesson, catalog, lookup, search_lesson
 from factory.runtime.observability import lesson_telemetry
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
+from tests import CLI
 from tests.factory.runtime.workflow_fixture import WorkflowFixture
 
 
@@ -123,13 +123,13 @@ class LessonTests(unittest.TestCase):
 
         def cli(*args: str) -> str:
             return subprocess.check_output(
-                [sys.executable, str(BIN / "lessons.py"), "--workspace", str(f.root), *args],
+                [*CLI, "lessons", "--workspace", str(f.root), *args],
                 text=True,
             )
 
         def search(query: str) -> list[dict[str, str]]:
             matches: list[dict[str, str]] = json.loads(
-                cli("search_lessons", query, "--run", run, "--dispatch", dispatch)
+                cli("search", query, "--run", run, "--dispatch", dispatch)
             )
             return matches
 
@@ -152,7 +152,7 @@ class LessonTests(unittest.TestCase):
         teacher.complete(f.root, key, reason="Confirmed in this run")
         teacher.complete(f.root, key)
         # A search outside an assignment remains visible only in workspace totals.
-        self.assertEqual([], json.loads(cli("search_lessons", "standalone")))
+        self.assertEqual([], json.loads(cli("search", "standalone")))
         restored = self.root / "restored"
         target = restored / workflow_db.DATABASE
         target.parent.mkdir(parents=True)
@@ -236,9 +236,7 @@ class LessonTests(unittest.TestCase):
 
     def test_ready_queue_preserves_operation_and_waiting_owner(self) -> None:
         def cli(*args: str) -> object:
-            out = subprocess.check_output(
-                [sys.executable, str(BIN / "lessons.py"), "--workspace", str(self.root), *args]
-            )
+            out = subprocess.check_output([*CLI, "lessons", "--workspace", str(self.root), *args])
             return json.loads(out)
 
         old = teacher.apply(self.root, self.key, self.card, None)
@@ -294,7 +292,7 @@ class LessonTests(unittest.TestCase):
     def test_user_creation_edit_delete_through_cli(self) -> None:
         def cli(*args: str, payload: Lesson | None = None) -> str:
             result = subprocess.run(
-                [sys.executable, str(BIN / "lessons.py"), "--workspace", str(self.root), *args],
+                [*CLI, "lessons", "--workspace", str(self.root), *args],
                 input=payload.model_dump_json(exclude={"sources"}) if payload else None,
                 capture_output=True,
                 text=True,
@@ -316,9 +314,7 @@ class LessonTests(unittest.TestCase):
         self.assertTrue(
             all(s.startswith("user:chat/") for s in updated["lesson"]["sources"]["case"])
         )
-        self.assertEqual(
-            ["packet"], [r["id"] for r in json.loads(cli("search_lessons", "передача"))]
-        )
+        self.assertEqual(["packet"], [r["id"] for r in json.loads(cli("search", "передача"))])
         deletion = json.loads(
             cli("user", "case", "chat/msg3", "Delete packet", "--delete", "packet")
         )
@@ -327,7 +323,7 @@ class LessonTests(unittest.TestCase):
         cli("delete", deletion, "--revision", updated["revision"])
         cli("delete", deletion, "--revision", updated["revision"])
         cli("complete", deletion)
-        self.assertEqual([], json.loads(cli("search_lessons", "передача")))
+        self.assertEqual([], json.loads(cli("search", "передача")))
         self.assertFalse((self.root / updated["path"]).exists())
 
     def test_deletion_requires_target_request_and_no_inbound_links(self) -> None:
@@ -489,11 +485,11 @@ class LessonTests(unittest.TestCase):
         path.write_text("corrupt", encoding="utf-8")
         run = subprocess.run(
             [
-                sys.executable,
-                str(BIN / "lessons.py"),
+                *CLI,
+                "lessons",
                 "--workspace",
                 str(self.root),
-                "search_lessons",
+                "search",
                 "wrong",
             ],
             capture_output=True,
@@ -579,7 +575,7 @@ class LessonTests(unittest.TestCase):
     def test_retro_event_stays_on_its_git_branch(self) -> None:
         def cli(*args: str) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
-                [sys.executable, str(BIN / "lessons.py"), "--workspace", str(self.root), *args],
+                [*CLI, "lessons", "--workspace", str(self.root), *args],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -781,8 +777,8 @@ class TeacherWorkflowTests(unittest.TestCase):
         f.complete()
         incident = f"{run_id}/accept-label"
         command = [
-            sys.executable,
-            str(BIN / "workflow.py"),
+            *CLI,
+            "workflow",
             "--workspace",
             str(f.root),
             "record-retro",
@@ -930,9 +926,9 @@ class ArchivedCaseSearchTests(unittest.TestCase):
         f.ledger.clean()
         before = teacher.pending(f.root)
 
-        command = [sys.executable, str(BIN / "lessons.py"), "--workspace", str(f.root)]
+        command = [*CLI, "lessons", "--workspace", str(f.root)]
         query = "invar shuttle"
-        plain = subprocess.check_output([*command, "search_lessons", query])
+        plain = subprocess.check_output([*command, "search", query])
         self.assertEqual([], json.loads(plain))
         self.assertEqual(([], []), search_cases(f.root, "telescopic"))
         self.assertEqual(([], []), search_cases(f.root, "ultraviolet"))
@@ -947,9 +943,7 @@ class ArchivedCaseSearchTests(unittest.TestCase):
             action="Check the plate after it cools",
         )
         teacher.apply(f.root, before[0], lesson, None)
-        hits = json.loads(
-            subprocess.check_output([*command, "search_lessons", query, "--include-history"])
-        )
+        hits = json.loads(subprocess.check_output([*command, "search", query, "--include-history"]))
         self.assertEqual(["lesson", "case"], [hit["source_type"] for hit in hits])
         _, case = hits
         self.assertEqual((node, 3), (case["node"], case["ordinal"]))
@@ -960,8 +954,8 @@ class ArchivedCaseSearchTests(unittest.TestCase):
         payload = json.loads(
             subprocess.check_output(
                 [
-                    sys.executable,
-                    str(BIN / "workflow.py"),
+                    *CLI,
+                    "workflow",
                     "--workspace",
                     str(f.root),
                     "read-report",
@@ -1098,8 +1092,8 @@ class TeacherDispatchTests(unittest.TestCase):
         path = bundle / "factory.yaml"
         config = yaml.safe_load(path.read_text())
         command = [
-            sys.executable,
-            str(BIN / "lessons.py"),
+            *CLI,
+            "lessons",
             "--workspace",
             str(f.root),
             "teacher-launch",

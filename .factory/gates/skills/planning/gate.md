@@ -18,6 +18,6 @@ plan_hash (digest of plan text), policy_hash (from preflight gate_result),
 coordinator_id, verdict (APPROVE/NEEDS_WORK/BLOCKED), evidence (nonempty references)
 and approval_evidence (actual user authorization references). Obtain hashes from
 the validator output; never invent approval or provenance.
-Run validate_plan.py --phase approved --plan PATH --completion-review REPORT.
+Run `cli planning validate --phase approved --plan PATH --completion-review REPORT`.
 Only its completion PASS permits the skill's final handoff. Without the report,
 the command remains a preflight and the completion gate stays BLOCKED.

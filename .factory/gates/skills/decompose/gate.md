@@ -5,7 +5,7 @@ to run this gate and bind the reviewer together. For standalone validation, from
 the project root run:
 
 ```bash
-sh .factory/tooling/bin/python.sh .factory/gates/skills/decompose/generate_task_graph.py \
+.factory/tooling/bin/cli decompose graph \
   --staging-dir .factory/memory/staging/tasks/ \
   --source-lock .factory/memory/staging/decomposition-source.json \
   --output .factory/memory/staging/mermaid_graph.txt
@@ -25,7 +25,7 @@ receive normalized tasks/envelopes on stdin and must not edit artifacts. They ar
 trusted project code, not a sandbox; preserve existing execution permissions.
 
 Graph validation is preflight, not permission to complete. Final assembly uses
-`assemble.py`: prepare a bound request, obtain an independent TaskReviewer report,
+`cli decompose assemble`: prepare a bound request, obtain an independent TaskReviewer report,
 then revalidate and create the local task bundle. Missing/stale evidence is BLOCKED;
 a confirmed violation is FAIL. All required conditions must PASS.
 See [review contract](review-contract.md) and

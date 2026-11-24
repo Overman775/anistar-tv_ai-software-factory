@@ -4,7 +4,7 @@ Keep active, blocked and unknown work. Preserve terminal archives and
 planning/decomposition `.factory/memory/staging/`.
 
 After actual worker termination, save additional required evidence in the run's
-history directory, archive the completed/cancelled run, then invoke `workflow.py clean`.
+history directory, archive the completed/cancelled run, then invoke `cli workflow clean`.
 Keep packets while downstream work may need them. Cleanup verifies terminal history and each removal path, then removes verified working copies of transport, checks and attachments
 and releases the current run slot in the workflow database.
 It removes directories only when empty.

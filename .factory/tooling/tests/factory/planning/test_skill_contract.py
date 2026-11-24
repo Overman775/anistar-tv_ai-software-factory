@@ -12,7 +12,7 @@ SKILL = ROOT / ".factory/skills/factory-planning/SKILL.md"
 CONTRACT = ROOT / ".factory/skills/factory-planning/references/plan-contract.md"
 PLAN_CONTENT = CONTRACT.with_name("plan-content.md")
 SESSION = ROOT / ".factory/skills/factory-planning/references/session-contract.md"
-VALIDATOR = ROOT / ".factory/gates/skills/planning/validate_plan.py"
+VALIDATOR = ROOT / ".factory/tooling/bin/cli"
 ARCHITECT = ROOT / ".factory/roles/architect.md"
 ARCHITECT_CONTRACT = ROOT / ".factory/contracts/architect.md"
 CHECKPOINT = ROOT / ".factory/contracts/common/agent-checkpoint.md"
@@ -55,7 +55,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertLessEqual(len(read(SKILL).splitlines()), 315)
         self.assertIn("[working session contract](references/session-contract.md)", read(SKILL))
         self.assertIn("[plan contract](references/plan-contract.md)", read(SKILL))
-        self.assertIn("[validator](../../gates/skills/planning/validate_plan.py)", read(SKILL))
+        self.assertIn("`cli planning validate`", read(SKILL))
 
     def test_architect_and_coordinator_use_one_plan_template(self) -> None:
         self.assertIn("## Canonical Template", read(PLAN_CONTENT))

@@ -1,6 +1,6 @@
 # Review run contract
 
-Run from the reviewed workspace with the Factory Python launcher. `scripts/review_run.py`
+Run from the reviewed workspace with the factory CLI. `cli review run`
 is the local lifecycle entry point, not an agent scheduler or server. Host adapters own
 spawn/wait/session operations. All three assignments use the configured reviewer role default, recorded in each assignment.
 
@@ -50,7 +50,7 @@ compares it to the actual checkout comparison. Full diff validation remains.
 
 - `init --input REQUEST --run RUN`: creates a new directory; never overwrites.
 - `status --run RUN`: derives status from current validated artifacts, no second status ledger.
-- `assignment --id DIRECTION --run RUN`: emits assignment JSON for context.py.
+- `assignment --id DIRECTION --run RUN`: emits assignment JSON for `cli context`.
 - `check --id CHECK --run RUN`: executes exact pinned command after dependency PASS.
 - `submit --id DIRECTION --input RESULT --run RUN`: preserves one returned attempt;
   explicit failed/invalid output permits one recovery. Healthy results cannot be replaced. Recovery retains valid findings from an incomplete
@@ -63,13 +63,13 @@ an OS-owned lock in `.review.lock`; the file must remain in place. An interrupte
 leaves `.check-in-progress`. A matching, validated saved attempt clears the marker after
 freshness checks. Otherwise inspect the command and logs, confirm it stopped and start a
 new review. A legacy `.busy` has no owner identity. Identify the old owner PID and verify
-that all its child commands stopped; then run `review_run.py recover-legacy --run RUN
+that all its child commands stopped; then run `cli review run recover-legacy --run RUN
 --legacy-owner-pid PID`. The command requires a dead owner PID, an empty marker and successful
 freshness and interrupted-check validation before it removes `.busy`. PID
 verification is available on POSIX only. The operator identifies the correct
 owner and verifies that its children stopped.
 Recovery accepts a lock whose inputs still match. It also accepts a lock-only
-upgrade from the three exact versions of `command_worker.py`, `review_run.py`
+upgrade from the three exact versions of `command_worker.py`, `cli review run`
 and this contract in Lab `dfe5cfba`, when all other recorded inputs still match
 and none of the changed files is a reviewed source, diff or command input.
 Runs with broader drift, including runs pinned to an unmodified
@@ -82,4 +82,4 @@ A command changing pinned bytes blocks the run; review is not an autofix mechani
 Recovery is for the same inputs. Changed revision requires new identity and fresh review.
 
 Standalone low-level protocol helpers are validation/diagnostic tools. Finish through
-review_run.py to enforce local input freshness as well as artifact validation.
+`cli review run` to enforce local input freshness as well as artifact validation.

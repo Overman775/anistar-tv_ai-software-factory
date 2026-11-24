@@ -6,7 +6,9 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import TypedDict
 
+from factory.cli_output import emit_error, emit_json
 from factory.decompose.graph.relations import build_relation_graph as build_relation_graph
 from factory.decompose.graph.relations import (
     check_circular_dependencies as check_circular_dependencies,
@@ -18,6 +20,7 @@ from factory.decompose.graph.relations import (
 from factory.decompose.graph.relations import (
     check_parent_task_cycles as check_parent_task_cycles,
 )
+from factory.decompose.graph.render import Violations
 from factory.decompose.graph.render import _aliases as _aliases
 from factory.decompose.graph.render import _ensure_directory as _ensure_directory
 from factory.decompose.graph.render import _escape_mermaid_label as _escape_mermaid_label
@@ -55,6 +58,7 @@ from factory.decompose.staging.output_safety import (
     guard_output,
     protected_inputs,
 )
+from factory.gates.gate_contract import GateResult, GateStatus
 from factory.paths import FACTORY_ROOT as FACTORY_ROOT
 from factory.project.profile_io import load_profile as load_profile
 from factory.project.project import configured_profile as configured_profile
@@ -64,8 +68,19 @@ from factory.tasks.criteria import criteria_map as criteria_map
 from factory.tasks.criteria import plan_criteria as plan_criteria
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+class GraphResult(TypedDict):
+    status: GateStatus
+    graph: str | None
+    task_count: int
+    scope_count: int
+    diagnostics: Violations | None
+    project_gates: list[GateResult]
+
+
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(
         description="Validate task JSON and build a Mermaid-dependency graph."
     )
     parser.add_argument("--config", default=str(FACTORY_ROOT / "factory.yaml"))
@@ -89,11 +104,29 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Core preflight only; never authorizes final assembly",
     )
-    return parser.parse_args()
+    return parser
 
 
-def main() -> None:
-    args = parse_args()
+def parse_args() -> argparse.Namespace:
+    return build_parser().parse_args()
+
+
+def run(args: argparse.Namespace) -> int:
+    as_json = getattr(args, "json", False)
+    try:
+        result = _write_graph(args)
+    except (OSError, ValueError) as exc:
+        if as_json:
+            emit_error("decompose_graph", str(exc))
+        else:
+            print(f"BLOCKED: {exc}", file=sys.stderr)
+        return 2
+    if as_json:
+        emit_json(result)
+    return {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[result["status"]]
+
+
+def _write_graph(args: argparse.Namespace) -> GraphResult:
     policy = load_profile(configured_profile(args.config))
     output_dir = os.path.dirname(args.output)
     protected = protected_inputs(args.config, args.staging_dir, args.source_lock, policy)
@@ -137,7 +170,8 @@ def main() -> None:
         dependency_cycles or parent_task_cycles or deferred_cycles or mixed_relation_cycles
     )
     source_drift = any("SOURCE_DRIFT:" in message for message in source_lock_violations)
-    status = "BLOCKED" if source_drift else "FAIL" if messages or has_cycles else "PASS"
+    status: GateStatus = "BLOCKED" if source_drift else "FAIL" if messages or has_cycles else "PASS"
+    gates: list[GateResult] = []
     if status == "PASS" and not args.core_only:
         gates = check_decomposition_gates(
             policy, tasks, envelopes, args.staging_dir, args.source_lock, output_dir or "."
@@ -153,6 +187,14 @@ def main() -> None:
         )
     elif status == "FAIL" and not args.core_only:
         messages.append("Core validation must pass before project commands")
+    result: GraphResult = {
+        "status": status,
+        "graph": None,
+        "task_count": len(tasks),
+        "scope_count": scope_count,
+        "diagnostics": None,
+        "project_gates": gates,
+    }
     if messages or has_cycles:
         if dependency_cycles:
             print("🚨 Task dependency cycle detected.", file=sys.stderr)
@@ -175,7 +217,7 @@ def main() -> None:
             print(f"  Mixed cycle: {cycle}", file=sys.stderr)
         for message in messages:
             print(f"  - {message}", file=sys.stderr)
-        _write_violations_json(
+        result["diagnostics"] = _write_violations_json(
             output_dir,
             messages,
             dependency_cycles,
@@ -198,7 +240,7 @@ def main() -> None:
             f"🚨 Graph gate: {status}. Graph and final assembly blocked.",
             file=sys.stderr,
         )
-        sys.exit(1 if status == "FAIL" else 2)
+        return result
 
     violations_file = os.path.join(output_dir, "violations.json")
     violations_md_file = os.path.join(output_dir, "dependency_violations.md")
@@ -210,12 +252,13 @@ def main() -> None:
     _ensure_directory(output_dir)
     atomic_write_text(args.output, mermaid_block)
     print(f"Graph gate: PASS. Graph written to {args.output}.", file=sys.stderr)
-    sys.exit(0)
+    result["graph"] = args.output
+    return result
+
+
+def main() -> None:
+    sys.exit(run(parse_args()))
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except (OSError, ValueError) as exc:
-        print(f"BLOCKED: {exc}", file=sys.stderr)
-        sys.exit(2)
+    main()

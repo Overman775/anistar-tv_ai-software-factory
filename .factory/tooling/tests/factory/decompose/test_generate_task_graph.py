@@ -16,11 +16,9 @@ from factory.decompose.graph.relations import TaskRelationGraph
 from factory.decompose.graph.task_data import load_tasks
 from factory.decompose.graph.validation import validate_markdown_files
 from factory.decompose.staging.metadata import apply, project
-from factory.paths import FACTORY_ROOT
+from tests import CLI
 from tests.factory.decompose.fixture_task_graph import TaskGraphFixture
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
-
-SCRIPT_PATH = FACTORY_ROOT / "gates/skills/decompose/generate_task_graph.py"
 
 
 class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
@@ -396,11 +394,12 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.source_lock.write_text(json.dumps(lock))
         self.assertEqual(graph.load_source_lock(self.source_lock)[1], [])
 
-    def run_cli(self) -> subprocess.CompletedProcess[str]:
+    def run_cli(self, *options: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [
-                sys.executable,
-                str(SCRIPT_PATH),
+                *CLI,
+                "decompose",
+                "graph",
                 "--config",
                 str(FIXTURE_ROOT / "factory.yaml"),
                 "--staging-dir",
@@ -409,6 +408,7 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
                 str(self.root / "graph.md"),
                 "--source-lock",
                 str(self.source_lock),
+                *options,
             ],
             check=False,
             capture_output=True,
@@ -602,6 +602,25 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.assertFalse((self.root / "graph.md").exists())
         violations = json.loads((self.root / "violations.json").read_text(encoding="utf-8"))
         self.assertTrue(any("Field required" in message for message in violations["violations"]))
+
+    def test_graph_json_reports_files_and_gate_diagnostics(self) -> None:
+        self.write_tasks([self.task()])
+        success = self.run_cli("--json")
+        self.assertEqual(0, success.returncode, success.stderr)
+        value = json.loads(success.stdout)
+        self.assertEqual("PASS", value["status"])
+        self.assertEqual(1, value["task_count"])
+        self.assertTrue(Path(value["graph"]).is_file())
+
+        self.write_tasks([{"id": "cart-ui-01", "title": "UI"}])
+        failure = self.run_cli("--json")
+        self.assertEqual(1, failure.returncode, failure.stderr)
+        value = json.loads(failure.stdout)
+        self.assertEqual("FAIL", value["status"])
+        self.assertIsNone(value["graph"])
+        diagnostics = json.loads((self.root / "violations.json").read_text(encoding="utf-8"))
+        self.assertEqual(diagnostics, value["diagnostics"])
+        self.assertFalse((self.root / "graph.md").exists())
 
     def test_unknown_fields_are_rejected_without_graph_or_projection(self) -> None:
         from factory.decompose.staging.metadata import project
@@ -1319,8 +1338,9 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
 
         result = subprocess.run(
             [
-                sys.executable,
-                str(SCRIPT_PATH),
+                *CLI,
+                "decompose",
+                "graph",
                 "--config",
                 str(FIXTURE_ROOT / "factory.yaml"),
                 "--staging-dir",
@@ -1345,8 +1365,9 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
 
         result = subprocess.run(
             [
-                sys.executable,
-                str(SCRIPT_PATH),
+                *CLI,
+                "decompose",
+                "graph",
                 "--config",
                 str(FIXTURE_ROOT / "factory.yaml"),
                 "--staging-dir",
@@ -1372,8 +1393,9 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
 
         result = subprocess.run(
             [
-                sys.executable,
-                str(SCRIPT_PATH),
+                *CLI,
+                "decompose",
+                "graph",
                 "--config",
                 str(FIXTURE_ROOT / "factory.yaml"),
                 "--staging-dir",
@@ -1399,8 +1421,9 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
 
         result = subprocess.run(
             [
-                sys.executable,
-                str(SCRIPT_PATH),
+                *CLI,
+                "decompose",
+                "graph",
                 "--config",
                 str(FIXTURE_ROOT / "factory.yaml"),
                 "--staging-dir",

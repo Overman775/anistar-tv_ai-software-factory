@@ -23,9 +23,8 @@ from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, snapshot
 from factory.review.protocol.contracts import validate_manifest
 from factory.review.protocol.plan import prepare, validate_plan
+from tests import CLI
 from tests.factory.review.fixture_protocol import ProtocolFixture, write_json
-
-RUNNER = FACTORY_ROOT / "skills/factory-code-review/scripts/review_run.py"
 
 
 class ReviewRunTests(unittest.TestCase):
@@ -145,9 +144,9 @@ rules:
             write_json(request, f.manifest)
             env = {**os.environ, "PYTHONPATH": str(bundle / "tooling")}
 
-            def cli(script: Path, *args: str | Path) -> dict[str, Any]:
+            def cli(command: tuple[str, ...], *args: str | Path) -> dict[str, Any]:
                 result = subprocess.run(
-                    [sys.executable, str(script), *map(str, args)],
+                    [sys.executable, "-m", "factory.cli", *command, *map(str, args)],
                     cwd=root,
                     capture_output=True,
                     text=True,
@@ -158,7 +157,7 @@ rules:
                 value: dict[str, Any] = json.loads(result.stdout)
                 return value
 
-            runner = bundle / RUNNER.relative_to(FACTORY_ROOT)
+            runner = ("review", "run")
             cli(runner, "init", "--input", request, "--run", run)
             for lens in f.lenses:
                 direction = lens["lens"]
@@ -167,7 +166,7 @@ rules:
                 path = root / "assignment.json"
                 write_json(path, assignment)
                 packet = cli(
-                    bundle / "tooling/bin/context.py",
+                    ("context",),
                     "--process",
                     "code-review",
                     "--role",
@@ -336,7 +335,7 @@ rules:
 
     def call(self, f: ProtocolFixture, *args: Any) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(RUNNER), *args], cwd=f.root, text=True, capture_output=True
+            [*CLI, "review", "run", *args], cwd=f.root, text=True, capture_output=True
         )
 
     def test_status_validates_policy_once_and_detects_subsequent_source_drift(self) -> None:

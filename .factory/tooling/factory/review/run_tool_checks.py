@@ -15,6 +15,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
+from factory.cli_output import LAUNCHER, emit_error
 from factory.review.protocol.contracts import IDENTITY_FIELDS
 from factory.review.protocol.evidence import COMMAND_RESULT, TOOL_RESULT, command_outcome
 from factory.review.protocol.shapes import CommandResult, Manifest, ReviewCommand
@@ -24,8 +25,10 @@ from factory.validation import validation_message
 EXCERPT_BYTES = 24 * 1024
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--tool-id", required=True)
     parser.add_argument(
@@ -37,7 +40,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--not-run-reason")
     parser.add_argument("--not-applicable-reason")
     parser.add_argument("--output", type=Path)
-    return parser.parse_args()
+    return parser
+
+
+def parse_args() -> argparse.Namespace:
+    return build_parser().parse_args()
 
 
 def load_manifest(path: Path) -> Manifest:
@@ -170,7 +177,10 @@ def collect_results(
 
 
 def main() -> int:
-    args = parse_args()
+    return run(parse_args())
+
+
+def run(args: argparse.Namespace) -> int:
     try:
         manifest = load_manifest(args.manifest)
         from factory.review.protocol.plan import validate_plan
@@ -180,7 +190,9 @@ def main() -> int:
         if check is None:
             raise ValueError("check not in pinned plan")
         if check.get("after"):
-            raise ValueError("dependent checks must run through review_run.py check")
+            raise ValueError(
+                f"Run dependent checks with `{LAUNCHER} review run check --run RUN_DIR --id CHECK_ID`"
+            )
         if args.not_applicable_reason:
             raise ValueError("planned check cannot be waived")
         planned = {
@@ -210,7 +222,10 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False))
         return 2 if result["status"] == "BLOCKED" else 1 if result["status"] == "FAIL" else 0
     except (OSError, json.JSONDecodeError, ValueError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        if getattr(args, "json", False):
+            emit_error("review_checks", str(exc))
+        else:
+            print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
 

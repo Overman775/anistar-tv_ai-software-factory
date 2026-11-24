@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import sys
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -17,6 +16,7 @@ from factory.context import context
 from factory.runtime.history.task_records import read_evidence
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
+from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import has_current
 
@@ -590,8 +590,8 @@ class ContextTests(unittest.TestCase):
         )
         result = subprocess.run(
             [
-                sys.executable,
-                str(workflow_fixture.ROOT / "tooling/bin/context.py"),
+                *CLI,
+                "context",
                 "--config",
                 str(f.config_file(lambda c: None)),
                 "--workspace",

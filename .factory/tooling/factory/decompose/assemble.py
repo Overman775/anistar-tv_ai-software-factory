@@ -17,6 +17,7 @@ from pydantic import ConfigDict, Field, TypeAdapter, ValidationError, with_confi
 from typing_extensions import TypedDict
 
 from factory import file_reader
+from factory.cli_output import emit_error, emit_json
 from factory.decompose.contracts import LoadedTask, Text
 from factory.decompose.graph.task_data import find_markdown_file, load_source_lock, load_tasks
 from factory.decompose.staging.manifest import Sha256, read_done_signal
@@ -28,8 +29,9 @@ from factory.decompose.staging.output_safety import (
     review_inputs,
     review_worker_materials,
 )
+from factory.environment import bundle_python_environment
 from factory.gates.catalog import core_result
-from factory.gates.gate_contract import GateCheck, digest, evidence, require_pass
+from factory.gates.gate_contract import GateCheck, GateResult, digest, evidence
 from factory.paths import FACTORY_ROOT
 from factory.planning.plan_document import parse_metadata, parse_revision
 from factory.planning.validate_plan import validate as validate_plan
@@ -174,7 +176,13 @@ def inspect(
     output_dir.mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
-        str(FACTORY_ROOT / "gates/skills/decompose/generate_task_graph.py"),
+        "-P",
+        "-s",
+        "-B",
+        "-m",
+        "factory.cli",
+        "decompose",
+        "graph",
         "--config",
         str(config),
         "--staging-dir",
@@ -185,7 +193,9 @@ def inspect(
         str(output_dir / "graph.md"),
         "--core-only",
     ]
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        command, env=bundle_python_environment(), capture_output=True, text=True, check=False
+    )
     atomic_write_text(output_dir / "graph.log", completed.stdout + completed.stderr)
     graph_record = evidence(
         "graph",
@@ -370,6 +380,18 @@ def validate_repair(
         raise ValueError("Reviewer repair cannot add, remove or move tasks to a new scope")
 
 
+class ReviewRequestRejection(TypedDict):
+    status: Literal["FAIL", "BLOCKED"]
+    checks: list[GateCheck]
+
+
+class AssemblyGateRejected(ValueError):
+    def __init__(self, result: GateResult | ReviewRequestRejection) -> None:
+        messages = "; ".join(c["message"] for c in result["checks"] if c["status"] != "PASS")
+        super().__init__(f"Gate {result['status']}: {messages}")
+        self.result = result
+
+
 def prepare(args: argparse.Namespace) -> ReviewRequest:
     preflight_outputs(args, assembling=False)
     initial = getattr(args, "author_done", None)
@@ -405,13 +427,10 @@ def prepare(args: argparse.Namespace) -> ReviewRequest:
         expected_artifacts=expected,
     )
     if any(r["status"] != "PASS" for r in records):
-        status = "FAIL" if any(r["status"] == "FAIL" for r in records) else "BLOCKED"
-        raise ValueError(
-            "Gate "
-            + status
-            + ": "
-            + "; ".join(r["message"] for r in records if r["status"] != "PASS")
+        status: Literal["FAIL", "BLOCKED"] = (
+            "FAIL" if any(r["status"] == "FAIL" for r in records) else "BLOCKED"
         )
+        raise AssemblyGateRejected({"status": status, "checks": records})
     if old is not None and (old["task_ids"] != sorted(tasks) or old["policy_hash"] != policy_hash):
         raise ValueError("Reviewer repair changed task identity or accepted policy")
     raw_request = {
@@ -466,7 +485,8 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
         records,
     )
     write_json(Path(args.evidence_dir) / "gate-result.json", result)
-    require_pass(result)
+    if result["status"] != "PASS":
+        raise AssemblyGateRejected(result)
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", args.bundle_id):
         raise ValueError("Safe bundle ID required")
     workspace = Path(policy["workspace"])
@@ -532,8 +552,10 @@ def assemble(args: argparse.Namespace) -> dict[str, object]:
     return result | {"destination": str(destination)}
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(
+    parser: argparse.ArgumentParser | None = None,
+) -> argparse.ArgumentParser:
+    parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["review-request", "assemble"])
     parser.add_argument("--config", default=str(FACTORY_ROOT / "factory.yaml"))
     parser.add_argument("--staging-dir", required=True)
@@ -549,7 +571,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reviewer-profile")
     for key in ("run-id", "assignment-id", "author-id", "reviewer-id"):
         parser.add_argument("--" + key)
-    args = parser.parse_args()
+    return parser
+
+
+def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     for path in (
         args.request,
         args.evidence_dir,
@@ -562,21 +587,26 @@ def parse_args() -> argparse.Namespace:
             parser.error("Review/evidence files must be outside staging task inputs")
     if args.action == "assemble" and (not args.review or not args.bundle_id):
         parser.error("assemble needs --review and --bundle-id")
-    return args
-
-
-def main() -> int:
     try:
-        args = parse_args()
         result = prepare(args) if args.action == "review-request" else assemble(args)
         if args.action == "review-request":
             result = {"request": result, "request_hash": digest(result)}
         print(json.dumps(result, ensure_ascii=False))
     except (ValueError, OSError, KeyError, TypeError) as exc:
-        status = "FAIL" if str(exc).startswith("Gate FAIL:") else "BLOCKED"
-        print(status + ": " + str(exc), file=sys.stderr)
+        status = exc.result["status"] if isinstance(exc, AssemblyGateRejected) else "BLOCKED"
+        if not getattr(args, "json", False):
+            print(status + ": " + str(exc), file=sys.stderr)
+        elif isinstance(exc, AssemblyGateRejected):
+            emit_json(exc.result)
+        else:
+            emit_error("decompose_assemble", str(exc))
         return 1 if status == "FAIL" else 2
     return 0
+
+
+def main() -> int:
+    parser = build_parser()
+    return run(parser.parse_args(), parser)
 
 
 if __name__ == "__main__":

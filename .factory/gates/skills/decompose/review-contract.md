@@ -1,6 +1,6 @@
 # TaskReviewer evidence
 
-Coordinator runs `assemble.py review-request` as preflight; it runs the graph gate
+Coordinator runs `cli decompose assemble review-request` as preflight; it runs the graph gate
 and project checks. Start TaskReviewer only after the request succeeds. Do not run
 a separate preflight in the normal route.
 Bind run_id, assignment_id, author_id and reviewer_id to the actual host assignments;

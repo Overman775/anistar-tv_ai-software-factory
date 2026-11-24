@@ -1,16 +1,16 @@
 # Dispatch Teacher
 
-After successful archival or resumption, read `workflow.py next` in the run checkout.
+After successful archival or resumption, read `cli workflow next` in the run checkout.
 Dispatch the `after_archive.event_id` when its status is `ready`. After cleanup,
-recover the run’s event from `lessons.py pending` and its packet. For a confirmed
+recover the run’s event from `cli lessons pending` and its packet. For a confirmed
 retro finding or manual intake, dispatch only its returned event ID.
-When resuming other authorized lesson work, recover its ID from `lessons.py pending`. For each ID
-read `lessons.py route EVENT` for its persisted operation and pinned owner text.
+When resuming other authorized lesson work, recover its ID from `cli lessons pending`. For each ID
+read `cli lessons route EVENT` for its persisted operation and pinned owner text.
 Pass [Capture](capture.md) for capture, [Edit](edit.md) for edit, and [Refresh](refresh.md)
 for audit or delete. The waiting list is for owner
 follow-up; skip those entries during automatic dispatch. Retune supplies its own procedure.
 
-Coordinator: run `sh .factory/tooling/bin/python.sh .factory/tooling/bin/lessons.py teacher-launch`
+Coordinator: run `.factory/tooling/bin/cli lessons teacher-launch`
 in the assigned checkout. Resolve again for each new assignment. Follow the returned
 adapter instructions, its capacity rules, and the exact model ID and effort.
 For Codex native use a fresh generic worker with `model` set to the returned
@@ -35,7 +35,7 @@ limitation. Stop processing that ID for this drain and report it for follow-up.
 One completed workflow run produces one Capture assignment. Pass its single
 event ID to one Teacher for all packet incidents, including linked retro notes.
 Do not launch a worker per task or per note. For a demonstrated reuse observed outside the workflow,
-`lessons.py capture-case REF.json OBSERVATION` remains an explicit intake.
+`cli lessons capture-case REF.json OBSERVATION` remains an explicit intake.
 Include how the current result was verified.
 
 Wait for the worker result and verify the durable decision. Record the actual

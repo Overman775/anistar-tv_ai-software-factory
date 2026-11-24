@@ -20,6 +20,20 @@ class RunEvent(NamedTuple):
     status: str | None
     role: str | None
     harness: str | None
+    stage: str | None
+    decision: str | None
+    target: str | None
+
+
+class Correction(NamedTuple):
+    node: str
+    decision: str
+    from_profile: str
+    to_profile: str
+    cause: str
+    author_dispatch: str
+    evidence_node: str
+    evidence_dispatch: str
 
 
 class LessonApplication(NamedTuple):
@@ -63,6 +77,8 @@ class RunObservation:
     status: str
     at: str | None
     events: list[RunEvent]
+    corrections: list[Correction]
+    current_dispatches: set[str]
     applications: list[LessonApplication]
     sessions: list[Session]
     transports: list[TransportCall]

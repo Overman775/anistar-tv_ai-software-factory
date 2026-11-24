@@ -18,27 +18,28 @@ Read [coordinator communication and waiting](../contracts/common/agent-checkpoin
 Complete this entry before preparation or delegation, whether invoked through
 Factory Implement or directly as Orchestrator.
 
-Inspect the current SQL ledger with `workflow.py show`. For an active run, continue from
-the accepted factory instructions via `workflow.py read-instructions - PATH...`
-and accepted coordinator project reading via `workflow.py read-project`, using
-the Python launcher. Use that policy and instruction text for current-run
+From the checkout root, run `.factory/tooling/bin/cli workflow status`
+(`.\.factory\tooling\bin\cli.cmd workflow status` on native Windows). The shorthand
+`cli` below means that checkout's launcher. For an active run, continue from the
+accepted factory instructions via `cli workflow read-instructions - PATH...` and
+accepted coordinator project reading via `cli workflow read-project`. Use that policy
+and instruction text for current-run
 decisions. Inspect candidate files separately for scoped edits. Reconcile files
 and runtime before resuming. Cancel an old run only on user instruction.
 Never silently replace legacy `pipeline.md` or an unknown writer.
 
 For a new Implement intake (route a planning-only request to Planning first):
 
-Run `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py prepare-workspace`.
+Run `.factory/tooling/bin/cli workflow prepare-workspace`.
 Use the returned workspace and config for all remaining steps, including coordinator
 reads, native and ACP workers, checks and handoff. Switch command cwd explicitly.
 If the native host cannot place a worker in that checkout, report a blocker.
 Keep the path and branch in the handoff so continuation opens the same checkout.
 See [workspace selection](README.md#workspace-selection) for setup and failure modes.
 
-Save `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py config`
+Save `.factory/tooling/bin/cli workflow config`
 output as JSON in OS temporary storage. Keep it through `init`; do not send it
-to workers. Use `sh .factory/tooling/bin/python.sh .factory/tooling/bin/workflow.py
-read-instructions SNAPSHOT PATH...` for mandatory Implement factory instructions.
+to workers. Use `cli workflow read-instructions SNAPSHOT PATH...` for mandatory Implement factory instructions.
 Paths are relative to `.factory/`. Use the returned content, including when
 rereading this policy and the entry skill. The command verifies the same bytes.
 Read the Orchestrator role and contract, communication and project policy,
@@ -47,8 +48,7 @@ Implement instruction links through that command. Other process handoffs follow
 their own entry instructions. On changed bytes, stop and reload the snapshot and
 instructions; pass the same snapshot to `init`.
 
-Resolve project inputs with `sh .factory/tooling/bin/python.sh
-.factory/tooling/bin/project.py context --process implement --audience coordinator`.
+Resolve project inputs with `.factory/tooling/bin/cli project context --process implement --audience coordinator`.
 Add `--scope PATH` for each known scope. Read returned instructions and applicable
 documents: project `AGENTS.md`, architecture, structure, codestyle, testing, specs,
 ADRs and package READMEs. Unknown scope retains obligations; read actual domain
@@ -89,7 +89,7 @@ graphs in history.
 
 Build/reuse slices, tasks and agent steps; record why the selected team is sufficient.
 Use the [state contract](../skills/factory-implement/references/shared-state.md)
-and [workflow usage](README.md). Run `workflow.py init GRAPH --config-pin CONFIG_SNAPSHOT`
+and [workflow usage](README.md). Run `cli workflow init GRAPH --config-pin CONFIG_SNAPSHOT`
 to verify observed instruction versions; validate before dispatch.
 Persist an acyclic graph before the first worker. Include the run-level `after_archive: teacher` step in the first execution sketch and every revision. Show it after final acceptance and successful archival. Each logical agent has one ID;
 Developer instances have distinct IDs. Steps bind task, slice, source hashes,
@@ -141,12 +141,12 @@ golden, refactor and evidence. Reports bind final scope and file hashes;
 process exit or ACP delivery is not a gate verdict.
 
 Wait for outstanding native packet confirmations, including other nodes, before
-`run-check`. The command identifies waiting nodes; a ready check reservation does
+`checks run`. The command identifies waiting nodes; a ready check reservation does
 not clear this delivery gate.
 
 Register applicable mandatory commands in task `required_checks.execution` before
 intake, with argv/cwd/timeout and additional input files. Execute through
-`workflow.py run-check NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID` under project-checks; use the stored result
+`cli checks run NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID` under project-checks; use the stored result
 unchanged in the report. Never infer PASS from successful transport, CLI `ok`,
 a missing exit code or a RUNNING receipt. A command failure needs diagnosis before
 an explicit retry. See workflow README for synchronous locking and process recovery.
@@ -174,7 +174,7 @@ production code, use [revise with a test retry](README.md#repair-revision-and-re
 before the Developer edits. Point to the failed dispatch and diagnosis in the
 decision. Dispatch TestWriter again after accepting the repair.
 
-For profiles with escalation, use `workflow.py correct NODE DECISION_JSON` after
+For profiles with escalation, use `cli workflow correct NODE DECISION_JSON` after
 reviewing terminal failed/blocked evidence. NODE identifies the responsible
 worker's work, not necessarily the checking node. Include exact author/evidence
 dispatch IDs, cause, diagnosis, reason, terminal evidence and a scoped handoff.
@@ -274,7 +274,7 @@ unresolved work and measured usage (`null` when unknown). After all workers stop
 place additional evidence under `.factory/memory/history/<run-id>/` and archive
 the completed or cancelled run. Record its run ID and database path. The journal
 retains the original packets, reports and transport logs, which may contain sensitive data.
-`workflow.py clean` verifies the inventory, removes its working copies and releases
+`cli workflow clean` verifies the inventory, removes its working copies and releases
 the current run slot. For later inspection use `list-artifacts` and `export-artifact`.
 Report any failed archival or cleanup with the remaining path and cause.
 
@@ -295,7 +295,7 @@ verification and review rerun on corrected bytes before accept/archive.
 
 ## Reconciliation
 
-Call `workflow.py next` after dispatch, transport return, check result,
+Call `cli workflow status` after dispatch, transport return, check result,
 correction, scope change and on resumed entry. Reconcile saved dispatches,
 session handles, pending executions and reports before any repeat request.
 Inspect new terminal reports once per dispatch and acknowledge with `ack-result`. Claim
@@ -333,8 +333,9 @@ messages follow the shared communication contract.
 ## Teacher at run completion
 
 Task acceptance records evidence for the final review. After successful
-`workflow.py archive completed SUMMARY`, or when resuming a completed run,
-read `workflow.py next` through the factory launcher. When `after_archive.status` is `ready`, dispatch the indicated event ID as the run's
+`cli workflow archive completed SUMMARY`, or when resuming a completed run,
+run `cli workflow status`. When `result.after_archive.status` is `ready`, dispatch
+the indicated event ID as the run's
 single [Teacher assignment](../skills/factory-lessons/references/dispatch.md)
 before final handoff. It covers all accepted tasks and retrospective notes
 already recorded for this run. Ready and waiting events survive cleanup on

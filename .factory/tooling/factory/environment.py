@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from factory import file_reader
+from factory.paths import TOOLS
 
 _environment: ContextVar[Mapping[str, str] | None] = ContextVar("factory_environment", default=None)
 
@@ -41,3 +42,15 @@ def settings(
             value = value[1:-1]
         values[key] = value
     return {**values, **process}
+
+
+def bundle_python_environment() -> dict[str, str]:
+    """Select this bundle for a child Python command, including disposable copies."""
+    return {
+        **{
+            name: value
+            for name, value in os.environ.items()
+            if not name.upper().startswith("PYTHON")
+        },
+        "PYTHONPATH": str(TOOLS),
+    }

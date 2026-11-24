@@ -18,7 +18,12 @@ description: "Обновление stable Flutter через FVM и зависи
 
 ## Порядок работы
 
-1. Проверь состояние Git, SDK и lockfile. Сохрани исходные версии для сравнения. Разбей работу на выбор stable, SDK, зависимости, совместимость, проверки и итог.
+1. Зафиксируй согласованные цели: SDK, конкретные пакеты либо все зависимости.
+   Если вызов пришёл из Factory Install, используй его точный набор; не расширяй его.
+   При обновлении только пакетов пропусти шаги 2–4, оставь SDK закреплённым.
+   Для SDK-only не обновляй все пакеты: меняй только необходимые совместимые зависимости
+   в согласованных пределах; расширение требует согласования.
+   Проверь состояние Git, SDK и lockfile. Сохрани исходные версии для сравнения. Разбей работу на выбор stable, SDK, зависимости, совместимость, проверки и итог.
 2. Получи `fvm releases` и проверь актуальный stable по [официальному архиву](https://docs.flutter.dev/install/archive) и [changelog](https://raw.githubusercontent.com/flutter/flutter/stable/CHANGELOG.md). Не используй GitHub `releases/latest`: там могут быть устаревшие beta. Если пользователь запросил последний stable, выбирай его без дополнительного вопроса. Для конкретной версии используй её.
 3. Установи и закрепи точный релиз:
 
@@ -31,7 +36,11 @@ description: "Обновление stable Flutter через FVM и зависи
 
    Из фактического SDK получи Dart version и architecture. Не определяй Dart version по номеру Flutter.
 4. Обнови `environment.sdk` всех участников workspace под новый Dart, сохрани верхнюю границу major. Обнови существующие `environment.flutter` под новый Flutter. Не меняй `sdk: flutter` в dependencies и не добавляй Flutter dependency в чистый Dart Core.
-5. Разреши зависимости из корня, сохрани `pub outdated --json`, затем обнови stable-пакеты с major-изменениями:
+5. Разреши зависимости из корня, сохрани `pub outdated --json`. Для выбранных
+   пакетов передай их имена в `fvm flutter pub upgrade PACKAGE...`; флаг
+   `--major-versions` добавляй только при согласованном major-обновлении. Проверь diff
+   constraints/lockfile; изменения transitive должны объясняться выбранными целями.
+   Следующий общий вариант допустим только при согласованном обновлении всех зависимостей:
 
    ```bash
    fvm flutter pub get
@@ -40,7 +49,7 @@ description: "Обновление stable Flutter через FVM и зависи
    fvm flutter pub outdated --json
    ```
 
-   Учитывай весь workspace. Для прямых зависимостей проверь `latest`, обнови нижние границы constraints до проверенных версий, включая patch/minor. Не добавляй overrides ради зелёного resolver. Для SDK-pinned и несовместимых transitive пакетов укажи конкретное ограничение; не называй их обновлёнными до latest.
+   Учитывай весь workspace. Для выбранных прямых зависимостей проверь `latest`, обнови нижние границы constraints до проверенных версий, включая patch/minor. Не добавляй overrides ради зелёного resolver. Для SDK-pinned и несовместимых transitive пакетов укажи конкретное ограничение; не называй их обновлёнными до latest.
 6. Прочитай официальные migration guides и changelog реально изменившихся API. Для Android проверь предупреждения SDK о Kotlin/AGP/Gradle и [матрицу совместимости KGP](https://kotlinlang.org/docs/gradle-configure-project.html). Обновляй native toolchain в совместимых пределах; не редактируй pub cache и не включай built-in Kotlin глобально, пока плагины ещё применяют legacy KGP. Исправь использование пакетов; если затронуты typed routes, выполни `fvm dart run melos run generate`. Если изменилось форматирование, запусти `fvm dart run melos run format`.
 7. Проверь:
 
@@ -61,7 +70,7 @@ description: "Обновление stable Flutter через FVM и зависи
 ## Definition of done
 
 - FVM pin, фактический SDK и environment constraints согласованы.
-- Direct dependencies используют проверенные последние stable-релизы; исключения и SDK/transitive ограничения названы.
+- Выбранные direct dependencies используют согласованные проверенные релизы; исключения и SDK/transitive ограничения названы.
 - Lockfile воспроизводится через `fvm flutter pub get --enforce-lockfile`.
 - Формат, analyzer, DCM, unit/widget, goldens, Android E2E и release APK проверены либо явно отмечены как недоступные.
 - Итоговый ответ содержит версии до и после, изменения direct packages, результаты проверок, ограничения и SHA-256 собранного APK. Руководства описывают актуальные правила работы, CHANGELOG — подтверждённые изменения проекта.

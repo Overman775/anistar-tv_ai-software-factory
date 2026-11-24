@@ -144,7 +144,30 @@ OUTCOMES = {
     "failure",
     "stale",
 }
+# Only fixed reason codes cross the diagnostic boundary. Validation details stay on stderr.
+REJECTION_CODES = {
+    "Execution request dispatch is stale": "stale_dispatch",
+    "Execution request ID already refers to different commands": "check_request_conflict",
+    "Check needs project-checks reservation": "check_resource_missing",
+    "Unknown assigned command": "unassigned_check",
+    "Check needs a bound running node": "dispatch_not_running",
+    "Report needs a bound running node": "dispatch_not_running",
+    "Wait for outstanding native packet delivery before running checks": "packet_pending",
+    "Invalid workflow report draft": "invalid_report_draft",
+    "Existing evidence cannot be refreshed": "report_evidence_exists",
+    "Stale report identity": "stale_report",
+    "Duplicate receipt": "duplicate_receipt",
+    "Unknown or incomplete receipt": "receipt_unavailable",
+    "Stale or mismatched runner receipt": "stale_receipt",
+    "Invalid packet chunk": "packet_chunk_invalid",
+    "Acknowledge the preceding chunk ordinal and digest": "packet_ack_mismatch",
+    "Chunk was not served in order; restart at chunk 1 if delivery receipt was lost": "packet_out_of_order",
+    "Confirm final chunk ordinal/digest and mandatory material set": "packet_confirmation_invalid",
+    "Packet recipient mismatch": "packet_recipient_mismatch",
+    "Packet bootstrap mismatch": "packet_bootstrap_mismatch",
+}
 ERRORS = {
+    *REJECTION_CODES.values(),
     "SOURCE_DRIFT",
     "RETRY_BUDGET_EXHAUSTED",
     "QUEUED_CAPACITY",
@@ -170,6 +193,8 @@ ERRORS = {
 TRANSPORT_OPERATIONS = {"create", "show", "status", "prompt", "cancel", "close"}
 JournalId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.:-]{1,96}$")]
 InvocationId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
+# Earlier journals accepted 32 hex digits. Current check executions use SHA-256.
+ExecutionId = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{32}|[0-9a-f]{64})$")]
 RunId = Annotated[str, StringConstraints(pattern=r"^run-[0-9a-f]{12}$")]
 
 
@@ -184,7 +209,7 @@ class JournalRecord(TypedDict):
     task_id: NotRequired[JournalId]
     node_id: NotRequired[JournalId]
     dispatch_id: NotRequired[InvocationId]
-    execution_id: NotRequired[InvocationId]
+    execution_id: NotRequired[ExecutionId]
     outcome: NotRequired[JournalId]
     error_code: NotRequired[JournalId]
     transport_operation: NotRequired[JournalId]
@@ -194,10 +219,16 @@ class JournalRecord(TypedDict):
 JOURNAL_RECORD = TypeAdapter[JournalRecord](JournalRecord)
 
 
-def valid_record(raw: object) -> TypeGuard[JournalRecord]:
+def valid_record(raw: object, *, allow_legacy_execution: bool = False) -> TypeGuard[JournalRecord]:
     try:
         record = JOURNAL_RECORD.validate_python(raw)
     except ValidationError:
+        return False
+    if (
+        "execution_id" in record
+        and len(record["execution_id"]) != 64
+        and not allow_legacy_execution
+    ):
         return False
     if record["event"] not in EVENTS or record["operation"] not in OPERATIONS:
         return False
@@ -222,7 +253,7 @@ def decode_record(payload: str) -> JournalRecord | None:
         record = json.loads(payload)
     except ValueError, RecursionError:
         return None
-    return record if valid_record(record) else None
+    return record if valid_record(record, allow_legacy_execution=True) else None
 
 
 def error_code(exc: BaseException) -> str:
@@ -235,6 +266,8 @@ def error_code(exc: BaseException) -> str:
             return "database_corrupt"
         return "database_constraint" if code == sqlite3.SQLITE_CONSTRAINT else "database_error"
     message = str(exc) if isinstance(exc, ValueError) else ""
+    if code_name := REJECTION_CODES.get(message.partition(":")[0]):
+        return code_name
     if message in {"Unsupported workflow database", "Unsupported lesson index"}:
         return "database_schema"
     if message in {

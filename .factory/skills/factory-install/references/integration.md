@@ -60,23 +60,38 @@ existing AGENTS.md or user host configuration. Explain a required host reload.
 
 ## Interpreter
 
-Follow [Python setup](../../../tooling/README.md#python-setup). Inventory Python first;
-if 3.14 is absent, use the documented project-local uv option or obtain official OS/distribution installation instructions.
-Do not assume Homebrew, a Python launcher, sudo or an existing PATH entry. Explain
-any required user/system action; never overwrite system Python. This prerequisite
-is separate from project packages and requires authorized scope.
+Inventory Python first. If 3.14 is absent, follow the official [Python installation
+instructions](https://www.python.org/downloads/) or provision it with an installed
+uv. On Linux, ensure the interpreter has venv and pip support. Do not assume
+Homebrew, a Python launcher, sudo or an existing PATH entry. Explain any required
+user/system action and preserve system Python. Runtime installation requires
+authorized scope.
 
-Use the chosen Python 3.14 only to run `tooling/bootstrap.py setup`. That helper
-creates the factory-owned `.factory/.venv/` and installs tooling/requirements.txt there.
+For project-local uv provisioning, set `UV_PYTHON_INSTALL_DIR` to the absolute
+path of the project's `.factory/.python`, run
+`uv python install --no-bin --no-registry 3.14`, then locate the executable with
+`uv python find --managed-python 3.14`. Use the same environment variable for both
+commands and exclude `.factory/.python` from Git and indexing.
+
+From the target root, run `.factory/tooling/bin/cli setup` on macOS/Linux or
+`.\.factory\tooling\bin\cli.cmd setup` on native Windows. Setup uses
+`python3.14` on macOS/Linux or `py -3.14` on Windows. For another installation,
+set `FACTORY_SETUP_PYTHON` to the verified absolute Python 3.14 executable.
+With the interpreter available, `setup --help` works before the venv exists.
+Setup creates or refreshes the factory-owned `.factory/.venv/` and can download
+the hash-locked dependencies in `tooling/requirements.txt`. Exclude the venv and
+`.factory/.venv.setup.lock` from Git and indexing. Run setup again after a
+requirements change. Stop active runs and preserve any misplaced data before
+recreating an incompatible or relocated venv.
 This standard Python environment does not change vendor project-install layouts.
 Do not add factory packages to application manifests or install them globally.
 
-All later factory Python commands use `sh .factory/tooling/bin/python.sh` on macOS/Linux,
-or `.\.factory\tooling\bin\python.cmd` on native Windows, followed by the script and args.
-Record this convention in the project's existing agent entrypoint without replacing
-its content. Do not record machine-absolute paths or rely on activation. From a fresh
-agent command session run launcher `--check` and the dry-run script; report actual
-interpreter and results. Do not claim Windows/Linux verified from a macOS test.
+Run factory commands from the project root. In instructions, the shorthand `cli`
+means `.factory/tooling/bin/cli` on macOS/Linux or `.\.factory\tooling\bin\cli.cmd`
+on native Windows, followed by the command and its arguments. Record this
+convention in the project's agent entry point alongside its existing instructions.
+Use project-relative paths. From a fresh agent command session, run the applicable
+launcher with `help --json` and report the result for the platform tested.
 
 ## MCP
 
@@ -110,7 +125,7 @@ Required connection availability does not automatically grant every role MCP acc
    consuming environment. Coordinator access does not prove worker or ACP access.
    Do not run write-capable business tools merely to test connectivity. If worker
    discovery requires a model call, perform it only within authorized scope or mark
-   that environment NOT_RUN. Factory dry run does not test MCP.
+   that environment NOT_RUN. Verify MCP separately in each consuming environment.
 5. When real profiles exist, reconcile selected tool grants with verified names and
    host alias mappings, without widening role permissions. Without profiles, report
    host connection readiness separately; grants remain pending. MCP availability
@@ -130,8 +145,8 @@ the selected connection. The executable name does not necessarily name a package
 Use the selected config and the verified interpreter from the target root:
 
 ```sh
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py --config .factory/factory.yaml doctor --connection CONNECTION
-sh .factory/tooling/bin/python.sh .factory/tooling/bin/acpx_adapter.py --config .factory/factory.yaml setup CONNECTION
+.factory/tooling/bin/cli acpx --config .factory/factory.yaml doctor --connection CONNECTION
+.factory/tooling/bin/cli acpx --config .factory/factory.yaml setup CONNECTION
 ```
 
 Replace CONNECTION with the actual selected alias; setup is a mutation, not diagnosis.
@@ -150,7 +165,7 @@ Use native host capability discovery for native readiness; an unavailable option
 ACP route does not invalidate working native routes. Live sessions are checked only
 within authorization, in a disposable workspace without application code. Verify
 model, response and continuation separately, close only the created test session,
-and inspect unknown outcomes before retrying. No live probe is implied by dry run.
+and inspect unknown outcomes before retrying. Live probes require explicit authorization.
 
 ## Skill discovery
 

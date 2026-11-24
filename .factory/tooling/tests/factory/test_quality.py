@@ -11,10 +11,46 @@ from pathlib import Path
 from unittest.mock import patch
 
 from factory import quality
+from factory.cli import main as cli_main
 from factory.paths import FACTORY_ROOT, TOOLS
 
 
 class QualityFailureTests(unittest.TestCase):
+    def test_checker_json_reports_failed_stage_and_keeps_progress_on_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            reports = Path(directory).resolve()
+            stage = quality.StageResult(
+                "lint", "FAIL", 7, [["ruff", "check"]], str(reports / "lint.log"), ["bad import"]
+            )
+            for options in (["--report-dir", directory], []):
+                with (
+                    self.subTest(retain=bool(options)),
+                    patch.object(quality, "source_files", return_value=[]),
+                    patch.object(quality, "source_digest", return_value="unchanged"),
+                    patch.object(quality, "run_stage", return_value=stage),
+                    contextlib.redirect_stdout(io.StringIO()) as output,
+                    contextlib.redirect_stderr(io.StringIO()) as progress,
+                ):
+                    self.assertEqual(
+                        1, cli_main(["tooling", "check", "--stage", "lint", "--json", *options])
+                    )
+                    result = json.loads(output.getvalue())
+                    report = result.pop("report")
+                    attempt = result["stages"][0]
+                    self.assertEqual(["bad import"], attempt.pop("diagnostics"))
+                    self.assertEqual(7, attempt["exit_code"])
+                    self.assertIn("lint: FAIL", progress.getvalue())
+                    self.assertIn("bad import", progress.getvalue())
+                    if options:
+                        self.assertEqual(str(reports / "result.json"), report)
+                        self.assertEqual(stage.log, attempt["log"])
+                        self.assertEqual(
+                            json.loads(Path(report).read_text(encoding="utf-8")), result
+                        )
+                    else:
+                        self.assertIsNone(report)
+                        self.assertIsNone(attempt["log"])
+
     def test_checker_discovers_sources_once_only_when_needed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -108,7 +144,7 @@ class QualityFailureTests(unittest.TestCase):
     def test_source_digest_ignores_local_diagnostics_but_tracks_module(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            module = root / "tooling/factory/diagnostics/dry_run.py"
+            module = root / "tooling/factory/diagnostics/records.py"
             module.parent.mkdir(parents=True)
             module.write_text("original", encoding="utf-8")
             with patch.object(quality, "FACTORY_ROOT", root):

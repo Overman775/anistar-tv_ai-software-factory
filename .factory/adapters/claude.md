@@ -36,14 +36,14 @@ return. Missing progress/cancellation tools and silence are never failure.
 ## Rules
 
 - No `.claude/agents/` files are generated or required.
-- For native Implement, after claim use `workflow.py prepare-packet NODE --with-diagnostics`.
+- For native Implement, after claim use `cli workflow prepare-packet NODE --with-diagnostics`.
   Inspect diagnostics and spawn the intended worker with a wait-only instruction.
   Bind the returned actual handle/model, prepare the packet again and send its
   bound bootstrap to that worker in the same workspace. Use a supported
   continuation mechanism when required. The worker reads every complete chunk
   and confirms delivery. Wait for outstanding confirmations before coordinator checks.
-  Full inline `workflow.py packet NODE` remains an alternative.
-  Planning/Decompose/Code Review use their owning skill’s `context.py` route
+  Full inline `cli workflow packet NODE` remains an alternative.
+  Planning/Decompose/Code Review use their owning skill’s `cli context` route
   and staging, without Implement claim/ledger. Deliver the complete packet.
 - Read capability/MCP rules from the selected profile. Discover optional MCP tools
   through exposed `ToolSearch` and inspect their real schemas. Project servers

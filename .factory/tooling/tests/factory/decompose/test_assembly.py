@@ -20,6 +20,7 @@ from factory.gates.gate_contract import digest, evidence
 from factory.paths import FACTORY_ROOT
 from factory.project.contracts import Selection
 from factory.project.profile_io import load_profile
+from tests import CLI
 from tests.factory.decompose import fixture_task_graph as fixtures
 from tests.factory.planning import fixture_plan as planning
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
@@ -243,7 +244,6 @@ class AssemblyTest(unittest.TestCase):
             {"skills/factory-decompose/references/staging-contract.md"},
             instructions("repair") - normal,
         )
-        script = copy / "gates/skills/decompose/assemble.py"
         common = [
             "--config",
             self.args.config,
@@ -260,7 +260,16 @@ class AssemblyTest(unittest.TestCase):
 
         def cli(action: str, extra: list[str]) -> subprocess.CompletedProcess[str]:
             return subprocess.run(
-                [sys.executable, str(script), action, *common, *extra],
+                [
+                    sys.executable,
+                    "-m",
+                    "factory.cli",
+                    "decompose",
+                    "assemble",
+                    action,
+                    *common,
+                    *extra,
+                ],
                 capture_output=True,
                 text=True,
                 env=env,
@@ -451,9 +460,8 @@ class AssemblyTest(unittest.TestCase):
         old_lock["plan_hash"] = "sha256:" + digest(plan.read_text(encoding="utf-8"))
         self.fixture.source_lock.write_text(json.dumps(old_lock), encoding="utf-8")
         self.assertIn("SOURCE_DRIFT: plan_hash", str(load_source_lock(self.fixture.source_lock)[1]))
-        script = FACTORY_ROOT / "gates/skills/decompose/prepare_source_lock.py"
         result = subprocess.run(
-            [sys.executable, str(script), "--plan", str(plan), "--config", self.args.config],
+            [*CLI, "decompose", "source-lock", "--plan", str(plan), "--config", self.args.config],
             capture_output=True,
             text=True,
             check=True,
@@ -469,7 +477,7 @@ class AssemblyTest(unittest.TestCase):
         plan.write_bytes(plan.read_bytes().replace(b"\n", b"\r\n"))
         self.assertIn("plan_content_hash", str(load_source_lock(self.fixture.source_lock)[1]))
         updated = subprocess.run(
-            [sys.executable, str(script), "--plan", str(plan), "--config", self.args.config],
+            [*CLI, "decompose", "source-lock", "--plan", str(plan), "--config", self.args.config],
             capture_output=True,
             text=True,
             check=True,
@@ -523,9 +531,8 @@ class AssemblyTest(unittest.TestCase):
     def test_prepare_source_lock_rejects_draft(self) -> None:
         plan = self.fixture.root / "plan.md"
         plan.write_text(planning.PLAN, encoding="utf-8")
-        script = FACTORY_ROOT / "gates/skills/decompose/prepare_source_lock.py"
         result = subprocess.run(
-            [sys.executable, str(script), "--plan", str(plan), "--config", self.args.config],
+            [*CLI, "decompose", "source-lock", "--plan", str(plan), "--config", self.args.config],
             capture_output=True,
             text=True,
             check=False,
@@ -608,15 +615,17 @@ class AssemblyTest(unittest.TestCase):
                     self.args.source_lock,
                 ]
                 graph_command = [
-                    sys.executable,
-                    str(FIXTURE_ROOT / "gates/skills/decompose/generate_task_graph.py"),
+                    *CLI,
+                    "decompose",
+                    "graph",
                     *common,
                     "--output",
                     str(self.fixture.root / "graph-output/graph.md"),
                 ]
                 review_command = [
-                    sys.executable,
-                    str(FIXTURE_ROOT / "gates/skills/decompose/assemble.py"),
+                    *CLI,
+                    "decompose",
+                    "assemble",
                     "review-request",
                     *common,
                     "--author-done",
@@ -671,8 +680,9 @@ class AssemblyTest(unittest.TestCase):
         )["hash"]
         self.fixture.source_lock.write_text(json.dumps(lock))
         command = [
-            sys.executable,
-            str(FIXTURE_ROOT / "gates/skills/decompose/assemble.py"),
+            *CLI,
+            "decompose",
+            "assemble",
         ]
         common = [
             "--config",
@@ -741,6 +751,42 @@ class AssemblyTest(unittest.TestCase):
     def test_missing_review_blocks_writes(self) -> None:
         with self.assertRaises(ValueError):
             assemble.assemble(self.args)
+        self.assertFalse((self.fixture.root / "docs/tasks/orders").exists())
+
+    def test_json_rejected_assembly_returns_persisted_gate_evidence(self) -> None:
+        self.approve()
+        Path(self.args.review).unlink()
+        result = subprocess.run(
+            [
+                *CLI,
+                "decompose",
+                "assemble",
+                "assemble",
+                "--config",
+                self.args.config,
+                "--staging-dir",
+                self.args.staging_dir,
+                "--source-lock",
+                self.args.source_lock,
+                "--request",
+                self.args.request,
+                "--evidence-dir",
+                self.args.evidence_dir,
+                "--review",
+                self.args.review,
+                "--bundle-id",
+                "orders",
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(2, result.returncode, result.stderr)
+        gate = json.loads(result.stdout)
+        self.assertEqual("BLOCKED", gate["status"])
+        evidence_path = Path(self.args.evidence_dir) / "gate-result.json"
+        self.assertEqual(json.loads(evidence_path.read_text(encoding="utf-8")), gate)
         self.assertFalse((self.fixture.root / "docs/tasks/orders").exists())
 
     def test_changed_task_invalidates_approval(self) -> None:
@@ -847,8 +893,9 @@ class AssemblyTest(unittest.TestCase):
         policy = self.fixture.root / ".factory/project/project.yaml"
         before = policy.read_bytes()
         command = [
-            sys.executable,
-            str(FIXTURE_ROOT / "gates/skills/decompose/assemble.py"),
+            *CLI,
+            "decompose",
+            "assemble",
             "review-request",
             "--config",
             self.args.config,
@@ -869,7 +916,7 @@ class AssemblyTest(unittest.TestCase):
             "--reviewer-id",
             "reviewer",
         ]
-        result = subprocess.run(command, capture_output=True, text=True)
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(2, result.returncode)
         self.assertIn("protected inputs", result.stderr)
         self.assertEqual(before, policy.read_bytes())
@@ -879,8 +926,9 @@ class AssemblyTest(unittest.TestCase):
         policy = self.fixture.root / ".factory/project/project.yaml"
         before = policy.read_bytes()
         command = [
-            sys.executable,
-            str(FIXTURE_ROOT / "gates/skills/decompose/generate_task_graph.py"),
+            *CLI,
+            "decompose",
+            "graph",
             "--config",
             self.args.config,
             "--staging-dir",
@@ -890,7 +938,9 @@ class AssemblyTest(unittest.TestCase):
             "--core-only",
             "--output",
         ]
-        result = subprocess.run(command + [str(policy)], capture_output=True, text=True)
+        result = subprocess.run(
+            command + [str(policy)], capture_output=True, text=True, check=False
+        )
         self.assertEqual(2, result.returncode, result.stderr)
         self.assertIn("protected inputs", result.stderr)
         self.assertEqual(before, policy.read_bytes())
@@ -901,7 +951,7 @@ class AssemblyTest(unittest.TestCase):
         except OSError as exc:
             self.skipTest(f"symlinks unavailable: {exc}")
         result = subprocess.run(
-            command + [str(evidence / "graph.md")], capture_output=True, text=True
+            command + [str(evidence / "graph.md")], capture_output=True, text=True, check=False
         )
         self.assertEqual(2, result.returncode, result.stderr)
         self.assertEqual(before, policy.read_bytes())
@@ -949,7 +999,7 @@ class AssemblyTest(unittest.TestCase):
 
         def run_and_insert_alias(command: Any, *args: Any, **kwargs: Any) -> Any:
             result = real_run(command, *args, **kwargs)
-            if any("generate_task_graph.py" in str(part) for part in command):
+            if command[-1] == "--core-only":
                 (Path(self.args.evidence_dir) / "graph.log").symlink_to(policy)
             return result
 
