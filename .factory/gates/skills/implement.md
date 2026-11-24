@@ -24,9 +24,8 @@ handoff, never invented facts or missing external approvals.
 
 ## Author checks and integration
 
-Developer writes production, TestWriter writes tests, Generalist may write both
-under its own contract. Authors run relevant checks directly; parent validates
-the returned evidence and serializes shared commands. Tests express locked
+Implementer writes production code and tests. Tester executes verification.
+The coordinator validates receipts and serializes shared commands. Tests express locked
 behavior, mock dependencies rather than the subject, and cover success, failure,
 boundary and no-op where applicable. Untestable code returns to its owner for an
 in-scope seam. Never weaken correct tests or silently update golden baselines.
@@ -94,7 +93,7 @@ Apply [the shared acceptance contract](../common/verification-rules.md).
 The source AC registry is a mandatory minimum, not an exhaustive test inventory.
 All gates in this file remain applicable independently of AC coverage. Populate
 required_checks with both concrete acceptance scenarios and applicable project gates.
-TestWriter/Generalist may add negative, boundary, regression and diagnostic checks
+Implementer may add negative, boundary and regression tests. Tester may request additional diagnostics
 without changing agreed behavior. Classify and resolve discovered failures; optional
 execution never makes a blocking product defect optional. Unknown/incomplete mandatory
 results block acceptance. Independent review checks semantic coverage and the actual

@@ -11,17 +11,14 @@ from tests.factory.runtime.store_fixture import overwrite
 class AssignmentLineageTests(TestCase):
     def setUp(self) -> None:
         self.f = workflow_fixture.WorkflowFixture(self.addCleanup)
-        self.f.g["agents"]["author"] = {"role": "developer", "profile": "middle-developer"}
+        self.f.g["agents"]["author"] = {"role": "implementer", "profile": "middle-implementer"}
+        self.f.config["_defaults"]["implementer"] = "middle-implementer"
         self.f.require_fixture_review()
 
-    def test_senior_start_is_invalid_for_either_specialty(self) -> None:
-        for role in ("developer", "test-writer"):
-            self.f.g["agents"]["author"] = {"role": role, "profile": "senior-" + role}
-            with (
-                self.subTest(role=role),
-                self.assertRaisesRegex(Invalid, "requires profile middle"),
-            ):
-                self.f.init()
+    def test_senior_implementer_requires_escalation(self) -> None:
+        self.f.g["agents"]["author"]["profile"] = "senior-implementer"
+        with self.assertRaisesRegex(Invalid, "requires profile middle"):
+            self.f.init()
 
     def test_started_assignment_rejects_new_identity_through_revise_or_reintake(self) -> None:
         f = self.f
@@ -44,7 +41,7 @@ class AssignmentLineageTests(TestCase):
         f.start("write-label")
         f.ledger.finish("write-label", f.report("write-label"))
         state = f.ledger.read()
-        state["graph"]["agents"]["author"]["profile"] = "senior-developer"
+        state["graph"]["agents"]["author"]["profile"] = "senior-implementer"
         overwrite(f.ledger, state)
         with self.assertRaisesRegex(Invalid, "requires profile middle"):
             f.ledger.replace_session("author", "replace", "terminal", "details")

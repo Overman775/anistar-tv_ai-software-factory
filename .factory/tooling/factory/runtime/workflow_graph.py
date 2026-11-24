@@ -13,7 +13,6 @@ from pydantic import TypeAdapter, ValidationError
 
 from factory.project.profile_rules import (
     check_task,
-    project_checks,
     required_checks,
 )
 from factory.runtime.contracts import (
@@ -172,48 +171,19 @@ def validate_task_topology(g: Graph, config: Config, nodes: dict[str, Node]) -> 
                 reviews and any(set(verify) <= ancestors(nodes, r) for r in reviews),
                 "Missing final review after verification",
             )
-            final_ids = {
-                c["id"] for c in project_checks(config["_project"]["data"]) if c["level"] == "final"
-            }
-            if (len(tasks) == 1 or task["kind"] == "integration") and final_ids & {
-                c["id"] for c in task["required_checks"]
-            }:
-                require(
-                    any(
-                        agents[agent_key(nodes[v])]["role"] == "judge"
-                        and writers <= ancestors(nodes, v)
-                        for v in full_verify
-                    ),
-                    "Final project checks require independent Judge verification",
-                )
         authors = {agent_key(n) for n in own.values() if n.get("owns")}
-        if not task["independent_review"]:
-            require(
-                len(authors) == 1 and agents[next(iter(authors))]["role"] == "generalist",
-                "Self-review requires one Generalist author",
-            )
         require(
-            all(nodes[r]["agent"] not in authors for r in reviews),
-            "Author cannot independently review",
+            len(authors) <= 1,
+            "Each task has at most one product author",
         )
-        if task["risk"] == "high" and task["kind"] != "integration":
-            require(
-                not any(agents[a]["role"] == "generalist" for a in authors),
-                "High risk requires separated authors",
-            )
-            require(
-                any(agents[a]["role"] == "developer" for a in authors),
-                "High risk needs Developer",
-            )
-            require(
-                any(
-                    n.get("agent")
-                    and agents[agent_key(n)]["role"] == "test-writer"
-                    and n["stage"] in {"work", "verify"}
-                    for n in own.values()
-                ),
-                "High risk needs TestWriter",
-            )
+        testers = {agent_key(nodes[v]) for v in verify}
+        require(not authors & testers, "Author cannot verify its own changes")
+        require(
+            all(nodes[r]["agent"] not in authors | testers for r in reviews),
+            "Independent Judge must differ from author and Tester",
+        )
+        if task["risk"] == "high":
+            require(reviews, "High risk requires independent Judge review")
         for dep in task.get("depends_on", []):
             if tasks[dep]["slice"] != task["slice"]:
                 slice_tasks = {k for k, t in tasks.items() if t["slice"] == tasks[dep]["slice"]}
@@ -254,25 +224,32 @@ def _validate_nodes(
             )
         if n["stage"] in {"verify", "review", "accept", "explore"}:
             require(not n.get("owns"), "Read/check node cannot own product writes")
-        if n["stage"] in {"verify", "review"}:
+        if n["stage"] == "verify":
             require(
                 "project-checks" in n.get("resources", []),
                 "Verification needs project-checks lock",
             )
         if n["stage"] != "accept":
-            acceptance_guard(
+            obligations = acceptance_guard(
                 finish_requirements.requirements,
                 config["_project"]["data"],
                 n,
                 tasks[n["task"]],
                 agents[agent_key(n)]["role"],
             )
+            if n.get("required_check_ids"):
+                validate_check_paths(
+                    {**tasks[n["task"]], "required_checks": obligations["allowed_checks"]},
+                    workspace,
+                )
+        if n["stage"] == "verify":
+            require(agents[agent_key(n)]["role"] == "tester", "Verification needs Tester")
         if n["stage"] == "review":
             require(agents[agent_key(n)]["role"] == "judge", "Integrated review needs Judge")
         if n.get("owns"):
             role = agents[agent_key(n)]["role"]
             require(
-                role in {"developer", "test-writer", "generalist", "doc-writer"},
+                role in {"implementer", "doc-writer"},
                 "Role cannot write product scope",
             )
             for path in n["owns"]:
@@ -296,6 +273,10 @@ def validate_graph(
             raise Invalid("Invalid identity")
     for a in agents.values():
         require(a["role"] != "teacher", "Teacher runs once after successful archival")
+        require(
+            a["role"] not in {"developer", "test-writer", "generalist"},
+            "Legacy author role cannot receive a new assignment",
+        )
         require(
             a["profile"] in config["_roles"].get(a["role"], []),
             "Profile not allowed for role",
@@ -406,7 +387,7 @@ def validate_assignment_lineage(
         if not node.get("agent"):
             continue
         agent = graph["agents"][agent_key(node)]
-        if agent["role"] not in {"developer", "test-writer"}:
+        if agent["role"] not in {"implementer"}:
             continue
         expected = config["_defaults"][agent["role"]]
         logical_agent = None

@@ -53,15 +53,14 @@ not evidence of what `finish` retained. Missing or ambiguous information fails
 the observation. Apply this only to handoffs explicitly required by the source;
 do not create an extra stage or agent. A Judge assigned to predecessor review
 validates the observation against source and report; otherwise the coordinator
-does so before acceptance, including in an authorized solo run. Integration covers selected source criteria,
+does so before acceptance, when independent review is optional. Integration covers selected source criteria,
 inspecting the retained handoff as historical process evidence rather than final
 product verification.
 Separate slice-local acceptance from final run acceptance before dispatch. Preserve
 applicable mandatory slice checks; place full-project tests/build/static and combined
-criteria on final integration. The final independent Judge executes its
-`verify` node, then its `review` node; one task's complete receipts remain bound to
+criteria on final integration. Tester executes final `verify`, then Judge performs independent `review` when required; one task's complete receipts remain bound to
 that node/dispatch. Never reuse stale slice receipts as proof of final-tree success.
-For a single-task run requiring full gates, assign that final verify to Judge
+For a single-task run requiring full gates, assign that final verify to Tester
 too. Existing required checks cannot be removed to retrofit this policy mid-run.
 
 Example:

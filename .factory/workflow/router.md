@@ -18,19 +18,19 @@ line count or by asking the user to select a workflow mode.
 
 | Conditions | Composition |
 | --- | --- |
-| Low consequence, local/reversible, explicit behavior, reliable oracle; no auth/data loss/public contract/lifecycle/concurrency impact | Generalist implements, tests as applicable and self-checks: SELF_REVIEW, never independent APPROVE. |
-| Bounded moderate change, clear oracle, no required independent test authorship | Generalist + independent Judge. |
-| Security, authorization, storage/migration, public API, playback/network trust, lifecycle/concurrency, weak oracle or required separation | Developer + TestWriter + independent Judge. |
-| Independent scopes benefit from specialization/context separation | Several Developers within/across slices; separate tests, integration and final Judge. |
+| Low consequence, local/reversible, explicit behavior, reliable oracle; no auth/data loss/public contract/lifecycle/concurrency impact | Implementer authors the change and tests. Tester verifies. Coordinator accepts without independent approval when allowed. |
+| Bounded moderate change with a clear oracle | Implementer, Tester and independent Judge. |
+| Security, authorization, storage/migration, public API, playback/network trust, lifecycle/concurrency, weak oracle or required separation | Implementer, Tester and independent Judge. |
+| Independent scopes benefit from specialization/context separation | One Implementer per assigned change, a Tester for affected behavior and final integration, and the required Judge. |
 
-When eligibility is uncertain, choose the stronger composition. The coordinator records independent_review=true whenever the user or project requires independent review; the graph validator cannot infer risk or those instructions. Risk labels never waive user/project gates. Solo/combined quality and savings are unproven.
+When eligibility is uncertain, choose the stronger composition. The coordinator records independent_review=true whenever the user or project requires independent review; the graph validator cannot infer risk or those instructions. Risk labels never waive user/project gates.
 Add CodeExplorer for missing facts, BugHunter for unknown failure causes;
 assign location search or investigation explicitly, with the needed result depth.
 Skip a separate search when verified locations already answer the question;
 read the cited current code before dependent edits. Semantic design belongs to
 Planning's Architect. Use DocWriter for large or
 multi-author documentation; authors handle small related edits. Add advisory
-Judges only for uncovered risks; where independent review is required, one final Judge owns the integrated verdict. Eligible solo work ends in SELF_REVIEW PASS. Advisory approval replaces neither required review nor test evidence.
+Judges only for uncovered risks; where independent review is required, one final Judge owns the integrated verdict. Advisory approval replaces neither required review nor test evidence.
 
 ## Assign and revise
 
@@ -47,18 +47,16 @@ record its reason and effective assignment under orchestration's revision rules.
 Busy slots require waiting, not model substitution. Reassignment changes neither
 approval boundaries nor retry budgets.
 
-Calibration: a specified UI label may qualify for Generalist; localization or
-accessibility logic needs reassessment. Even a one-line auth fix requires separate
-code/tests/review and negative access tests. A playback preference is one
+Calibration: a specified UI label may qualify for focused Tester verification without a Judge; localization or
+accessibility logic needs reassessment. Even a one-line auth fix requires negative access tests, verification by Tester and independent review. A playback preference is one
 UI→storage→playback slice with end-to-end tests, not only layer mocks; split
-Developers only when scope/competence warrants it. Large features may combine
+Implementers only when scope/competence warrants it. Large features may combine
 exploration, planning, slices and advisory review; this is no mandatory template.
 
 ## Initial profiles
 
-Choose the team first. Start each Developer and TestWriter assignment at its
-configured group default. The supplied defaults are middle-developer and
-middle-test-writer. Confirm model, harness, permissions and tools before
+Choose the team first. Start Implementer and Tester at their configured defaults. The supplied
+defaults are `middle-implementer` and `tester`. Confirm model, harness, permissions and tools before
 dispatch. Wait for a busy slot. An incompatible default blocks assignment.
 Started task, node, logical agent and profile identities survive revise,
 re-intake and physical replacement. Only a recorded correction changes profile.
@@ -66,8 +64,8 @@ re-intake and physical replacement. Only a recorded correction changes profile.
 ## Named profiles and escalation
 
 All profiles of a specialty share its procedure, contract and permissions.
-Classify evidenced failures as quality, environment or requirements. Code defects
-belong to Developer and test defects to TestWriter. WRITES_READY is intermediate.
+Classify evidenced failures as quality, environment or requirements. Code and test defects belong to the assigned Implementer. Additional execution
+of an existing check belongs to Tester. WRITES_READY is intermediate.
 An attempt without usable output can report FAIL_CODE or FAIL_TEST with attempted
 work, unmet requirement and evidence. Prediction, silence and transport delay
 cannot count as a failed attempt.

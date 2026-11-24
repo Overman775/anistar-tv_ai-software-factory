@@ -12,6 +12,8 @@ from typing_extensions import TypedDict
 from factory.context import context
 from factory.runtime.agent_commands import check_commands
 from factory.runtime.contracts import (
+    CheckEvidence,
+    CheckResult,
     FindingView,
     LockedSource,
     Node,
@@ -109,10 +111,237 @@ def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
             item["report"] = REPORT_SUMMARY.validate_python(
                 {key: deepcopy(value) for key, value in saved["report"].items() if key != "files"}
             )
+            predecessor = nodes[key]
+            predecessor_agent = state["graph"]["agents"].get(agent_key(predecessor))
+            role = predecessor_agent["role"] if predecessor_agent is not None else None
+            if role == "tester" and predecessor["stage"] == "verify":
+                item["report"] = compact_tester_report(state, key, item["report"])
             if "report_ref" in saved:
                 item["report_ref"] = saved["report_ref"]
         results[key] = item
     return results
+
+
+def compact_tester_report(state: State, node_id: str, report: ReportSummary) -> ReportSummary:
+    """Delivery projection only; original reports and immutable references stay intact."""
+    result = deepcopy(report)
+    result["summary"] = "Verification " + report["outcome"]
+    result.pop("evidence", None)
+    # Canonical findings and gate prose remain available through report_ref; their
+    # duplicated free text can contain successful test names and full-suite output.
+    result.pop("gate_results", None)
+    result.pop("findings", None)
+    checks: list[CheckResult] = []
+    observations = []
+    for check in report["checks"]:
+        execution_id = check.get("execution_id")
+        receipt = state.get("executions", {}).get(execution_id or "")
+        linked = (
+            receipt is not None
+            and receipt["node_id"] == node_id
+            and receipt["dispatch_id"] == report["dispatch_id"]
+            and receipt["run_id"] == report["run_id"]
+            and receipt["spec"]["id"] == check["id"]
+        )
+        status = (
+            receipt["status"] if linked and receipt is not None else check.get("result", "BLOCKED")
+        )
+        if linked and receipt is not None:
+            for observation in receipt.get("verification", []):
+                observed = deepcopy(observation)
+                if observed["scope"] == "unknown":
+                    observed["scope"] = receipt.get("selection", {}).get(
+                        "mode", receipt.get("mode", "unknown")
+                    )
+                for failure in observed["failures"]:
+                    failure["check_id"] = check["id"]
+                observations.append(observed)
+            skipped_stages = [
+                stage["spec"]["id"]
+                for stage in receipt.get("composite_stages", [])
+                if stage["execution_id"] not in state.get("executions", {})
+            ]
+            if skipped_stages:
+                observations.append(
+                    {
+                        "suite": "combined-gate",
+                        "scope": receipt.get("mode", "unknown"),
+                        "phase": "not-executed",
+                        "result": "BLOCKED",
+                        "counts": {},
+                        "failures": [],
+                        "diagnostics": ["Not executed checks: " + ", ".join(skipped_stages)],
+                    }
+                )
+        if status == "PASS":
+            continue
+        compact: CheckEvidence = {
+            "id": check["id"],
+            "result": status,
+            "reason": "Structured diagnostics unavailable; inspect immutable report/check evidence",
+        }
+        if linked and receipt is not None:
+            compact["evidence"] = receipt["output"]
+            compact["execution_id"] = execution_id or ""
+            if receipt.get("error"):
+                compact["reason"] = receipt["error"] or ""
+        checks.append(compact)
+    counts: dict[str, int] = {}
+    for observation in observations:
+        for key, value in observation["counts"].items():
+            counts[key] = counts.get(key, 0) + value
+    scopes = {item["scope"] for item in observations}
+    result["verification"] = [
+        {
+            "suite": "overall",
+            "scope": next(iter(scopes)) if len(scopes) == 1 else "unknown",
+            "phase": "verify",
+            "result": result["outcome"],
+            "counts": counts,
+            "failures": [failure for item in observations for failure in item["failures"]],
+            "diagnostics": [
+                text
+                for item in observations
+                if item["result"] != "PASS"
+                for text in item["diagnostics"]
+            ]
+            or (
+                [
+                    "Structured diagnostics unavailable; inspect immutable report/check evidence",
+                    *(
+                        [
+                            "Unstructured reporter observation: "
+                            + (report.get("evidence") or report["summary"])[:500]
+                        ]
+                        if report["outcome"] != "PASS"
+                        else []
+                    ),
+                ]
+                if not observations
+                else []
+            ),
+        }
+    ]
+    result["checks"] = checks
+    return result
+
+
+def correction_context(state: State, task_id: str) -> escalation.WorkerCorrection:
+    correction = escalation.worker_context(state, task_id)
+    nodes = {node["id"]: node for node in state["graph"]["nodes"]}
+    for entry in correction.get("history", []):
+        report = entry["evidence"]
+        node = nodes.get(report["node_id"])
+        if node is None or node["stage"] != "verify":
+            continue
+        agent = state["graph"]["agents"].get(agent_key(node))
+        if agent is None or agent["role"] != "tester":
+            continue
+        summary = REPORT_SUMMARY.validate_python(
+            {key: value for key, value in report.items() if key != "files"}
+        )
+        entry["evidence"] = compact_tester_report(state, node["id"], summary)
+        for event in reversed(state["events"]):
+            previous = event.get("previous")
+            if (
+                isinstance(previous, dict)
+                and previous.get("dispatch_id") == report["dispatch_id"]
+                and "report_ref" in previous
+            ):
+                entry["report_ref"] = report_history.reference(dict(previous).get("report_ref"))
+                break
+    failures: list[escalation.VerificationFailureHandoff] = []
+    seen = {entry["evidence"]["node_id"] for entry in correction.get("history", [])}
+    for event in reversed(state["events"]):
+        node_id = event.get("node")
+        if node_id is None or node_id in seen or node_id not in nodes:
+            continue
+        node = nodes[node_id]
+        previous = event.get("previous")
+        if node["task"] != task_id or node["stage"] != "verify" or not isinstance(previous, dict):
+            continue
+        values = dict(previous)
+        raw_report = values.get("report")
+        if not isinstance(raw_report, dict):
+            continue
+        seen.add(node_id)
+        current_report = state["nodes"][node_id].get("report")
+        if raw_report.get("outcome") == "PASS" or (
+            current_report is not None and current_report["outcome"] == "PASS"
+        ):
+            continue
+        agent = state["graph"]["agents"].get(agent_key(node))
+        if agent is None or agent["role"] != "tester":
+            continue
+        summary = REPORT_SUMMARY.validate_python(
+            {key: value for key, value in raw_report.items() if key != "files"}
+        )
+        failure: escalation.VerificationFailureHandoff = {
+            "historical": True,
+            "report": compact_tester_report(state, node_id, summary),
+        }
+        if "report_ref" in values:
+            failure["report_ref"] = report_history.reference(values["report_ref"])
+        failures.append(failure)
+    if failures:
+        correction["verification_failures"] = failures
+    return correction
+
+
+def delivered_findings(
+    state: State, task_id: str, *, include_dependencies: bool
+) -> dict[str, FindingView]:
+    """Project Tester prose from structured failures without altering finding history."""
+    result = review_findings.view(state, task_id, include_dependencies=include_dependencies)
+    nodes = {node["id"]: node for node in state["graph"]["nodes"]}
+    for finding in result.values():
+        tid, fid = finding.get("task_id", task_id), finding.get("id")
+        if not isinstance(tid, str) or not isinstance(fid, str):
+            continue
+        record = state.get("review_findings", {}).get(tid, {}).get(fid)
+        if record is None or not record["history"]:
+            # Leave unresolvable projections intact for the canonical packet validator.
+            continue
+        origin = record["history"][0]
+        node = nodes.get(origin["node_id"])
+        if node is None or state["graph"]["agents"][agent_key(node)]["role"] != "tester":
+            continue
+        details = []
+        for receipt in state.get("executions", {}).values():
+            if (
+                receipt["node_id"] != origin["node_id"]
+                or receipt["dispatch_id"] != origin["dispatch_id"]
+            ):
+                continue
+            for observation in receipt.get("verification", []):
+                for failure in observation["failures"]:
+                    detail = failure["name"] + ": " + failure["diagnostic"]
+                    if failure.get("location"):
+                        detail += " (" + failure["location"] + ")"
+                    details.append(detail)
+        if not details:
+            # Legacy reports may contain the only actionable failure observation.
+            continue
+        evidence = "Originating Tester dispatch failure diagnostics:\n" + "\n".join(
+            dict.fromkeys(details)
+        )
+        finding["summary"] = "Verification finding " + finding["id"]
+        latest = record["history"][-1]
+        latest_node = nodes.get(latest["node_id"])
+        if (
+            latest_node is not None
+            and state["graph"]["agents"][agent_key(latest_node)]["role"] == "tester"
+        ):
+            finding["evidence"] = evidence
+        reviewed = finding.get("reviewed")
+        if reviewed is not None:
+            reviewer = nodes.get(reviewed["node_id"])
+            if (
+                reviewer is not None
+                and state["graph"]["agents"][agent_key(reviewer)]["role"] == "tester"
+            ):
+                reviewed["evidence"] = evidence
+    return result
 
 
 def worker_node(node: Node) -> Node:
@@ -184,10 +413,10 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         }
         if integration_verifier
         else {},
-        review_findings=review_findings.view(
+        review_findings=delivered_findings(
             state, node["task"], include_dependencies=integration_verifier
         ),
-        correction=escalation.worker_context(state, node["task"]),
+        correction=correction_context(state, node["task"]),
     )
     if state["config"]["profiles"][agent["profile"]]["runner"] == "acpx":
         envelope["report_path"] = str(

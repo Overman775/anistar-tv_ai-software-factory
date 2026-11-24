@@ -25,7 +25,7 @@ from factory.validation import validation_message
 RECORD = TypeAdapter[FindingRecord](FindingRecord)
 EVENT = TypeAdapter[FindingEvent](FindingEvent)
 
-ROLES = {"developer", "test-writer", "generalist", "doc-writer", "judge"}
+ROLES = {"implementer", "doc-writer", "judge"}
 CLOSED = {"fixed", "dismissed"}
 
 
@@ -78,7 +78,17 @@ def consistent(report: Report, review: bool = False) -> None:
             "RETHINK": "BLOCKED",
             "BLOCKED_TOOL_ERROR": "BLOCKED",
         }
-        if not (
+        pending_defect = (
+            review
+            and verdict == "NEEDS_WORK"
+            and outcome == "BLOCKED"
+            and stage == "CHECKS_REQUESTED"
+            and any(
+                finding.get("status") == "open" and finding.get("blocking") is True
+                for finding in report.get("findings", [])
+            )
+        )
+        if not pending_defect and not (
             isinstance(verdict, str) and verdict in expected and (expected[verdict] == outcome)
         ):
             raise ValueError("Contradictory verdict/outcome")
@@ -115,10 +125,24 @@ def _new_finding(state: State, node: Node, tid: str, update: Finding) -> Finding
         raise ValueError(validation_message("Invalid new finding", exc, RECORD)) from None
 
 
+def _tester_origin(state: State, finding: FindingRecord) -> bool:
+    if not finding["history"]:
+        return False
+    origin = finding["history"][0]
+    return any(
+        n["id"] == origin["node_id"]
+        and n["stage"] == "verify"
+        and state["graph"]["agents"][agent_key(n)]["role"] == "tester"
+        for n in state["graph"]["nodes"]
+    )
+
+
 def apply(state: State, node: Node, report: Report) -> None:
     """Validate a complete report before committing a copied registry to state."""
     role = state["graph"]["agents"][agent_key(node)]["role"]
-    reviewer = node["stage"] in {"verify", "review"} and role == "judge"
+    reviewer = (node["stage"] == "verify" and role == "tester") or (
+        node["stage"] == "review" and role == "judge"
+    )
     review = node["stage"] == "review" and reviewer
     consistent(report, review)
     registry = deepcopy(state.get("review_findings", {}))
@@ -146,8 +170,8 @@ def apply(state: State, node: Node, report: Report) -> None:
         if reviewer:
             finding = cast(Finding, update)
             ensure(
-                review or status == "open",
-                "Verification may discover findings; closure requires review",
+                review or status == "open" or (old is not None and _tester_origin(state, old)),
+                "Tester cannot close Judge findings",
             )
             ensure(status in {"open", "fixed", "dismissed"}, "Invalid reviewer finding status")
             if old is None:
@@ -204,12 +228,17 @@ def apply(state: State, node: Node, report: Report) -> None:
         old["history"].append(event)
         if reviewer:
             old["reviewed"] = event
-    if review and report["outcome"] == "PASS":
+    if reviewer and report["outcome"] == "PASS":
         ensure(
             all(
                 not item["blocking"] or ((tid, fid) in seen and item["status"] in CLOSED)
                 for tid in allowed
                 for fid, item in registry.get(tid, {}).items()
+                if review
+                or (
+                    item["history"][0]["review_task_id"] == node["task"]
+                    and _tester_origin(state, item)
+                )
             ),
             "Unresolved or omitted blocking review finding",
         )

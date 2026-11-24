@@ -37,6 +37,9 @@ def evaluate(
     report = raw if isinstance(raw, dict) else {}
     gates = boundary_gates(profile, "implement." + node["stage"], task)
     expected_checks = {cid for gate in gates for cid in gate.get("checks", [])}
+    selected = node.get("required_check_ids")
+    if isinstance(selected, list):
+        expected_checks &= {cid for cid in selected if isinstance(cid, str)}
     if expected_checks:
         specifications = [c for c in task.get("required_checks", []) if c["id"] in expected_checks]
         results = [c for c in report.get("checks", []) if c.get("id") in expected_checks]

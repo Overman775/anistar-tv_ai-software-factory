@@ -31,6 +31,7 @@ class Execution(TypedDict):
     stages: NotRequired[Annotated[list[Name], Field(min_length=1)]]
     mode: NotRequired[Literal["full", "filtered", "update"]]
     selection_files: NotRequired[Literal[True]]
+    result_format: NotRequired[Literal["anistar-quality"]]
 
 
 def execution_shape(value: Execution) -> Execution:

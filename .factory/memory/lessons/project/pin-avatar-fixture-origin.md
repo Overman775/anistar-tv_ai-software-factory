@@ -9,8 +9,8 @@ observed: После перехода с .bz на .pw три проверки а
   по умолчанию, а метаданные профиля задавали прежний origin. С явным origin в фикстуре
   прошли все 6 тестов аватара и полный набор из 922 тестов.
 roles:
-- developer
-- test-writer
+- implementer
+- tester
 - judge
 tags:
 - avatar

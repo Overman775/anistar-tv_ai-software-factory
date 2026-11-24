@@ -33,21 +33,25 @@ class GateTests(unittest.TestCase):
             data, f.g["tasks"]["label"], final=True
         )
 
-    def work_setup(self, code: int = 0) -> workflow_fixture.WorkflowFixture:
+    def verify_setup(self, code: int = 0) -> workflow_fixture.WorkflowFixture:
         f = self.f
-        self.install(policy([check(code=code)]))
-        f.g["nodes"][0]["resources"] = ["project-checks"]
+        data = policy([check(code=code)])
+        data["gates"][0]["at"] = ["implement.verify"]
+        self.install(data)
         f.init()
         f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        f.start("verify-label")
         return f
 
-    def test_missing_receipt_blocks_work_and_next_stage_then_real_pass_opens_it(self) -> None:
-        f = self.work_setup()
+    def test_missing_receipt_blocks_verify_and_accept_then_real_pass_opens_it(self) -> None:
+        f = self.verify_setup()
+        behavior = f.ledger.run_check("verify-label", "behavior")
         with self.assertRaisesRegex(Invalid, "Missing required check"):
-            f.ledger.finish("write-label", f.report("write-label", checks=[]))
-        self.assertEqual("running", f.ledger.read()["nodes"]["write-label"]["status"])
-        with self.assertRaisesRegex(Invalid, "Dependencies"):
-            f.ledger.claim("verify-label")
+            f.ledger.finish("verify-label", f.report("verify-label", checks=[behavior]))
+        self.assertEqual("running", f.ledger.read()["nodes"]["verify-label"]["status"])
+        with self.assertRaisesRegex(Invalid, "Required work not done"):
+            f.ledger.accept("accept-label")
         forged: dict[str, Any] = {
             **f.g["tasks"]["label"]["required_checks"][-1],
             "result": "PASS",
@@ -57,55 +61,59 @@ class GateTests(unittest.TestCase):
             "evidence": "claimed",
         }
         with self.assertRaisesRegex(Invalid, "receipt"):
-            f.ledger.finish("write-label", f.report("write-label", checks=[forged]))
-        receipt = f.ledger.run_check("write-label", "lint")
-        f.ledger.finish("write-label", f.report("write-label", checks=[receipt]))
-        report = f.ledger.read()["nodes"]["write-label"]["report"]
+            f.ledger.finish("verify-label", f.report("verify-label", checks=[behavior, forged]))
+        receipt = f.ledger.run_check("verify-label", "lint")
+        f.ledger.finish("verify-label", f.report("verify-label", checks=[behavior, receipt]))
+        report = f.ledger.read()["nodes"]["verify-label"]["report"]
         self.assertEqual(
-            ["factory-implement-work", "work-ready"], [g["gate_id"] for g in report["gate_results"]]
+            ["factory-implement-verify", "work-ready"],
+            [g["gate_id"] for g in report["gate_results"]],
         )
         self.assertTrue(
             all(g["status"] == "PASS" and g["artifact_hash"] for g in report["gate_results"])
         )
-        f.start("verify-label")
-        # Early success cannot replace the final verification's own fresh receipt.
-        with self.assertRaisesRegex(Invalid, "Missing required check"):
-            f.ledger.finish("verify-label", f.report("verify-label"))
-        final = f.report("verify-label")
-        final["checks"].append(f.ledger.run_check("verify-label", "lint"))
-        f.ledger.finish("verify-label", final)
+        self.assertEqual([], f.ledger.read()["nodes"]["write-label"]["report"]["checks"])
         f.ledger.accept("accept-label")
 
-    def test_failed_command_can_report_failure_but_cannot_release_next_stage(self) -> None:
-        f = self.work_setup(code=1)
-        failed = f.ledger.run_check("write-label", "lint")
+    def test_failed_command_can_report_named_failure_but_cannot_release_accept(self) -> None:
+        f = self.verify_setup(code=1)
+        behavior = f.ledger.run_check("verify-label", "behavior")
+        failed = f.ledger.run_check("verify-label", "lint")
         self.assertEqual("FAIL", failed["result"])
         with self.assertRaisesRegex(Invalid, "Failed/incomplete"):
-            f.ledger.finish("write-label", f.report("write-label", checks=[failed]))
+            f.ledger.finish("verify-label", f.report("verify-label", checks=[behavior, failed]))
         f.ledger.finish(
-            "write-label",
+            "verify-label",
             f.report(
-                "write-label", outcome="FAIL", checks=[failed], gate_results=[{"status": "PASS"}]
+                "verify-label",
+                outcome="FAIL",
+                stage_result="FAIL_CODE",
+                checks=[behavior, failed],
+                gate_results=[{"status": "PASS"}],
             ),
         )
-        self.assertEqual("blocked", f.ledger.read()["nodes"]["write-label"]["status"])
-        self.assertEqual(
-            "FAIL", f.ledger.read()["nodes"]["write-label"]["report"]["gate_results"][0]["status"]
-        )
-        with self.assertRaisesRegex(Invalid, "Dependencies"):
-            f.ledger.claim("verify-label")
+        state = f.ledger.read()["nodes"]["verify-label"]
+        self.assertEqual("blocked", state["status"])
+        self.assertEqual("FAIL_CODE", state["report"]["stage_result"])
+        self.assertEqual("FAIL", state["report"]["gate_results"][0]["status"])
+        with self.assertRaisesRegex(Invalid, "Required work not done"):
+            f.ledger.accept("accept-label")
 
-    def test_work_gate_rejects_stale_receipt(self) -> None:
-        f = self.work_setup()
-        receipt = f.ledger.run_check("write-label", "lint")
+    def test_verify_gate_rejects_stale_receipt(self) -> None:
+        f = self.verify_setup()
+        behavior = f.ledger.run_check("verify-label", "behavior")
+        receipt = f.ledger.run_check("verify-label", "lint")
         (f.root / "lib/example.dart").write_text("changed after checking")
         with self.assertRaisesRegex(Invalid, "invalidated"):
-            f.ledger.finish("write-label", f.report("write-label", checks=[receipt]))
+            f.ledger.finish("verify-label", f.report("verify-label", checks=[behavior, receipt]))
 
     def test_stage_command_gate_requires_reservation_at_graph_validation(self) -> None:
         f = self.f
-        self.install(policy())
-        with self.assertRaisesRegex(Invalid, "project-checks reservation"):
+        data = policy()
+        data["gates"][0]["at"] = ["implement.verify"]
+        self.install(data)
+        next(n for n in f.g["nodes"] if n["stage"] == "verify")["resources"] = []
+        with self.assertRaisesRegex(Invalid, "Verification needs project-checks lock"):
             validate_graph(f.g, f.config, f.root)
 
     def test_integrated_review_requires_criteria_before_approval_and_acceptance(self) -> None:
@@ -133,7 +141,7 @@ class GateTests(unittest.TestCase):
                 "agent": "judge",
                 "depends_on": ["verify-label"],
                 "owns": [],
-                "resources": ["project-checks"],
+                "resources": [],
             }
         )
         next(n for n in f.g["nodes"] if n["stage"] == "accept")["depends_on"] = ["review-label"]

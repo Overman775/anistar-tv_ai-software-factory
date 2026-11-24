@@ -141,7 +141,7 @@ class AcceptanceTests(unittest.TestCase):
         f.start("verify-second")
         f.ledger.finish("verify-second", f.report("verify-second"))
         f.ledger.accept("accept-second")
-        f.start("verify-all", "integration-judge")
+        f.start("verify-all")
         f.ledger.finish("verify-all", f.report("verify-all"))
         f.start("review-all", "integration-judge")
         f.ledger.finish("review-all", f.report("review-all", verdict="APPROVE", findings=[]))
@@ -261,8 +261,17 @@ class AcceptanceTests(unittest.TestCase):
 
     def test_additional_failure_cannot_hide_blocking_finding(self) -> None:
         f, report = self.verifying()
-        report["findings"] = [dict(id="REV-01", blocking=True, status="open", summary="Regression")]
-        with self.assertRaisesRegex(Invalid, "blocking finding"):
+        report["findings"] = [
+            dict(
+                id="REV-01",
+                blocking=True,
+                status="open",
+                owner_role="implementer",
+                summary="Regression",
+                evidence="The observed result contradicts the locked acceptance criterion",
+            )
+        ]
+        with self.assertRaisesRegex(Invalid, "Unresolved or omitted blocking review finding"):
             f.ledger.finish("verify-label", report)
 
     def test_required_project_gate_cannot_be_replaced_by_acceptance_tests(self) -> None:

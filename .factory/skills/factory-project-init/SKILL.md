@@ -35,7 +35,33 @@ Load only needed authoring details:
 - Judgment definitions: [decisions](../../contracts/common/decisions.md).
 
 Validate through [shared verification](../factory-project-configure/references/verification.md).
+After YAML edits, when the prepared development tools are available, run the
+registered public stages (REPORT_DIR must be outside the candidate workspace):
+
+```sh
+.factory/tooling/bin/cli tooling check --stage yaml-lint --stage yaml-contracts --report-dir "$REPORT_DIR" --json
+```
+
+Choose a fresh external report directory. For a bounded target write scope, run
+this command from a disposable external copy of the actual candidate with its
+prepared dependencies, selected profile and linked inputs, as shared verification
+requires. Read both stage results and logs. Standalone yamllint on selected files,
+private `_check_files` calls, or a two-file subset do not replace either full stage.
+A missing tool or stage failure stays explicit; do not silently omit the stage.
+
+The stages inspect the checker's owned YAML discovery set, not only edited files.
+`yaml-contracts` loads factory.yaml's selected profile and its linked definitions;
+a profile under project/ is also discovered by its ID regardless of filename.
+An alternate selected filename does not justify skipping the public stages.
+Do not claim that a stage validates undiscovered files or recipient delivery:
+add the selected-profile loading and real target/contrast preview from shared
+verification. Report unrelated existing stage failures without changing their
+files outside scope or presenting a private subset as full-stage PASS.
 Report selected profile, sources, changed files, verified configuration and remaining
-setup. Distinguish profile readiness from application checks and live execution.
+setup. For each relevant check state executed PASS, executed failure with its
+command/exit and cause, or not run with reason. Missing dev tools and failed
+invocations must remain explicit even when profile loading or preview succeeds.
+State separately profile readiness, application check results and whether live
+workflow acceptance was observed.
 Do not install application dependencies, start development, or create a run merely
 to finish setup. Existing authorization may cover follow-up work; do not infer it.

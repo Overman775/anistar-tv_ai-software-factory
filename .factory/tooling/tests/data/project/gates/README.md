@@ -4,12 +4,12 @@ Explicit definitions loaded by `gate_files` in [project.yaml](../project.yaml).
 
 | File | Boundary / usual executor |
 | --- | --- |
-| [roles/authors.yaml](roles/authors.yaml) | implement.work — Developer, TestWriter or Generalist |
-| [roles/judge.yaml](roles/judge.yaml) | implement.verify — final verification by Judge |
+| [roles/authors.yaml](roles/authors.yaml) | implement.verify — standalone static checks by Tester |
+| [roles/judge.yaml](roles/judge.yaml) | implement.verify — final verification by Tester |
 | [skills/decompose/gate.yaml](skills/decompose/gate.yaml) | decompose.complete — общий валидатор вызывает проектную проверку |
 | [skills/code-review.yaml](skills/code-review.yaml) | implement.review + code-review.complete — Judge or standalone Review |
 
-Shared author checks have one definition, not one copy per role. Names organize
+Each check has one registered definition. Names organize
 files; `at` and the workflow graph determine execution. All Implement checks remain mandatory
 at final verify; Decompose checks stay within decomposition. Reviewer cannot run commands; standalone Review coordinator owns
 tool evidence. [Factory gates](../../gates/README.md) remain mandatory independently.

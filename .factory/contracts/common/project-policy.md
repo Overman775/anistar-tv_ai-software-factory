@@ -26,7 +26,7 @@ inspecting the candidate.
 
 Worker `cli context` resolves the same profile for process, role, stage and scope.
 Deliver its full packet. Rule selectors remain visible: a server rule does not
-become a UI-wide rule merely because both scopes share one Developer assignment.
+become a UI-wide rule merely because both scopes share one Implementer assignment.
 Explicit assignment reads supplement the profile; they cannot remove obligations.
 Profile data never overrides the worker role or introduces new roles/stages.
 
@@ -114,7 +114,7 @@ callbacks or plugin runtime. Conditional selectors use paths, not code execution
 retains existing exact selectors. Unsupported fields fail rather than disappearing.
 Artifact headings/columns and source formats remain the existing factory formats.
 
-Generalist, universal backend/frontend/mobile roles, vertical slices and final
+Implementer, universal backend/frontend/mobile roles, vertical slices and final
 independent Judge retain their contracts. Profile selection does not prove model
 quality, runtime tool availability or live application verification.
 

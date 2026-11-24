@@ -57,7 +57,7 @@ def fixture_profile() -> ProjectData:
                 {
                     "id": "server",
                     "for": {
-                        "roles": ["developer", "generalist", "test-writer", "judge"],
+                        "roles": ["implementer", "tester", "judge"],
                         "paths_any": ["services/api/**"],
                     },
                     "file": "backend.md",
@@ -65,7 +65,7 @@ def fixture_profile() -> ProjectData:
                 {
                     "id": "browser",
                     "for": {
-                        "roles": ["developer", "generalist", "test-writer", "judge"],
+                        "roles": ["implementer", "tester", "judge"],
                         "paths_any": ["apps/web/**"],
                     },
                     "file": "frontend.md",
@@ -101,7 +101,7 @@ class ProjectTests(unittest.TestCase):
             (["apps/web/app.ts"], {"browser"}),
             (["services/api/app.py", "apps/web/app.ts"], {"server", "browser"}),
         ]:
-            for role in ["developer", "test-writer", "judge", "generalist"]:
+            for role in ["implementer", "tester", "judge"]:
                 rules = select_rules(
                     policy["data"],
                     process="implement",
@@ -119,14 +119,22 @@ class ProjectTests(unittest.TestCase):
             2,
             len(
                 select_rules(
-                    self.data, process="implement", audience="worker", role="developer", scope=None
+                    self.data,
+                    process="implement",
+                    audience="worker",
+                    role="implementer",
+                    scope=None,
                 )
             ),
         )
         for scope in [[], ["../outside"], ["a.py", "a.py"]]:
             with self.assertRaises(ValueError):
                 select_rules(
-                    self.data, process="implement", audience="worker", role="developer", scope=scope
+                    self.data,
+                    process="implement",
+                    audience="worker",
+                    role="implementer",
+                    scope=scope,
                 )
 
     def test_rule_groups_reject_legacy_shapes_and_recipient_overrides(self) -> None:
@@ -138,7 +146,7 @@ class ProjectTests(unittest.TestCase):
             {"worker": [{"id": "old", "audience": ["worker"], "file": "backend.md"}]},
             {
                 "coordinator": [
-                    {"id": "role", "for": {"roles": ["developer"]}, "file": "backend.md"}
+                    {"id": "role", "for": {"roles": ["implementer"]}, "file": "backend.md"}
                 ]
             },
             {
@@ -156,7 +164,7 @@ class ProjectTests(unittest.TestCase):
             data = validate({"id": "fixture", "rules": rules})
             self.assertEqual([], select_rules(data, process="planning", audience="coordinator"))
             self.assertEqual(
-                [], select_rules(data, process="implement", audience="worker", role="developer")
+                [], select_rules(data, process="implement", audience="worker", role="implementer")
             )
         data = {
             "id": "fixture",
@@ -167,7 +175,7 @@ class ProjectTests(unittest.TestCase):
         }
         policy = self.policy(data)
         for audience, role, expected in [
-            ("worker", "developer", "worker-common"),
+            ("worker", "implementer", "worker-common"),
             ("worker", "reviewer", "worker-common"),
             ("coordinator", None, "coord-common"),
         ]:
@@ -217,7 +225,7 @@ class ProjectTests(unittest.TestCase):
             lambda d: d.update(support_files=[]),
             lambda d: d.update(support_files=["backend.md"]),
             lambda d: d["rules"]["worker"].append(deepcopy(d["rules"]["worker"][0])),
-            lambda d: d["rules"]["worker"][0]["for"].update(roles=["backend-developer"]),
+            lambda d: d["rules"]["worker"][0]["for"].update(roles=["backend-implementer"]),
             lambda d: d["rules"]["worker"][0]["for"].update(paths_any=[]),
             lambda d: d["rules"]["worker"][0].update(file="../outside"),
             lambda d: d["rules"]["worker"][0].update(forbidden="ignored"),
@@ -284,7 +292,7 @@ class ProjectTests(unittest.TestCase):
             self.root,
             process="implement",
             audience="worker",
-            role="developer",
+            role="implementer",
             scope=None,
             read_bytes=read,
         )
@@ -380,17 +388,13 @@ class ProjectTests(unittest.TestCase):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("Fixture document", encoding="utf-8")
             graph = json.loads((ROOT / "tooling/examples" / name).read_text(encoding="utf-8"))
-            if name.startswith("reviewed"):
-                fixture.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
+            fixture.config["_defaults"]["implementer"] = "middle-implementer"
             full = expand_intake_checks(graph, fixture.config)
             task_id = next(iter(full["tasks"]))
             task = full["tasks"][task_id]
             self.assertEqual(
                 [
                     "behavior",
-                    "anistar-analyze",
-                    "anistar-dcm",
-                    "anistar-format-check",
                     "anistar-check",
                     "anistar-test-e2e",
                     "anistar-build-android-prod-apk",
@@ -414,7 +418,7 @@ class ProjectTests(unittest.TestCase):
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
         fixture.config["_project"] = load_profile(ROOT / "project/project.yaml")
         graph = json.loads((ROOT / "tooling/examples/example.workflow.json").read_text())
-        graph["tasks"]["label"]["project_check_inputs"] = {"anistar-analyze": ["extra.txt"]}
+        graph["tasks"]["label"]["project_check_inputs"] = {"anistar-check": ["extra.txt"]}
         task = expand_intake_checks(graph, fixture.config)["tasks"]["label"]
         check_task(fixture.config["_project"]["data"], task, final=True)
         check = task["required_checks"][1]
@@ -836,7 +840,7 @@ class ProjectTests(unittest.TestCase):
             self.assertEqual(
                 [],
                 material_entries(
-                    policy, self.root, process="implement", audience="worker", role="developer"
+                    policy, self.root, process="implement", audience="worker", role="implementer"
                 ),
             )
 
@@ -890,7 +894,7 @@ class ProjectTests(unittest.TestCase):
                 self.root,
                 process="implement",
                 audience="worker",
-                role="developer",
+                role="implementer",
                 scope=scope,
                 read_bytes=read,
             )
@@ -930,7 +934,7 @@ class ProjectTests(unittest.TestCase):
         self.data["documents"] = {"api": {"path": "backend.md"}, "web": {"path": "frontend.md"}}
         self.data["rules"] = {"worker": [{"id": "read", "documents": ["api", "web"]}]}
         policy = self.policy()
-        selection: Selection = dict(process="implement", audience="worker", role="developer")
+        selection: Selection = dict(process="implement", audience="worker", role="implementer")
         frozen = freeze_materials(policy, self.root, [selection])
         self.assertEqual(2, len(frozen))
         (self.root / "frontend.md").write_text("changed")
@@ -1229,7 +1233,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         self.install_policy(fixture_profile())
         task = deepcopy(f.g["tasks"]["label"])
         task["scope"] = ["services/api/app.py", "apps/web/app.ts"]
-        for role in ["developer", "test-writer", "judge"]:
+        for role in ["implementer", "tester", "judge"]:
             packet = context.build(
                 f.config,
                 f.root,
@@ -1368,7 +1372,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         for name, (_, updated) in documents.items():
             path = (f.root / name).resolve()
             path.write_text("Unverified candidate")
-            with self.assertRaisesRegex(Invalid, "Runner evidence invalidated"):
+            with self.assertRaisesRegex(Invalid, "[Ee]vidence invalidated"):
                 f.ledger.accept("accept-label")
             path.write_text(updated)
         f.ledger.accept("accept-label")
@@ -1406,8 +1410,8 @@ class ProjectIntegrationTests(unittest.TestCase):
         native = context.build(
             active["config"],
             f.root,
-            "generalist",
-            "generalist",
+            "implementer",
+            "implementer",
             "implement",
             {
                 "source": f.g["sources"]["request"],
@@ -1498,7 +1502,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "dependency"):
             f.ledger.run_check("verify-label", "second")
 
-    def test_final_project_verify_cannot_be_reassigned_from_judge_to_author(self) -> None:
+    def test_final_project_verify_cannot_be_reassigned_from_tester_to_author(self) -> None:
         from factory.runtime.workflow_graph import validate_graph
 
         f = self.f
@@ -1506,8 +1510,8 @@ class ProjectIntegrationTests(unittest.TestCase):
         graph = json.loads((ROOT / "tooling/examples/reviewed-slice.workflow.json").read_text())
         graph = expand_intake_checks(graph, config)
         validate_graph(graph, config, f.root)
-        next(n for n in graph["nodes"] if n["id"] == "verify")["agent"] = "tests"
-        with self.assertRaisesRegex(Invalid, "Judge verification"):
+        next(n for n in graph["nodes"] if n["id"] == "verify")["agent"] = "implementer"
+        with self.assertRaisesRegex(Invalid, "Verification needs Tester|Required checks need"):
             validate_graph(graph, config, f.root)
 
 

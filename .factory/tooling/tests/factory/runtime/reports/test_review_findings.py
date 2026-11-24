@@ -7,10 +7,10 @@ import sys
 import unittest
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from factory.adapters.acpx_adapter import prepare_prompt
-from factory.runtime.contracts import agent_key
+from factory.runtime.contracts import Report, agent_key
 from factory.runtime.reports import review_findings
 from factory.runtime.workflow_core import Invalid, snapshot
 from tests.factory.runtime import workflow_fixture
@@ -41,7 +41,7 @@ class ReviewFindingTests(unittest.TestCase):
             id="REV-1",
             status="open",
             blocking=True,
-            owner_role="generalist",
+            owner_role="implementer",
             summary="Incorrect label",
             evidence="Reproduction",
         )
@@ -174,9 +174,9 @@ class ReviewFindingTests(unittest.TestCase):
                 finding_updates=[dict(id="REV-1", status="ready", evidence="Changed")],
             ),
         )
-        f.start("verify-label", "new-author")
+        f.start("verify-label")
         verification = f.ledger.packet("verify-label")
-        self.assertNotIn(
+        self.assertIn(
             "review-findings.md", {Path(item["path"]).name for item in verification["instructions"]}
         )
         f.ledger.finish("verify-label", f.report("verify-label"))
@@ -276,7 +276,239 @@ class ReviewFindingTests(unittest.TestCase):
         envelope = json.loads(prompt)
         self.assertEqual(["REV-1"], list(envelope["review_findings"]))
         self.assertNotIn("history", envelope["review_findings"]["REV-1"])
-        self.assertNotIn("Review findings in Implement", prompt)
+        self.assertTrue(
+            any(
+                Path(item["path"]).name == "review-findings.md" for item in envelope["instructions"]
+            )
+        )
+
+    def test_low_risk_tester_failure_returns_to_author_and_closes_without_judge(self) -> None:
+        f = workflow_fixture.WorkflowFixture(self.addCleanup)
+        f.g["tasks"]["label"]["required_checks"][0]["execution"]["argv"] = [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; raise SystemExit(Path('lib/example.dart').read_text() == 'before')",
+        ]
+        f.init()
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        f.start("verify-label")
+        f.ledger.finish(
+            "verify-label",
+            f.report(
+                "verify-label",
+                "FAIL",
+                stage_result="FAIL_CODE",
+                findings=[self.finding],
+            ),
+        )
+        f.ledger.retry(
+            "write-label", "tests", "Tester reproduced code defect", "All workers terminal"
+        )
+        f.start("write-label")
+        (f.root / "lib/example.dart").write_text("after")
+        f.ledger.finish(
+            "write-label",
+            f.report(
+                "write-label",
+                finding_updates=[dict(id="REV-1", status="ready", evidence="Corrected label")],
+            ),
+        )
+        f.start("verify-label")
+        f.ledger.finish(
+            "verify-label",
+            f.report(
+                "verify-label",
+                findings=[
+                    dict(id="REV-1", status="fixed", evidence="Registered regression now passes")
+                ],
+            ),
+        )
+        f.ledger.accept("accept-label")
+        state = f.ledger.read()
+        self.assertEqual("done", state["nodes"]["accept-label"]["status"])
+        self.assertEqual({"label:tests": 1}, state["counters"])
+        self.assertEqual(
+            ["open", "ready", "fixed"],
+            [event["status"] for event in state["review_findings"]["label"]["REV-1"]["history"]],
+        )
+
+    def test_tester_reopening_does_not_acquire_judge_closure_authority(self) -> None:
+        self.discovered()
+        state = self.f.ledger.read()
+        node = next(n for n in state["graph"]["nodes"] if n["id"] == "verify-label")
+        reopened = dict(self.finding, evidence="Tester confirms existing semantic finding")
+        report = cast(Report, self.f.report("verify-label", "FAIL", findings=[reopened], checks=[]))
+        review_findings.apply(state, node, report)
+        item = state["review_findings"]["label"]["REV-1"]
+        self.assertEqual("verify-label", item["reviewed"]["node_id"])
+        before = deepcopy(state)
+        with self.assertRaisesRegex(ValueError, "Tester cannot close Judge findings"):
+            review_findings.apply(
+                state,
+                node,
+                cast(
+                    Report,
+                    {
+                        **report,
+                        "findings": [dict(id="REV-1", status="dismissed", evidence="Dismissed")],
+                    },
+                ),
+            )
+        self.assertEqual(before, state)
+
+    def test_judge_requested_existing_check_keeps_author_and_final_receipts(
+        self, known_defect: bool = False
+    ) -> None:
+        from factory.project.profile_io import load_profile
+
+        self.f = f = workflow_fixture.WorkflowFixture(self.addCleanup)
+        f.require_fixture_review()
+        f.fixture_policy = """id: unit-fixture
+decisions:
+  - id: extra-needed
+    type: predicate
+    min_confidence: 0.4
+    question: Is this extra check mandatory at intake?
+gates:
+  - id: optional-quality
+    at: [implement.verify]
+    checks:
+      - id: focused-extra
+        level: slice
+        decision: extra-needed
+        kind: static
+        method: Existing focused command
+        execution:
+          argv: ["{python}", "-c", "print('focused extra')"]
+          cwd: .
+          timeout_seconds: 10
+          inputs: [extra-input.txt]
+"""
+        f.fixture_policy = f.fixture_policy.replace('"{python}"', json.dumps(sys.executable))
+        (f.root / "extra-input.txt").write_text("original input")
+        f.fixture_profile.write_text(f.fixture_policy)
+        f.config["_project"] = load_profile(f.fixture_profile)
+        f.config["_files"].update(f.config["_project"]["files"])
+        f.g["tasks"]["label"]["policy_decisions"] = {
+            "extra-needed": {"probability": 0.1, "source": "coordinator", "reason": "Not mandatory"}
+        }
+        review = next(node for node in f.g["nodes"] if node["id"] == "review-label")
+        review["resources"] = [*review.get("resources", []), "project-checks"]
+        f.init()
+        self.work()
+        f.start("review-label", "reviewer-session")
+        self.assertTrue(f.config["profiles"]["judge"]["capabilities"]["commands"])
+        before_check = f.ledger.read()
+        self.assertIn("project-checks", review["resources"])
+        self.assertFalse(
+            any(
+                check["kind"] != "observation"
+                for check in f.ledger.finish_requirements(before_check, review)["allowed_checks"]
+            )
+        )
+        with self.assertRaisesRegex(Invalid, "Unknown assigned command"):
+            f.ledger.run_check("review-label", "behavior")
+        self.assertEqual(before_check, f.ledger.read())
+        f.ledger.finish(
+            "review-label",
+            f.report(
+                "review-label",
+                "BLOCKED",
+                verdict="NEEDS_WORK" if known_defect else "RETHINK",
+                findings=[self.finding] if known_defect else [],
+                stage_result="CHECKS_REQUESTED",
+                summary="Coordinator: request the existing optional focused-extra command on this candidate",
+            ),
+        )
+        before = f.ledger.read()
+        self.assertEqual(["revise"], f.ledger.next_actions()["corrections"]["review-label"])
+        self.assertEqual(
+            "CHECKS_REQUESTED", before["nodes"]["review-label"]["report"]["stage_result"]
+        )
+        self.assertIn("focused-extra", before["nodes"]["review-label"]["report"]["summary"])
+        graph = deepcopy(before["graph"])
+        graph["nodes"].append(
+            dict(
+                id="requested-behavior",
+                task="label",
+                stage="verify",
+                agent="tester",
+                depends_on=["verify-label"],
+                owns=[],
+                resources=["project-checks"],
+                required_check_ids=["focused-extra"],
+            )
+        )
+        next(n for n in graph["nodes"] if n["id"] == "review-label")["depends_on"].append(
+            "requested-behavior"
+        )
+        changed = deepcopy(graph)
+        changed["tasks"]["label"]["reason"] = "Unrelated task edit"
+        with self.assertRaisesRegex(Invalid, "cannot change task obligations"):
+            f.ledger.revise(changed, "Not an evidence-only request")
+        self.assertEqual(before, f.ledger.read())
+        (f.root / "lib/example.dart").write_text("unreviewed candidate")
+        with self.assertRaisesRegex(Invalid, "Check request candidate changed"):
+            f.ledger.revise(graph, "Stale candidate")
+        self.assertEqual(before, f.ledger.read())
+        (f.root / "lib/example.dart").write_text("before")
+        f.ledger.revise(graph, "Judge requested an existing focused check; candidate unchanged")
+        revised = f.ledger.read()
+        for node in ["write-label", "verify-label"]:
+            self.assertEqual(before["nodes"][node], revised["nodes"][node])
+        self.assertEqual("pending", revised["nodes"]["review-label"]["status"])
+        f.start("requested-behavior")
+        focused = f.report("requested-behavior")
+        forged = deepcopy(focused)
+        forged["checks"][0]["execution_id"] = "forged"
+        before_forged = f.ledger.read()
+        with self.assertRaisesRegex(Invalid, "Required command has no runner receipt"):
+            f.ledger.finish("requested-behavior", forged)
+        self.assertEqual(before_forged, f.ledger.read())
+        f.ledger.finish("requested-behavior", focused)
+        if known_defect:
+            finding = f.ledger.read()["review_findings"]["label"]["REV-1"]
+            self.assertEqual("review-label", finding["history"][0]["node_id"])
+            self.assertEqual("open", finding["status"])
+            self.assertEqual(1, f.ledger.read()["nodes"]["write-label"]["attempt"])
+            with self.assertRaisesRegex(Invalid, "Unresolved or omitted blocking"):
+                self.review([], "PASS", "APPROVE")
+            f.ledger.finish(
+                "review-label",
+                f.report("review-label", "FAIL", verdict="NEEDS_WORK", findings=[self.finding]),
+            )
+            self.retry_work()
+            f.start("requested-behavior")
+            f.ledger.finish("requested-behavior", f.report("requested-behavior"))
+            self.review(
+                [dict(id="REV-1", status="fixed", evidence="Fresh checks and repaired assertion")],
+                "PASS",
+                "APPROVE",
+            )
+            f.ledger.accept("accept-label")
+            history = f.ledger.read()["review_findings"]["label"]["REV-1"]["history"]
+            self.assertEqual(["open", "open", "ready", "fixed"], [e["status"] for e in history])
+            return
+        self.review([], "PASS", "APPROVE")
+        (f.root / "extra-input.txt").write_text("changed after focused receipt")
+        with self.assertRaisesRegex(Invalid, "Runner evidence invalidated by later write"):
+            f.ledger.accept("accept-label")
+        (f.root / "extra-input.txt").write_text("original input")
+        f.ledger.accept("accept-label")
+        final = f.ledger.read()
+        self.assertEqual({}, final["counters"])
+        self.assertEqual(1, final["nodes"]["write-label"]["attempt"])
+        self.assertEqual(1, final["nodes"]["verify-label"]["attempt"])
+        self.assertEqual(1, final["nodes"]["requested-behavior"]["attempt"])
+        self.assertEqual(2, final["nodes"]["review-label"]["attempt"])
+        self.assertCountEqual(
+            ["behavior", "focused-extra"],
+            [execution["spec"]["id"] for execution in final["executions"].values()],
+        )
+
+    def test_known_defect_records_judge_finding_before_requested_verification(self) -> None:
+        self.test_judge_requested_existing_check_keeps_author_and_final_receipts(known_defect=True)
 
     def test_nonblocking_note_does_not_block(self) -> None:
         self.work()
@@ -305,7 +537,7 @@ class IntegrationFindingTests(unittest.TestCase):
         )
         f.g["nodes"][2]["depends_on"] = ["review-label"]
         final_verify = next(n for n in f.g["nodes"] if n["id"] == "verify-all")
-        final_verify["agent"] = "reviewer"
+        final_verify["agent"] = "tester"
         f.g["nodes"].append(
             dict(
                 id="review-second",
@@ -331,7 +563,7 @@ class IntegrationFindingTests(unittest.TestCase):
             else []
         )
         f.ledger.finish("write-label", f.report("write-label", finding_updates=updates))
-        f.start("verify-label", self.author_handle())
+        f.start("verify-label")
         f.ledger.finish("verify-label", f.report("verify-label"))
         self.review("review-label", findings or [])
         f.ledger.accept("accept-label")
@@ -349,7 +581,7 @@ class IntegrationFindingTests(unittest.TestCase):
         f.start("write-second", self.author_handle())
         (f.root / "lib/example.dart").write_text(content)
         f.ledger.finish("write-second", f.report("write-second"))
-        f.start("verify-second", self.author_handle())
+        f.start("verify-second")
         f.ledger.finish("verify-second", f.report("verify-second"))
         self.review("review-second", [])
         f.ledger.accept("accept-second")
@@ -358,7 +590,7 @@ class IntegrationFindingTests(unittest.TestCase):
         self, outcome: str = "PASS", findings: list[dict[str, Any]] | None = None
     ) -> None:
         f = self.f
-        f.start("verify-all", "independent-reviewer")
+        f.start("verify-all")
         f.ledger.finish("verify-all", f.report("verify-all", outcome, findings=findings or []))
 
     def review(self, node: str, findings: list[dict[str, Any]], outcome: str = "PASS") -> None:
@@ -387,7 +619,7 @@ class IntegrationFindingTests(unittest.TestCase):
             evidence="Current failing scenario",
         )
 
-    def test_final_judge_runs_all_gates_then_reviews_same_session(self) -> None:
+    def test_tester_runs_final_gates_before_independent_judge_reviews(self) -> None:
         f = self.f
         for kind in ["static", "build"]:
             spec = deepcopy(f.g["tasks"]["integrated"]["required_checks"][0])
@@ -396,7 +628,7 @@ class IntegrationFindingTests(unittest.TestCase):
         f.init()
         self.first()
         self.second()
-        f.start("verify-all", "independent-reviewer")
+        f.start("verify-all")
         report = f.report("verify-all")
         report["checks"] += [
             f.ledger.run_check("verify-all", "final-" + kind) for kind in ["static", "build"]
@@ -404,10 +636,12 @@ class IntegrationFindingTests(unittest.TestCase):
         f.ledger.finish("verify-all", report)
         self.review("review-all", [])
         f.ledger.accept("accept-all")
-        f.ledger.archive("completed", "Judge checked tests static and build")
+        f.ledger.archive(
+            "completed", "Tester ran tests, static analysis and build; Judge reviewed the results"
+        )
         state = f.ledger.read()
         self.assertEqual({"tests", "static", "build"}, {c["kind"] for c in report["checks"]})
-        self.assertEqual(
+        self.assertNotEqual(
             state["nodes"]["verify-all"]["handle"], state["nodes"]["review-all"]["handle"]
         )
         self.assertNotEqual(
@@ -441,7 +675,7 @@ class IntegrationFindingTests(unittest.TestCase):
         self.assertEqual("REV-1", packet["review_findings"]["label:REV-1"]["id"])
         self.assertNotIn("history", packet["review_findings"]["label:REV-1"])
         self.assertEqual("label", packet["integration_owners"]["write-label"]["task_id"])
-        self.assertEqual("generalist", packet["integration_owners"]["write-label"]["role"])
+        self.assertEqual("implementer", packet["integration_owners"]["write-label"]["role"])
         self.assertEqual(["lib/example.dart"], packet["integration_owners"]["write-label"]["owns"])
         self.assertEqual({"label", "second"}, set(packet["integration_tasks"]))
         f.ledger.bind("review-all", "independent-reviewer", "gpt-6.1-sol")
@@ -509,9 +743,10 @@ class IntegrationFindingTests(unittest.TestCase):
 
     def test_failed_integration_verification_routes_to_predecessor_then_rechecks(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
-        f.config["profiles"]["middle-developer"]["escalation"] = {
-            "to": "senior-developer",
+        f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer")
+        f.config["_defaults"]["implementer"] = "middle-implementer"
+        f.config["profiles"]["middle-implementer"]["escalation"] = {
+            "to": "senior-implementer",
             "after_failed_attempts": 2,
         }
         f.g["tasks"]["integrated"]["required_checks"][0]["execution"]["argv"] = [
@@ -542,7 +777,16 @@ class IntegrationFindingTests(unittest.TestCase):
         # A real project fixture is repaired; the declared gate remains unchanged.
         # The initial command uses a project input that the author may repair.
         self.second("Final corrected shared result")
-        self.verify_all()
+        self.verify_all(
+            findings=[
+                dict(
+                    task_id="label",
+                    id="REV-1",
+                    status="fixed",
+                    evidence="Integration regression now passes",
+                )
+            ]
+        )
         self.review(
             "review-all",
             [dict(task_id="label", id="REV-1", status="fixed", evidence="Final regression gone")],
@@ -550,15 +794,16 @@ class IntegrationFindingTests(unittest.TestCase):
         f.ledger.accept("accept-all")
         f.ledger.archive("completed", "Corrected integration finding")
         self.assertEqual(
-            ["open", "ready", "fixed", "fixed"],
+            ["open", "ready", "fixed", "fixed", "fixed"],
             [e["status"] for e in f.ledger.read()["review_findings"]["label"]["REV-1"]["history"]],
         )
 
     def test_cross_source_integration_correction_checks_exact_owner_and_fresh_bytes(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
-        f.config["profiles"]["middle-developer"]["escalation"] = {
-            "to": "senior-developer",
+        f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer")
+        f.config["_defaults"]["implementer"] = "middle-implementer"
+        f.config["profiles"]["middle-implementer"]["escalation"] = {
+            "to": "senior-implementer",
             "after_failed_attempts": 2,
         }
         f.g["sources"]["other"] = deepcopy(f.g["sources"]["request"])
@@ -601,7 +846,7 @@ class IntegrationFindingTests(unittest.TestCase):
             state["graph"]["sources"]["other"]["hash"], item["reviewed"]["source_hash"]
         )
 
-    def test_judge_verify_cannot_close_findings_or_use_writer_session(self) -> None:
+    def test_tester_cannot_close_judge_findings_or_use_writer_session(self) -> None:
         f = self.f
         f.init()
         self.first()
@@ -609,10 +854,10 @@ class IntegrationFindingTests(unittest.TestCase):
         f.ledger.claim("verify-all")
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             f.ledger.bind("verify-all", self.author_handle(), "gpt-6.1-sol")
-        f.ledger.bind("verify-all", "independent-reviewer", "gpt-6.1-sol")
+        f.ledger.bind("verify-all", "handle-tester", "gpt-6-luna")
         closed = self.finding()
         closed["status"] = "dismissed"
-        with self.assertRaisesRegex(Invalid, "closure requires review"):
+        with self.assertRaisesRegex(Invalid, "Tester cannot close Judge findings"):
             f.ledger.finish("verify-all", f.report("verify-all", findings=[closed]))
 
 

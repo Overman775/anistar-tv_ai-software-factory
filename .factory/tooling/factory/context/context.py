@@ -53,9 +53,8 @@ from factory.validation import validation_message
 
 PROCESS_ROLES = {
     "implement": {
-        "developer",
-        "test-writer",
-        "generalist",
+        "implementer",
+        "tester",
         "judge",
         "doc-writer",
         "bug-hunter",
@@ -80,13 +79,12 @@ DECOMPOSE_REVIEW_REFS = (
     "contracts/common/implementation-detail.md",
 )
 ROLE_REFS = {
-    "developer": ["gates/roles/developer.md", "contracts/common/coding-principles.md"],
-    "test-writer": ["gates/roles/test-writer.md", "contracts/common/testing-principles.md"],
-    "generalist": [
-        "gates/roles/generalist.md",
+    "implementer": [
+        "gates/roles/implementer.md",
         "contracts/common/coding-principles.md",
         "contracts/common/testing-principles.md",
     ],
+    "tester": ["gates/roles/tester.md", "contracts/common/testing-principles.md"],
     "architect": [
         "skills/factory-planning/references/architect-input.md",
         "skills/factory-planning/references/architect-plan-contract.md",
@@ -113,7 +111,7 @@ COMMAND_REFS = [
 ]
 REVIEW_FINDINGS_CONTRACT = "contracts/common/review-findings.md"
 WRITE_RESULT_CONTRACT = "contracts/common/implement-write-result.md"
-AUTHORS = frozenset({"developer", "test-writer", "doc-writer", "generalist"})
+AUTHORS = frozenset({"implementer", "doc-writer"})
 
 
 @dataclass(frozen=True)
@@ -148,7 +146,7 @@ STAGE_RULES = (
         (REVIEW_FINDINGS_CONTRACT,),
         "Implement review interface",
         "implement",
-        roles=frozenset({"judge"}),
+        roles=frozenset({"judge", "tester"}),
     ),
     MaterialRule((WRITE_RESULT_CONTRACT,), "Implement write handoff", "implement", roles=AUTHORS),
 )
@@ -317,7 +315,9 @@ def _validate_assignment(
         if not (assignment.get("task") or TaskSelection()).get("scope"):
             raise ValueError("Missing task context")
         ensure(
-            "project-checks" not in resources or profile["capabilities"]["commands"],
+            "project-checks" not in resources
+            or profile["capabilities"]["commands"]
+            or (role == "judge" and node.get("stage") == "review"),
             "Context commands forbidden by profile",
         )
     reads = node.get("read", assignment.get("read", []))
@@ -358,6 +358,8 @@ def factory_materials(
         selected += [(p, "Decompose repair contract") for p in DECOMPOSE_REPAIR_REFS]
     for rule in STAGE_RULES:
         if rule.matches(process, role, node):
+            if rule.paths == tuple(COMMAND_REFS) and not profile["capabilities"]["commands"]:
+                continue
             write_only = (
                 role in AUTHORS
                 and node.get("stage") in {"work", "docs"}

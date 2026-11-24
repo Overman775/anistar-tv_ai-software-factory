@@ -45,7 +45,10 @@ for supported local methods; do not silently fall back to global installation.
 4. Apply [exclusions](references/exclusions.md) before any graph build. Keep factory
    and project settings indexable while excluding factory implementation and local
    artifacts. Graph construction and hooks require inclusion in the authorized scope.
-5. Run [verification](references/verification.md), including command discovery
+5. Run [verification](references/verification.md) within the authorized write scope;
+   configuration-reading CLI commands may write diagnostic journals. For a bounded
+   configuration edit use read-only loaders or an external actual-candidate copy,
+   never delete existing diagnostics to hide side effects. Include command discovery
    from the agent session. Report installed, configured,
    verified and blocked capabilities separately; do not claim live checks from fixtures.
 

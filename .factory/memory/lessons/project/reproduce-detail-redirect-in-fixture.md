@@ -9,9 +9,8 @@ observed: На телевизоре сборка 1.5.7+15 получила HTTP 
   отвечала HTTP 200 сразу. Маршрут с фикстурой 301 и Location воспроизвёл сбой до
   исправления и прошёл после него.
 roles:
-- generalist
-- developer
-- test-writer
+- implementer
+- tester
 - judge
 tags:
 - http

@@ -9,9 +9,8 @@ observed: В REV-2 существующий тест холодного вход
   После привязки поиска к области серий прошли все 9 тестов файла и полный набор из
   904 тестов.
 roles:
-- generalist
-- developer
-- test-writer
+- implementer
+- tester
 tags:
 - skeleton
 - tv-skeleton

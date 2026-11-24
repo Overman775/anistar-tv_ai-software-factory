@@ -100,15 +100,15 @@ rules:
     - id: language-worker
       file: rules/language.md
 
-    - id: developer-reading
+    - id: implementer-reading
       for:
-        roles: [developer, generalist]
-      file: rules/developer-reading.md
+        roles: [implementer]
+      file: rules/implementer-reading.md
 
-    - id: test-writer-reading
+    - id: tester-reading
       for:
-        roles: [test-writer, generalist]
-      file: rules/test-writer-reading.md
+        roles: [implementer, tester]
+      file: rules/tester-reading.md
 
     - id: architect-reading
       for:
@@ -132,7 +132,7 @@ rules:
 
     - id: coding
       for:
-        roles: [developer, generalist]
+        roles: [implementer]
       file: rules/coding.md
 
     - id: exploration
@@ -142,7 +142,7 @@ rules:
 
     - id: documentation
       for:
-        roles: [developer, generalist]
+        roles: [implementer]
         path_regex: \.md$
       file: rules/documentation.md
 
@@ -159,22 +159,22 @@ rules:
     - id: commands-worker
       for:
         stages: [work, verify, review]
-        roles: [developer, test-writer, generalist, judge]
+        roles: [implementer, tester, judge]
       file: rules/checks.md
 
     - id: document-architecture
       for:
-        roles: [developer, generalist, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer]
+        roles: [implementer, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer]
       documents: [architecture, structure]
 
     - id: document-codestyle
       for:
-        roles: [developer, generalist, reviewer, judge]
+        roles: [implementer, reviewer, judge]
       documents: [codestyle]
 
     - id: document-testing
       for:
-        roles: [test-writer, generalist, task-decomposer, task-reviewer, reviewer, judge, bug-hunter]
+        roles: [implementer, tester, task-decomposer, task-reviewer, reviewer, judge, bug-hunter]
       documents: [testing]
 
     - id: document-product
@@ -184,14 +184,14 @@ rules:
 
     - id: document-specifications
       for:
-        roles: [architect, bug-hunter, code-explorer, developer, generalist, judge, reviewer, task-decomposer, task-reviewer,
-                test-writer]
+        roles: [architect, bug-hunter, code-explorer, implementer, judge, reviewer, task-decomposer, task-reviewer,
+                tester]
       documents: [specifications]
 
     - id: domain-context-worker
       for:
-        roles: [architect, bug-hunter, code-explorer, developer, doc-writer, generalist, judge, reviewer, task-decomposer,
-                task-reviewer, test-writer]
+        roles: [architect, bug-hunter, code-explorer, implementer, doc-writer, judge, reviewer, task-decomposer,
+                task-reviewer, tester]
         paths_any: ["lib/**", "infrastructure/**", "test/**", "integration_test/**", "android/**", "ios/**",
                     "docs/specs/**", "docs/adr/**", "docs/01_01_domain_glossary.md", "docs/01_02_feature_responsibilities.md",
                     "PRODUCT.md"]
@@ -200,13 +200,13 @@ rules:
 
     - id: document-decisions
       for:
-        roles: [developer, generalist, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer, bug-hunter]
+        roles: [implementer, architect, code-explorer, task-decomposer, task-reviewer, judge, reviewer, bug-hunter]
       documents: [decisions]
 
     - id: verification-context
       for:
         stages: [verify, review]
-        roles: [developer, test-writer, generalist, judge]
+        roles: [implementer, tester, judge]
         processes: [implement]
       documents: [commands, testing]
 

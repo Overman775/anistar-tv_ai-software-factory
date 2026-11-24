@@ -4,8 +4,10 @@ decisions:
   - id: dart-changes
     type: predicate
     min_confidence: 0.4
-    question: Do assigned changes require the AniStar Dart/Flutter static checks? Include affected generated/code/toolchain
-      inputs; record evidence for false.
+    question: Are standalone AniStar Dart/Flutter static checks required for these changes? Answer false when the
+      planned final melos check covers the same integrated candidate bytes; avoid repeating the workspace triplet for
+      every Dart slice. Answer true for uncovered static work or an explicit early static-check requirement. Include
+      generated/code/toolchain inputs and cite the planned final check or other scoped evidence for false.
   - id: application-changes
     type: predicate
     min_confidence: 0.4

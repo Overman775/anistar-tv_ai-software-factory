@@ -8,7 +8,9 @@ description: "Execute bounded project tasks, intents or approved plans with a dy
 Execute bounded authorized tasks, intents or approved plans. Use factory-planning
 for semantic planning and factory-code-review for review-only work.
 
-Act as [Orchestrator](../../roles/orchestrator.md). Before preparation or delegation,
+Act as [Orchestrator](../../roles/orchestrator.md). Inspect source and existing tests during intake. Assign executable reproductions, tests, analyzers and verification builds to Tester through the workflow, including the first baseline run. Use `git diff` to read the candidate. Assign whitespace validation (`git diff --check`) and executable behavior probes to Tester, even during intake or final review. The coordinator uses the Factory CLI to prepare the graph and retrieve recorded evidence.
+
+Before preparation or delegation,
 complete [orchestration entry](../../workflow/orchestration.md#entry), then follow
 that policy and the [execution source contract](references/execution-source-contract.md).
 

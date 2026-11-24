@@ -183,7 +183,8 @@ class CheckRunnerTests(unittest.TestCase):
         draft = f.report("worker0")
         draft.pop("files")
         prepared = f.ledger.prepare_report("worker0", draft, [])
-        (f.root / "lib/file1.txt").write_text("worker 1 change")
+        (f.root / "docs/file1.txt").parent.mkdir(parents=True, exist_ok=True)
+        (f.root / "docs/file1.txt").write_text("worker 1 change")
         f.ledger.finish("worker0", prepared)
         self.assertEqual("done", f.ledger.read()["nodes"]["worker0"]["status"])
 
@@ -478,7 +479,6 @@ class CheckRunnerTests(unittest.TestCase):
             required_checks(f.config["_project"]["data"], task, final=True)
         )
         f.require_fixture_review()
-        f.g["nodes"][1]["agent"] = "fixture-judge"
         path = "test/goldens/label.txt"
         target = f.root / path
         target.parent.mkdir(parents=True)
@@ -603,7 +603,7 @@ class CheckRunnerTests(unittest.TestCase):
         self.assertNotEqual(old_checks[1]["execution_id"], peer[1]["execution_id"])
         with patch.object(f.ledger, "run_check", return_value=peer[0]):
             f.ledger.finish(sibling, f.report(sibling, checks=peer))
-        f.start("review-label", "judge")
+        f.start("review-label", "independent-judge")
         f.ledger.finish("review-label", f.report("review-label", verdict="APPROVE"))
         f.ledger.accept("accept-label")
         self.assertEqual("done", f.ledger.read()["nodes"]["accept-label"]["status"])

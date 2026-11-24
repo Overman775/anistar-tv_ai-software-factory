@@ -3,8 +3,7 @@
 Factory-owned completion conditions. Project additions: [project gates](../project/gates/README.md).
 
 - [Common verification](common/verification-rules.md): acceptance, mandatory project checks, additional evidence.
-- Roles: [Developer](roles/developer.md), [TestWriter](roles/test-writer.md),
-  [Generalist](roles/generalist.md), [Judge](roles/judge.md), [Reviewer](roles/reviewer.md).
+- Roles: [Implementer](roles/implementer.md), [Tester](roles/tester.md), [Judge](roles/judge.md), [Reviewer](roles/reviewer.md).
 - Skills: [Planning](skills/planning/gate.md), [Decompose](skills/decompose/gate.md),
   [Implement](skills/implement.md), [Code Review](skills/code-review/gate.md).
 

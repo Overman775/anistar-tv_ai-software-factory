@@ -7,8 +7,10 @@ gates:
       - id: anistar-check
         level: final
         decision: application-changes
-        kind: tests
+        kind: static
         method: AniStar required check
+        approval_action: update-golden-baselines
+        approval_path_regex: 'test/(?:[^/]+/)*goldens/[^/]+[.]png'
         execution:
           argv:
             - fvm
@@ -18,6 +20,7 @@ gates:
             - run
             - check
           cwd: .
+          result_format: anistar-quality
           timeout_seconds: 3600
           inputs:
             - pubspec.yaml
@@ -37,6 +40,7 @@ gates:
             - run
             - test:e2e
           cwd: .
+          result_format: anistar-quality
           timeout_seconds: 3600
           inputs:
             - pubspec.yaml

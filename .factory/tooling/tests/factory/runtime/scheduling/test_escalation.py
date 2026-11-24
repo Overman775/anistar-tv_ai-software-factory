@@ -28,7 +28,8 @@ ROOT = workflow_fixture.ROOT
 class EscalationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.f = workflow_fixture.WorkflowFixture(self.addCleanup)
-        self.f.g["agents"]["author"] = dict(role="developer", profile="middle-developer")
+        self.f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer")
+        self.f.config["_defaults"]["implementer"] = "middle-implementer"
         self.f.require_fixture_review()
 
     def batch(self) -> None:
@@ -65,7 +66,7 @@ class EscalationTests(unittest.TestCase):
             s = f.ledger.read()
             agent = agent_key(s["graph"]["nodes"][0])
             handle = s["sessions"][agent]["handle"]
-            f.start("verify-label", handle)
+            f.start("verify-label")
         f.ledger.finish(
             "verify-label",
             f.report("verify-label", outcome=outcome, stage_result=role_result, checks=[]),
@@ -85,7 +86,7 @@ class EscalationTests(unittest.TestCase):
     def test_profiles_keep_one_task_budget_and_stop_after_senior_failure(self) -> None:
         f = self.f
         f.init()
-        for expected in ["senior-developer", "senior-developer"]:
+        for expected in ["senior-implementer", "senior-implementer"]:
             decision = f.ledger.correct("write-label", self.fail_verification())
             self.assertEqual(expected, decision["to_profile"])
             s = f.ledger.read()
@@ -165,10 +166,10 @@ class EscalationTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "Conflicting"):
             f.ledger.correct("write-label", changed)
 
-    def test_revision_retries_failed_tests_after_diagnosed_developer_repair(self) -> None:
+    def test_revision_retries_failed_tests_after_diagnosed_implementer_repair(self) -> None:
         f = self.f
         f.g["agents"].update(
-            tester=dict(role="test-writer", profile="middle-test-writer"),
+            tester=dict(role="tester", profile="tester"),
             diagnostician=dict(role="bug-hunter", profile="bug-hunter"),
         )
         f.g["tasks"]["label"]["scope"].append("lib/example_test.dart")
@@ -177,10 +178,11 @@ class EscalationTests(unittest.TestCase):
                 dict(
                     id="test-label",
                     task="label",
-                    stage="work",
+                    stage="verify",
                     agent="tester",
                     depends_on=[],
-                    owns=["lib/example_test.dart"],
+                    owns=[],
+                    required_check_ids=["behavior"],
                     resources=["project-checks"],
                 ),
                 dict(
@@ -194,9 +196,7 @@ class EscalationTests(unittest.TestCase):
                 ),
             ]
         )
-        f.g["nodes"][0].update(
-            depends_on=["test-label", "diagnose-label"], resources=["project-checks"]
-        )
+        f.g["nodes"][0].update(depends_on=["test-label", "diagnose-label"], resources=[])
         f.init()
         f.start("test-label", "tester")
         failed = f.report("test-label", "FAIL", stage_result="FAIL_TEST", checks=[])
@@ -256,7 +256,7 @@ class EscalationTests(unittest.TestCase):
         candidate = {node["id"]: node for node in without_repair["nodes"]}
         candidate["test-label"]["depends_on"] = []
         candidate["verify-label"]["depends_on"] = ["test-label", "write-label"]
-        with self.assertRaisesRegex(Invalid, "Keep the Developer repair dependency"):
+        with self.assertRaisesRegex(Invalid, "Keep the Implementer repair dependency"):
             f.ledger.revise(without_repair, "try to remove the repair prerequisite")
         self.assertEqual(revised, f.ledger.read())
 
@@ -264,7 +264,7 @@ class EscalationTests(unittest.TestCase):
             f.ledger.claim("test-label")
         f.start("write-label")
         production.write_text("after")
-        f.ledger.finish("write-label", f.report("write-label", stage_result="IMPLEMENTED"))
+        f.ledger.finish("write-label", f.report("write-label", stage_result="WRITES_READY"))
         f.start("test-label", "tester")
         with self.assertRaisesRegex(Invalid, "Stale report identity"):
             f.ledger.finish("test-label", failed)
@@ -291,11 +291,11 @@ class EscalationTests(unittest.TestCase):
 
     def test_worker_gets_task_history_not_routing_policy_in_native_and_acp(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer-zcode")
-        f.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
+        f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer-zcode")
+        f.config["_defaults"]["implementer"] = "middle-implementer-zcode"
         f.init()
         decision = f.ledger.correct("write-label", self.fail_verification("FAIL_TEST"))
-        self.assertEqual("senior-test-writer", decision["to_profile"])
+        self.assertEqual("senior-implementer", decision["to_profile"])
         f.ledger.claim("write-label")
         s = f.ledger.read()
         packet = f.ledger.packet("write-label")
@@ -306,9 +306,9 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(s["graph"]["sources"]["request"], packet["source"])
         # Model an ACP reservation with identical scoped correction context.
         s["graph"]["agents"][agent_key(s["graph"]["nodes"][0])]["profile"] = (
-            "middle-test-writer-zcode"
+            "middle-implementer-zcode"
         )
-        s["nodes"]["write-label"]["profile"] = "middle-test-writer-zcode"
+        s["nodes"]["write-label"]["profile"] = "middle-implementer-zcode"
         with patch.object(f.ledger, "read", return_value=s):
             prepared = prepare_prompt(f.ledger, "write-label")
         prompt = Path(prepared["prompt"]).read_text(encoding="utf-8")
@@ -329,15 +329,13 @@ class EscalationTests(unittest.TestCase):
             f.ledger.bind("write-label", "new", "gpt-6.1-terra")
         f.ledger.bind("write-label", "new", "gpt-6.1-sol")
 
-    def test_fail_code_is_not_a_testwriter_failure(self) -> None:
+    def test_code_and_test_failures_route_to_same_implementer(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer")
+        f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer")
         f.init()
         request = self.fail_verification("FAIL_CODE")
-        before = f.ledger.read()
-        with self.assertRaisesRegex(Invalid, "belongs to Developer"):
-            f.ledger.correct("write-label", request)
-        self.assertEqual(before, f.ledger.read())
+        result = f.ledger.correct("write-label", request)
+        self.assertEqual("senior-implementer", result["to_profile"])
 
     def test_blocker_does_not_raise_model_or_count_quality_failure(self) -> None:
         f = self.f
@@ -517,37 +515,15 @@ class EscalationTests(unittest.TestCase):
             f.ledger.resume_task("label", "Still unavailable")
         self.assertEqual(before, f.ledger.read())
 
-    def test_independent_failed_siblings_are_diagnosed_separately(self) -> None:
+    def test_task_rejects_independent_product_authors(self) -> None:
         f = self.f
-        f.g["agents"]["sibling"] = dict(role="developer", profile="middle-developer")
+        f.g["agents"]["sibling"] = dict(role="implementer", profile="middle-implementer")
         extra = deepcopy(f.g["nodes"][0])
         extra.update(id="write-sibling", agent="sibling")
         f.g["nodes"].append(extra)
         f.g["nodes"][1]["depends_on"].append("write-sibling")
-        f.init()
-        requests: dict[str, Any] = {}
-        for node in ["write-label", "write-sibling"]:
-            f.start(node, node)
-            f.ledger.finish(node, f.report(node, "FAIL", stage_result="FAIL_CODE", checks=[]))
-            dispatch = f.ledger.read()["nodes"][node]["dispatch_id"]
-            requests[node] = dict(
-                author_dispatch_id=dispatch,
-                evidence_node=node,
-                evidence_dispatch_id=dispatch,
-                cause="tests",
-                kind="quality",
-                reason="Confirmed defect",
-                terminal_evidence="Stopped",
-                handoff="Inspect defect",
-            )
-        f.ledger.correct("write-label", requests["write-label"])
-        self.assertEqual(
-            "middle-developer", f.ledger.read()["graph"]["agents"]["sibling"]["profile"]
-        )
-        self.assertEqual(
-            "escalate", f.ledger.correct("write-sibling", requests["write-sibling"])["decision"]
-        )
-        self.assertEqual({"label:tests": 2}, f.ledger.read()["counters"])
+        with self.assertRaisesRegex(Invalid, "at most one product author"):
+            f.init()
 
     def test_task_history_is_scoped_and_old_profile_cannot_be_reintroduced(self) -> None:
         f = self.f
@@ -558,18 +534,18 @@ class EscalationTests(unittest.TestCase):
         other["graph"]["tasks"]["other"] = deepcopy(other["graph"]["tasks"]["label"])
         self.assertEqual([], escalation.worker_context(other, "other")["history"])
         graph = deepcopy(s["graph"])
-        graph["agents"]["new"] = {"role": "developer", "profile": "junior-developer"}
+        graph["agents"]["new"] = {"role": "implementer", "profile": "junior-implementer"}
         graph["nodes"][0]["agent"] = "new"
         with self.assertRaisesRegex(Invalid, "Correction agent mismatch"):
             f.ledger.revise(graph, "attempt to start over")
 
     def test_config_rejects_cycles_role_changes_bad_defaults_and_boolean_limits(self) -> None:
         mutations: list[Callable[[Any], object]] = [
-            lambda c: c["profiles"]["senior-developer"]["escalation"].update(to="junior-developer"),
-            lambda c: c["profiles"]["junior-developer"]["escalation"].update(
-                to="senior-test-writer"
+            lambda c: c["profiles"]["senior-implementer"]["escalation"].update(
+                to="junior-implementer"
             ),
-            lambda c: c["routing"]["defaults"].update({"roles/developer.md": "generalist"}),
+            lambda c: c["profiles"]["junior-implementer"]["escalation"].update(to="tester"),
+            lambda c: c["routing"]["defaults"].update({"roles/implementer.md": "tester"}),
             lambda c: c["execution"]["retry_budgets"].update(tests=True),
         ]
         for mutate in mutations:
@@ -586,7 +562,7 @@ class EscalationTests(unittest.TestCase):
         s = f.ledger.read()
         second = next(n for n in s["graph"]["nodes"] if n["id"] == "write-second")
         self.assertEqual("author", second["agent"])
-        self.assertEqual("middle-developer", s["graph"]["agents"]["author"]["profile"])
+        self.assertEqual("middle-implementer", s["graph"]["agents"]["author"]["profile"])
         self.assertEqual([], escalation.worker_context(s, "second")["history"])
         self.assertNotIn("second:tests", s["counters"])
 
@@ -625,7 +601,7 @@ class EscalationTests(unittest.TestCase):
             id="REV-1",
             status="open",
             blocking=True,
-            owner_role="developer",
+            owner_role="implementer",
             summary="Incorrect label",
             evidence="Reproduction",
         )
@@ -712,7 +688,7 @@ class EscalationTests(unittest.TestCase):
 
     def test_same_profile_sibling_assignments_advance_without_deadlock(self) -> None:
         f = self.f
-        f.g["agents"]["checker"] = dict(role="developer", profile="middle-developer")
+        f.g["agents"]["checker"] = dict(role="tester", profile="tester")
         f.g["nodes"][1]["agent"] = "checker"
         f.init()
         f.start("write-label", "author")
@@ -733,25 +709,29 @@ class EscalationTests(unittest.TestCase):
 
     def test_backend_default_cannot_silently_change_model_in_existing_session(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = dict(role="test-writer", profile="middle-test-writer-zcode")
-        f.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
-        f.config["models"][f.config["profiles"]["middle-test-writer-zcode"]["model"]]["id"] = None
+        f.g["agents"]["author"] = dict(role="implementer", profile="middle-implementer-zcode")
+        f.config["_defaults"]["implementer"] = "middle-implementer-zcode"
+        f.config["models"][f.config["profiles"]["middle-implementer-zcode"]["model"]]["id"] = None
+        again = deepcopy(f.g["nodes"][0])
+        again.update(id="write-again", depends_on=["write-label"])
+        f.g["nodes"].append(again)
+        f.g["nodes"][1]["depends_on"] = ["write-again"]
         f.init()
         f.start("write-label", "acp-default")
         f.ledger.finish("write-label", f.report("write-label"))
-        f.ledger.claim("verify-label")
+        f.ledger.claim("write-again")
         with self.assertRaisesRegex(Invalid, "Effective model changed"):
-            f.ledger.bind("verify-label", "acp-default", "different-default")
-        f.ledger.bind("verify-label", "acp-default", "fixture-default")
+            f.ledger.bind("write-again", "acp-default", "different-default")
+        f.ledger.bind("write-again", "acp-default", "fixture-default")
 
     def test_yaml_example_loads_full_catalog_and_defaults(self) -> None:
         c = load_config(ROOT / "factory.example.yaml")
         self.assertNotIn("roles", c)
-        self.assertEqual("middle-developer", c["_defaults"]["developer"])
-        self.assertEqual("pi", c["profiles"]["middle-test-writer-pi"]["connection"])
+        self.assertEqual("middle-implementer", c["_defaults"]["implementer"])
+        self.assertEqual("pi", c["profiles"]["middle-implementer-pi"]["connection"])
         self.assertEqual(r"builtin:zai-coding-plan\GLM-5.3", c["models"]["glm-5-3"]["id"])
         self.assertNotIn("zcode", c["models"])
-        self.assertEqual("glm-5-3", c["profiles"]["middle-test-writer-zcode"]["model"])
+        self.assertEqual("glm-5-3", c["profiles"]["middle-implementer-zcode"]["model"])
 
     def test_configuration_graph_and_state_have_no_schema_versions(self) -> None:
         f = self.f

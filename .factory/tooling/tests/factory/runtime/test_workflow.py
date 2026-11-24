@@ -186,11 +186,11 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             load_config(config)
 
     def test_adapter_reference_resolves_and_is_frozen(self) -> None:
-        self.assertEqual(self.config["profiles"]["middle-test-writer-zcode"]["connection"], "zcode")
+        self.assertEqual(self.config["profiles"]["middle-implementer-zcode"]["connection"], "zcode")
         adapter = str(ROOT / "adapters/acpx.md")
         self.assertIn(adapter, self.config["_files"])
         p = self.config_file(
-            lambda c: c["profiles"]["developer"]["variants"]["middle-developer"].update(
+            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
                 adapter="missing"
             )
         )
@@ -263,7 +263,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_duplicate_profile_transport_is_rejected(self) -> None:
         p = self.config_file(
-            lambda c: c["profiles"]["developer"]["variants"]["middle-developer"].update(
+            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
                 runner="native"
             )
         )
@@ -272,20 +272,20 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_malformed_capabilities_rejected(self) -> None:
         p = self.config_file(
-            lambda c: c["profiles"]["developer"]["capabilities"].update(edit="false")
+            lambda c: c["profiles"]["implementer"]["capabilities"].update(edit="false")
         )
         with self.assertRaisesRegex(Invalid, r"capabilities.edit: .*boolean"):
             load_config(p)
 
     def test_strict_enforcement_blocks_before_dispatch(self) -> None:
-        self.config["profiles"]["generalist"]["enforcement"] = "required"
+        self.config["profiles"]["implementer"]["enforcement"] = "required"
         self.init()
         with self.assertRaisesRegex(Invalid, "BLOCKED_CAPABILITIES"):
             self.ledger.claim("write-label")
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "pending")
 
     def test_readonly_profile_cannot_claim_writer(self) -> None:
-        self.config["profiles"]["generalist"]["capabilities"]["edit"] = False
+        self.config["profiles"]["implementer"]["capabilities"]["edit"] = False
         self.init()
         with self.assertRaisesRegex(Invalid, "forbids edits"):
             self.ledger.claim("write-label")
@@ -321,9 +321,12 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         sqlite_history_repository.export(self.root, run, str(saved["path"]), exported)
         self.assertEqual(packet, json.loads(exported.read_bytes()))
         self.assertEqual(packet["profile"]["adapter"], "codex")
-        self.assertEqual(packet["model"]["id"], "gpt-6.1-sol")
+        self.assertEqual(
+            packet["model"]["id"],
+            self.config["models"][self.config["profiles"]["implementer"]["model"]]["id"],
+        )
         self.assertTrue(any("Codex worker adapter" in f["content"] for f in packet["instructions"]))
-        self.assertTrue(any("Generalist Contract" in f["content"] for f in packet["instructions"]))
+        self.assertTrue(any("Implementer contract" in f["content"] for f in packet["instructions"]))
         self.assertTrue(any("Fixture workspace" in f["content"] for f in packet["instructions"]))
         self.assertFalse(any(f["content"].startswith("# Router") for f in packet["instructions"]))
 
@@ -408,9 +411,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         with self.assertRaisesRegex(Invalid, "Missing final review"):
             validate_graph(required, self.config, self.root)
         other = deepcopy(self.g)
-        other["agents"]["author"] = {"role": "developer", "profile": "middle-developer"}
-        with self.assertRaisesRegex(Invalid, "one Generalist"):
-            validate_graph(other, self.config, self.root)
+        other["agents"]["author"] = {"role": "implementer", "profile": "implementer"}
+        validate_graph(other, self.config, self.root)
 
     def test_non_low_risk_needs_independent_review(self) -> None:
         self.g["tasks"]["label"]["risk"] = "moderate"
@@ -619,7 +621,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             "id": "REV-1",
             "status": "open",
             "blocking": True,
-            "owner_role": "generalist",
+            "owner_role": "implementer",
             "owner_node_id": "write-label",
             "summary": "Current run finding",
             "evidence": "Inspected change",
@@ -729,51 +731,25 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             rendered.rindex(" acceptance"), rendered.index("O->>T: Final Teacher review (planned)")
         )
 
-    def test_reserved_test_writer_must_submit_actual_tests_receipt(self) -> None:
-        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
+    def test_implementer_cannot_execute_tests_despite_resource_reservation(self) -> None:
         self.g["nodes"][0]["resources"] = ["project-checks"]
-        static = deepcopy(self.g["tasks"]["label"]["required_checks"][0])
-        static.update(id="lint", kind="static")
-        self.g["tasks"]["label"]["required_checks"].append(static)
-        self.require_fixture_review()
         self.init()
         self.start("write-label")
-        state = self.ledger.read()
-        task = state["graph"]["tasks"]["label"]
-        report: dict[str, Any] = {
-            "run_id": state["run_id"],
-            "dispatch_id": state["nodes"]["write-label"]["dispatch_id"],
-            "node_id": "write-label",
-            "task_id": "label",
-            "slice_id": task["slice"],
-            "source_hash": state["graph"]["sources"][task["source"]]["hash"],
-            "terminal": True,
-            "outcome": "PASS",
-            "summary": "Tests written",
-            "files": snapshot(self.root, task["scope"]),
-            "stage_result": "VERIFIED",
-            "checks": [self.ledger.run_check("write-label", "lint")],
-        }
-        with self.assertRaisesRegex(Invalid, "successful tests receipt"):
-            self.ledger.finish("write-label", report)
-        report["checks"].append(self.ledger.run_check("write-label", "behavior"))
-        report["stage_result"] = "WRITES_READY"
-        with self.assertRaisesRegex(Invalid, "TestWriter checks required"):
-            self.ledger.finish("write-label", report)
-        report["stage_result"] = "VERIFIED"
-        self.ledger.finish("write-label", report)
+        with self.assertRaisesRegex(Invalid, "Unknown assigned command"):
+            self.ledger.run_check("write-label", "behavior")
+        self.ledger.finish("write-label", self.report("write-label", checks=[]))
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "done")
 
-    def test_unreserved_test_writer_can_defer_checks(self) -> None:
-        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
+    def test_implementer_handoff_needs_no_verification_receipts(self) -> None:
+        self.g["agents"]["author"] = {"role": "implementer", "profile": "implementer"}
         self.require_fixture_review()
         self.init()
         self.start("write-label")
         self.ledger.finish("write-label", self.report("write-label"))
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "done")
 
-    def test_unreserved_test_writer_reports_required_observation(self) -> None:
-        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
+    def test_implementer_reports_required_observation(self) -> None:
+        self.g["agents"]["author"] = {"role": "implementer", "profile": "implementer"}
         self.require_fixture_review()
         check = self.g["tasks"]["label"]["required_checks"][0]
         check["kind"] = "observation"
@@ -788,8 +764,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.finish("write-label", report)
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "done")
 
-    def test_blocked_reserved_test_writer_can_report_without_tests(self) -> None:
-        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer"}
+    def test_blocked_implementer_can_report_without_test_receipts(self) -> None:
+        self.g["agents"]["author"] = {"role": "implementer", "profile": "implementer"}
         self.g["nodes"][0]["resources"] = ["project-checks"]
         self.require_fixture_review()
         self.init()
@@ -911,7 +887,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         self.ledger.claim("write-label")
         prepared = prepare_prompt(self.ledger, "write-label")
-        self.assertIn("Test Writer Contract", Path(prepared["prompt"]).read_text(encoding="utf-8"))
+        self.assertIn("Implementer contract", Path(prepared["prompt"]).read_text(encoding="utf-8"))
         self.assertNotIn("--approve-all", prepared["prompt_argv"])
         self.assertIn("--non-interactive-permissions", prepared["prompt_argv"])
 
@@ -1248,7 +1224,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
                 "id": "openrouter/z-ai/glm-5.3",
                 "effort": "max",
             }
-            raw["profiles"]["generalist"]["variants"]["generalist"].update(
+            raw["profiles"]["implementer"]["variants"]["implementer"].update(
                 adapter="opencode", model="openrouter-glm"
             )
 
@@ -1425,7 +1401,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.retry("write-label", "recovery", "creation failed", "terminal verified")
         self.ledger.claim("write-label")
         before = self.ledger.read()
-        profile = self.config["profiles"]["middle-test-writer-zcode"]
+        profile = self.config["profiles"]["middle-implementer-zcode"]
         model = self.config["models"][profile["model"]]["id"] or "fixture-model"
         with self.assertRaisesRegex(Invalid, "different agent or epoch"):
             self.ledger.bind("write-label", old, model)
@@ -1626,7 +1602,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_case_alias_writers_cannot_run_together(self) -> None:
         self.parallel_graph()
-        self.g["nodes"][1]["owns"] = ["lib/FILE0.txt"]
+        self.g["nodes"][1]["owns"] = ["docs/FILE0.txt"]
         self.init()
         self.ledger.claim("worker0")
         with self.assertRaisesRegex(Invalid, "QUEUED_OWNERSHIP"):
@@ -1719,7 +1695,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         results = packet["dependency_results"]
         self.assertEqual(set(results), {"write-label", "verify-label", "accept-label"})
         self.assertEqual(results["write-label"]["report"]["summary"], summary)
-        self.assertEqual(results["verify-label"]["report"]["checks"][0]["result"], "PASS")
+        self.assertEqual(results["verify-label"]["report"]["outcome"], "PASS")
+        self.assertEqual(results["verify-label"]["report"]["checks"], [])
         self.assertNotIn("files", results["write-label"]["report"])
         reference = results["write-label"]["report_ref"]
         stored = report_history.read(self.root, reference)["report"]
@@ -1791,7 +1768,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.start("verify-second")
         self.ledger.finish("verify-second", self.report("verify-second"))
         self.ledger.accept("accept-second")
-        self.start("verify-all", "handle-integration-judge")
+        self.start("verify-all")
         self.ledger.finish("verify-all", self.report("verify-all"))
         self.start("review-all", "handle-integration-judge")
         self.ledger.finish("review-all", self.report("review-all", verdict="APPROVE", findings=[]))
@@ -1812,7 +1789,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.finish("verify-second", self.report("verify-second"))
         self.ledger.accept("accept-second")
         for attempt in range(allowed + 1):
-            self.start("verify-all", "handle-integration-judge")
+            self.start("verify-all")
             self.ledger.finish("verify-all", self.report("verify-all", "FAIL"))
             if attempt < allowed:
                 self.ledger.retry("verify-all", "review", "Integration finding", "Worker stopped")
@@ -1841,8 +1818,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def test_high_risk_can_verify_existing_tests_without_pointless_test_edits(self) -> None:
         self.g["tasks"]["label"].update(risk="high", independent_review=True)
         self.g["agents"] = {
-            "author": {"role": "developer", "profile": "middle-developer"},
-            "tester": {"role": "test-writer", "profile": "middle-test-writer"},
+            "author": {"role": "implementer", "profile": "implementer"},
+            "tester": {"role": "tester", "profile": "tester"},
             "reviewer": {"role": "judge", "profile": "judge"},
         }
         self.g["nodes"][1]["agent"] = "tester"

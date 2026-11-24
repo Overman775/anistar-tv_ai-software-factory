@@ -37,7 +37,14 @@ class WorkflowFixture:
         self.fixture_profile.write_text(self.fixture_policy)
         self.config["_project"] = load_profile(self.fixture_profile)
         self.config["_files"].update(self.config["_project"]["files"])
+        self.config["profiles"]["implementer"] = deepcopy(
+            self.config["profiles"]["middle-implementer"]
+        )
+        self.config["profiles"]["implementer"].pop("escalation", None)
+        self.config["_roles"]["implementer"].append("implementer")
+        self.config["_defaults"]["implementer"] = "implementer"
         self.g = read_json(ROOT / "tooling/examples/example.workflow.json")
+        self.g["agents"]["author"]["profile"] = "implementer"
         self.g["tasks"]["label"].pop("project_check_inputs", None)
         self.g["tasks"]["label"].pop("policy_decisions", None)
         for node in self.g["nodes"]:
@@ -60,6 +67,8 @@ class WorkflowFixture:
         s = self.ledger.read()
         n = next(n for n in s["graph"]["nodes"] if n["id"] == node)
         task = s["graph"]["tasks"][n["task"]]
+        assigned = self.ledger.finish_requirements(s, n)["required_checks"]
+        check = assigned[0] if assigned else task["required_checks"][0]
         return {
             "run_id": s["run_id"],
             "dispatch_id": s["nodes"][node]["dispatch_id"],
@@ -74,17 +83,19 @@ class WorkflowFixture:
             "stage_result": "WRITES_READY" if n.get("owns") else "VERIFIED",
             "checks": (
                 (
-                    [self.ledger.run_check(node, task["required_checks"][0]["id"])]
-                    if task["required_checks"][0]["kind"] != "observation"
+                    [self.ledger.run_check(node, check["id"])]
+                    if check["kind"] != "observation"
                     else [
                         {
-                            **task["required_checks"][0],
+                            **check,
                             "result": "PASS",
                             "evidence": "fixture observation",
                         }
                     ]
                 )
-                if "checks" not in extra and "project-checks" in n.get("resources", [])
+                if "checks" not in extra
+                and n["stage"] == "verify"
+                and "project-checks" in n.get("resources", [])
                 else []
             ),
             "not_applicable": {
@@ -99,17 +110,15 @@ class WorkflowFixture:
             **extra,
         }
 
-    def start(self, node: str, handle: str = "handle-author") -> None:
+    def start(self, node: str, handle: str | None = None) -> None:
         self.ledger.claim(node)
         state = self.ledger.read()
         n = next(n for n in state["graph"]["nodes"] if n["id"] == node)
         profile = state["config"]["profiles"][state["graph"]["agents"][agent_key(n)]["profile"]]
         self.ledger.bind(
             node,
-            handle,
-            state["config"]["models"][profile["model"]]["id"]
-            or "fixture-default"
-            or "fixture-default",
+            handle or "handle-" + agent_key(n),
+            state["config"]["models"][profile["model"]]["id"] or "fixture-default",
         )
 
     def complete(self) -> None:
@@ -123,6 +132,11 @@ class WorkflowFixture:
         import yaml
 
         raw = yaml.safe_load((ROOT / "factory.yaml").read_text())
+        raw["profiles"]["implementer"]["variants"]["implementer"] = dict(
+            raw["profiles"]["implementer"]["variants"]["middle-implementer"]
+        )
+        raw["profiles"]["implementer"]["variants"]["implementer"].pop("escalation", None)
+        raw["profiles"]["implementer"]["default"] = "implementer"
         mutate(raw)
         # Use absolute existing canonical file paths via a fixture bundle copy.
         import shutil
@@ -152,7 +166,7 @@ class WorkflowFixture:
                 "agent": "fixture-judge",
                 "depends_on": ["verify-label"],
                 "owns": [],
-                "resources": ["project-checks"],
+                "resources": [],
             }
         )
         next(n for n in self.g["nodes"] if n["id"] == "accept-label")["depends_on"] = [
@@ -160,39 +174,102 @@ class WorkflowFixture:
         ]
 
     def parallel_graph(self) -> None:
-        self.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
+        self.config["_defaults"]["implementer"] = "middle-implementer-zcode"
+        template = deepcopy(self.g["tasks"]["label"])
+        scope = [f"docs/file{i}.txt" if i < 4 else f"lib/file{i}.txt" for i in range(8)]
         works = []
+        tails = []
+        tasks = {}
         for i in range(8):
-            acp = i >= 4
             aid = f"worker{i}"
+            tid = f"task{i}"
             self.g["agents"][aid] = {
-                "role": "test-writer" if acp else "generalist",
-                "profile": "middle-test-writer-zcode" if acp else "generalist",
+                "role": "implementer" if i >= 4 else "doc-writer",
+                "profile": "middle-implementer-zcode" if i >= 4 else "doc-writer",
             }
-            scope = f"lib/file{i}.txt"
-            self.g["tasks"]["label"]["scope"].append(scope)
+            tasks[tid] = {**deepcopy(template), "scope": scope, "independent_review": False}
             works.append(
                 {
                     "id": aid,
-                    "task": "label",
+                    "task": tid,
                     "stage": "work",
                     "agent": aid,
                     "depends_on": [],
-                    "owns": [scope],
+                    "owns": [scope[i]],
                     "resources": [],
                 }
             )
-        self.g["nodes"] = works + self.g["nodes"][1:]
-        self.g["nodes"][-2]["depends_on"] = [w["id"] for w in works]
-        self.require_fixture_review()
+            tails.extend(
+                [
+                    {
+                        "id": f"verify-{aid}",
+                        "task": tid,
+                        "stage": "verify",
+                        "agent": "tester",
+                        "depends_on": [aid],
+                        "owns": [],
+                        "resources": ["project-checks"],
+                    },
+                    {
+                        "id": f"accept-{aid}",
+                        "task": tid,
+                        "stage": "accept",
+                        "agent": None,
+                        "depends_on": [f"verify-{aid}"],
+                        "owns": [],
+                        "resources": [],
+                    },
+                ]
+            )
+        tasks["integrated"] = {
+            **deepcopy(template),
+            "scope": scope,
+            "kind": "integration",
+            "independent_review": True,
+            "depends_on": list(tasks),
+        }
+        self.g["agents"]["parallel-judge"] = {"role": "judge", "profile": "judge"}
+        tails.extend(
+            [
+                {
+                    "id": "verify-all",
+                    "task": "integrated",
+                    "stage": "verify",
+                    "agent": "tester",
+                    "depends_on": [f"accept-worker{i}" for i in range(8)],
+                    "owns": [],
+                    "resources": ["project-checks"],
+                },
+                {
+                    "id": "review-all",
+                    "task": "integrated",
+                    "stage": "review",
+                    "agent": "parallel-judge",
+                    "depends_on": ["verify-all"],
+                    "owns": [],
+                    "resources": [],
+                },
+                {
+                    "id": "accept-all",
+                    "task": "integrated",
+                    "stage": "accept",
+                    "agent": None,
+                    "depends_on": ["review-all"],
+                    "owns": [],
+                    "resources": [],
+                },
+            ]
+        )
+        self.g["tasks"] = tasks
+        self.g["nodes"] = works + tails
 
     def fake_acp(self, code: int = 0) -> Path:
-        self.config["_defaults"]["test-writer"] = "middle-test-writer-zcode"
+        self.config["_defaults"]["implementer"] = "middle-implementer-zcode"
         binary = Path(sys.executable)
         self.transport_exit_code = code
         self.config["acpx"]["command"] = str(binary)
         self.config["acpx"]["connections"]["zcode"]["command"] = str(binary)
-        self.g["agents"]["author"] = {"role": "test-writer", "profile": "middle-test-writer-zcode"}
+        self.g["agents"]["author"] = {"role": "implementer", "profile": "middle-implementer-zcode"}
         self.require_fixture_review()
         return binary
 
@@ -244,7 +321,7 @@ class WorkflowFixture:
                 "id": "verify-second",
                 "task": "second",
                 "stage": "verify",
-                "agent": "author",
+                "agent": "tester",
                 "depends_on": ["write-second"],
                 "owns": [],
                 "resources": ["project-checks"],
@@ -262,7 +339,7 @@ class WorkflowFixture:
                 "id": "verify-all",
                 "task": "integrated",
                 "stage": "verify",
-                "agent": "integration-judge",
+                "agent": "tester",
                 "depends_on": ["accept-label", "accept-second"],
                 "owns": [],
                 "resources": ["project-checks"],
@@ -285,6 +362,6 @@ class WorkflowFixture:
                 "agent": "integration-judge",
                 "depends_on": ["verify-all"],
                 "owns": [],
-                "resources": ["project-checks"],
+                "resources": [],
             }
         )

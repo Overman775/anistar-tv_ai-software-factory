@@ -194,7 +194,7 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
         )
         checks = report.get("checks", [])
         findings = report.get("findings", [])
-        if outcome == "PASS" and n["stage"] != "review":
+        if outcome == "PASS" and n["stage"] not in {"verify", "review"}:
             for finding in findings:
                 require(
                     "blocking" in finding,

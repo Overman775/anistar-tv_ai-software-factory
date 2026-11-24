@@ -65,7 +65,7 @@ OPERATIONS_HELP = (
         "Assemble context for a role assignment.",
         CONFIG + " An exact assignment JSON and its configured process, profile and role.",
         "Prints the assembled context packet.",
-        "--process implement --profile middle-developer --role developer assignment.json",
+        "--process implement --profile middle-implementer --role implementer assignment.json",
         summary="Build a context packet for a role assignment",
         writes=("diagnostics",),
     ),

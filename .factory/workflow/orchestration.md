@@ -65,7 +65,7 @@ approvals. New unrelated tasks need another run. A follow-up records its bounded
 new delta without inheriting completed gate verdicts. Coordinate shared provider
 quotas across checkouts. Planning owns product decisions and immutable approved
 plans; Decompose owns published vertical tasks. The parent coordinates; even
-small product edits go to a Generalist, not a root-only editing exception.
+small product edits go to an Implementer, not a root-only editing exception.
 
 Lock intended behavior, exclusions, criteria and risk. For a direct source, copy
 the complete request into `text`, excluding credentials, and check it against the
@@ -92,7 +92,7 @@ Use the [state contract](../skills/factory-implement/references/shared-state.md)
 and [workflow usage](README.md). Run `cli workflow init GRAPH --config-pin CONFIG_SNAPSHOT`
 to verify observed instruction versions; validate before dispatch.
 Persist an acyclic graph before the first worker. Include the run-level `after_archive: teacher` step in the first execution sketch and every revision. Show it after final acceptance and successful archival. Each logical agent has one ID;
-Developer instances have distinct IDs. Steps bind task, slice, source hashes,
+Implementer instances have distinct IDs. Steps bind task, slice, source hashes,
 profile, inputs, owned paths, dependencies and output. Fixes reuse nodes with new
 attempts. Runtime state is authoritative; Mermaid sequenceDiagram only projects it: one lifeline
 per agent, `par` for safe parallelism, dashed findings through the parent to owner.
@@ -154,12 +154,14 @@ The runner does not decide whether test assertions or test selection are correct
 
 Update affected docs/specs within authorized scope before final verification;
 author/DocWriter selection follows the router. If none apply, record
-`not_applicable` with a reason. Final review covers code, tests and docs; eligible low-risk, local, reversible work with an explicit behavior and reliable oracle may finish with Generalist SELF_REVIEW PASS when no user or project rule requires independent review. Higher risk, required independence and multi-task integration require an independent Judge. Subsequent writes invalidate affected verification and review.
+`not_applicable` with a reason. Final review covers code, tests and docs; eligible low-risk, local, reversible work with an explicit behavior and reliable oracle may finish after Tester verification when no user or project rule requires independent review. Higher risk, required independence and multi-task integration require an independent Judge. Subsequent writes invalidate affected verification and review.
 
-Return code/test defects to their respective owners; never weaken correct
+Return code and test defects to the original Implementer; never weaken correct
 assertions to pass broken code. Keep finding IDs across reviews. Ambiguous
 ownership or environment failure returns to the parent; repeated failures require
 diagnosis before team expansion (router).
+When Judge returns `BLOCKED` with `CHECKS_REQUESTED`, check the candidate and the requested registered check. Use `cli workflow revise` to append a Tester `verify` node with the requested `required_check_ids` and add it to the existing review's `depends_on`. Preserve the task, author and current full verification. After Tester returns, dispatch Judge with the new receipt. A changed candidate needs fresh verification. A missing assertion needs an author correction.
+
 For Judge corrections use [persistent review findings](../contracts/common/review-findings.md):
 route open IDs to their owner, then ready IDs to independent re-review. Never erase
 the registry during retries/revisions or treat an author handoff as closure.
@@ -169,10 +171,10 @@ Initial work is separate from retries; integration uses feature review budget
 when the fixed batch contains a feature. Session/profile/graph changes never
 reset counters. Requirements, project gates and additional checks stay intact.
 
-If an accepted BugHunter diagnosis attributes a blocked TestWriter failure to
+If an accepted BugHunter diagnosis attributes a blocked Tester verification to
 production code, use [revise with a test retry](README.md#repair-revision-and-recovery)
-before the Developer edits. Point to the failed dispatch and diagnosis in the
-decision. Dispatch TestWriter again after accepting the repair.
+before the Implementer edits. Point to the failed dispatch and diagnosis in the
+decision. Dispatch Tester again after accepting the repair.
 
 For profiles with escalation, use `cli workflow correct NODE DECISION_JSON` after
 reviewing terminal failed/blocked evidence. NODE identifies the responsible
@@ -203,7 +205,7 @@ resets budgets. An exhausted budget cannot be resumed through this command.
 
 Use ordinary `retry` for non-escalating profiles and the separately budgeted
 transport recovery without terminal FAIL/BLOCKED reports in affected nodes.
-Reported blockers in escalation-enabled Developer/TestWriter assignments require
+Reported blockers in escalation-enabled Implementer assignments require
 correct and resume-task. Non-escalating profiles use ordinary retry with recorded
 blocker resolution; do not invoke an unsupported escalation transition. The next packet contains task-scoped correction history,
 current source/AC, findings, dependencies and remaining budgets. Prior reports
@@ -282,12 +284,13 @@ Report any failed archival or cleanup with the remaining path and cause.
 
 Distinguish slice-local gates from final run gates before dispatch. Slice acceptance
 unblocks dependents; it never claims whole-run completion. Assign final integration
-verify (all required tests/build/static) and subsequent review to an independent
-Judge with combined source/AC, slice map and current reports. Reuse its session
-across those two nodes, never an author session. A single eligible solo Generalist executes all applicable final checks and records SELF_REVIEW PASS; user or project independent-review requirements still require Judge. Preserve mandatory slice checks and project rules.
+verification to Tester with all required test, build and static checks. An independent
+Judge receives combined source/AC, the slice map and the current Tester evidence for
+review when required. For eligible low-risk work the coordinator may accept after
+Tester verification. Preserve all mandatory project and user gates.
 Store full command logs; hand off short results and bounded failure excerpts.
 Reviewer diagnoses affected task and owner using evidence; coordinator routes code
-fixes to Developer, test fixes to TestWriter, unknown causes to diagnosis. Cross-slice
+and test fixes to their Implementer, and unknown causes to diagnosis. Cross-slice
 defects need explicit correction ownership and rechecking combined behavior.
 No product writes by the reviewer. Retry invalidates downstream evidence; final
 verification and review rerun on corrected bytes before accept/archive.

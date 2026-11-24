@@ -11,6 +11,7 @@ from factory.checks.command import CommandExecution
 from factory.checks.contracts import CheckId, CheckSpec, ExecutableCheck
 from factory.gates.gate_contract import GateResult
 from factory.project.contracts import BoundaryGate, Policy
+from factory.runtime.commands.verification import Verification
 from factory.runtime.observability.configuration import TelemetrySettings
 from factory.tasks.contracts import Criterion, Task
 
@@ -438,7 +439,7 @@ class FindingView(TypedDict):
     id: Nonblank
     status: Literal["open", "ready", "fixed", "dismissed"]
     blocking: bool
-    owner_role: Literal["developer", "test-writer", "generalist", "doc-writer"]
+    owner_role: Literal["implementer", "doc-writer", "developer", "test-writer", "generalist"]
     owner_node_id: Nonblank
     task_id: NotRequired[Nonblank]
     summary: Nonblank
@@ -501,6 +502,7 @@ class ReportEvidence(TypedDict, total=False):
     findings: list[Finding]
     finding_updates: list[FindingUpdate]
     evidence: str
+    verification: list[Verification]
     unsuccessful_attempt: UnsuccessfulAttempt
 
 
@@ -576,9 +578,10 @@ class Dispatch(TypedDict, total=False):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class TestSelection(TypedDict):
-    mode: Literal["full"]
+    mode: Literal["full", "filtered"]
     selected: Positive
     completed: Positive
+    skipped: NotRequired[Budget]
     files: NotRequired[Annotated[list[Nonblank], Field(min_length=1)]]
 
 
@@ -606,6 +609,7 @@ class ExecutionReceipt(TypedDict, total=False):
     composite_parent: str
     mode: str
     selection: TestSelection
+    verification: list[Verification]
     output_before: dict[str, str]
     output_after: dict[str, str]
     pid: int

@@ -19,13 +19,13 @@
     }
   },
   "agents": {
-    "developer": {
-      "role": "developer",
-      "profile": "middle-developer"
+    "implementer": {
+      "role": "implementer",
+      "profile": "middle-implementer"
     },
-    "tests": {
-      "role": "test-writer",
-      "profile": "middle-test-writer-zcode"
+    "tester": {
+      "role": "tester",
+      "profile": "tester"
     },
     "reviewer": {
       "role": "judge",
@@ -37,7 +37,7 @@
       "slice": "save-and-apply-preference",
       "source": "request",
       "outcome": "A preference persists and controls playback consistently",
-      "reason": "Crosses UI, persistence and playback lifecycle; independent tests/review required",
+      "reason": "Crosses UI, persistence and playback lifecycle; separate verification and independent review required",
       "risk": "high",
       "kind": "feature",
       "independent_review": true,
@@ -74,8 +74,8 @@
       ],
       "policy_decisions": {
         "dart-changes": {
-          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
-          "probability": 0.9,
+          "reason": "Planned final anistar-check runs the complete static triplet on the integrated candidate; no explicit early static requirement.",
+          "probability": 0.1,
           "source": "agent:coordinator (illustrative estimate)"
         },
         "application-changes": {
@@ -92,38 +92,22 @@
       "id": "implement",
       "task": "preference",
       "stage": "work",
-      "agent": "developer",
+      "agent": "implementer",
       "depends_on": [],
       "owns": [
         "lib/example_preference.dart",
+        "test/example_preference_test.dart",
         "docs/example_preference.md"
       ],
-      "resources": [
-        "project-checks"
-      ]
-    },
-    {
-      "id": "write-tests",
-      "task": "preference",
-      "stage": "work",
-      "agent": "tests",
-      "depends_on": [
-        "implement"
-      ],
-      "owns": [
-        "test/example_preference_test.dart"
-      ],
-      "resources": [
-        "project-checks"
-      ]
+      "resources": []
     },
     {
       "id": "verify",
       "task": "preference",
       "stage": "verify",
-      "agent": "reviewer",
+      "agent": "tester",
       "depends_on": [
-        "write-tests"
+        "implement"
       ],
       "owns": [],
       "resources": [

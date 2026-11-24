@@ -90,12 +90,12 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("Planning authorization: explicit_user_delegation", contract)
         self.assertIn("Keep metadata unchanged", contract)
 
-    def test_architect_is_planning_owned_and_developer_roles_are_excluded(self) -> None:
+    def test_architect_is_planning_owned_and_implementation_roles_are_excluded(self) -> None:
         skill = read(SKILL)
         self.assertIn("`architect` is Factory Planning-owned", skill)
         self.assertIn("`.factory/memory/staging/planning-plan.md.candidate`", skill)
         self.assertIn("coordinator's change classification", skill)
-        self.assertIn("Do not invoke Developer, TestWriter, Reviewer", skill)
+        self.assertIn("Do not invoke Implementer, Tester, Reviewer", skill)
         self.assertIn("No `task-decomposition-planner`", skill)
 
     def test_architect_persona_owns_planning_draft(self) -> None:

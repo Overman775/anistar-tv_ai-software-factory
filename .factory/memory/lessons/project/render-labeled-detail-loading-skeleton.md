@@ -7,9 +7,8 @@ applies_when: Во время загрузки карточки аниме «П�
 observed: REV-1 отклонил полупрозрачный AppButton после уточнения требования владельцем.
   Judge подтвердил заглушку, исключение ввода и стабильную геометрию на TV и телефоне.
 roles:
-- generalist
-- developer
-- test-writer
+- implementer
+- tester
 tags:
 - loading
 - skeleton

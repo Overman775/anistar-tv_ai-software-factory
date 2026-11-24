@@ -11,7 +11,7 @@ import time
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Literal, NotRequired, Protocol, cast
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
@@ -19,12 +19,13 @@ from typing_extensions import TypedDict
 from factory.runtime.contracts import (
     Agent,
     CorrectionRecord,
-    CorrectionSummary,
     Dispatch,
     EscalationStop,
     Node,
     Nonblank,
     Report,
+    ReportRef,
+    ReportSummary,
 )
 from factory.runtime.contracts import EscalationPolicy as EscalationPolicy
 from factory.runtime.contracts import State as State
@@ -140,7 +141,7 @@ def validate_correction(
     policy = profile.get("escalation")
     if not policy:
         raise ValueError("Profile has no escalation policy")
-    ensure(assignment["role"] in {"developer", "test-writer"}, "Unsupported correction specialty")
+    ensure(assignment["role"] in {"implementer"}, "Unsupported correction specialty")
     guard(state, task_id, profile_id, node_id)
     ensure(
         not any(v["status"] in ACTIVE for v in state["nodes"].values()),
@@ -171,7 +172,8 @@ def validate_correction(
     if integration_evidence:
         ensure(
             evidence_node["stage"] in {"verify", "review"}
-            and state["graph"]["agents"][agent_key(evidence_node)]["role"] == "judge"
+            and state["graph"]["agents"][agent_key(evidence_node)]["role"]
+            == ("tester" if evidence_node["stage"] == "verify" else "judge")
             and task_id in review_findings.review_tasks(state, evidence_node["task"]),
             "Cross-task correction needs integration review evidence",
         )
@@ -277,11 +279,9 @@ def validate_correction(
             "Quality correction needs evidence of actual unsuccessful work",
         )
         if report.get("stage_result") == "FAIL_CODE":
-            ensure(
-                assignment["role"] == "developer", "FAIL_CODE belongs to Developer, not TestWriter"
-            )
+            ensure(assignment["role"] == "implementer", "FAIL_CODE belongs to Implementer")
         if report.get("stage_result") == "FAIL_TEST":
-            ensure(assignment["role"] == "test-writer", "FAIL_TEST belongs to TestWriter")
+            ensure(assignment["role"] == "implementer", "FAIL_TEST belongs to Implementer")
     else:
         ensure(report.get("outcome") == "BLOCKED", "Non-quality diagnosis needs a BLOCKED report")
     return CorrectionEvidence(nodes, node, task_id, assignment, profile_id, policy, report)
@@ -408,7 +408,15 @@ def possible_actions(state: State, node: Node, dispatch: Dispatch) -> list[str]:
         return ["resume-task"]
     if report.get("observed_source_drift"):
         return ["reintake"]
-    if report.get("terminal") and dispatch.get("role") in {"developer", "test-writer", "judge"}:
+    if (
+        report.get("terminal")
+        and report.get("outcome") == "BLOCKED"
+        and report.get("stage_result") == "CHECKS_REQUESTED"
+        and dispatch.get("role") == "judge"
+        and node["stage"] == "review"
+    ):
+        return ["revise"]
+    if report.get("terminal") and dispatch.get("role") in {"implementer", "tester", "judge"}:
         return ["correct"]
     return ["retry"]
 
@@ -435,8 +443,29 @@ class RemainingRetries(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class WorkerCorrectionSummary(TypedDict):
+    identity: list[str]
+    source_hash: str
+    from_profile: str
+    kind: Literal["quality", "environment", "requirements"]
+    cause: Literal["static", "tests", "docs", "review"]
+    reason: str
+    handoff: str
+    evidence: Report | ReportSummary
+    report_ref: NotRequired[ReportRef]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class VerificationFailureHandoff(TypedDict):
+    historical: Literal[True]
+    report: ReportSummary
+    report_ref: NotRequired[ReportRef]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class WorkerCorrection(TypedDict):
-    history: list[CorrectionSummary]
+    history: list[WorkerCorrectionSummary]
+    verification_failures: NotRequired[list[VerificationFailureHandoff]]
     session_handoffs: list[SessionHandoff]
     blocker_resolutions: list[BlockerResolution]
     remaining_retries: RemainingRetries
@@ -445,7 +474,7 @@ class WorkerCorrection(TypedDict):
 
 def worker_context(state: State, task_id: str) -> WorkerCorrection:
     """Facts for this task only, without the coordinator's target/threshold policy."""
-    history: list[CorrectionSummary] = [
+    history: list[WorkerCorrectionSummary] = [
         {
             "identity": list(record["identity"]),
             "source_hash": record["source_hash"],

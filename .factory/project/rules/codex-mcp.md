@@ -9,10 +9,10 @@ The imported source-project handshake reported Dart `analyze_files`, `dtd`,
 `get_runtime_errors`, `hot_restart`, and `hot_reload`; DCM `dcm_analyze` and
 `dcm_format`; Context7 `resolve-library-id` and `query-docs`.
 
-Preserve the source role boundaries: developer may analyze/format and query
-Context7; code-explorer may analyze/query Context7; bug-hunter may additionally
-connect tooling, inspect runtime errors and reload/restart. Review roles use
-Dart/DCM analysis only; test-writer uses DCM analysis. Architect, doc-writer and
+Implementer may query Context7. Tester owns verification and can consult the
+configured Dart/DCM analysis tools. Judge reads the final diff and verification
+evidence. CodeExplorer may analyze and query Context7. BugHunter may additionally
+connect tooling, inspect runtime errors and reload/restart. Architect, doc-writer and
 decomposition roles gain no additional MCP categories. Server inheritance does
 not expand a persona's write ownership.
 

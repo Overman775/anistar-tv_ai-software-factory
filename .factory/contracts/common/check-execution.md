@@ -17,7 +17,7 @@ before releasing the resource. Use foreground commands within the runner tree.
 
 Verify supplies all required checks plus applicable static/tests/docs evidence or
 justified not_applicable reasons; high risk cannot skip tests. Required checks
-cannot be waived via not_applicable. Review performs its assigned final checks.
+cannot be waived via not_applicable. Tester owns verification receipts. Judge inspects current receipts on review.
 Later writes or changed inputs invalidate prior evidence. Self-review is never an
 independent APPROVE. Correct assertions and nonzero test selection need inspection.
 
@@ -41,7 +41,7 @@ actual log/report; absent selection evidence or zero selected tests cannot prove
 success. A filtered run cannot satisfy a required full-suite gate. Retain late,
 setup and teardown errors, incomplete streams and unknown terminal outcomes;
 a zero process exit alone does not override them. Keep runner receipts unchanged:
-put this detail in accompanying evidence, not invented receipt fields.
+use the runner's structured observations when available and record other evidence in the assigned report. The delivery packet carries the outcome, available counts and failed checks. Use its `report_ref` to retrieve the full retained report.
 
 An observation uses `kind: observation`, `result: PASS`, and evidence such as
 screenshots and comparison notes; never invent a shell command for visual review.
@@ -51,10 +51,9 @@ dispatch and fields and the concrete facts checked. An absent fact is not an
 unknown, and neither means a check was NOT_RUN. Return missing or ambiguous facts
 to the coordinator; do not pass the observation on a source document alone.
 Observations do not replace mandatory project test/static/build commands.
-One `verify` must supply the complete required check set for its assigned task.
+A full `verify` supplies the task's required read-only checks. A supplementary Tester assignment with `required_check_ids` supplies only its selected checks.
 Slice tasks declare local behavior/regression gates; final integration declares
-the full project test/build/static set and is verified by the independent
-Judge before its review. Never silently drop an existing required check. Current conservative
+the full project test/build/static set and is verified by Tester before independent review. Never silently drop an existing required check. Current conservative
 source/file snapshots and later-write invalidation apply to all its results.
 For a multi-task run, integration rechecks all selected criteria on final files,
 including joint behavior. References to another source use `source-id:AC-01` in
@@ -85,8 +84,7 @@ An assigned check may declare registered ordered `execution.stages` and an empty
 child receipts, command results, input hashes and logs under the parent execution.
 Use `checks results EXECUTION_ID` to retrieve the parent and child results. Select the parent execution ID in `prepare-report` to include its recorded child
 receipts, or select individual receipt IDs explicitly. A stage that never ran has
-no receipt and cannot satisfy its gate. Judge uses its own
-assignment. A `codegen` command may declare exact owned `outputs`; the runner
+no receipt and cannot satisfy its gate. Tester uses its own verification assignment. A `codegen` command may declare exact owned `outputs`; the runner
 records before/after hashes and checks immutability of other declared inputs.
 
 A registered composite test stage supplies one log record

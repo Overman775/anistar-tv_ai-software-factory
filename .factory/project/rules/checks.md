@@ -1,62 +1,46 @@
 # AniStar project checks
 
+Use `docs/melos_tooling.md` and `docs/05_development_and_testing.md` for
+commands, selector syntax and coverage. The coordinator assigns every
+verification command to Tester. Serialize shared Flutter, Gradle and generator
+resources. A writer can run an explicitly assigned generation step for its
+owned outputs. Judge reads check evidence and requests additional execution
+through the coordinator.
 
-Read current project command definitions in `docs/melos_tooling.md` and
-`docs/05_development_and_testing.md`. For Dart changes run sequentially:
+For a slice, select the regression and existing tests covering affected
+consumers. Use a supported test path or name. Record the actual selection and
+completed count. For example, a change to shared catalog/favorites state also
+needs the navigation, tab switching and pull-to-refresh widget tests. A widget
+test does not establish native IME behavior, and fixture results do not establish
+live behavior. Live tests require their authorized scope.
 
-```bash
-fvm dart run melos run analyze
-fvm dart run melos run dcm
-fvm dart run melos run format:check
-```
+For applicable application changes Tester runs the following registered Melos
+commands in order after all writers finish on the integrated tree:
 
-These are workspace-wide; package `--scope` does not narrow them. Developer may
-run preflight. Slice review runs assigned applicable static checks; the final
-integration Judge runs this read-only triplet after all writers.
-In solo Generalist owns both passes as needed; never call it independent review.
-When no Dart/Flutter changes exist, record `NOT_APPLICABLE` with evidence/reason.
+1. `fvm dart run melos run check`
+2. `fvm dart run melos run test:e2e`
+3. `fvm dart run melos run build:android:prod:apk`
 
-Focused tests: `fvm flutter test "<test_path>" --reporter=failures-only`, or
-`fvm dart run melos run test:unit`. Full project completion retains the applicable
-sequence `fvm dart run melos run check` → `fvm dart run melos run test:e2e` →
-`fvm dart run melos run build:android:prod:apk`. TestWriter (or Generalist) runs
-slice tests; Developer (or Generalist) builds when needed to verify that slice.
-For final integration, assign Judge a command-capable `verify` node with
-the complete project test/build/static set, followed by its `review` node and
-coordinator acceptance. This same independent reviewer may perform both stages;
-it must not be a product author. A single-task run uses the same final verification
-assignment when full project gates apply. No extra Generalist is required.
-Do not repeat full-project gates for each slice unless project policy requires it.
-Keep mandatory slice checks; assign run-wide gates explicitly to final integration.
-Serialize all Flutter/Gradle/codegen and
-common gates, including commands requested by reviewers. Live tests require
-explicit scope. Do not replace missing Flutter/APK with Python
-fixtures. Parent checks commands against project rules before accepting evidence.
+The full `check` includes format checking, analyzer, DCM and tests. Schedule
+standalone workspace-wide `analyze`, `dcm`, `format:check` when Dart/Flutter
+changes require these checks outside that aggregate, or when an earlier check
+is explicitly required. Package `--scope` does not narrow these three commands.
+Record why each project gate applies. Focused results do not discharge a full
+gate. Single-task runs use one final Tester assignment when it can cover all
+requirements. Diagnose a failure with the smallest relevant scenario before a
+full rerun on corrected bytes.
 
-При изменении общего состояния каталога и избранного координатор включает в
-проверки среза существующие widget-тесты затронутой навигации, переключения
-вкладок и pull-to-refresh. TestWriter или Generalist запускает их вместе с
-целевой регрессией, как только изменение можно проверить, до полного `check`.
+Владелец AniStar TV разрешил обновлять затронутые golden-эталоны, если изменение
+соответствует ожидаемому результату задачи. Tester запускает сравнение и
+возвращает диагностические PNG. Implementer проверяет наблюдаемое поведение,
+diff и точные пути и применяет разрешённое изображение в своей области записи.
+После этого Tester повторяет сравнение. Для полупрозрачного элемента проверить
+видимость контура и фона на стабильном изображении во всех затронутых профилях
+TV и mobile. Увеличение задержек и числа нажатий требует установленной причины.
 
-Diagnostic constraints: do not increase sleeps, timeouts or D-pad presses without evidence. A widget test cannot prove native IME behavior; fixture success cannot prove live behavior.
-
-Владелец AniStar TV заранее разрешил добавлять и обновлять golden-эталоны,
-которые проверяют ожидаемое изменение в рамках текущей задачи. Для таких PNG
-отдельное согласование не требуется. Координатор включает точные пути в область
-работы и назначает их TestWriter или Generalist. Исполнитель проверяет PNG и
-diff, обновляет только затронутые эталоны выборочной командой
-`test:goldens:update` и повторяет сравнение.
-
-Если задача затрагивает полупрозрачный элемент, до обновления эталона проверьте
-на пробном снимке, что контур элемента различим и через него виден фон.
-Используйте стабильное тестовое изображение с подходящей яркостью и текстурой.
-Проверьте каждый затронутый профиль TV и mobile.
-
-Если Judge обнаружил ожидаемое расхождение в рамках задачи, координатор
-возвращает эталоны владельцу тестов и повторяет итоговую проверку после записи.
-При дефекте или неясной причине сначала выясняют причину расхождения.
-Для расширения задачи на другие эталоны применяют отдельное согласование.
-Если `anistar-check` остановился только на таком расхождении, Judge может
-вернуть `APPROVAL_REQUIRED` с действием `update-golden-baselines`, точными
-путями и SHA-256 просмотренных PNG. После согласования координатор применяет
-эти PNG, вызывает `resume-approved` и повторяет обязательные проверки и ревью.
+Если для единственного расхождения `anistar-check` требуется расширить область
+на новые эталоны, Tester возвращает `APPROVAL_REQUIRED` с действием
+`update-golden-baselines`, точными путями и SHA-256 просмотренных кандидатов.
+Координатор после согласования применяет одобренные PNG, вызывает
+`resume-approved` и назначает новую проверку и требуемое ревью. Ошибка приложения
+или теста возвращается Implementer.

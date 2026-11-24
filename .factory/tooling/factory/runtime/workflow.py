@@ -500,7 +500,9 @@ class Ledger(RunJournal):
             budget = RetryBudget.for_task(s, n["task"], stage)
             budget.require_available()
             affected = {node_id} | {k for k in nodes if node_id in ancestors(nodes, k)}
-            if profile.get("escalation"):
+            if profile.get("escalation") or (
+                stage == "recovery" and s["graph"]["agents"][agent_key(n)]["role"] == "tester"
+            ):
                 require(
                     not any(
                         s["nodes"][k].get("report", {}).get("outcome") in {"FAIL", "BLOCKED"}

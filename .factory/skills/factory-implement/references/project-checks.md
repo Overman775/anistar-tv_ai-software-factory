@@ -8,8 +8,8 @@ configuration, tests and dependencies outside task scope); never remove profile 
 The runner snapshots their union with task scope. Unknown applicability blocks execution.
 
 Slice tests remain mandatory. Run-wide checks belong to the final verification
-assignment (the sole task in a one-task run). Final Judge verifies then reviews;
-an eligible solo Generalist retains SELF_REVIEW. Serialize shared project checks.
+assignment (the sole task in a one-task run). Tester executes the final registered checks on the integrated tree. Judge reads
+those receipts and reviews the diff when independent review is required. Serialize shared project checks.
 The profile adds requirements, never changes role permissions or verdict authority.
 
 ## Diagnose before a broad rerun
@@ -25,3 +25,11 @@ After correction, rerun the selected scenario, then satisfy the applicable final
 gates on the final tree. Focused success does not replace full-suite acceptance.
 Use the current project's supported selectors; do not invent flags or wrappers.
 Match evidence to the actual affected boundary; isolated fixtures do not establish live behavior.
+
+For author corrections, deliver the assignment's `correction.verification_failures`
+(or compact dependency result) with its immutable report_ref. An empty
+`dependency_results` does not mean failure evidence is missing: inspect correction
+context before adding reads. Do not add the full canonical Tester report to
+`node.read`, handoff instructions or normal messages; its prose may include passing
+tests. Keep the reference available for an explicitly needed forensic read. Preserve
+the original report and receipts; do not rewrite them to obtain a compact handoff.

@@ -2,7 +2,7 @@
 # Paths/cwd/inputs refer to the application root, not this directory.
 gates:
   - id: implementation-ready
-    at: [implement.work]
+    at: [implement.verify]
     checks:
       - id: api-lint
         level: slice

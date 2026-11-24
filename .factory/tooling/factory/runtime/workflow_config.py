@@ -298,7 +298,8 @@ def check_capabilities(profile: Profile, node: Node | None = None) -> None:
         )
         require(
             "project-checks" not in node.get("resources", [])
-            or profile["capabilities"]["commands"],
+            or profile["capabilities"]["commands"]
+            or node["stage"] == "review",
             "Profile forbids project commands",
         )
 

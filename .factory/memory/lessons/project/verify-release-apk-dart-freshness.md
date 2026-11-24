@@ -8,8 +8,8 @@ observed: На Flutter 3.44 / AGP 9 Gradle повторно использова
   компиляции нового Dart AOT. В APK попадал старый libapp.so. В проекте для задачи
   merge…JniLibFolders отключили up-to-date.
 roles:
-- generalist
-- developer
+- implementer
+- tester
 - judge
 tags:
 - apk

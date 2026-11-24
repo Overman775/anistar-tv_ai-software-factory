@@ -120,21 +120,21 @@ rules:
     - id: development-conventions
       for:
         processes: [implement]
-        roles: [developer, generalist, test-writer]
+        roles: [implementer, tester]
         stages: [work]
       documents: [development-guide]
 
     - id: backend-context
       for:
         processes: [implement, code-review]
-        roles: [developer, generalist, test-writer, judge, reviewer]
+        roles: [implementer, tester, judge, reviewer]
         paths_any: ["services/api/**"]
       documents: [backend-design, api-contract]
 
     - id: frontend-context
       for:
         processes: [implement, code-review]
-        roles: [developer, generalist, test-writer, judge, reviewer]
+        roles: [implementer, tester, judge, reviewer]
         paths_any: ["apps/web/**"]
       documents: [frontend-design, api-contract]
 
@@ -161,7 +161,7 @@ rules:
     - id: verification-guidance
       for:
         processes: [implement]
-        roles: [test-writer, generalist, judge]
+        roles: [implementer, tester, judge]
         stages: [work, verify, review]
       documents: [testing-guide]
 

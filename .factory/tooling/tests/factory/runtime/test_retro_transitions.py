@@ -87,10 +87,9 @@ class RetroTransitionsTests(TestCase):
 
     def test_additive_scope_requires_current_verification_and_keeps_original_report(self) -> None:
         f = self.f
-        f.g["agents"]["author"] = {"role": "developer", "profile": "middle-developer"}
+        f.g["agents"]["author"] = {"role": "implementer", "profile": "middle-implementer"}
+        f.config["_defaults"]["implementer"] = "middle-implementer"
         f.require_fixture_review()
-        verify = next(node for node in f.g["nodes"] if node["id"] == "verify-label")
-        verify["agent"] = "fixture-judge"
         f.g["tasks"]["label"]["required_checks"][0]["execution"]["argv"] = [
             sys.executable,
             "-c",
@@ -99,7 +98,7 @@ class RetroTransitionsTests(TestCase):
         f.init()
         f.start("write-label")
         f.ledger.finish("write-label", f.report("write-label"))
-        f.start("verify-label", "fixture-judge")
+        f.start("verify-label", "fixture-tester")
         report = f.report("verify-label", "FAIL", stage_result="FAIL_CODE")
         self.assertEqual(3, report["checks"][0]["exit_code"])
         f.ledger.finish("verify-label", report)
@@ -127,7 +126,7 @@ class RetroTransitionsTests(TestCase):
         }
         with self.assertRaisesRegex(Invalid, "Historical failure|current verification"):
             f.ledger.correct("write-label", correction)
-        f.start("verify-label", "fixture-judge")
+        f.start("verify-label", "fixture-tester")
         fresh = f.report("verify-label")
         self.assertEqual(0, fresh["checks"][0]["exit_code"])
         self.assertNotEqual(report["dispatch_id"], fresh["dispatch_id"])
@@ -145,7 +144,7 @@ class RetroTransitionsTests(TestCase):
             f.ledger.correct("write-label", correction)
         self.assertEqual(resolved, f.ledger.read())
         self.assertEqual(state["counters"], resolved["counters"])
-        self.assertEqual("middle-developer", resolved["nodes"]["write-label"]["profile"])
+        self.assertEqual("middle-implementer", resolved["nodes"]["write-label"]["profile"])
 
         f.start("review-label", "fixture-judge")
         f.ledger.finish("review-label", f.report("review-label", verdict="APPROVE"))
@@ -537,7 +536,9 @@ class RetroTransitionsTests(TestCase):
         output.write_bytes(contents)
         self.f.ledger.finish("verify-label", prepared)
 
-    def generator_setup(self, extra_write: bool) -> None:
+    def generator_setup(
+        self, extra_write: bool, *, register: bool = True, initialize: bool = True
+    ) -> None:
         f = self.f
         task = f.g["tasks"]["label"]
         task["scope"].append("generated.txt")
@@ -570,11 +571,91 @@ class RetroTransitionsTests(TestCase):
                 },
             }
         )
+        if register:
+            registered = deepcopy(task["required_checks"][-1])
+            registered.pop("category")
+            registered.pop("criteria")
+            registered.update(level="slice", decision="generator-required")
+            f.fixture_policy = json.dumps(
+                {
+                    "id": "registered-generator-fixture",
+                    "decisions": [
+                        {
+                            "id": "generator-required",
+                            "type": "predicate",
+                            "min_confidence": 0.4,
+                            "question": "Is generation mandatory for every task?",
+                        }
+                    ],
+                    "gates": [
+                        {"id": "generation", "at": ["implement.work"], "checks": [registered]}
+                    ],
+                }
+            )
+            f.fixture_profile.write_text(f.fixture_policy)
+            f.config["_project"] = load_profile(f.fixture_profile)
+            f.config["_files"].update(f.config["_project"]["files"])
+            task["policy_decisions"] = {
+                "generator-required": {
+                    "probability": 0.1,
+                    "source": "coordinator",
+                    "reason": "Explicit selected generator only",
+                }
+            }
         f.g["nodes"][0].update(
             owns=["generated.txt"], resources=["project-checks"], required_check_ids=["generate"]
         )
-        f.init()
-        f.start("write-label")
+        if initialize:
+            f.init()
+            f.start("write-label")
+
+    def test_task_declared_codegen_does_not_grant_arbitrary_writer_command(self) -> None:
+        with self.assertRaisesRegex(Invalid, "unknown registered check"):
+            self.generator_setup(False, register=False)
+        self.assertEqual("before", (self.f.root / "generated.txt").read_text())
+
+    def test_registered_codegen_command_and_scope_cannot_be_substituted(self) -> None:
+        self.generator_setup(False, initialize=False)
+        original = deepcopy(self.f.g)
+        for field, value in [
+            ("argv", [sys.executable, "-c", "raise SystemExit('arbitrary command')"]),
+            ("cwd", "lib"),
+            ("timeout_seconds", 11),
+            ("inputs", []),
+        ]:
+            self.f.g = deepcopy(original)
+            self.f.g["tasks"]["label"]["required_checks"][-1]["execution"][field] = value
+            with (
+                self.subTest(field=field),
+                self.assertRaisesRegex(Invalid, "missing/changed registered check"),
+            ):
+                self.f.init()
+        self.f.g = original
+        self.f.config["_project"]["data"]["gates"][0]["checks"][0]["for"] = {
+            "paths_any": ["unrelated/**"]
+        }
+        with self.assertRaisesRegex(Invalid, "registered check outside task scope"):
+            self.f.init()
+
+    def test_registered_codegen_requires_current_producer_boundary(self) -> None:
+        self.generator_setup(False, initialize=False)
+        self.f.config["_project"]["data"]["gates"][0]["at"] = ["implement.docs"]
+        with self.assertRaisesRegex(Invalid, "registered producer boundary"):
+            self.f.init()
+
+    def test_registered_codegen_accepts_only_stronger_explicit_inputs(self) -> None:
+        self.generator_setup(False, initialize=False)
+        (self.f.root / "extra-generator-input.txt").write_text("extra")
+        check = self.f.g["tasks"]["label"]["required_checks"][-1]
+        check["execution"]["inputs"].append("extra-generator-input.txt")
+        self.f.init()
+        self.f.start("write-label")
+        result = self.f.ledger.run_check("write-label", "generate")
+        self.assertEqual("PASS", result["result"])
+        self.assertIn(
+            "extra-generator-input.txt",
+            self.f.ledger.read()["executions"][result["execution_id"]]["input_scope"],
+        )
 
     def test_codegen_mutates_only_exact_outputs_and_verifies_new_snapshot(self) -> None:
         self.generator_setup(False)
@@ -652,7 +733,7 @@ class RetroTransitionsTests(TestCase):
         prepared = f.ledger.prepare_report("write-all", draft, [])
         self.assertEqual(set(task["scope"]), set(prepared["files"]))
         f.ledger.finish("write-all", prepared)
-        f.start("verify-all", "judge")
+        f.start("verify-all")
         judge = f.ledger.packet("verify-all")
         self.assertEqual({"label", "second"}, set(judge["integration_tasks"]))
         self.assertEqual(task["required_checks"], judge["finish_requirements"]["required_checks"])

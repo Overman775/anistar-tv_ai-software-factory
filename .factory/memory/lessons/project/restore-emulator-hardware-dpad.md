@@ -9,9 +9,8 @@ observed: В `anistar_e2e` при `hw.dPad=yes` и `hw.keyboard=no` команд
   Boot появилось устройство `qwerty2` со стрелками. Владелец подтвердил работу кнопок
   в панели.
 roles:
-- generalist
-- developer
-- test-writer
+- implementer
+- tester
 - judge
 tags:
 - android-tv

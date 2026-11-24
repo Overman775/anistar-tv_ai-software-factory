@@ -24,17 +24,17 @@ class ProfileGroupTests(unittest.TestCase):
         original = deepcopy(self.raw["profiles"])
         profiles, defaults = expand_profiles(original)
         self.assertEqual(original, self.raw["profiles"])
-        self.assertEqual("middle-developer", defaults["roles/developer.md"])
-        self.assertEqual("terra", profiles["middle-developer"]["model"])
-        self.assertEqual("luna", profiles["junior-developer"]["model"])
-        self.assertEqual("zcode", profiles["middle-test-writer-zcode"]["adapter"])
-        profiles["middle-developer"]["capabilities"]["edit"] = False
-        profiles["middle-developer"]["mcp"].clear()
-        policy = profiles["middle-developer"]["escalation"]
+        self.assertEqual("middle-implementer", defaults["roles/implementer.md"])
+        self.assertEqual("terra", profiles["middle-implementer"]["model"])
+        self.assertEqual("luna", profiles["junior-implementer"]["model"])
+        self.assertEqual("zcode", profiles["middle-implementer-zcode"]["adapter"])
+        profiles["middle-implementer"]["capabilities"]["edit"] = False
+        profiles["middle-implementer"]["mcp"].clear()
+        policy = profiles["middle-implementer"]["escalation"]
         assert policy is not None
         policy["to"] = "human"
-        self.assertTrue(profiles["junior-developer"]["capabilities"]["edit"])
-        self.assertTrue(profiles["junior-developer"]["mcp"])
+        self.assertTrue(profiles["junior-implementer"]["capabilities"]["edit"])
+        self.assertTrue(profiles["junior-implementer"]["mcp"])
         self.assertEqual(original, self.raw["profiles"])
 
     def test_omitted_paths_preserve_profiles_and_defaults(self) -> None:
@@ -44,36 +44,38 @@ class ProfileGroupTests(unittest.TestCase):
             groups = deepcopy(original)
             for group in groups.values():
                 for field in omitted:
-                    group.pop(field)
+                    group.pop(field, None)
             with self.subTest(omitted=omitted):
                 self.assertEqual(expected, expand_profiles(groups))
 
     def test_single_variant_uses_existing_default_resolution(self) -> None:
         config = load_config(ROOT / "factory.yaml")
         self.assertEqual("reviewer", config["_defaults"]["reviewer"])
-        self.assertEqual("middle-developer", config["_defaults"]["developer"])
+        self.assertEqual("middle-implementer", config["_defaults"]["implementer"])
         groups = deepcopy(self.raw["profiles"])
         groups["reviewer"]["default"] = "reviewer"
         self.assertEqual("reviewer", expand_profiles(groups)[1]["roles/reviewer.md"])
 
     def test_group_boundaries_reject_overrides_duplicates_and_bad_defaults(self) -> None:
         changes: list[Callable[[Any], object]] = [
-            lambda g: g["developer"].pop("default"),
-            lambda g: g["developer"].update(default="reviewer"),
-            lambda g: g["developer"].update(default=[]),
-            lambda g: g["developer"].update(variants={}),
-            lambda g: g["developer"].update(role=None),
-            lambda g: g["developer"].update(contract=None),
-            lambda g: g["developer"].update(role="roles/reviewer.md"),
-            lambda g: g["developer"].update(contract="contracts/reviewer.md"),
-            lambda g: g["developer"]["variants"]["middle-developer"].update(
+            lambda g: g["implementer"].pop("default"),
+            lambda g: g["implementer"].update(default="reviewer"),
+            lambda g: g["implementer"].update(default=[]),
+            lambda g: g["implementer"].update(variants={}),
+            lambda g: g["implementer"].update(role=None),
+            lambda g: g["implementer"].update(contract=None),
+            lambda g: g["implementer"].update(role="roles/reviewer.md"),
+            lambda g: g["implementer"].update(contract="contracts/reviewer.md"),
+            lambda g: g["implementer"]["variants"]["middle-implementer"].update(
                 capabilities={"edit": False}
             ),
-            lambda g: g["developer"]["variants"]["middle-developer"].update(mcp=[]),
-            lambda g: g["developer"]["variants"]["middle-developer"].update(enforcement="required"),
-            lambda g: g["developer"]["variants"]["middle-developer"].update(model=[]),
+            lambda g: g["implementer"]["variants"]["middle-implementer"].update(mcp=[]),
+            lambda g: g["implementer"]["variants"]["middle-implementer"].update(
+                enforcement="required"
+            ),
+            lambda g: g["implementer"]["variants"]["middle-implementer"].update(model=[]),
             lambda g: g["reviewer"].update(
-                variants={"middle-developer": {"model": "sol", "adapter": "codex"}}
+                variants={"middle-implementer": {"model": "sol", "adapter": "codex"}}
             ),
         ]
         for change in changes:
@@ -92,8 +94,8 @@ class ProfileGroupTests(unittest.TestCase):
         changes: list[Callable[[Any], object]] = [
             lambda c: c.update(routing={"defaults": {}}),
             lambda c: c.update(profliles={}),
-            lambda c: c["profiles"]["developer"].update(defualt="middle-developer"),
-            lambda c: c["profiles"]["developer"]["variants"]["middle-developer"].update(
+            lambda c: c["profiles"]["implementer"].update(defualt="middle-implementer"),
+            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
                 effort="high"
             ),
             lambda c: c["models"]["terra"].update(efort="high"),

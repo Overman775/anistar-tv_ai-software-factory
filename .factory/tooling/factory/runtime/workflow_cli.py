@@ -135,7 +135,7 @@ def build_parser(
         "--retry-tests",
         nargs=4,
         metavar=("TEST_NODE", "FAILED_DISPATCH", "DIAGNOSIS_NODE", "REPAIR_NODE"),
-        help="Reopen a failed TestWriter node after the diagnosed Developer repair",
+        help="Reopen a failed Tester node after the diagnosed Implementer repair",
     )
     intake = command(
         "reintake",

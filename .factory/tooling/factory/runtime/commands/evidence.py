@@ -5,6 +5,7 @@ from pathlib import Path
 from factory import file_reader
 from factory.runtime.command_worker import selection_error
 from factory.runtime.contracts import CheckResult, ExecutionReceipt, State
+from factory.runtime.reports import finish_requirements
 from factory.runtime.workflow_core import Invalid, digest, relative, require, snapshot
 
 
@@ -20,7 +21,7 @@ def check_receipts(
     n = next(n for n in state["graph"]["nodes"] if n["id"] == node_id)
     task = state["graph"]["tasks"][n["task"]]
     v = state["nodes"][node_id]
-    for spec in task["required_checks"]:
+    for spec in finish_requirements.for_node(state, n)["allowed_checks"]:
         if spec["kind"] == "observation":
             continue
         actual = next((c for c in checks if c.get("id") == spec["id"]), None)

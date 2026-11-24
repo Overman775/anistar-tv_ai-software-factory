@@ -268,7 +268,7 @@ covered by source or bounded direct-execution rules, fabricated facts/contracts,
 question protocols, approval revision, or an independent decision log. The
 brief cannot authorize work beyond source.
 
-Freeze brief before Developer starts. Later technical deviations are reported
+Freeze brief before Implementer starts. Later technical deviations are reported
 in implementation/test/review results and must remain inside source lock.
 
 ## Material Semantic Gap Gate

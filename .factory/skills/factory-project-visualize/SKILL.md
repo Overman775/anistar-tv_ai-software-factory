@@ -15,6 +15,12 @@ For policy views read [project policy](../../contracts/common/project-policy.md)
 and [verification](../factory-project-configure/references/verification.md).
 Resolve the selected profile; retain IDs, boundary names, selection conditions and
 source paths. Gate catalog supplies definitions, never execution status.
+Respect the requested output-only scope during validation: use read-only shared
+readers with bytecode disabled, or run journal-producing CLI probes on a disposable
+external copy of the actual candidate as described in shared verification. Never
+create or delete target diagnostics merely to produce a map.
+Resolve linked skill documents against the canonical `.factory/skills/` location
+when this skill was discovered through a symlink under `.agents/skills/`.
 For recipient views use the resolver with explicit process/audience/role/stage/scope;
 show unknown scope as conservative selection, not exact applicability.
 

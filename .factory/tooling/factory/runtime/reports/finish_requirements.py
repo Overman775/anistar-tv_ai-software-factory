@@ -1,7 +1,12 @@
 """Compute and apply the same evidence obligations at dispatch and handoff."""
 
 from factory.project.contracts import ProjectData
-from factory.project.profile_rules import boundary_gates, project_checks
+from factory.project.profile_rules import (
+    boundary_gates,
+    check_definition,
+    project_checks,
+    registered_check,
+)
 from factory.runtime.contracts import CheckResult, Node, Report, State, agent_key
 from factory.runtime.contracts import FinishRequirements as FinishRequirements
 from factory.runtime.reports import acceptance
@@ -14,10 +19,19 @@ def requirements(
 ) -> FinishRequirements:
     stage = node["stage"]
     gates = boundary_gates(profile, "implement." + stage, task)
-    all_checks = task["required_checks"]
+    all_checks = list(task["required_checks"])
+    selected = node.get("required_check_ids")
+    if selected is not None and role == "tester" and stage == "verify":
+        declared = {check["id"] for check in all_checks}
+        all_checks.extend(
+            registered_check(profile, cid, task["scope"]) for cid in selected if cid not in declared
+        )
+        gates = [
+            {**gate, "checks": [cid for cid in gate.get("checks", []) if cid in selected]}
+            for gate in gates
+        ]
     by_id = {c["id"]: c for c in all_checks}
     gated = {cid for gate in gates for cid in gate.get("checks", [])}
-    selected = node.get("required_check_ids")
     full = stage == "verify" and selected is None
     verification_ids = {
         check["id"]
@@ -25,6 +39,8 @@ def requirements(
         if check["kind"] == "observation" or not check["execution"].get("outputs")
     }
     required = gated | (verification_ids if full else set(selected or []))
+    if role == "judge":
+        required = {cid for cid in required if by_id[cid]["kind"] == "observation"}
     commands = "project-checks" in node.get("resources", [])
     if selected is not None:
         acceptance.ids(selected, "node required_check_ids", empty=True)
@@ -37,20 +53,39 @@ def requirements(
         and (
             check["kind"] == "observation"
             or (
-                commands and set(check["execution"].get("outputs", [])) <= set(node.get("owns", []))
+                commands
+                and (
+                    (
+                        role == "tester"
+                        and check["kind"] != "codegen"
+                        and not check["execution"].get("outputs")
+                    )
+                    or (
+                        role in {"implementer", "doc-writer"}
+                        and check["kind"] == "codegen"
+                        and bool(check["execution"].get("outputs"))
+                        and set(check["execution"]["outputs"]) <= set(node.get("owns", []))
+                    )
+                )
             )
         )
     ]
+    for check in allowed:
+        if role in {"implementer", "doc-writer"} and check["kind"] == "codegen":
+            check_definition(registered_check(profile, check["id"], task["scope"]), check)
+            acceptance.ensure(
+                check["id"] in gated, "Code generation needs a registered producer boundary"
+            )
     available = {check["id"] for check in allowed}
     acceptance.ensure(
         required <= available,
         "Required checks need project-checks reservation and exact output ownership",
     )
-    for registered_check in project_checks(profile):
-        if registered_check["id"] in required:
+    for entry in project_checks(profile):
+        if entry["id"] in required:
             acceptance.ensure(
-                set(registered_check.get("after", [])) <= available,
-                "Missing registered prerequisites for check " + registered_check["id"],
+                set(entry.get("after", [])) <= available,
+                "Missing registered prerequisites for check " + entry["id"],
             )
     for check in allowed:
         if check["kind"] == "observation":
@@ -71,12 +106,7 @@ def requirements(
                 ),
                 "Composite requires registered, assigned direct read-only stages declared full",
             )
-    test_receipt = stage == "work" and role == "test-writer" and commands
-    if test_receipt:
-        acceptance.ensure(
-            any(c["kind"] == "tests" for c in allowed),
-            "TestWriter needs an assigned tests receipt before dispatch",
-        )
+    test_receipt = False
     kinds = ["static", "tests", "docs"] if full else []
     return {
         "allowed_checks": allowed,
@@ -91,8 +121,9 @@ def requirements(
         ],
         "require_test_receipt": test_receipt,
         "require_approval": stage == "review",
-        "require_writes_ready": bool(node.get("owns")) and not commands,
-        "require_evidence": stage in {"verify", "review"},
+        "require_writes_ready": bool(node.get("owns"))
+        and not any(check["kind"] == "codegen" for check in allowed),
+        "require_evidence": stage == "verify",
     }
 
 
@@ -100,7 +131,11 @@ def validate_selection(obligations: FinishRequirements, checks: list[CheckResult
     allowed = {check["id"] for check in obligations["allowed_checks"]}
     for check in checks:
         acceptance.ensure(
-            check.get("category") == "additional" or check.get("id") in allowed,
+            (
+                check.get("category") == "additional"
+                and (check.get("kind") == "observation" or bool(obligations["evidence_kinds"]))
+            )
+            or check.get("id") in allowed,
             f"Check not assigned to this node: {check.get('id')}",
         )
 
@@ -130,12 +165,13 @@ def validate_pass(obligations: FinishRequirements, report: Report) -> None:
                 raise ValueError(f"Missing {kind} evidence or justified not_applicable reason")
     if obligations["require_test_receipt"]:
         acceptance.ensure(
-            report.get("stage_result") != "WRITES_READY", "TestWriter checks required"
+            report.get("stage_result") != "WRITES_READY",
+            "A required test receipt cannot be replaced by WRITES_READY",
         )
         test_ids = {c["id"] for c in obligations["allowed_checks"] if c["kind"] == "tests"}
         acceptance.ensure(
             any(c.get("id") in test_ids and acceptance.successful(c) for c in checks),
-            "TestWriter needs a successful tests receipt",
+            "Missing required successful tests receipt",
         )
     if obligations["require_writes_ready"]:
         acceptance.ensure(

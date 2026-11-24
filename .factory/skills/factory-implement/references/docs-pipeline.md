@@ -1,6 +1,6 @@
 # Docs guidance
 
-A documentation-only request goes to DocWriter or an eligible Generalist
+A documentation-only request goes to DocWriter or the assigned Implementer
 for a small bounded update. Source truth, links, commands, examples and indexes
 must be verified. Do not execute documented commands merely to check prose.
 Automatic docs work within implementation happens before final review and needs

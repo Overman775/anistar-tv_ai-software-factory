@@ -196,8 +196,8 @@ returns all nonblocked nodes to pending, and keeps blocked nodes and counters.
 Explicit selected plan scope is part of source identity. The parent establishes
 real authorization before re-intake.
 
-When BugHunter traces a blocked TestWriter failure to production code, submit
-the revision and the test retry together, before Developer edits the files:
+When BugHunter traces a blocked Tester verification to production code, submit
+the revision and the test retry together, before Implementer edits the files:
 
 ```bash
 .factory/tooling/bin/cli workflow revise /path/to/revised-graph.json "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
@@ -205,7 +205,7 @@ the revision and the test retry together, before Developer edits the files:
 
 Identify the exact failure in the diagnosis and explain the owner's responsibility
 in the reason. The revised graph orders the accepted BugHunter diagnosis, then
-the Developer repair, then TestWriter. The helper checks both reports against
+the Implementer repair, then Tester. The helper checks both reports against
 current source, files and checks. It spends one task `tests` retry and reopens
 only the named failure in the same save as the revision. Other blocked nodes
 stay blocked. The original report remains in history. Claim a fresh test dispatch
@@ -309,8 +309,8 @@ Canonical plan paths/identifying frontmatter cannot use the external route.
 
 ## Initial profiles
 
-Developer and TestWriter start at their configured group defaults. The supplied
-configuration starts both at middle. `validate`, `init` and `claim` check the
+Implementer starts at the configured author default. Tester uses its own
+verification profile, `tester` on Luna in the supplied configuration. `validate`, `init` and `claim` check the
 default and any registered correction lineage. `revise` and `reintake` preserve
 started assignment identities. Physical replacement preserves its logical
 agent and profile. Correction records link exact reassigned nodes to new
@@ -330,8 +330,8 @@ instruction hashes too. Runner/harness/connection on profiles are rejected to
 avoid two competing sources. Configuration, graph and run state have no schema
 version field; graph revisions and frozen file hashes track actual changes.
 There is no repeated `roles` list. `roles/<role-id>.md` and matching contract
-define specialty; `profiles.<role>.default` selects its normal profile. Developer and
-TestWriter have junior/middle/senior profiles sharing one procedure and contract.
+define specialty; `profiles.<role>.default` selects its normal profile. Implementer profiles share one procedure and contract. Tester uses a separate
+read-only verification procedure.
 The annotated example additionally shows ZCode/GLM and Pi/DeepSeek; verify
 backend IDs, credentials and required tools before selecting them.
 
@@ -521,7 +521,7 @@ static/tests/docs/review. Kind is quality (FAIL, or diagnosed BLOCKED_STATIC_FAI
 with cause static), environment or requirements (BLOCKED, no model cascade).
 Use the actual IDs, not placeholder strings. Evidence belongs to this task and
 is the corrected node or its descendant. Files/source must still match.
-`FAIL_CODE` belongs to Developer; `FAIL_TEST` belongs to TestWriter. Successful
+`FAIL_CODE` and `FAIL_TEST` corrections belong to the original Implementer. Successful
 WRITES_READY, source drift, unavailable tools or missing requirements cannot be
 relabelled as poor model quality.
 
@@ -590,16 +590,16 @@ to reopen drift-blocked work and its dependents, spending the separate recovery
 budget. Quality failures are not converted into free source recovery. Environment
 stops also use recovery exhaustion, not an unrelated exhausted tests/static budget.
 
-Final integration Judge may execute verify and then review in the same
-independent session. Its packet contains all task/source mappings, writer nodes and
+Final integration Tester executes verify. A separate Judge reviews the result
+when required. Each integration packet contains all task/source mappings, writer nodes and
 predecessor findings. Failed verify may register open task-qualified findings before
 review is reachable. Correct the explicit owner using this failed node's dispatch
 as evidence; use ordinary retry for non-escalating profiles. Rerun dependent gates.
 Final review refreshes original task closures against current bytes without deleting
 history or weakening archive freshness. See contracts/common/review-findings.md.
 
-Role migration: legacy `dev-reviewer` is replaced by `judge` (profile, role and contract
-paths together). Rebuild graphs/configuration with the new role. Do not rewrite an
+New graphs use `implementer` for code and tests, `tester` for verification, and
+`judge` for independent review. Historical records retain their original role IDs. Rebuild graphs/configuration with the new role. Do not rewrite an
 active ledger or historical reports: preserve them, finish with their original
 bundle or stop/archive and start an explicitly re-intaken run on the new bundle.
 
@@ -608,7 +608,8 @@ bundle or stop/archive and start an explicitly re-intaken run on the new bundle.
 The profile declares gates at work/docs/verify/review boundaries. Command gates
 require project-checks reservation; finish rejects missing/failed/stale evidence.
 Final verify repeats every required check. Where independent review is required, the integrated Judge supplies review_checks
-for selected criteria; an eligible solo Generalist instead records SELF_REVIEW PASS, never independent APPROVE. Runtime derives gate_results. A blocked gate does not choose
+for selected criteria. For eligible low-risk work the coordinator can accept
+current Tester evidence without an independent review verdict. Runtime derives gate_results. A blocked gate does not choose
 an owner or reset budgets: the coordinator uses existing correction/escalation.
 Planning, Decompose and standalone Review retain their own artifact validators.
 

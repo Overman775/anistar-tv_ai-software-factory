@@ -32,8 +32,11 @@ coordinator before applying any candidate. Ordinary failures follow correction.
 
 Summarize consequential decisions and reasons, constraints, unverified behavior and
 open questions; distinguish facts from hypotheses. Preserve exact paths, interfaces
-and evidence references in existing fields without repeating checks. Keep full logs
-in artifacts; include paths and necessary failure excerpts.
+and evidence references in existing fields without repeating checks. Keep full logs in artifacts. Tester returns all required checks in the canonical
+result. The assignment packet carries a short verification summary with failure
+details and the immutable `report_ref`. Preserve actionable findings, their IDs,
+known limitations and incomplete work in the existing structured report fields.
+Use `report_ref` if the short summary is insufficient to decide a correction or review.
 
 Use `cli workflow read-report REF.json` with the exact `report_ref` object when
 full predecessor evidence is needed. The helper checks content and dispatch

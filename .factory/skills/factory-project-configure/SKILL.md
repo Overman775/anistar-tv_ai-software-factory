@@ -38,6 +38,10 @@ New/changed check code needs relevant positive, negative and execution-error che
 Use existing runners/contracts; no second acceptance mechanism.
 
 Report changed behavior and files, scenario/check results, and unresolved blockers.
+For each relevant validation state executed PASS, executed failure with command/exit
+and cause, or not run with reason. A stage attempted with a missing tool failed; it
+was not skipped. Separate profile readiness, actual application check results and
+observed live workflow acceptance.
 Preserve known pre-existing failures separately. A saved change with incomplete
 verification remains unverified. Active runs retain their pinned policy; identify
 re-intake needs rather than editing snapshots or historical results.

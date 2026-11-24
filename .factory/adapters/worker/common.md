@@ -3,6 +3,11 @@
 Use the resolved profile's read/edit/commands/web and MCP allowlist; the host's
 actual permissions are the upper bound. Do not emulate disallowed access through
 shell or another tool. Role ownership can narrow profile capabilities further.
+`commands: false` forbids shell/subprocess execution, including read-only helpers;
+use exposed read tools or report a capability blocker. With `commands: true`,
+Judge may use shell solely to read files/diffs and inspect existing evidence
+(including JSON parsing and SHA-256 calculation). This does not authorize project
+test/static/build/whitespace checks, importing project code, or product writes.
 `enforcement: instructions` is behavioral policy, not OS isolation; `required`
 needs supported enforcement and must not be silently downgraded.
 Inspect actual exposed tools; do not invent names or infer available servers from

@@ -29,7 +29,7 @@ class ContextTests(unittest.TestCase):
 
     def packet(
         self,
-        role: str = "generalist",
+        role: str = "implementer",
         process: str = "implement",
         stage: str = "work",
         resources: list[str] | None = None,
@@ -71,7 +71,7 @@ class ContextTests(unittest.TestCase):
 
     def test_authors_get_review_contract_for_owned_unresolved_findings(self) -> None:
         contract = "contracts/common/review-findings.md"
-        for role in ("developer", "test-writer", "doc-writer", "generalist"):
+        for role in ("implementer", "doc-writer"):
             self.assertNotIn(contract, self.names(self.packet(role)))
             assigned = {
                 "REV-1": {"owner_node_id": "write-label", "owner_role": role, "status": "open"}
@@ -92,7 +92,7 @@ class ContextTests(unittest.TestCase):
                     {
                         "REV-1": {
                             "owner_node_id": owner,
-                            "owner_role": "generalist",
+                            "owner_role": "implementer",
                             "status": status,
                         }
                     }
@@ -143,7 +143,7 @@ class ContextTests(unittest.TestCase):
             self.assertEqual(criteria, judge["project_policy"]["review_criteria"])
 
     def test_gate_documents_are_role_scoped_not_whole_directory(self) -> None:
-        owners = {"developer", "test-writer", "generalist", "judge", "reviewer"}
+        owners = {"implementer", "tester", "judge", "reviewer"}
         for process, roles in context.PROCESS_ROLES.items():
             for role in roles:
                 with self.subTest(process=process, role=role):
@@ -163,7 +163,7 @@ class ContextTests(unittest.TestCase):
         f.config = load_config(file)
         f.init()
         f.ledger.claim("write-label")
-        (file.parent / "gates/roles/generalist.md").write_text("Weakened completion gate")
+        (file.parent / "gates/roles/implementer.md").write_text("Weakened completion gate")
         self.assertNotIn(
             "Weakened completion gate",
             [i["content"] for i in f.ledger.packet("write-label")["instructions"]],
@@ -212,8 +212,8 @@ class ContextTests(unittest.TestCase):
 
     def test_principles_delivered_once_to_applicable_profiles_only(self) -> None:
         recipients: dict[str, Any] = {
-            "coding-principles": {"developer", "generalist"},
-            "testing-principles": {"test-writer", "generalist"},
+            "coding-principles": {"implementer"},
+            "testing-principles": {"implementer", "tester"},
             "review-principles": {"reviewer", "judge"},
         }
         for process, roles in context.PROCESS_ROLES.items():
@@ -268,12 +268,12 @@ class ContextTests(unittest.TestCase):
                         )
 
     def test_verify_source_criteria_checks_and_permissions_survive(self) -> None:
-        packet = self.packet("test-writer", stage="verify", resources=["project-checks"])
+        packet = self.packet("tester", stage="verify", resources=["project-checks"])
         self.assertEqual(self.f.g["sources"]["request"], packet["source"])
         self.assertEqual(self.f.g["tasks"]["label"], packet["task"])
         self.assertEqual(["project-checks"], packet["node"]["resources"])
         self.assertEqual(
-            self.f.config["profiles"]["middle-test-writer"]["capabilities"],
+            self.f.config["profiles"]["tester"]["capabilities"],
             packet["profile"]["capabilities"],
         )
 
@@ -321,12 +321,12 @@ class ContextTests(unittest.TestCase):
         for resources in (None, ["project-checks"]):
             self.assertIn(
                 "contracts/common/implement-handoff.md",
-                self.names(self.packet("test-writer", resources=resources)),
+                self.names(self.packet("tester", resources=resources)),
             )
 
     def test_standalone_and_integrated_review_have_separate_result_contracts(self) -> None:
         lens = self.names(self.packet("reviewer", "code-review"))
-        integrated = self.names(self.packet("judge", stage="review", resources=["project-checks"]))
+        integrated = self.names(self.packet("judge", stage="review"))
         schema = "skills/factory-code-review/references/lens-result.md"
         self.assertIn(schema, lens)
         self.assertNotIn(schema, integrated)
@@ -364,9 +364,9 @@ class ContextTests(unittest.TestCase):
     def test_unknown_process_role_and_profile_fail_closed(self) -> None:
         for role, process, profile in [
             ("architect", "implement", "architect"),
-            ("developer", "planning", "developer"),
-            ("generalist", "unknown", "generalist"),
-            ("generalist", "implement", "developer"),
+            ("implementer", "planning", "implementer"),
+            ("implementer", "unknown", "implementer"),
+            ("implementer", "implement", "tester"),
         ]:
             with self.subTest(role=role, process=process), self.assertRaises(ValueError):
                 self.packet(role, process, profile=profile)
@@ -465,8 +465,8 @@ class ContextTests(unittest.TestCase):
             context.build(
                 config,
                 f.root,
-                config["_defaults"]["generalist"],
-                "generalist",
+                config["_defaults"]["implementer"],
+                "implementer",
                 "implement",
                 dict(
                     source=f.g["sources"]["request"],
@@ -476,7 +476,7 @@ class ContextTests(unittest.TestCase):
             )
 
     def test_profile_cannot_grant_unavailable_command_stage(self) -> None:
-        self.f.config["profiles"]["generalist"]["capabilities"]["commands"] = False
+        self.f.config["profiles"]["implementer"]["capabilities"]["commands"] = False
         with self.assertRaisesRegex(ValueError, "commands forbidden"):
             self.packet(stage="verify", resources=["project-checks"])
 
@@ -519,7 +519,7 @@ class ContextTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "Coordinator instructions"):
                         self.packet()
                 adapter = self.f.config["adapters"][
-                    self.f.config["profiles"]["generalist"]["adapter"]
+                    self.f.config["profiles"]["implementer"]["adapter"]
                 ]
                 original = adapter["worker_instructions"]
                 adapter["worker_instructions"] = rel
@@ -546,7 +546,7 @@ class ContextTests(unittest.TestCase):
         packet = json.loads(
             read_evidence(normal.root, bootstrap["path"], run_id=bootstrap["run_id"])
         )
-        adapter_name = normal.config["profiles"]["generalist"]["adapter"]
+        adapter_name = normal.config["profiles"]["implementer"]["adapter"]
         worker_file = normal.config["adapters"][adapter_name]["worker_instructions"]
         worker_path = Path(normal.config["_path"]).parent / worker_file
         self.assertTrue(
@@ -571,7 +571,7 @@ class ContextTests(unittest.TestCase):
         self.assertNotIn("packet_file", invalid.ledger.read()["nodes"]["write-label"])
         skill = config.parent / "skills/factory-implement/SKILL.md"
         skill.unlink()
-        skill.symlink_to(config.parent / "roles/generalist.md")
+        skill.symlink_to(config.parent / "roles/implementer.md")
         with self.assertRaisesRegex(Invalid, "worker_instructions"):
             invalid.ledger.prepare_packet("write-label")
 
@@ -643,9 +643,14 @@ class ContextTests(unittest.TestCase):
         f.ledger.claim("verify-label")
         second = f.ledger.packet("verify-label")
         self.assertNotEqual(first["dispatch_id"], second["dispatch_id"])
-        self.assertTrue(
-            self.names(first) - {"contracts/common/implement-write-result.md"} <= self.names(second)
-        )
+        self.assertEqual(first["source"], second["source"])
+        self.assertEqual(first["task"], second["task"])
+        self.assertIn("roles/implementer.md", self.names(first))
+        self.assertIn("roles/tester.md", self.names(second))
+        self.assertNotIn("roles/implementer.md", self.names(second))
+        for common in ["contracts/common/worker-rules.md", "contracts/common/communication.md"]:
+            self.assertIn(common, self.names(first))
+            self.assertIn(common, self.names(second))
         self.assertIn("contracts/common/implement-result.md", self.names(second))
 
     def assignment(self, **node_fields: Any) -> dict[str, Any]:
@@ -668,8 +673,8 @@ class ContextTests(unittest.TestCase):
         packet = context.build(
             self.f.config,
             self.f.root,
-            "generalist",
-            "generalist",
+            "implementer",
+            "implementer",
             "implement",
             assignment,
             read_bytes=reader,
@@ -703,15 +708,15 @@ class ContextTests(unittest.TestCase):
             self.assertEqual(1, len(entries))
             self.assertEqual(rule.reason, entries[0]["reason"])
             work = context.build(
-                config, self.f.root, "generalist", "generalist", "implement", self.assignment()
+                config, self.f.root, "implementer", "implementer", "implement", self.assignment()
             )
             self.assertFalse(any(i["path"].endswith(relative) for i in work["instructions"]))
 
     def test_malformed_selectors_and_resources_fail_as_validation_errors(self) -> None:
         for process, role, profile in [
-            ([], "generalist", "generalist"),
-            ("implement", {}, "generalist"),
-            ("implement", "generalist", []),
+            ([], "implementer", "implementer"),
+            ("implement", {}, "implementer"),
+            ("implement", "implementer", []),
         ]:
             with self.subTest(process=process, role=role, profile=profile):
                 with self.assertRaises(ValueError):
@@ -723,7 +728,12 @@ class ContextTests(unittest.TestCase):
             assignment["node"]["resources"] = resources
             with self.subTest(resources=resources), self.assertRaisesRegex(ValueError, "resources"):
                 context.build(
-                    self.f.config, self.f.root, "generalist", "generalist", "implement", assignment
+                    self.f.config,
+                    self.f.root,
+                    "implementer",
+                    "implementer",
+                    "implement",
+                    assignment,
                 )
 
     def test_invalid_project_paths_are_rejected_before_reading(self) -> None:
@@ -736,8 +746,8 @@ class ContextTests(unittest.TestCase):
                 context.build(
                     self.f.config,
                     self.f.root,
-                    "generalist",
-                    "generalist",
+                    "implementer",
+                    "implementer",
                     "implement",
                     assignment,
                     read_bytes=lambda _: self.fail("Invalid paths must not be read"),
@@ -747,12 +757,12 @@ class ContextTests(unittest.TestCase):
         assignment = self.assignment()
         assignment["read"] = ["missing.md"]
         context.build(
-            self.f.config, self.f.root, "generalist", "generalist", "implement", assignment
+            self.f.config, self.f.root, "implementer", "implementer", "implement", assignment
         )
         del assignment["node"]["read"]
         with self.assertRaisesRegex(ValueError, "Missing context file"):
             context.build(
-                self.f.config, self.f.root, "generalist", "generalist", "implement", assignment
+                self.f.config, self.f.root, "implementer", "implementer", "implement", assignment
             )
 
     def test_invalid_utf8_reports_file_and_preserves_inputs(self) -> None:
@@ -762,8 +772,8 @@ class ContextTests(unittest.TestCase):
             context.build(
                 self.f.config,
                 self.f.root,
-                "generalist",
-                "generalist",
+                "implementer",
+                "implementer",
                 "implement",
                 assignment,
                 read_bytes=lambda _: b"\xff",

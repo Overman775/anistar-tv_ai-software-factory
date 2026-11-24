@@ -39,9 +39,8 @@ ROLES = {
     "code-explorer",
     "task-decomposer",
     "task-reviewer",
-    "developer",
-    "test-writer",
-    "generalist",
+    "implementer",
+    "tester",
     "judge",
     "reviewer",
     "doc-writer",
@@ -288,6 +287,28 @@ def select_rules(
     ]
 
 
+def registered_check(profile: ProjectData, check_id: str, scope: list[str]) -> CheckSpec:
+    """Resolve an explicit opt-in to one frozen project check, without changing task gates."""
+    item = next((check for check in project_checks(profile) if check["id"] == check_id), None)
+    require(item is not None, "unknown registered check")
+    if item is None:
+        raise ValueError("Project policy: unknown registered check")
+    require(
+        matches(item.get("for", {}), process="implement", scope=scope),
+        "registered check outside task scope",
+    )
+    spec: dict[str, object] = {
+        "id": item["id"],
+        "kind": item["kind"],
+        "method": item["method"],
+        "category": "project",
+        "criteria": [],
+    }
+    if item["kind"] != "observation":
+        spec["execution"] = item["execution"]
+    return CHECK_SPEC.validate_python(spec)
+
+
 def required_checks(profile: ProjectData, task: object, *, final: bool = False) -> list[CheckSpec]:
     result: list[CheckSpec] = []
     if not (isinstance(task, dict)):
@@ -333,23 +354,30 @@ def required_checks(profile: ProjectData, task: object, *, final: bool = False) 
 def check_task(profile: ProjectData, task: Task | TaskSelection, *, final: bool = False) -> None:
     actual = {x["id"]: x for x in task["required_checks"]}
     for expected in required_checks(profile, task, final=final):
-        candidate = deepcopy(actual.get(expected["id"]))
-        message = f"missing/changed mandatory check: {expected['id']}"
-        if expected["kind"] != "observation" and isinstance(candidate, dict):
-            execution = candidate.get("execution")
-            if not (isinstance(execution, dict)):
-                raise ValueError("Project policy: " + message)
-            inputs = execution.get("inputs", [])
-            strings(inputs, "check inputs", empty=True)
-            for path in inputs:
-                relative(path)
-            require(set(expected["execution"].get("inputs", [])) <= set(inputs), message)
-            # Task-specific inputs strengthen freshness without changing the command.
-            if "inputs" in expected["execution"]:
-                execution["inputs"] = expected["execution"]["inputs"]
-            else:
-                execution.pop("inputs", None)
-        require(candidate == expected, message)
+        check_definition(expected, actual.get(expected["id"]), label="mandatory")
+
+
+def check_definition(
+    expected: CheckSpec, actual: CheckSpec | None, *, label: str = "registered"
+) -> None:
+    """Permit stronger exact-file inputs, while preserving every registered operation field."""
+    candidate = deepcopy(actual)
+    message = f"missing/changed {label} check: {expected['id']}"
+    if expected["kind"] != "observation" and isinstance(candidate, dict):
+        execution = candidate.get("execution")
+        if not (isinstance(execution, dict)):
+            raise ValueError("Project policy: " + message)
+        inputs = execution.get("inputs", [])
+        strings(inputs, "check inputs", empty=True)
+        for path in inputs:
+            relative(path)
+        require(set(expected["execution"].get("inputs", [])) <= set(inputs), message)
+        # Task-specific inputs strengthen freshness without changing the command.
+        if "inputs" in expected["execution"]:
+            execution["inputs"] = expected["execution"]["inputs"]
+        else:
+            execution.pop("inputs", None)
+    require(candidate == expected, message)
 
 
 def document_paths(profile: ProjectData, rule: Rule) -> list[str]:

@@ -11,7 +11,7 @@ from factory import file_reader
 from factory.context.context import accepted_bytes, accepted_path
 from factory.decisions.decision_contract import preserve_obligations
 from factory.project.profile_io import load_profile
-from factory.runtime.commands.evidence import active_commands
+from factory.runtime.commands.evidence import active_commands, check_receipts
 from factory.runtime.contracts import (
     Config,
     Graph,
@@ -86,7 +86,7 @@ def validate_assignment_change(state: State, graph: GraphTopology) -> None:
             node.get("agent") == aid and graph["agents"].get(aid) == assignment,
             "Started assignments require correct",
         )
-        if assignment["role"] not in {"developer", "test-writer"}:
+        if assignment["role"] not in {"implementer"}:
             continue
         owns = previous.get("owns", [])
         require(set(owns) <= set(node.get("owns", [])), "Keep started assignment ownership")
@@ -254,10 +254,15 @@ def _revise(
                 prior_task.get(field) != current_task.get(field)
                 for field in ("scope", "required_checks")
             )
-            if prev["status"] != "blocked" or (
-                verify_changed
-                and prev.get("report", {}).get("outcome") == "FAIL"
-                and n["task"] not in s.get("escalation_stops", {})
+            check_request = _targeted_check_request(journal, s, old, new_nodes, n)
+            if (
+                prev["status"] != "blocked"
+                or check_request
+                or (
+                    verify_changed
+                    and prev.get("report", {}).get("outcome") == "FAIL"
+                    and n["task"] not in s.get("escalation_stops", {})
+                )
             ):
                 s["nodes"][n["id"]] = {
                     "status": "pending",
@@ -270,6 +275,75 @@ def _revise(
         s["nodes"][tests] = {"status": "pending", "attempt": test_retry["attempt"]}
         details["test_retry"] = test_retry
     journal.save(s, "revised", reason=reason, previous_graph=old, **details)
+
+
+def _targeted_check_request(
+    journal: RunJournal, state: State, old: Graph | LockedGraph, nodes: dict[str, Node], node: Node
+) -> bool:
+    previous = state["nodes"][node["id"]]
+    report = previous.get("report", {})
+    if not (
+        node["stage"] == "review"
+        and state["graph"]["agents"][agent_key(node)]["role"] == "judge"
+        and report.get("outcome") == "BLOCKED"
+        and report.get("stage_result") == "CHECKS_REQUESTED"
+    ):
+        return False
+    old_ids = {entry["id"] for entry in old["nodes"]}
+    extra = [
+        nodes[key]
+        for key in ancestors(nodes, node["id"]) - old_ids
+        if nodes[key]["stage"] == "verify" and nodes[key].get("required_check_ids")
+    ]
+    if not extra:
+        return False
+    extra_ids = {entry["id"] for entry in extra}
+    require(set(nodes) - old_ids == extra_ids, "Check request adds only focused verification nodes")
+    require(old["agents"] == state["graph"]["agents"], "Check request cannot change agents")
+    for previous_node in old["nodes"]:
+        replacement = nodes[previous_node["id"]]
+        if previous_node["id"] == node["id"]:
+            require(
+                {key: value for key, value in previous_node.items() if key != "depends_on"}
+                == {key: value for key, value in replacement.items() if key != "depends_on"}
+                and set(previous_node["depends_on"]) <= set(replacement["depends_on"])
+                and set(replacement["depends_on"]) - set(previous_node["depends_on"]) <= extra_ids,
+                "Check request only adds review prerequisites",
+            )
+        else:
+            require(
+                previous_node == replacement, "Check request cannot change existing assignments"
+            )
+    task = state["graph"]["tasks"][node["task"]]
+    require(old["tasks"][node["task"]] == task, "Check request cannot change task obligations")
+    current = snapshot(journal.root, task["scope"])
+    require(report.get("files") == current, "Check request candidate changed")
+    journal.check_sources(state, task)
+    for previous_node in old["nodes"]:
+        if previous_node["task"] != node["task"] or previous_node["stage"] != "verify":
+            continue
+        verified = state["nodes"][previous_node["id"]]
+        verification = verified.get("report")
+        require(
+            verified["status"] == "done"
+            and verification is not None
+            and verification.get("outcome") == "PASS"
+            and verification.get("files") == current,
+            "Check request needs current completed verification",
+        )
+        if verification is not None:
+            check_receipts(
+                journal.root,
+                state,
+                previous_node["id"],
+                verification.get("checks", []),
+                complete=False,
+            )
+    require(
+        all(entry["task"] == node["task"] for entry in extra),
+        "Requested checks must belong to the reviewed task",
+    )
+    return True
 
 
 def _prepare_test_retry(
@@ -291,12 +365,12 @@ def _prepare_test_retry(
     task = graph["tasks"][task_id]
     require(
         nodes[diagnose]["task"] == nodes[repair]["task"] == task_id
-        and graph["agents"][agent_key(nodes[tests])]["role"] == "test-writer"
+        and graph["agents"][agent_key(nodes[tests])]["role"] == "tester"
         and graph["agents"][agent_key(nodes[diagnose])]["role"] == "bug-hunter"
-        and graph["agents"][agent_key(nodes[repair])]["role"] == "developer"
+        and graph["agents"][agent_key(nodes[repair])]["role"] == "implementer"
         and diagnose in ancestors(nodes, repair)
         and repair in ancestors(nodes, tests),
-        "Test retry needs a BugHunter diagnosis before Developer repair before TestWriter",
+        "Test retry needs a BugHunter diagnosis before Implementer repair before Tester",
     )
     require(
         current[tests]["status"] == "blocked"
@@ -314,7 +388,7 @@ def _prepare_test_retry(
     require(
         current[repair]["status"] == "pending"
         or (current[repair]["status"] == "done" and repair in invalidate),
-        "Test retry needs pending Developer repair",
+        "Test retry needs pending Implementer repair",
     )
     journal.check_sources(state, state["graph"]["tasks"][task_id])
     files = snapshot(journal.root, task["scope"])
@@ -333,7 +407,7 @@ def _prepare_test_retry(
             and report["stage_result"] in results
             and report["task_id"] == task_id
             and assignment["agent"]["role"] == graph["agents"][agent_key(nodes[node])]["role"],
-            "Test retry needs terminal TestWriter failure and BugHunter root-cause reports",
+            "Test retry needs terminal Tester failure and BugHunter root-cause reports",
         )
         require(
             not report.get("observed_source_drift")
@@ -363,7 +437,7 @@ def _preserve_test_retry_dependencies(state: State, nodes: dict[str, Node]) -> N
         if current["status"] == "pending" and current["attempt"] == retry["attempt"]:
             require(
                 tests in nodes and retry["repair_node"] in ancestors(nodes, tests),
-                "Keep the Developer repair dependency for the pending test retry",
+                "Keep the Implementer repair dependency for the pending test retry",
             )
 
 

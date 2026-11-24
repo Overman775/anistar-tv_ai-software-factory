@@ -52,8 +52,8 @@ def routing(
         policy = profile.get("escalation")
         if policy is not None:
             ensure(
-                role in {"developer", "test-writer"},
-                "Escalation supports Developer/TestWriter in Implement",
+                role in {"implementer", "developer", "test-writer"},
+                "Escalation supports Implementer in new Implement assignments",
             )
     for name, profile in profiles.items():
         seen, cursor = set(), name

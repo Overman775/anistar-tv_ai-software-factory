@@ -20,14 +20,14 @@ Contract vocabulary:
   recovery rules for coordinators only; workers receive common/worker-rules.md.
 - `common/implementation-detail.md`: detail boundaries shared by Factory Planning,
   Factory Decompose, and Factory Implement.
-- Root role contracts such as `architect.md`, `developer.md`, `judge.md`,
+- Root role contracts such as `architect.md`, `implementer.md`, `tester.md`, `judge.md`,
   and `reviewer.md`: permissions, evidence, and completion states for one
   canonical role.
 
 ## Dynamic assignments
 
-Generalist has its own code/tests/self-check contract. Developer/TestWriter
-remain separate when selected. Each delegated role may write its exact assigned
+Implementer writes the change and its tests. Tester runs verification. Judge
+reviews the final diff and fresh evidence when independent review is required. Each delegated role may write its exact assigned
 report under the current run state, in addition to role-specific product paths.
 Never share a singleton report across agents. The dynamic assignment envelope
 and final JSON evidence schema are defined by `common/implement-handoff.md`, `common/implement-result.md` and `common/check-execution.md`.
@@ -44,8 +44,8 @@ Planning, Decompose and Implement; native/ACP receive shared principles; process
 - `common/check-execution.md`: reserved command execution/results, conditional on assignment.
 - `common/review-principles.md`: shared review principles, without standalone dispatch/schema.
 - [common/code-discovery.md](common/code-discovery.md): project search and source confirmation for every worker.
-- `common/coding-principles.md`: code-author principles for Developer and Generalist.
-- `common/testing-principles.md`: test-author principles for TestWriter and Generalist.
+- `common/coding-principles.md`: code-author principles for Implementer.
+- `common/testing-principles.md`: test-author principles for Implementer.
 - `../gates/common/verification-rules.md`: mandatory checks and evidence requirements.
 Shared principles grant no role permissions. Context builder delivers applicable
 files once per worker, across all profiles/transports; no concatenated role contracts.

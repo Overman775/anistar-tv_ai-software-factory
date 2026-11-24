@@ -44,78 +44,50 @@ execution:
 # Specialties: shared permissions and tools, then model and adapter variants.
 # Variants do not override shared fields. Variant names are unique across the factory.
 profiles:
-  developer:
+  implementer:
     capabilities: {read: true, edit: true, commands: true, web: true}
+    enforcement: instructions
+    mcp:
+      - context7.resolve-library-id
+      - context7.query-docs
+    default: middle-implementer
+    variants:
+      middle-implementer:
+        model: terra
+        adapter: codex
+        escalation:
+          to: senior-implementer
+          after_failed_attempts: 1
+      junior-implementer:
+        model: luna
+        adapter: codex
+        escalation:
+          to: middle-implementer
+          after_failed_attempts: 1
+      senior-implementer:
+        model: sol
+        adapter: codex
+        escalation:
+          to: human
+          after_failed_attempts: 2
+      implementer-deepseek:
+        model: deepseek-flash-1017
+        adapter: opencode
+      implementer-glm:
+        model: glm-5-3
+        adapter: opencode
+
+  tester:
+    capabilities: {read: true, edit: false, commands: true, web: false}
     enforcement: instructions
     mcp:
       - dart.analyze_files
       - dcm.dcm_analyze
-      - dcm.dcm_format
-      - context7.resolve-library-id
-      - context7.query-docs
-    default: middle-developer
+    default: tester
     variants:
-      middle-developer:
-        model: terra
-        adapter: codex
-        escalation:
-          to: senior-developer
-          after_failed_attempts: 1
-      junior-developer:
+      tester:
         model: luna
         adapter: codex
-        escalation:
-          to: middle-developer
-          after_failed_attempts: 1
-      senior-developer:
-        model: sol
-        adapter: codex
-        escalation:
-          to: human
-          after_failed_attempts: 2
-
-  test-writer:
-    capabilities: {read: true, edit: true, commands: true, web: false}
-    enforcement: instructions
-    mcp:
-      - dcm.dcm_analyze
-    default: middle-test-writer
-    variants:
-      middle-test-writer:
-        model: terra
-        adapter: codex
-        escalation:
-          to: senior-test-writer
-          after_failed_attempts: 1
-      junior-test-writer:
-        model: luna
-        adapter: codex
-        escalation:
-          to: middle-test-writer
-          after_failed_attempts: 1
-      senior-test-writer:
-        model: sol
-        adapter: codex
-        escalation:
-          to: human
-          after_failed_attempts: 2
-
-  generalist:
-    capabilities: {read: true, edit: true, commands: true, web: true}
-    enforcement: instructions
-    mcp:
-      - dcm.dcm_analyze
-    default: generalist
-    variants:
-      generalist:
-        model: sol
-        adapter: codex
-      generalist-deepseek:
-        model: deepseek-flash-1017
-        adapter: opencode
-      generalist-glm:
-        model: glm-5-3
-        adapter: opencode
 
   teacher:
     capabilities: {read: true, edit: true, commands: true, web: false}
@@ -130,9 +102,7 @@ profiles:
   judge:
     capabilities: {read: true, edit: false, commands: true, web: false}
     enforcement: instructions
-    mcp:
-      - dart.analyze_files
-      - dcm.dcm_analyze
+    mcp: []
     variants:
       judge:
         model: sol

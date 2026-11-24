@@ -18,7 +18,7 @@ the unique assigned analysis artifact under `.factory/memory/state/` when pipeli
 
 ## Investigation
 
-1. Record observed vs expected behavior and reproduction path.
+1. Record observed vs expected behavior and reproduction path. In Implement, request any executable test, analyzer or verification build through the coordinator for Tester. Inspect the returned receipt and diagnostic alongside source and logs.
 2. Trace the actual path from the symptom through relevant entry points and
    components to the observable failure boundary.
 3. Test hypotheses against source/logs; do not blame vendor without proof.

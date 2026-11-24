@@ -14,8 +14,12 @@
   },
   "agents": {
     "author": {
-      "role": "generalist",
-      "profile": "generalist"
+      "role": "implementer",
+      "profile": "middle-implementer"
+    },
+    "tester": {
+      "role": "tester",
+      "profile": "tester"
     }
   },
   "tasks": {
@@ -56,8 +60,8 @@
       ],
       "policy_decisions": {
         "dart-changes": {
-          "reason": "Example assumes application/Dart behavior changes; replace with actual scoped evidence before use.",
-          "probability": 0.9,
+          "reason": "Planned final anistar-check runs the complete static triplet on the integrated candidate; no explicit early static requirement.",
+          "probability": 0.1,
           "source": "agent:coordinator (illustrative estimate)"
         },
         "application-changes": {
@@ -87,7 +91,7 @@
       "id": "verify-label",
       "task": "label",
       "stage": "verify",
-      "agent": "author",
+      "agent": "tester",
       "depends_on": [
         "write-label"
       ],

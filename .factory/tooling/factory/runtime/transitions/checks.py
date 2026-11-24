@@ -319,6 +319,8 @@ def _complete_check(
             observed["after_files"],
         )
         record.update({"input_scope": scope, "files": before})
+        if "verification" in observed:
+            record["verification"] = observed["verification"]
         if selection := observed.get("selection"):
             record["selection"] = selection
         outputs = execution.get("outputs", [])

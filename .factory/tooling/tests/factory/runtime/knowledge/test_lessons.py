@@ -799,7 +799,7 @@ class TeacherWorkflowTests(unittest.TestCase):
             f.ledger.finish(node, f.report(node))
         f.ledger.accept("accept-second")
         self.assertEqual([], f.ledger.next_actions()["pending_teacher_events"])
-        f.start("verify-all", "integration-judge")
+        f.start("verify-all")
         f.ledger.finish("verify-all", f.report("verify-all"))
         f.start("review-all", "integration-judge")
         f.ledger.finish("review-all", f.report("review-all", verdict="APPROVE", findings=[]))

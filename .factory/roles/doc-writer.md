@@ -59,7 +59,7 @@ Do not claim certified ASD-STE100 compliance.
 
 | Source meaning | Safe wording | Do not write |
 | --- | --- | --- |
-| `developer` performs the APK build | `developer` builds the APK. | `developer` delegates the APK build. |
+| `tester` performs the APK build | `tester` builds the APK. | `tester` delegates the APK build. |
 | A failure is possible | The request may fail. | The request fails. |
 | Both actions apply on error | On failure, clear busy. In this case the panel offers a retry. | On failure, clear busy. The panel always offers a retry. |
 

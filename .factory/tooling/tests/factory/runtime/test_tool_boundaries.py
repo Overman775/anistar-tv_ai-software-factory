@@ -31,8 +31,8 @@ from tests.factory.runtime.store_fixture import has_current, overwrite, record_b
 
 def configuration() -> dict[str, Any]:
     profile = dict(
-        role="roles/generalist.md",
-        contract="contracts/generalist.md",
+        role="roles/implementer.md",
+        contract="contracts/implementer.md",
         capabilities=dict(read=True, edit=True, commands=True, web=False),
         enforcement="instructions",
         mcp=[],
@@ -50,14 +50,22 @@ def configuration() -> dict[str, Any]:
         },
         models={"fixture": {"id": "fixture-model"}},
         profiles={
-            "generalist": dict(
+            "tester": dict(
+                profile,
+                role="roles/tester.md",
+                contract="contracts/tester.md",
+                capabilities=dict(read=True, edit=False, commands=True, web=False),
+                default="tester",
+                variants={"tester": dict(model="fixture", adapter="native")},
+            ),
+            "implementer": dict(
                 profile,
                 default="native",
                 variants={
                     "native": dict(model="fixture", adapter="native"),
                     "acp": dict(model="fixture", adapter="acp"),
                 },
-            )
+            ),
         },
         adapters={
             "native": dict(
@@ -103,7 +111,10 @@ def graph(profile: str) -> Graph:
                 ],
             }
         },
-        agents={"author": dict(role="generalist", profile=profile)},
+        agents={
+            "author": dict(role="implementer", profile=profile),
+            "verifier": dict(role="tester", profile="tester"),
+        },
         tasks={
             "fixture": dict(
                 slice="fixture",
@@ -141,7 +152,7 @@ def graph(profile: str) -> Graph:
                 id="verify",
                 task="fixture",
                 stage="verify",
-                agent="author",
+                agent="verifier",
                 depends_on=["work"],
                 owns=[],
                 resources=["project-checks"],
@@ -203,6 +214,7 @@ class ToolBoundaryTests(unittest.TestCase):
                         )
                         self.assertIn(rule, "\n".join(entry["content"] for entry in entries))
                         ledger = Ledger(workspace)
+                        config["_defaults"]["implementer"] = route
                         ledger.init(graph(route), config)
                         ledger.claim("work")
                         if route == "native":
@@ -316,11 +328,13 @@ class ToolBoundaryTests(unittest.TestCase):
     def test_disabled_escalation_survives_state_roundtrip(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
         config_file = fixture.config_file(
-            lambda c: c["profiles"]["generalist"]["variants"]["generalist"].update(escalation=None)
+            lambda c: c["profiles"]["implementer"]["variants"]["implementer"].update(
+                escalation=None
+            )
         )
         fixture.config = load_config(config_file)
         fixture.init()
-        self.assertIsNone(fixture.ledger.read()["config"]["profiles"]["generalist"]["escalation"])
+        self.assertIsNone(fixture.ledger.read()["config"]["profiles"]["implementer"]["escalation"])
         fixture.ledger.claim("write-label")
 
     def test_invalid_state_is_rejected_before_initial_write_or_save(self) -> None:

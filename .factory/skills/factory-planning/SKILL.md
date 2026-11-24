@@ -95,7 +95,7 @@ Pass delegated roles only run identity, source/session paths, requested boundary
 specific supporting rationale for a nonsemantic change, and checkpoint context. Do not copy their
 canonical instructions into spawn prompts.
 
-Do not invoke Developer, TestWriter, Reviewer, TaskDecomposer, or
+Do not invoke Implementer, Tester, Reviewer, TaskDecomposer, or
 TaskReviewer. No `task-decomposition-planner`: ticket slicing belongs to
 `factory-decompose` after approval.
 
