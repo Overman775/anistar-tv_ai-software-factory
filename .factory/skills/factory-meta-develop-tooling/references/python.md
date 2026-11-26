@@ -118,8 +118,12 @@ Factory checks use explicit factory configuration, not the consumer application'
 Check failures/blockers produce nonzero aggregate status; preserve individual results.
 Expose stages separately; CI uses the same entry point before integration.
 
-Declare runtime/dev dependencies separately. Pin resolved transitive versions and
-stubs reproducibly. Explicit setup may install packages within authorized scope;
+Declare direct runtime imports in `requirements.in` and development tools in
+`requirements-dev.in`. Pin transitive versions and type stubs in the generated
+locks. From `.factory/tooling/`, compile the runtime lock first,
+then the dev lock that includes it. Use the command in each lock header.
+Set `UV_CACHE_DIR` in the environment when a custom cache is needed so the
+generated commands stay portable. Explicit setup may install packages within authorized scope;
 normal checks are offline and never install or rewrite source.
 Verify runtime in a clean runtime-only environment as well as the dev environment.
 Verify the installed copy with a temporary profile, without Lab/specs or AniStar inputs.

@@ -1,6 +1,8 @@
 PyYAML>=6.0.2,<7
 pydantic>=2,<3
+pydantic-core
 pydantic-graph==2.71.0
 typing-extensions>=4.12.2
 
 opentelemetry-proto>=1.35,<2
+protobuf
