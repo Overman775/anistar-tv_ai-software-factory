@@ -22,7 +22,7 @@ coordinate independent machines/checkouts or enforce filesystem sandboxing.
 A role handoff includes run/task/node/dispatch IDs, source hash, exact output
 path, workspace, source/brief, allowed writes and applicable project documents.
 Reports use unique dispatch identity; do not reuse a shared test-report.md or
-review.md between instances. JSON report evidence is copied into the ledger by
+review.md between instances. Typed report evidence is registered under its assignment by
 `finish`; temporary prompt/transport files are distinct and declared separately.
 
 Tests/reviews bind the exact task file scope and SHA-256 contents after all

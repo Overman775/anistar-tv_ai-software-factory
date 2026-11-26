@@ -1,0 +1,23 @@
+id: implement-intake
+entry: work
+nodes:
+  work:
+    decision: task_intent
+    routes:
+      - {outcome: diagnose, priority: 40, target: diagnose}
+      - {outcome: explore, priority: 40, target: explore}
+      - {outcome: documents, priority: 30, target: documents}
+      - {outcome: integration, priority: 20, target: verify}
+      - {outcome: write, priority: 10, target: write}
+  diagnose: {operation: assign_diagnosis, after: verify}
+  explore: {operation: assign_exploration, after: verify}
+  documents: {operation: assign_documents, after: verify}
+  write: {operation: assign_author, after: verify}
+  verify: {operation: assign_verification, after: independent_review}
+  independent_review:
+    decision: review_requirement
+    routes:
+      - {outcome: mandatory, priority: 20, target: judge}
+      - {outcome: ordinary, priority: 10, target: accept}
+  judge: {operation: assign_judge, after: accept}
+  accept: {operation: assign_acceptance}

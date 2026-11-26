@@ -4,6 +4,7 @@ from pathlib import Path
 
 from factory.database.sqlite import (
     artifacts,
+    graph_documents,
     sqlite_history_repository,
     sqlite_teacher_job_repository,
     workflow_db,
@@ -12,7 +13,18 @@ from factory.database.sqlite.sqlite_history_repository import cleanup_paths as c
 from factory.runtime.contracts import State
 from factory.runtime.knowledge.teacher_models import TeacherJob
 from factory.runtime.run_repository import ArchiveReference
-from factory.runtime.workflow_core import digest, relative, require
+from factory.runtime.workflow_core import relative
+
+
+def publish_input(root: Path, kind: str, value: object) -> str:
+    with workflow_db.database(root) as db:
+        return graph_documents.write(db, kind, value)
+
+
+def read_input(root: Path, kind: str, key: str) -> object:
+    with workflow_db.database(root) as db:
+        db.execute("BEGIN")
+        return graph_documents.read(db, kind, key)
 
 
 def has_current(root: Path) -> bool:
@@ -53,14 +65,6 @@ def commit_archive(
     review: TeacherJob | None,
 ) -> None:
     with workflow_db.database(root) as db:
-        raw = sqlite_history_repository.journal_record(db, root, state, usage, pending)
-        require(
-            db.execute(
-                "UPDATE runs SET record=?, sha256=? WHERE run_id=? AND current=1 AND status='active'",
-                (raw.decode(), digest(raw), state["run_id"]),
-            ).rowcount
-            == 1,
-            "Run already closed",
-        )
+        sqlite_history_repository.seal_run(db, root, state, usage, pending)
         if review is not None:
             sqlite_teacher_job_repository.insert_event(db, review)

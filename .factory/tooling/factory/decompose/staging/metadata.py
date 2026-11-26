@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import argparse
 import glob
 import hashlib
 import json
 import os
 import re
-import shutil
-import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TypedDict
@@ -163,118 +160,3 @@ def project(staging: Path, source_lock: Path) -> Projection:
     ):
         raise ValueError("Projection inputs changed; rerun")
     return {"documents": documents, "envelopes": rendered_envelopes, "input_sha256": inputs}
-
-
-def apply(staging: Path, source_lock: Path, checkpoint_id: str) -> dict[str, object]:
-    """Apply one projection under the caller's single-writer discipline."""
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", checkpoint_id):
-        raise ValueError("Safe checkpoint ID required")
-    projection = project(staging, source_lock)
-    root = staging.resolve()
-    inputs = projection["input_sha256"]
-    changes = {
-        **{path: text.encode("utf-8") for path, text in projection["documents"].items()},
-        **{
-            path: (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-            for path, value in projection["envelopes"].items()
-        },
-    }
-    for raw in changes:
-        path = Path(raw)
-        reject_symlink_ancestors(path)
-        if not path.resolve().is_relative_to(root) or path.stat().st_nlink != 1:
-            raise ValueError("Unsafe projection target")
-        if raw not in inputs:
-            raise ValueError("Unbound projection target")
-    checkpoints = staging.parent / "checkpoints"
-    reject_symlink_ancestors(checkpoints)
-    checkpoints.mkdir(parents=True, exist_ok=True)
-    checkpoint = checkpoints / checkpoint_id
-    if checkpoint.exists() or checkpoint.is_symlink():
-        raise ValueError("Checkpoint already exists")
-    with tempfile.TemporaryDirectory(prefix=".checkpoint-", dir=checkpoints) as temp:
-        backup = Path(temp) / "checkpoint"
-        backup.mkdir()
-        snapshot_dir = backup / "tasks"
-        shutil.copytree(staging, snapshot_dir, copy_function=file_reader.copy_with_metadata)
-        manifest: dict[str, str] = {}
-        for raw in sorted(changes):
-            rel = Path(raw).resolve().relative_to(root)
-            manifest[rel.as_posix()] = inputs[raw]
-        (backup / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
-        if any(
-            hashlib.sha256(file_reader.read_bytes(snapshot_dir / rel)).hexdigest() != digest
-            for rel, digest in manifest.items()
-        ):
-            raise ValueError("Checkpoint input changed; rerun")
-        os.rename(backup, checkpoint)
-    temp_paths: list[Path] = []
-    try:
-        for raw, content in changes.items():
-            path = Path(raw)
-            fd, name = tempfile.mkstemp(prefix=".metadata-", dir=path.parent)
-            temporary = Path(name)
-            temp_paths.append(temporary)
-            with os.fdopen(fd, "wb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-        if set(map(str, envelope_paths(staging))) != set(projection["envelopes"]):
-            raise ValueError("Projection envelope set changed; rerun")
-        for raw, digest in inputs.items():
-            path = Path(raw)
-            reject_symlink_ancestors(path)
-            if (
-                not path.is_file()
-                or hashlib.sha256(file_reader.read_bytes(path)).hexdigest() != digest
-            ):
-                raise ValueError("Projection inputs changed; rerun")
-        for (raw, _), temporary in zip(changes.items(), temp_paths, strict=True):
-            path = Path(raw)
-            reject_symlink_ancestors(path)
-            if (
-                path.stat().st_nlink != 1
-                or hashlib.sha256(file_reader.read_bytes(path)).hexdigest() != inputs[raw]
-            ):
-                raise ValueError("Projection target changed; recover from checkpoint")
-            os.replace(temporary, path)
-        return {
-            "checkpoint": str(checkpoint),
-            "documents": len(projection["documents"]),
-            "envelopes": len(projection["envelopes"]),
-        }
-    finally:
-        for temporary in temp_paths:
-            temporary.unlink(missing_ok=True)
-
-
-def build_parser(
-    parser: argparse.ArgumentParser | None = None,
-) -> argparse.ArgumentParser:
-    parser = parser or argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("staging", type=Path)
-    parser.add_argument("source_lock", type=Path)
-    parser.add_argument("--checkpoint", required=True, help="new safe checkpoint ID")
-    return parser
-
-
-def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    try:
-        print(
-            json.dumps(
-                apply(args.staging, args.source_lock, args.checkpoint), ensure_ascii=False, indent=2
-            )
-        )
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        parser.exit(1, f"BLOCKED: {exc}\n")
-
-
-def main() -> None:
-    parser = build_parser()
-    run(parser.parse_args(), parser)
-
-
-if __name__ == "__main__":
-    main()

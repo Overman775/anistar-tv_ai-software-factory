@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from graphlib import CycleError
 from typing import Any
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from factory.checks.command import validate_execution
+from factory.dependency_graph import compile_dependencies
 from factory.project.contracts import ProjectData
 from factory.project.profile_io import validate_snapshot
 from factory.project.profile_rules import matches, require
@@ -58,11 +60,10 @@ def review_checks(
     for c in checks:
         if not (all(x in seen and x != c["id"] for x in c.get("after", []))):
             raise ValueError("Project policy: " + "inactive/unknown review dependency")
-    done: set[str] = set()
-    while done != seen:
-        ready = {c["id"] for c in checks if set(c.get("after", [])) <= done} - done
-        require(ready, "review dependency cycle")
-        done |= ready
+    try:
+        compile_dependencies({c["id"]: c.get("after", []) for c in checks})
+    except CycleError as exc:
+        raise ValueError("Project policy: review dependency cycle") from exc
     return checks
 
 

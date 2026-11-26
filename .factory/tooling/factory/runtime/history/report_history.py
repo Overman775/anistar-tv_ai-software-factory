@@ -1,11 +1,11 @@
 """Immutable terminal report and assignment references."""
 
-import json
 from pathlib import Path
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
+from factory.database.provider import current_database
 from factory.runtime.contracts import (
     Assignment,
     Dispatch,
@@ -16,11 +16,11 @@ from factory.runtime.contracts import (
     agent_key,
 )
 from factory.runtime.history.artifact_ref import Artifact
+from factory.runtime.history.document import render
 from factory.runtime.history.history_repository import HistoryRepository
 from factory.runtime.history.task_records import read_evidence
 from factory.runtime.reports.finish_requirements import FinishRequirements
-from factory.runtime.workflow_core import Invalid, digest, require
-from factory.runtime.workflow_core import identity as identity
+from factory.runtime.workflow_core import Invalid, digest, graph_identity, require
 from factory.validation import validation_message
 
 
@@ -60,12 +60,12 @@ def assignment(state: State, node: Node, requirements: FinishRequirements) -> As
 
 def prepare(state: State, dispatch: Dispatch, report: Report) -> tuple[ReportRef, Artifact]:
     body = validated_body({"assignment": dispatch["assignment"], "report": report})
-    checksum = identity(body)
+    checksum = graph_identity(body)
     name = (
         f".factory/memory/history/{state['run_id']}/reports/"
-        f"{report['node_id']}-{report['dispatch_id']}-{checksum}.json"
+        f"{report['node_id']}-{report['dispatch_id']}-{checksum}.md"
     )
-    data = (json.dumps(body, ensure_ascii=False, indent=2) + "\n").encode()
+    data = render(body)
     ref: ReportRef = {
         "run_id": state["run_id"],
         "node_id": report["node_id"],
@@ -74,7 +74,7 @@ def prepare(state: State, dispatch: Dispatch, report: Report) -> tuple[ReportRef
         "sha256": digest(data),
         "content_identity": checksum,
     }
-    return ref, Artifact(name, "report", data, ref["node_id"], ref["dispatch_id"])
+    return ref, Artifact(name, "report", data, ref["node_id"], ref["dispatch_id"], document=body)
 
 
 def reference(raw: object) -> ReportRef:
@@ -88,8 +88,10 @@ def read(root: Path, raw: object, *, history: HistoryRepository | None = None) -
     ref = reference(raw)
     data = read_evidence(root, ref["path"], run_id=ref["run_id"], history=history)
     require(digest(data) == ref["sha256"], "Report reference digest mismatch")
-    original: object = json.loads(data)
-    require(identity(original) == ref["content_identity"], "Report content identity mismatch")
+    history = current_database().history if history is None else history
+    original = history.document(root, ref["run_id"], ref["path"], ref["sha256"], "report")
+    require(render(original) == data, "Historical report differs from its graph document")
+    require(graph_identity(original) == ref["content_identity"], "Report content identity mismatch")
     body = validated_body(original)
     report = body["report"]
     assignment_data = body["assignment"]

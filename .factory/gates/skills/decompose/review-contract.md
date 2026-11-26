@@ -1,13 +1,6 @@
 # TaskReviewer evidence
 
-Coordinator runs `cli decompose assemble review-request` as preflight; it runs the graph gate
-and project checks. Start TaskReviewer only after the request succeeds. Do not run
-a separate preflight in the normal route.
-Bind run_id, assignment_id, author_id and reviewer_id to the actual host assignments;
-the reviewer must differ from the author. The request is coordinator-owned. Pass
-its exact bytes, printed request_hash and task paths to TaskReviewer. Do not ask
-the model to invent a digest or identity. Identity fields are provenance records,
-not cryptographic proof of which model authored text.
+Read the approved plan, the checked task set and the selected project documents. Use the bound packet's `review_request` and its canonical hash, run ID, assignment ID and reviewer identity. Return findings with their precise paths and tested basis. The coordinator records the actual worker response through `decompose run report`.
 
 The reviewer returns exactly these schema keys, with no extra report field
 (including `project_documents_read`). Cite actual project document read paths in
@@ -36,10 +29,4 @@ to review. Criteria use PASS/FAIL/BLOCKED. Findings contain unique id, boolean
 blocking, message and nonempty evidence list. Empty findings is allowed only when
 there are none. APPROVE with a blocking finding does not open the gate.
 
-After the bounded repair, return a separate Done Signal using the
-[completion handoff shape](../../../skills/factory-decompose/references/generation-contract.md#completion-handoff)
-for all repaired and unchanged staged tasks. The coordinator preserves the prior
-request and supplies the separate repair signal when rebinding. Review after repairs binds a newly prepared request to the final task bytes and
-policy. Focused recheck may reuse the same permitted assignment, but must confirm
-the complete final set. Do not edit the request or source lock. Coordinator records
-the actual returned report outside staging; it must never fabricate approval.
+After an explicitly authorized repair, deliver the changed files and the complete [manifest](../../../skills/factory-decompose/references/generation-contract.md#completion-handoff). Review the checked final set on the new ticket.

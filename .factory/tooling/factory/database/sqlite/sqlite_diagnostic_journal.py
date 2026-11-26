@@ -7,14 +7,19 @@ from collections.abc import Iterable, Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 
+from factory.database.sqlite.layout import check_layout, preflight_recovery
 from factory.diagnostics.diagnostic_journal import JournalBusy, LogRow
 from factory.diagnostics.records import MAX_RECORD_BYTES
 
 MAX_RECORDS = 5_000
-JOURNAL_TABLE = (
-    "CREATE TABLE records (id INTEGER PRIMARY KEY, invocation_id TEXT, run_id TEXT, "
-    "dispatch_id TEXT, payload TEXT NOT NULL)"
-)
+SCHEMA = """
+CREATE TABLE records (id INTEGER PRIMARY KEY, invocation_id TEXT, run_id TEXT,
+    dispatch_id TEXT, payload TEXT NOT NULL, export_seq INTEGER);
+CREATE UNIQUE INDEX eligible_records ON records(export_seq) WHERE export_seq IS NOT NULL;
+CREATE TABLE log_sequence (seq INTEGER NOT NULL);
+INSERT INTO log_sequence VALUES (0);
+CREATE TABLE log_offsets (receiver TEXT PRIMARY KEY, seq INTEGER NOT NULL);
+"""
 
 
 def database_path(workspace: str | Path) -> Path:
@@ -45,36 +50,12 @@ def prepare(root: Path) -> None:
             pass
         else:
             os.close(fd)
+        preflight_recovery(path, SCHEMA, "diagnostic journal", 1)
         with (
             closing(sqlite3.connect(path, timeout=1)) as conn,
             conn,
         ):
-            version = conn.execute("PRAGMA user_version").fetchone()[0]
-            if version in (0, 1):
-                conn.execute("BEGIN IMMEDIATE")
-                version = conn.execute("PRAGMA user_version").fetchone()[0]
-                if version == 0:
-                    definitions = conn.execute("SELECT sql FROM sqlite_schema").fetchall()
-                    if not definitions:
-                        conn.execute(JOURNAL_TABLE)
-                    elif definitions != [(JOURNAL_TABLE,)]:
-                        raise sqlite3.DatabaseError("Unsupported diagnostic journal")
-                    version = 1
-                if version == 1:
-                    # Legacy records have no collection-time consent and stay local.
-                    conn.execute("ALTER TABLE records ADD COLUMN export_seq INTEGER")
-                    conn.execute(
-                        "CREATE UNIQUE INDEX eligible_records ON records(export_seq) WHERE export_seq IS NOT NULL"
-                    )
-                    conn.execute("CREATE TABLE log_sequence (seq INTEGER NOT NULL)")
-                    conn.execute("INSERT INTO log_sequence VALUES (0)")
-                    conn.execute(
-                        "CREATE TABLE log_offsets (receiver TEXT PRIMARY KEY, seq INTEGER NOT NULL)"
-                    )
-                    conn.execute("PRAGMA user_version=2")
-                    version = 2
-            if version != 2:
-                raise sqlite3.DatabaseError("Unsupported diagnostic journal")
+            check_layout(conn, SCHEMA, "diagnostic journal", initialize=True)
     except sqlite3.Error as exc:
         raise OSError("Diagnostic journal unavailable") from exc
 
@@ -82,9 +63,14 @@ def prepare(root: Path) -> None:
 def append(root: Path, invocation_id: str, rows: list[LogRow], timeout: float) -> None:
     path = database_path(root)
     try:
-        with closing(sqlite3.connect(path, timeout=timeout)) as conn, conn:
-            conn.execute("PRAGMA max_page_count = 2048")
+        preflight_recovery(path, SCHEMA, "diagnostic journal", timeout)
+        with (
+            closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=timeout)) as conn,
+            conn,
+        ):
             conn.execute("BEGIN IMMEDIATE")
+            check_layout(conn, SCHEMA, "diagnostic journal")
+            conn.execute("PRAGMA max_page_count = 2048")
             eligible = sum(row.exportable for row in rows)
             first = 0
             if eligible:
@@ -123,7 +109,6 @@ def append(root: Path, invocation_id: str, rows: list[LogRow], timeout: float) -
 @contextmanager
 def records(root: Path, key: str, value: str, cursor: int) -> Iterator[Iterable[tuple[int, str]]]:
     if key == "operation":
-        # The journal is bounded. Read older schemas without a migration or a new index.
         column = "json_extract(CASE WHEN json_valid(payload) THEN payload END, '$.operation')"
     elif key in {"invocation_id", "run_id", "dispatch_id"}:
         column = key
@@ -147,8 +132,8 @@ def _reader(root: Path) -> Iterator[sqlite3.Connection | None]:
         return
     try:
         with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1)) as conn:
-            if conn.execute("PRAGMA user_version").fetchone()[0] not in (0, 1, 2):
-                raise ValueError("Unsupported diagnostic journal")
+            conn.execute("BEGIN")
+            check_layout(conn, SCHEMA, "diagnostic journal")
             yield conn
     except sqlite3.Error as exc:
         raise ValueError("Diagnostics unavailable") from exc
@@ -169,7 +154,7 @@ def snapshot(root: Path) -> list[str]:
 
 def delivery_window(root: Path, receiver: str) -> tuple[int, int]:
     with _reader(root) as conn:
-        if conn is None or conn.execute("PRAGMA user_version").fetchone()[0] < 2:
+        if conn is None:
             return 0, 0
         after, until = conn.execute(
             "SELECT coalesce((SELECT seq FROM log_offsets WHERE receiver=?),0), seq FROM log_sequence",
@@ -193,10 +178,13 @@ def delivery_batch(root: Path, after: int, until: int, limit: int) -> list[tuple
 def acknowledge(root: Path, receiver: str, sequence: int) -> None:
     path = database_path(root)
     try:
+        preflight_recovery(path, SCHEMA, "diagnostic journal", 1)
         with (
             closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=1)) as conn,
             conn,
         ):
+            conn.execute("BEGIN IMMEDIATE")
+            check_layout(conn, SCHEMA, "diagnostic journal")
             conn.execute(
                 "INSERT INTO log_offsets VALUES (?,?) ON CONFLICT(receiver) DO UPDATE SET seq=max(seq,excluded.seq)",
                 (receiver, sequence),

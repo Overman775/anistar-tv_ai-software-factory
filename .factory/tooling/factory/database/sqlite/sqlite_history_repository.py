@@ -8,7 +8,7 @@ from tempfile import NamedTemporaryFile
 
 from pydantic import BaseModel, ConfigDict
 
-from factory.database.sqlite import artifacts, closed_journal, workflow_db
+from factory.database.sqlite import artifacts, graph_documents, graph_state
 from factory.database.sqlite.workflow_db import DATABASE as DATABASE
 from factory.database.sqlite.workflow_db import database as database
 from factory.paths import MEMORY as BASE
@@ -17,7 +17,7 @@ from factory.runtime.state_io import parse_state
 from factory.runtime.transport.evidence import file_hash as file_hash
 from factory.runtime.transport.evidence import pending_transports as pending_transports
 from factory.runtime.transport.evidence import transport_paths as transport_paths
-from factory.runtime.workflow_core import Invalid, digest, relative, require
+from factory.runtime.workflow_core import Invalid, relative, require
 
 
 class Inventory(BaseModel):
@@ -30,32 +30,25 @@ def json_bytes(value: object) -> bytes:
     return (json.dumps(value, ensure_ascii=False, indent=2) + "\n").encode()
 
 
-def journal_bytes(root: Path, run: str) -> bytes:
-    if not relative(root, DATABASE).is_file():
-        raise FileNotFoundError(run)
-    with database(root) as db:
-        row = db.execute(
-            "SELECT record,sha256 FROM runs WHERE run_id=? AND sha256 IS NOT NULL", (run,)
-        ).fetchone()
+def _inventory(db: sqlite3.Connection, run: str) -> Inventory:
+    row = db.execute(
+        "SELECT sha256 FROM runs WHERE run_id=? AND sha256 IS NOT NULL", (run,)
+    ).fetchone()
     if row is None:
         raise FileNotFoundError(run)
-    record, checksum = row
-    require(isinstance(record, str), "Invalid closed journal record")
-    assert isinstance(record, str)
-    raw = record.encode()
-    require(digest(raw) == checksum, "Closed journal digest mismatch")
-    return raw
+    graph_state.verify_seal(db, run, row[0])
+    state = parse_state(graph_state.read(db, run))
+    require(state["status"] in {"completed", "cancelled"}, "Invalid terminal inventory")
+    files = dict(db.execute("SELECT path,sha256 FROM sealed_artifacts WHERE run_id=?", (run,)))
+    return Inventory(state=state, files=files)
 
 
 def inventory(root: Path, run: str) -> Inventory:
-    compact = journal_bytes(root, run)
+    if not relative(root, DATABASE).is_file():
+        raise FileNotFoundError(run)
     with database(root) as db:
-        result = Inventory.model_validate_json(closed_journal.transform(db, compact, restore=True))
-    require(
-        result.state["run_id"] == run and result.state["status"] in {"completed", "cancelled"},
-        "Invalid terminal inventory",
-    )
-    return result
+        db.execute("BEGIN")
+        return _inventory(db, run)
 
 
 def confirmed_files(
@@ -93,7 +86,7 @@ def confirmed_files(
             continue
         kind = "attachment"
         if name.startswith(f"{BASE}/state/"):
-            kind = "transport-report" if name.endswith(".report.json") else "transport"
+            kind = "transport"
         elif path.is_relative_to(folder / "checks"):
             kind = "check-evidence"
         hashes[name] = artifacts.put(db, run, artifacts.Artifact(name, kind, path))
@@ -110,30 +103,44 @@ def confirmed_files(
 
 
 def current(root: Path) -> State:
-    row = workflow_db.current_row(root)
-    if row is None:
-        raise FileNotFoundError("No current workflow run")
-    run, raw, sha = row
-    if sha is None:
-        return parse_state(json.loads(raw))
-    return inventory(root, run).state
+    if relative(root, DATABASE).is_file():
+        with database(root) as db:
+            db.execute("BEGIN")
+            row = db.execute("SELECT run_id,sha256 FROM runs WHERE current=1").fetchone()
+            if row is not None:
+                run, checksum = row
+                if checksum is not None:
+                    graph_state.verify_seal(db, run, checksum)
+                return parse_state(graph_state.read(db, run))
+    raise FileNotFoundError("No current workflow run")
 
 
-def journal_record(
+def seal_run(
     db: sqlite3.Connection,
     root: Path,
     state: State,
     usage: object,
     pending: dict[str, tuple[str, str, str]],
-) -> bytes:
+) -> None:
     run = state["run_id"]
+    require(
+        db.execute(
+            "UPDATE runs SET status=?,summary=?,revision=? WHERE run_id=? AND current=1 AND status='active' AND sha256 IS NULL",
+            (state["status"], state.get("summary"), state["revision"], run),
+        ).rowcount
+        == 1,
+        "Run already closed",
+    )
+    graph_state.write(db, parse_state(state))
     name = f"{BASE}/history/{run}/usage.acpx.json"
     artifacts.put(db, run, artifacts.Artifact(name, "usage", json_bytes(usage)))
     files = confirmed_files(db, root, state, pending)
     artifacts.verify_manifest(db, run, files)
-    return closed_journal.transform(
-        db, json_bytes({"state": parse_state(state), "files": files}), restore=False
+    db.execute(
+        "INSERT INTO sealed_artifacts SELECT run_id,path,kind,node_id,dispatch_id,sha256,document_id FROM artifacts WHERE run_id=?",
+        (run,),
     )
+    db.execute("UPDATE runs SET sha256=? WHERE run_id=?", (graph_state.seal(db, run), run))
 
 
 def check_inventory(root: Path, record: Inventory) -> None:
@@ -160,9 +167,11 @@ def cleanup_paths(root: Path, state: State) -> list[Path]:
 
 
 def member(root: Path, run: str, name: str) -> bytes:
-    expected = json.loads(journal_bytes(root, run))["files"].get(name)
-    require(expected is not None, "Unregistered historical artifact")
     with database(root) as db:
+        db.execute("BEGIN")
+        expected = _inventory(db, run).files.get(name)
+        require(expected is not None, "Unregistered historical artifact")
+        assert expected is not None
         return artifacts.read(db, run, name, expected)
 
 
@@ -184,6 +193,7 @@ def listing(root: Path, run: str) -> list[dict[str, object]]:
 
 def export(root: Path, run: str, name: str, output: Path) -> None:
     with database(root) as db:
+        db.execute("BEGIN")
         row = db.execute(
             "SELECT a.sha256,r.sha256 FROM artifacts a JOIN runs r ON a.run_id=r.run_id WHERE a.run_id=? AND a.path=?",
             (run, name),
@@ -192,7 +202,7 @@ def export(root: Path, run: str, name: str, output: Path) -> None:
         assert row is not None
         if row[1] is not None:
             require(
-                json.loads(journal_bytes(root, run))["files"].get(name) == row[0],
+                _inventory(db, run).files.get(name) == row[0],
                 "Artifact inventory mismatch",
             )
         with NamedTemporaryFile(dir=output.parent, delete=False) as target:
@@ -241,6 +251,25 @@ def verify_history(root: Path, run: str, *, bind: bool) -> int:
     if bind:
         rebind(root, record)
     return len(record.files)
+
+
+def document(root: Path, run: str, name: str, checksum: str, kind: str) -> object:
+    with database(root) as db:
+        db.execute("BEGIN")
+        row = db.execute(
+            "SELECT a.document_id,r.sha256 FROM artifacts a JOIN runs r USING(run_id) WHERE a.run_id=? AND a.path=? AND a.sha256=? AND a.kind=?",
+            (run, name, checksum, kind),
+        ).fetchone()
+        require(row is not None and row[0], "Missing or changed graph document")
+        assert row is not None
+        if row[1] is not None:
+            graph_state.verify_seal(db, run, row[1])
+            sealed = db.execute(
+                "SELECT document_id,sha256 FROM sealed_artifacts WHERE run_id=? AND path=?",
+                (run, name),
+            ).fetchone()
+            require(sealed == (row[0], checksum), "Graph document inventory mismatch")
+        return graph_documents.read(db, kind, row[0])
 
 
 def stored_evidence(root: Path, run: str, name: str, *, allow_loose: bool) -> bytes | None:

@@ -1,84 +1,132 @@
 """Workflow database adapter for the Teacher outbox."""
 
-import json
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
-from factory.database.sqlite import workflow_db
+from factory.database.sqlite import graph_records, workflow_db
+from factory.database.sqlite.lesson_hits import read_hits
 from factory.runtime.contracts import ReportRef
 from factory.runtime.knowledge.teacher_models import SearchEvidence, TeacherJob, decode_event
 from factory.runtime.workflow_core import digest, require
 
+COLUMNS = (
+    "kind",
+    "incident",
+    "source",
+    "operation",
+    "observation",
+    "checkout",
+    "user_instructions",
+    "user_sha256",
+    "delete_target",
+    "edit_target",
+    "cancelled_by",
+    "waiting_for",
+    "resolution",
+    "done",
+)
 
-def read(root: Path, key: str) -> str:
-    with workflow_db.database(root) as db:
-        row = db.execute("SELECT record FROM teacher_jobs WHERE id=?", (key,)).fetchone()
+
+def load_job(db: sqlite3.Connection, key: str) -> TeacherJob:
+    row = db.execute(f"SELECT {','.join(COLUMNS)} FROM teacher_jobs WHERE id=?", (key,)).fetchone()
     if row is None:
         raise FileNotFoundError("Teacher event not found")
-    return str(row[0])
+    details = graph_records.inflate(
+        db.execute(
+            "SELECT ordinal,parent,name,kind,value FROM teacher_fields WHERE job_id=? ORDER BY ordinal",
+            (key,),
+        ).fetchall()
+    )
+    require(isinstance(details, dict), "Invalid Teacher evidence")
+    assert isinstance(details, dict)
+    raw = dict(zip(COLUMNS, row, strict=True))
+    raw["done"] = bool(raw["done"])
+    return decode_event(key, {**details, **raw})
+
+
+def read(root: Path, key: str) -> TeacherJob:
+    with workflow_db.database(root) as db:
+        db.execute("BEGIN")
+        return load_job(db, key)
 
 
 def enqueue_once(root: Path, key: str, prepare: Callable[[], TeacherJob]) -> None:
     with workflow_db.database(root) as db:
-        prior = db.execute("SELECT record FROM teacher_jobs WHERE id=?", (key,)).fetchone()
-        if prior is not None:
-            decode_event(key, prior[0])
+        db.execute("BEGIN IMMEDIATE")
+        if db.execute("SELECT 1 FROM teacher_jobs WHERE id=?", (key,)).fetchone():
+            load_job(db, key)
         else:
             insert_event(db, prepare())
 
 
-def insert_event(db: sqlite3.Connection, event: TeacherJob) -> None:
-    event.user_sha256 = digest(event.user_instructions.encode())
-    db.execute(
-        "INSERT INTO teacher_jobs(id,record) VALUES (?,?) ON CONFLICT(id) DO NOTHING",
-        (event.key(), event.model_dump_json()),
+def _fields(db: sqlite3.Connection, key: str, event: TeacherJob) -> None:
+    details = event.model_dump(exclude=set(COLUMNS), exclude_none=True)
+    db.execute("DELETE FROM teacher_fields WHERE job_id=?", (key,))
+    db.executemany(
+        "INSERT INTO teacher_fields VALUES (?,?,?,?,?,?)",
+        ((key, *row) for row in graph_records.flatten(details)),
     )
 
 
+def insert_event(db: sqlite3.Connection, event: TeacherJob) -> None:
+    key = event.key()
+    event.user_sha256 = digest(event.user_instructions.encode())
+    values = event.model_dump()
+    inserted = db.execute(
+        f"INSERT INTO teacher_jobs(id,{','.join(COLUMNS)}) VALUES (?,{','.join('?' for _ in COLUMNS)}) ON CONFLICT(id) DO NOTHING",
+        (key, *(values[col] for col in COLUMNS)),
+    )
+    if inserted.rowcount:
+        _fields(db, key, event)
+    else:
+        load_job(db, key)
+
+
 def update(root: Path, key: str, event: TeacherJob) -> None:
+    require(event.key() == key, "Teacher event identity mismatch")
+    data = event.model_dump()
     with workflow_db.database(root) as db:
+        changes = ",".join(col + "=?" for col in COLUMNS)
         require(
             db.execute(
-                "UPDATE teacher_jobs SET record=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
-                (event.model_dump_json(), key),
+                f"UPDATE teacher_jobs SET {changes},updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id=?",
+                (*(data[col] for col in COLUMNS), key),
             ).rowcount
             == 1,
             "Unknown Teacher event",
         )
+        _fields(db, key, event)
 
 
 def pending(root: Path, waiting: bool, checkout: Callable[[], str | None]) -> list[str]:
     with workflow_db.database(root) as db:
-        # Read one queue snapshot; unbound work is also available outside Git.
         db.execute("BEGIN")
         scoped = db.execute(
-            """SELECT 1 FROM teacher_jobs WHERE done=0
-               AND json_extract(record, '$.checkout') IS NOT NULL LIMIT 1"""
+            "SELECT 1 FROM teacher_jobs WHERE done=0 AND checkout IS NOT NULL LIMIT 1"
         ).fetchone()
         branch = checkout() if scoped else None
-        rows = db.execute(
-            """SELECT id, record FROM teacher_jobs WHERE done=0
-               AND (json_extract(record, '$.checkout') IS NULL OR json_extract(record, '$.checkout') = ?)
-               AND (json_extract(record, '$.waiting_for') IS NOT NULL) = ?
-               ORDER BY id""",
-            (branch, waiting),
-        )
-        keys = []
-        for key, raw in rows:
-            decode_event(key, raw)
-            keys.append(key)
+        keys = [
+            r[0]
+            for r in db.execute(
+                "SELECT id FROM teacher_jobs WHERE done=0 AND (checkout IS NULL OR checkout=?) AND (waiting_for IS NOT NULL)=? ORDER BY id",
+                (branch, waiting),
+            )
+        ]
+        for key in keys:
+            load_job(db, key)
         return keys
 
 
 def feedback(root: Path, refs: list[ReportRef], run: str, current: str) -> list[SearchEvidence]:
     with workflow_db.database(root) as db:
+        db.execute("BEGIN")
+        assignments = {(r["node_id"], r["dispatch_id"]) for r in refs if r["run_id"] == run}
         rows = db.execute(
-            """SELECT s.id,s.node_id,s.dispatch_id,s.status,e.query,e.catalog_sha256,s.matches
-               FROM json_each(?) r JOIN lesson_searches s ON
-               s.run_id=? AND s.node_id=(r.value ->> '$.node_id') AND s.dispatch_id=(r.value ->> '$.dispatch_id')
-               LEFT JOIN lesson_search_evidence e ON e.search_id=s.id ORDER BY s.id""",
-            (json.dumps(refs), run),
+            """SELECT s.id,s.node_id,s.dispatch_id,s.status,e.query,e.catalog_sha256
+               FROM lesson_searches s LEFT JOIN lesson_search_evidence e ON e.search_id=s.id
+               WHERE s.run_id=? ORDER BY s.id""",
+            (run,),
         )
         return [
             SearchEvidence(
@@ -88,7 +136,8 @@ def feedback(root: Path, refs: list[ReportRef], run: str, current: str) -> list[
                 status=status,
                 query=q,
                 same_catalog=stamp == current if stamp else None,
-                matches=json.loads(hits),
+                matches=read_hits(db, i),
             )
-            for i, n, d, status, q, stamp, hits in rows
+            for i, n, d, status, q, stamp in rows
+            if (n, d) in assignments
         ]

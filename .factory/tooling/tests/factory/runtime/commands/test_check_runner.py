@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 import unittest
 from copy import deepcopy
 from pathlib import Path
@@ -13,7 +14,10 @@ from unittest.mock import patch
 
 from factory.project.profile_io import load_profile
 from factory.project.profile_rules import required_checks
+from factory.runtime.contracts import RoleMaterialKind
 from factory.runtime.history.task_records import read_evidence
+from factory.runtime.reports import role_material
+from factory.runtime.state_io import parse_report_draft
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_core import Invalid, digest
 from tests import CLI
@@ -43,6 +47,86 @@ class CheckRunnerTests(unittest.TestCase):
         # Construct the role report without implicitly running another command.
         with patch.object(f.ledger, "run_check", return_value=result):
             return f.report("verify-label")
+
+    def test_verification_progress_survives_restart_and_lost_linter_reply(self) -> None:
+        f = self.f
+        checks = f.g["tasks"]["label"]["required_checks"]
+        base = checks[0]
+        for name in ("lint", "analysis"):
+            cmd = deepcopy(base)
+            cmd.update(id=name, kind="static")
+            checks.append(cmd)
+        # The linter signals actual execution and waits outside the candidate's input scope.
+        checks[1]["execution"]["argv"] = [
+            sys.executable,
+            "-c",
+            "from pathlib import Path\nimport time\n"
+            "with Path('lint-runs').open('a') as log: log.write('started\\n')\n"
+            "while not Path('release-lint').exists(): time.sleep(0.02)\n",
+        ]
+        checks[1]["execution"]["timeout_seconds"] = 30
+        observation = {k: v for k, v in base.items() if k != "execution"}
+        observation.update(id="view", kind="observation", method="Inspect the displayed label")
+        checks.append(observation)
+        f.init()
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        f.start("verify-label")
+        ticket = f.ledger.read()["nodes"]["verify-label"]["dispatch_id"]
+
+        def status() -> dict[str, Any]:
+            args = [*CLI, "workflow", "--workspace", str(f.root), "status", "--json"]
+            return dict(
+                json.loads(subprocess.check_output(args))["result"]["verification"]["verify-label"][
+                    "checks"
+                ]
+            )
+
+        first = f.ledger.run_check("verify-label", base["id"], "suite-once")
+        args = [
+            *CLI,
+            "checks",
+            "--workspace",
+            str(f.root),
+            "run",
+            "verify-label",
+            "lint",
+            "--request",
+            "lint-once",
+            "--dispatch",
+            ticket,
+            "--json",
+        ]
+        with subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) as proc:
+            try:
+                deadline = time.monotonic() + 15
+                while (
+                    not (f.root / "lint-runs").exists()
+                    and proc.poll() is None
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.05)
+                one = status()
+                self.assertEqual("RUNNING", one["lint"]["status"])
+                self.assertEqual(first["execution_id"], one[base["id"]]["receipt"])
+                self.assertEqual("PENDING", one["analysis"]["status"])
+                self.assertEqual(one, status())
+            finally:
+                (f.root / "release-lint").touch()
+            self.assertEqual(0, proc.wait(timeout=30), proc.stderr.read() if proc.stderr else None)
+        lint = json.loads(subprocess.check_output(args))["result"]
+        self.assertEqual("started\n", (f.root / "lint-runs").read_text())
+        analyzer = f.ledger.run_check("verify-label", "analysis", "analyzer-once")
+        self.assertEqual(lint["execution_id"], status()["lint"]["receipt"])
+        self.assertEqual("AWAITING_OBSERVATION", status()["view"]["status"])
+        report = f.report("verify-label", checks=[first, lint, analyzer])
+        with self.assertRaisesRegex(Invalid, "Missing required check results: view"):
+            f.ledger.finish("verify-label", report)
+        report["checks"].append(
+            {**observation, "result": "PASS", "evidence": "Label matches the fixture criterion"}
+        )
+        f.ledger.finish("verify-label", report)
+        self.assertEqual("PASS", status()["view"]["status"])
 
     def test_discovery_receipt_requires_executed_file_in_before_scope(self) -> None:
         for include in (False, True):
@@ -180,7 +264,23 @@ class CheckRunnerTests(unittest.TestCase):
         f.init()
         f.start("worker0", "handle-0")
         f.start("worker1", "handle-1")
-        draft = f.report("worker0")
+        ticket = f.ledger.read()["nodes"]["worker0"]["dispatch_id"]
+        (f.root / "docs").mkdir(exist_ok=True)
+        (f.root / "docs/file0.txt").write_text("Worker zero's verified documentation")
+        kinds: tuple[RoleMaterialKind, ...] = ("documents", "document-review")
+        for kind in kinds:
+            role_material.note(
+                f.ledger,
+                "worker0",
+                ticket,
+                kind,
+                {
+                    "kind": kind,
+                    "observation": "Checked the assigned text and its references",
+                    "paths": ["docs/file0.txt"],
+                },
+            )
+        draft = f.report("worker0", stage_result="DOCS_UPDATED")
         draft.pop("files")
         prepared = f.ledger.prepare_report("worker0", draft, [])
         (f.root / "docs/file1.txt").parent.mkdir(parents=True, exist_ok=True)
@@ -243,21 +343,23 @@ class CheckRunnerTests(unittest.TestCase):
         draft = self.report(result)
         draft.pop("files")
         draft["checks"] = []
-        command = [
-            *workflow,
-            "prepare-report",
-            "verify-label",
-            "-",
-            result["execution_id"],
-        ]
-        run = subprocess.run(
-            command, check=False, input=json.dumps(draft), capture_output=True, text=True
+        from factory.runtime.graph_inputs import draft_report
+
+        draft_id = draft_report(f.root, parse_report_draft(draft))
+        command = [*workflow, "prepare-report", "verify-label", draft_id, result["execution_id"]]
+        run = subprocess.run(command, check=True, capture_output=True, text=True)
+        ref = json.loads(run.stdout)["result"]["report_id"]
+        prepared = f.ledger.runs.read_input(f.root, "submission", ref)
+        assert isinstance(prepared, dict)
+        self.assertEqual([result], prepared["checks"])
+        rejected = subprocess.run(
+            [*workflow, "prepare-report", "verify-label", ref],
+            check=False,
+            capture_output=True,
+            text=True,
         )
-        self.assertEqual(0, run.returncode, run.stderr)
-        self.assertEqual([result], json.loads(run.stdout)["result"]["checks"])
-        run = subprocess.run(command, check=False, input="[]", capture_output=True, text=True)
-        self.assertNotEqual(0, run.returncode)
-        self.assertIn("BLOCKED: Invalid workflow report draft: (root)", run.stderr)
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("Unknown graph input for this operation", rejected.stderr)
 
     def test_failed_receipt_is_evidence_for_nonpassing_handoff_only(self) -> None:
         f = self.ready("raise SystemExit(7)")
@@ -375,7 +477,7 @@ class CheckRunnerTests(unittest.TestCase):
         f.g["nodes"][2]["depends_on"].append("inspect-label")
         self.ready()
         node = "inspect-label"
-        f.ledger.claim(node)
+        f.claim(node)
         bootstrap = f.ledger.prepare_packet(node)
         meta = {
             key: bootstrap[key]
@@ -572,6 +674,29 @@ class CheckRunnerTests(unittest.TestCase):
         f.ledger.finish(node, {**report, "approval_request": request})
         state = f.ledger.read()
         request_id = state["nodes"][node]["report"]["approval_request"]["id"]
+        bypass = subprocess.run(
+            [
+                *CLI,
+                "workflow",
+                "--workspace",
+                str(f.root),
+                "retry",
+                "write-label",
+                "review",
+                "Request ordinary retry",
+                "Writer ended",
+                "--dispatch",
+                state["nodes"]["write-label"]["dispatch_id"],
+                "--evidence-dispatch",
+                state["nodes"][node]["dispatch_id"],
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(0, bypass.returncode)
+        self.assertIn("requires resume-approved", bypass.stderr)
+        self.assertEqual(state, f.ledger.read())
         self.assertEqual(budget, state["counters"]["label:tests"])
         self.assertNotIn(path, state["graph"]["tasks"]["label"]["scope"])
         with self.assertRaisesRegex(Invalid, "RETRY_BUDGET_EXHAUSTED"):
@@ -582,7 +707,20 @@ class CheckRunnerTests(unittest.TestCase):
         target.write_text("approved")
         with self.assertRaisesRegex(Invalid, "Need current approval"):
             f.ledger.resume_approved(node, "stale", "user approval")
-        f.ledger.resume_approved(node, request_id, "user approval")
+        subprocess.run(
+            [
+                *CLI,
+                "workflow",
+                "--workspace",
+                str(f.root),
+                "resume-approved",
+                node,
+                request_id,
+                "user approval",
+            ],
+            check=True,
+            capture_output=True,
+        )
         with self.assertRaisesRegex(Invalid, "Need current approval"):
             f.ledger.resume_approved(node, request_id, "replay")
         resumed = f.ledger.read()
@@ -709,7 +847,8 @@ class CheckRunnerTests(unittest.TestCase):
         s = f.ledger.read()
         s["executions"][result["execution_id"]]["status"] = "RUNNING"
         assert result["result"] != "RUNNING"
-        (f.root / (result["evidence"] + ".owner.json")).unlink()
+        s["executions"][result["execution_id"]].pop("owner")
+        s["executions"][result["execution_id"]].pop("process_facts")
         overwrite(f.ledger, s)
         self.assertEqual("RUNNING", f.ledger.run_check("verify-label", "behavior")["result"])
         with self.assertRaisesRegex(Invalid, "Unresolved command"):

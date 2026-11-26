@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+from factory.graphs.definition import Selection, parse
 from factory.paths import FACTORY_ROOT
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
 
@@ -39,6 +40,13 @@ def read_validator() -> str:
     )
 
 
+def routes(process: str) -> dict[str, str]:
+    definition = parse(process, read(FACTORY_ROOT / "graphs" / (process + ".yaml")))
+    entry = definition.nodes[definition.entry]
+    assert isinstance(entry, Selection)
+    return {r.outcome: r.target for r in entry.routes}
+
+
 class SkillContractTest(unittest.TestCase):
     def test_bundle_exists_and_skill_is_compact(self) -> None:
         for path in (
@@ -53,9 +61,9 @@ class SkillContractTest(unittest.TestCase):
         ):
             self.assertTrue(path.is_file(), path)
         self.assertLessEqual(len(read(SKILL).splitlines()), 315)
-        self.assertIn("[working session contract](references/session-contract.md)", read(SKILL))
+        self.assertIn("[working session](references/session-contract.md)", read(SKILL))
         self.assertIn("[plan contract](references/plan-contract.md)", read(SKILL))
-        self.assertIn("`cli planning validate`", read(SKILL))
+        self.assertIn("cli planning run init", read(SKILL))
 
     def test_architect_and_coordinator_use_one_plan_template(self) -> None:
         self.assertIn("## Canonical Template", read(PLAN_CONTENT))
@@ -65,42 +73,24 @@ class SkillContractTest(unittest.TestCase):
             self.assertNotIn("## Canonical Template", text)
 
     def test_trigger_boundary_skips_clear_ticket_but_routes_ambiguity(self) -> None:
-        skill = read(SKILL)
-        for marker in (
-            "ordinary self-contained ticket",
-            "may go directly to `factory-implement`",
-            "behavior, scope, architecture, API/storage contract",
-            "sole semantic planning source",
-        ):
-            self.assertIn(marker, skill)
+        self.assertEqual(routes("implement-source")["approved_or_ready"], "admit")
+        self.assertEqual(routes("implement-source")["gap"], "hold")
+        self.assertIn("self-contained execution request", read(SKILL))
 
     def test_no_plan_and_delegated_planning_are_distinct(self) -> None:
-        skill = read(SKILL)
-        contract = read(CONTRACT) + read(PLAN_CONTENT)
-        session = read(SESSION)
-        for marker in (
-            "`no plan`, `no plan needed`",
-            "`decide yourself`, `do it yourself`, `at your discretion`",
-            "Explicit no-plan wording wins",
-            "delegated planning",
-            "do not ask `ASK` questions",
-            "`BLOCK` facts remain blockers",
-        ):
-            self.assertIn(marker, skill + session)
-        self.assertIn("Planning authorization: explicit_user_delegation", contract)
-        self.assertIn("Keep metadata unchanged", contract)
+        graph = routes("implement-source")
+        self.assertEqual((graph["forbidden"], graph["delegated"]), ("hold", "planning"))
+        self.assertIn("explicit_user_delegation", read(CONTRACT) + read(PLAN_CONTENT))
 
     def test_architect_is_planning_owned_and_implementation_roles_are_excluded(self) -> None:
-        skill = read(SKILL)
-        self.assertIn("`architect` is Factory Planning-owned", skill)
-        self.assertIn("`.factory/memory/staging/planning-plan.md.candidate`", skill)
-        self.assertIn("coordinator's change classification", skill)
-        self.assertIn("Do not invoke Implementer, Tester, Reviewer", skill)
-        self.assertIn("No `task-decomposition-planner`", skill)
+        graph = routes("planning")
+        self.assertEqual(graph["intake"], "architect")
+        self.assertNotIn("implementer", graph.values())
+        self.assertNotIn("tester", graph.values())
 
     def test_architect_persona_owns_planning_draft(self) -> None:
         content = read(ARCHITECT)
-        self.assertIn("planning-plan.md", content)
+        self.assertIn("candidate", content)
         self.assertNotIn("implementation-plan.md", content)
 
     def test_architect_receives_nonsemantic_revision_evidence(self) -> None:
@@ -115,25 +105,10 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("classification or required evidence is missing", normalized)
 
     def test_paths_and_transactional_contract_are_explicit(self) -> None:
-        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT))
-        normalized = " ".join(content.split())
-        for marker in (
-            ".factory/memory/staging/planning-session.md",
-            ".factory/memory/staging/planning-plan.md",
-            "docs/plans/{plan_id}.md",
-            "temporary file beside target",
-            "atomically replace target",
-            "last valid checkpoint",
-            "Do not delete staging or approved files",
-            "Never use destructive cleanup",
-        ):
-            self.assertIn(marker, normalized)
-        self.assertIn("planning-plan.md.candidate", read(SKILL))
-        self.assertIn("--previous .factory/memory/staging/planning-plan.md", read(SKILL))
-        self.assertNotIn(
-            "--plan .factory/memory/staging/planning-plan.md --phase",
-            read(SKILL),
-        )
+        self.assertIn("--destination docs/plans/PLAN.md", read(SKILL))
+        self.assertIn("--previous", read(SKILL))
+        self.assertIn("previous public file", read(SKILL))
+        self.assertIn("planning run history", read(SKILL))
 
     def test_human_first_sections_are_exact(self) -> None:
         contract = read(CONTRACT) + read(PLAN_CONTENT)
@@ -150,7 +125,7 @@ class SkillContractTest(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertIn("one numbered primary flow", contract)
         self.assertIn("exception/decision table", contract)
-        self.assertIn("Write human-facing prose in the task/project language", read(SKILL))
+        self.assertIn("Use the task/project language", read(SKILL))
         self.assertIn("Ordinary prose follows task/project language", contract)
         self.assertIn("`loading/error/retry/empty`", contract)
         self.assertIn("ordinary prose unless they are exact identifiers", contract)
@@ -209,7 +184,6 @@ class SkillContractTest(unittest.TestCase):
             "does not own task/slice IDs",
             "affected\nlayers, estimates, ticket dependency graph",
             "Never use future task/slice IDs",
-            "maps `CAP-*` to tickets",
         ):
             self.assertIn(marker, content)
 
@@ -239,7 +213,6 @@ class SkillContractTest(unittest.TestCase):
             "`external_contract`",
             "`none`",
             "full API/platform fingerprint internal",
-            "only behavior-shaping gist",
             "comma-separated list of declared `CAP-*`",
         ):
             self.assertIn(marker, content)
@@ -248,10 +221,7 @@ class SkillContractTest(unittest.TestCase):
         skill = read(SKILL)
         contract = read(CONTRACT) + read(PLAN_CONTENT)
         detail_contract = read(DETAIL_CONTRACT)
-        for marker in (
-            "durable semantic execution seed",
-            "planning-only work does not trigger it",
-        ):
+        for marker in ("A planning request alone ends at the approved plan",):
             self.assertIn(marker, skill)
         for marker in (
             "Plan content is the durable semantic layer",
@@ -271,46 +241,25 @@ class SkillContractTest(unittest.TestCase):
             (read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION)).split()
         )
         for marker in (
-            "section-role deduplication",
             "Section-role deduplication map",
             "single full statement and rationale",
             "Deduplicate semantically",
             "Do not optimize for a fixed word count",
             "No fixed word-count target applies",
-            "never shorten against a word target",
         ):
             self.assertIn(marker, content)
 
     def test_ready_working_map_uses_single_architect_fast_path(self) -> None:
-        content = read(SKILL) + read(SESSION)
-        for marker in (
-            "Architect fast path",
-            "Give Architect source lock and working map once",
-            "do not repeat Reality Check or source search",
-            "Reopen discovery only",
-        ):
-            self.assertIn(marker, content)
+        self.assertEqual(routes("planning")["analysis_ready"], "architect")
+        self.assertIn("do not repeat Reality Check or source search", read(ARCHITECT_CONTRACT))
 
     def test_checkpoint_contract_covers_explorer_and_every_architect_pass(self) -> None:
-        skill = read(SKILL)
-        checkpoint = read(CHECKPOINT)
-        for marker in (
-            "every `code-explorer` and Architect handoff",
-            "Explicitly failed/invalid `code-explorer` handoff",
-            "Explicitly failed/invalid Architect handoff",
-            "Never run a concurrent second Architect",
-        ):
-            self.assertIn(marker, skill)
-        for marker in (
-            "Silence is not failure",
-            "Do not count quiet or silent windows",
-            "poll count or elapsed time",
-            "Allowed Interruption",
-            "BLOCKED_AGENT_FAILURE",
-            "Never run two writer roles concurrently",
-            "Runtime capability differences do not create role failure",
-        ):
-            self.assertIn(marker, checkpoint)
+        r = routes("planning")
+        self.assertEqual(r["blocked_external_source"], "owner")
+        self.assertEqual(r["blocked_requirements"], "owner")
+        self.assertEqual(r["needs_exploration"], "explorer")
+        self.assertIn("observe the original handle", read(SKILL))
+        self.assertIn("Silence is not failure", read(CHECKPOINT))
 
     def test_adapters_use_checkpoint_observation_without_timer_failure(self) -> None:
         for runtime, adapter in ADAPTERS.items():
@@ -336,25 +285,15 @@ class SkillContractTest(unittest.TestCase):
         self.assertNotIn("### QA checklist", contract)
 
     def test_recursive_questions_live_before_first_revision(self) -> None:
-        content = (
-            read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION) + read_validator()
-        )
-        for marker in (
-            "After every answer, update the working map and run an impact scan",
-            "newly revealed branch",
-            "consume a plan revision",
-            "First promoted user-reviewable plan is `revision: 1`",
-            "Active questions belong to planning-session.md",
-        ):
-            self.assertIn(marker, content)
+        self.assertEqual(routes("planning")["needs_user_decision"], "owner")
+        self.assertEqual(routes("planning")["answer_received"], "architect")
+        self.assertIn("After every answer", read(SESSION))
+        self.assertIn("owner answers", read(SESSION))
 
     def test_architect_only_returns_candidate_and_parent_promotes(self) -> None:
-        role = read(ARCHITECT)
-        contract = read(ROOT / ".factory/contracts/architect.md")
-        self.assertIn("Never replace the live target", role)
-        self.assertIn("planning-plan.md.candidate` only", contract)
-        self.assertIn("Coordinator alone promotes", contract)
-        self.assertIn("live target unchanged", contract)
+        self.assertEqual(routes("planning")["plan_ready"], "review")
+        self.assertEqual(routes("planning")["approved"], "publish")
+        self.assertIn("coordinator alone reviews", read(ARCHITECT_CONTRACT))
 
     def test_single_canonical_plan_preserves_approved_git_history(self) -> None:
         content = read(CONTRACT) + read(PLAN_CONTENT)
@@ -365,26 +304,14 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("--change-kind nonsemantic --change-evidence", content)
 
     def test_candidate_preflight_returns_semantic_gaps_to_session(self) -> None:
-        content = read(SKILL) + (read(CONTRACT) + read(PLAN_CONTENT)) + read(SESSION)
-        for marker in (
-            "semantic preflight",
-            "semantic gap",
-            "machine-only defects",
-            "without user approval",
-            "Atomically promote only after both checks pass",
-        ):
-            self.assertIn(marker, content)
+        self.assertEqual(routes("planning")["needs_work"], "architect")
+        self.assertIn("Resolve semantic gaps", read(SESSION))
+        self.assertIn("cli planning validate --phase draft", read(SESSION))
 
     def test_bounded_reality_check_reuses_evidence(self) -> None:
-        content = read(SKILL) + read(SESSION) + read(ARCHITECT)
-        for marker in (
-            "Batch lookup by semantic surface",
-            "reuse collected\nevidence across the session",
-            "one narrow follow-up",
-            "never reopen search for wording",
-            "Reuse evidence",
-        ):
-            self.assertIn(marker, content)
+        self.assertIn("reuse evidence across the session", read(SESSION))
+        self.assertIn("one narrow lookup follow-up", read(SESSION))
+        self.assertIn("critical contradiction", read(SESSION))
 
     def test_strict_quality_gates_cover_capabilities_externals_and_handoff(self) -> None:
         content = (
@@ -401,26 +328,15 @@ class SkillContractTest(unittest.TestCase):
             self.assertIn(marker, content)
 
     def test_instruction_ownership_keeps_spawn_handoffs_bounded(self) -> None:
-        skill = read(SKILL)
-        for marker in (
-            "session contract owns discovery state and decision loop",
-            "plan contract owns output schema",
-            "validator owns mechanical structure",
-            "Do not copy their\ncanonical instructions into spawn prompts",
-        ):
-            self.assertIn(marker, skill)
+        self.assertIn("bound `packet`", read(SKILL))
+        self.assertIn("plan contract", read(SKILL))
+        self.assertIn("working session", read(SKILL))
+        self.assertIn("planning gate", read(SKILL))
 
     def test_handoff_is_advice_and_skill_does_not_launch_downstream(self) -> None:
-        skill = read(SKILL)
-        for marker in (
-            "`handoff_recommendation: direct | decompose | either` is advice",
-            "Without pre-authorized continuation, ask user to choose next action",
-            "itself does not launch downstream",
-            "parent may\nstart the requested downstream skill without another checkpoint",
-            "do not hard-block",
-            "must not publish task items",
-        ):
-            self.assertIn(marker, skill)
+        self.assertIn("A planning request alone ends at the approved plan", read(SKILL))
+        self.assertIn("execution authority to start work", read(SKILL))
+        self.assertIn("execution sketch", read(SKILL))
 
     def test_delegated_approval_reuses_existing_metadata_contract(self) -> None:
         contract = read(CONTRACT) + read(PLAN_CONTENT)

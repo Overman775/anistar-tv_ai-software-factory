@@ -10,6 +10,7 @@ from contextlib import closing, redirect_stderr, redirect_stdout
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import StringIO
+from pathlib import Path
 from threading import Thread
 from typing import Any
 from unittest.mock import Mock, call, patch
@@ -34,7 +35,8 @@ from factory.diagnostics.diagnostic_journal import LogRow
 from factory.diagnostics.events import event
 from factory.environment import use_environment
 from factory.logging_config import diagnostic_operation
-from factory.runtime import teacher
+from factory.runtime import command_worker, teacher
+from factory.runtime.contracts import ExecutionReceipt
 from factory.runtime.lessons import Lesson, search_lessons
 from factory.runtime.observability import export_policy
 from factory.runtime.observability.acp_tools import summarize_tools
@@ -47,7 +49,7 @@ from factory.runtime.observability.otlp_projection import project
 from factory.runtime.state_io import parse_state
 from factory.secret_reader import SecretReader
 from tests import CLI
-from tests.factory.runtime.workflow_fixture import WorkflowFixture
+from tests.factory.runtime.workflow_fixture import WorkflowFixture, bound_teacher
 
 
 class OtlpTests(unittest.TestCase):
@@ -55,10 +57,14 @@ class OtlpTests(unittest.TestCase):
         self.f = WorkflowFixture(self.addCleanup)
         self.config = self.f.root / ".factory/factory.yaml"
         self.config.parent.mkdir(exist_ok=True)
+        from shutil import copytree
+
+        copytree(Path(self.f.config["_path"]).parent / "graphs", self.config.parent / "graphs")
         self.enterContext(use_environment({}))
         self.development = self.enterContext(
             patch.object(export_policy, "development_install", return_value=False)
         )
+        self.enterContext(patch.object(command_worker, "launch", self.launch_check))
         self.spans: list[Span] = []
         self.logs: list[LogRecord] = []
         self.requests: list[tuple[str, str | None, str | None]] = []
@@ -116,6 +122,32 @@ class OtlpTests(unittest.TestCase):
         self.sink = Receiver(self.url + "/v1/traces", {"Authorization": "local-only"})
 
         self.configure()
+
+    def launch_check(
+        self, root: Path, execution_id: str, record: ExecutionReceipt
+    ) -> subprocess.Popen[bytes]:
+        # The supervisor is a new interpreter. Give it the fixture's telemetry policy
+        # just as the coordinator has it, independently of the checker's dev install.
+        script = (
+            "import sys\n"
+            "from unittest.mock import patch\n"
+            "from factory.environment import use_environment\n"
+            "from factory.runtime.command_worker import main\n"
+            "from factory.runtime.observability import export_policy\n"
+            "disabled = sys.argv.pop(1)\n"
+            "with patch.object(export_policy, 'development_install', return_value=False), "
+            "use_environment({'OTEL_SDK_DISABLED': disabled}):\n"
+            "    main()\n"
+        )
+        disabled = "false" if export_policy.enabled(root) else "true"
+        with command_worker.artifact(root, record, ".supervisor.log").open("ab") as log:
+            return subprocess.Popen(
+                [sys.executable, "-I", "-B", "-c", script, disabled, str(root), execution_id],
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                start_new_session=os.name == "posix",
+            )
 
     def configure(self, path: str = "/v1/traces", headers: dict[str, str] | None = None) -> None:
         self.config.write_text(
@@ -460,38 +492,20 @@ class OtlpTests(unittest.TestCase):
         self.assertFalse(self.requests)
         self.assertFalse((self.f.root / workflow_db.DATABASE).exists())
 
-    def test_v1_queue_stays_local_after_migration(self) -> None:
+    def test_historical_workflow_schema_is_left_untouched(self) -> None:
         with workflow_db.database(self.f.root):
             pass
-        with closing(sqlite3.connect(self.f.root / workflow_db.DATABASE)) as db, db:
-            for table in ("runs", "teacher_jobs"):
-                db.execute(f"ALTER TABLE {table} DROP COLUMN otlp_eligible")
-            db.execute("ALTER TABLE telemetry_feed DROP COLUMN eligible")
-            for kind, table in (
-                ("run", "runs"),
-                ("teacher", "teacher_jobs"),
-                ("search", "lesson_searches"),
+        path = self.f.root / workflow_db.DATABASE
+        for version in (1, 2):
+            with closing(sqlite3.connect(path)) as db, db:
+                db.execute(f"PRAGMA user_version={version}")
+            before = path.read_bytes()
+            with (
+                self.assertRaisesRegex(ValueError, "Unsupported workflow database"),
+                workflow_db.database(self.f.root),
             ):
-                db.execute(
-                    f"CREATE TRIGGER telemetry_{kind} AFTER INSERT ON {table} BEGIN SELECT 1; END"
-                )
-            db.execute("INSERT INTO telemetry_feed(kind,ref,at) VALUES ('search','old','fixture')")
-            db.execute("INSERT INTO telemetry_offsets VALUES ('legacy',0,6)")
-            db.execute("PRAGMA user_version=1")
-        search_lessons(self.f.root, "new production")
-        self.assertEqual(self.bridge().returncode, 0)
-        self.assertEqual(len(self.spans), 1)
-        with workflow_db.database(self.f.root) as db:
-            self.assertEqual(
-                db.execute("SELECT ref,eligible FROM telemetry_feed ORDER BY seq").fetchall(),
-                [("old", 0), ("1", 1)],
-            )
-            self.assertEqual(
-                db.execute(
-                    "SELECT span_offset FROM telemetry_offsets WHERE receiver='legacy'"
-                ).fetchone(),
-                (0,),
-            )
+                self.fail("opened a historical workflow schema")
+            self.assertEqual(path.read_bytes(), before)
 
     def test_delivery_after_clean_includes_late_teacher_but_no_source_text(self) -> None:
         f = self.f
@@ -614,8 +628,9 @@ class OtlpTests(unittest.TestCase):
             job,
             card.model_copy(update={"action": "Check the latest receipt"}),
             hit.revision,
+            dispatch_id=bound_teacher(f.root, job),
         )
-        teacher.complete(f.root, job)
+        teacher.complete(f.root, job, dispatch_id=bound_teacher(f.root, job))
         self.assertEqual(self.bridge().returncode, 0)
         self.assertEqual(len(self.spans), before + 1)
         self.assertEqual(self.spans[-1].parent_span_id, root.span_id)
@@ -701,7 +716,7 @@ class OtlpTests(unittest.TestCase):
         self.assertEqual(self.bridge().returncode, 0)
         self.assertEqual(len(self.spans), 2)
 
-    def test_old_reservations_use_only_matching_acpx_assignment(self) -> None:
+    def test_reservations_use_only_graph_event_attributes(self) -> None:
         run = self.f.init()["run_id"]
         self.f.start("write-label")
         dispatch = self.f.ledger.read()["nodes"]["write-label"]["dispatch_id"]
@@ -733,17 +748,17 @@ class OtlpTests(unittest.TestCase):
         item = sqlite_export_feed.next_observation(self.f.root, 0, 1)
         assert item is not None and isinstance(item[1], RunObservation)
         record = item[1]
-        legacy = replace(
+        missing_attributes = replace(
             record, events=[e._replace(role=None, harness=None) for e in record.events]
         )
         spans = [
             {a.key: a.value.string_value for a in s.attributes}
-            for s in project(legacy)
+            for s in project(missing_attributes)
             if s.name == "factory.attempt"
         ]
         self.assertEqual(len(spans), 2)
-        self.assertEqual(spans[0]["factory.role"], "developer")
-        self.assertEqual(spans[0]["factory.harness"], "codex")
+        self.assertNotIn("factory.role", spans[0])
+        self.assertNotIn("factory.harness", spans[0])
         self.assertNotIn("factory.role", spans[1])
         self.assertNotIn("factory.harness", spans[1])
 
@@ -828,7 +843,7 @@ class OtlpTests(unittest.TestCase):
         f.fake_acp()
         install_connection(f.config, f.root, "zcode")
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         prepared = prepare_prompt(f.ledger, "write-label")
 
         def execute(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -936,14 +951,14 @@ class OtlpTests(unittest.TestCase):
         self.assertEqual(self.bridge().returncode, 0)
         self.assertEqual(len(self.spans), 1)
 
-    def test_previously_frozen_telemetry_settings_remain_readable(self) -> None:
+    def test_only_current_receiver_settings_are_readable(self) -> None:
         state = self.f.init()
-        state["config"]["telemetry"] = {"otlp_enabled": True}
-        self.assertEqual(parse_state(state)["config"]["telemetry"], {"otlp_enabled": True})
-        raw = json.loads(json.dumps(state))
-        raw["config"].pop("logs", None)
-        raw["config"]["telemetry"] = {"enabled": True, "logs": {"endpoint": self.url}}
-        self.assertEqual(parse_state(raw)["config"]["telemetry"], raw["config"]["telemetry"])
+        for settings in ({"otlp_enabled": True}, {"enabled": True, "logs": {"endpoint": self.url}}):
+            with self.subTest(settings=settings):
+                raw = {**state, "config": {**state["config"], "telemetry": settings}}
+                with self.assertRaisesRegex(ValueError, "Invalid persisted state"):
+                    parse_state(raw)
+        self.assertEqual(parse_state(state), state)
 
     def test_delivery_from_current_schema(self) -> None:
         run = self.f.init()["run_id"]
@@ -951,7 +966,7 @@ class OtlpTests(unittest.TestCase):
         search_lessons(self.f.root, "old lookup")
         self.assertEqual(drain(self.f.root, self.sink, "old"), 0)
         with workflow_db.database(self.f.root) as db:
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (2,))
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (0,))
             self.assertEqual(db.execute("SELECT count(*) FROM telemetry_feed").fetchone(), (2,))
         self.assertEqual({s.name for s in self.spans}, {"factory.run", "factory.lesson.search"})
         self.assertIn(run, str(self.spans))

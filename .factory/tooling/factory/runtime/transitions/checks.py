@@ -9,7 +9,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Literal
 
-from factory.project.profile_rules import project_checks
+from factory.project.profile_rules import project_check_graph
 from factory.runtime import command_worker
 from factory.runtime.commands.evidence import active_commands
 from factory.runtime.commands.execution import CheckExecution
@@ -122,9 +122,9 @@ def _check_intent(
         and set(child_ids) <= set(available),
         "Composite requires distinct assigned command stages",
     )
-    registrations = {c["id"]: c for c in project_checks(state["config"]["_project"]["data"])}
+    dependencies = project_check_graph(state["config"]["_project"]["data"]).parents
     require(
-        not child_ids or {check_id, *child_ids} <= set(registrations),
+        not child_ids or {check_id, *child_ids} <= dependencies.keys(),
         "Composite and child checks must be registered",
     )
     require(
@@ -152,7 +152,7 @@ def _check_intent(
             ),
             "Generator outputs must be exact owned task paths",
         )
-        for dependency in registrations[cid].get("after", []) if cid in registrations else []:
+        for dependency in dependencies.get(cid, ()):
             if dependency in included:
                 continue
             prior = previous.get(dependency)
@@ -215,15 +215,11 @@ def reconcile_check(
         if record["status"] != "RUNNING":
             return record["result"]
         execution = CheckExecution(rid, record)
-        facts = command_worker.facts(journal.root, rid, record)
+        facts = command_worker.facts(rid, record)
         if facts is None:
             if not abandon_unstarted:
                 return execution.pending()
-            execution.require_abandonable(
-                owner_registered=command_worker.artifact(
-                    journal.root, record, ".owner.json"
-                ).exists()
-            )
+            execution.require_abandonable(owner_registered="owner" in record)
             # The worker needs this same lock to register. A delayed worker sees
             # the terminal receipt and cannot start project code after abandonment.
             facts = {"stages": {}}
@@ -256,6 +252,8 @@ def reconcile_check(
                 "mode": stages[child_id]["mode"],
             }
             child.pop("composite_stages", None)
+            child.pop("owner", None)
+            child.pop("process_facts", None)
             _complete_check(journal.root, child_id, child, stages[child_id], error)
             state["executions"][child_id] = child
             completed.append(child)

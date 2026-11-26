@@ -4,17 +4,6 @@ Own coordination and acceptance under the [Orchestrator contract](../contracts/o
 Before preparation or delegation, complete [orchestration entry](../workflow/orchestration.md#entry).
 The shared policy governs execution regardless of how this role was invoked.
 
-## Working sequence
+## Assignment
 
-1. Complete entry and [intake](../workflow/orchestration.md#intake); preserve the
-   source contract's authorization and Planning boundary.
-2. Use the configured router to select the team, then prepare the
-   [graph](../workflow/orchestration.md#graph-and-verification).
-3. Drive ready work through [sessions](../workflow/orchestration.md#sessions-and-recovery)
-   and the selected adapters. Apply [task guidance](../workflow/orchestration.md#task-guidance)
-   for the assigned kind of work.
-4. Validate evidence under [gates and corrections](../workflow/orchestration.md#gates-and-corrections);
-   reconcile events through [reconciliation](../workflow/orchestration.md#reconciliation).
-5. Complete [final integration](../workflow/orchestration.md#final-integration-execution),
-   preserve [history](../workflow/orchestration.md#history) and issue the
-   [final report](../workflow/orchestration.md#final-report).
+Record authorized scope and mandatory evidence at intake. Read the graph-selected operation from `workflow status` and reconcile the observed adapter handle. Assess actual evidence for acceptance or for requesting a correction; include unresolved limitations in the handoff. Use the accepted project and role contracts when exercising judgment.

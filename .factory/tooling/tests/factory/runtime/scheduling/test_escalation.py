@@ -15,9 +15,12 @@ from factory.adapters.acpx_adapter import prepare_prompt
 from factory.database.port import DatabaseBackend
 from factory.database.provider import use_database
 from factory.runtime.contracts import agent_key
+from factory.runtime.graph_inputs import PROPOSAL, propose
+from factory.runtime.history.document import render
 from factory.runtime.scheduling import escalation
+from factory.runtime.scheduling.assignment import validate_packet
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, atomic_json
+from factory.runtime.workflow_core import Invalid
 from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import overwrite
@@ -202,7 +205,22 @@ class EscalationTests(unittest.TestCase):
         failed = f.report("test-label", "FAIL", stage_result="FAIL_TEST", checks=[])
         f.ledger.finish("test-label", failed)
         f.start("diagnose-label", "diagnostician")
-        diagnosis = f.report("diagnose-label", stage_result="ROOT_CAUSE_FOUND")
+        diagnosis = f.report(
+            "diagnose-label",
+            stage_result="ROOT_CAUSE_FOUND",
+            role_material=[
+                {
+                    "kind": "reproduction",
+                    "observation": "The fixture label differs from the assertion",
+                    "paths": ["lib/example.dart"],
+                },
+                {
+                    "kind": "cause",
+                    "observation": "The current label constant differs from the source",
+                    "paths": ["lib/example.dart"],
+                },
+            ],
+        )
         f.ledger.finish("diagnose-label", diagnosis)
 
         graph = f.ledger.read()["graph"]
@@ -225,8 +243,7 @@ class EscalationTests(unittest.TestCase):
             f.ledger.revise(graph, reason, retry_tests=retry)
         self.assertEqual(before, f.ledger.read())
 
-        path = f.root / "revised.json"
-        atomic_json(path, graph)
+        proposal = propose(f.root, PROPOSAL.validate_python(graph))
         result = subprocess.run(
             [
                 *CLI,
@@ -234,7 +251,7 @@ class EscalationTests(unittest.TestCase):
                 "--workspace",
                 str(f.root),
                 "revise",
-                str(path),
+                proposal,
                 reason,
                 "--retry-tests",
                 *retry,
@@ -261,7 +278,7 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(revised, f.ledger.read())
 
         with self.assertRaisesRegex(Invalid, "Dependencies not complete"):
-            f.ledger.claim("test-label")
+            f.claim("test-label")
         f.start("write-label")
         production.write_text("after")
         f.ledger.finish("write-label", f.report("write-label", stage_result="WRITES_READY"))
@@ -296,7 +313,7 @@ class EscalationTests(unittest.TestCase):
         f.init()
         decision = f.ledger.correct("write-label", self.fail_verification("FAIL_TEST"))
         self.assertEqual("senior-implementer", decision["to_profile"])
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         s = f.ledger.read()
         packet = f.ledger.packet("write-label")
         self.assertNotIn("escalation", packet["profile"])
@@ -311,8 +328,11 @@ class EscalationTests(unittest.TestCase):
         s["nodes"]["write-label"]["profile"] = "middle-implementer-zcode"
         with patch.object(f.ledger, "read", return_value=s):
             prepared = prepare_prompt(f.ledger, "write-label")
-        prompt = Path(prepared["prompt"]).read_text(encoding="utf-8")
-        envelope = json.loads(prompt)
+        ref = s["nodes"]["write-label"]["packet_file"]
+        envelope = validate_packet(
+            f.ledger.history.document(f.root, ref["run_id"], ref["path"], ref["sha256"], "packet")
+        )
+        self.assertEqual(Path(prepared["prompt"]).read_bytes(), render(envelope))
         self.assertEqual(packet["correction"], envelope["correction"])
         self.assertNotIn("escalation", envelope["profile"])
 
@@ -322,7 +342,7 @@ class EscalationTests(unittest.TestCase):
         request = self.fail_verification()
         old = f.ledger.read()["sessions"]["author"]["handle"]
         f.ledger.correct("write-label", request)
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             f.ledger.bind("write-label", old, "gpt-6.1-terra")
         with self.assertRaisesRegex(Invalid, "Actual model differs"):
@@ -350,7 +370,7 @@ class EscalationTests(unittest.TestCase):
             f.ledger.retry("write-label", "recovery", "fix", "stopped")
         f.ledger.resume_task("label", "Actual tool restored; coordinator verified")
         self.assertEqual({"label:recovery": 1}, f.ledger.read()["counters"])
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.assertIn(
             "Actual tool restored",
             f.ledger.packet("write-label")["correction"]["blocker_resolutions"][0]["evidence"],
@@ -396,14 +416,14 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(before["nodes"]["write-label"], state["nodes"]["write-label"])
         self.assertEqual(before["counters"], state["counters"])
         with self.assertRaisesRegex(Invalid, "Already dispatched|Task stopped"):
-            f.ledger.claim("write-label")
+            f.claim("write-label")
         f.ledger.resume_task("label", "New source authorized and no worker remains")
         state = f.ledger.read()
         self.assertEqual({"label:recovery": 1}, state["counters"])
         self.assertEqual("pending", state["nodes"]["write-label"]["status"])
         intake = next(e for e in state["events"] if e["event"] == "source_reintake")
         self.assertEqual(before["nodes"], intake["previous_nodes"])
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.assertIn(
             "New source authorized",
             f.ledger.packet("write-label")["correction"]["blocker_resolutions"][0]["evidence"],
@@ -509,8 +529,12 @@ class EscalationTests(unittest.TestCase):
             request["kind"] = "environment"
             f.ledger.correct("write-label", request)
             if attempt == 0:
-                f.ledger.resume_task("label", "Environment restored")
+                old_stop = f.ledger.next_actions()["task_stops"]["label"]["stop_id"]
+                f.ledger.resume_task("label", "Environment restored", stop_id=old_stop)
         before = f.ledger.read()
+        self.assertNotEqual(old_stop, f.ledger.next_actions()["task_stops"]["label"]["stop_id"])
+        with self.assertRaisesRegex(Invalid, "decision is stale"):
+            f.ledger.resume_task("label", "Environment restored", stop_id=old_stop)
         with self.assertRaisesRegex(Invalid, "Budget exhausted"):
             f.ledger.resume_task("label", "Still unavailable")
         self.assertEqual(before, f.ledger.read())
@@ -634,7 +658,7 @@ class EscalationTests(unittest.TestCase):
         self.assertEqual(
             before["graph"]["agents"]["reviewer"], after["graph"]["agents"]["reviewer"]
         )
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         packet = f.ledger.packet("write-label")
         self.assertEqual("open", packet["review_findings"]["REV-1"]["status"])
 
@@ -650,7 +674,7 @@ class EscalationTests(unittest.TestCase):
         n["owns"] = ["lib/second.dart"]
         f.init()
         request = self.fail_verification()
-        f.ledger.claim("write-second")
+        f.claim("write-second")
         before = f.ledger.read()
         with self.assertRaisesRegex(Invalid, "Quiesce"):
             f.ledger.correct("write-label", request)
@@ -674,7 +698,7 @@ class EscalationTests(unittest.TestCase):
             "author",
             "new context",
             "stopped",
-            json.dumps({"label": "label only", "second": "second only"}),
+            {"label": "label only", "second": "second only"},
         )
         s = f.ledger.read()
         self.assertEqual(
@@ -719,7 +743,7 @@ class EscalationTests(unittest.TestCase):
         f.init()
         f.start("write-label", "acp-default")
         f.ledger.finish("write-label", f.report("write-label"))
-        f.ledger.claim("write-again")
+        f.claim("write-again")
         with self.assertRaisesRegex(Invalid, "Effective model changed"):
             f.ledger.bind("write-again", "acp-default", "different-default")
         f.ledger.bind("write-again", "acp-default", "fixture-default")

@@ -37,7 +37,7 @@ class RetroTransitionsTests(TestCase):
         f.ledger.set_paused("User stopped")
         self.assertEqual([], f.ledger.next_actions()["runnable"])
         with self.assertRaisesRegex(Invalid, "paused"):
-            f.ledger.claim("write-label")
+            f.claim("write-label")
         resumed = Ledger(f.root)
         self.assertEqual("User stopped", resumed.next_actions()["pause_reason"])
         resumed.set_paused(None)
@@ -249,7 +249,7 @@ class RetroTransitionsTests(TestCase):
         state = f.ledger.read()
         [rid] = state["executions"]
         record = state["executions"][rid]
-        owner = json.loads(command_worker.artifact(f.root, record, ".owner.json").read_text())
+        owner = record["owner"]
         group = owner["process_group"]
         self.addCleanup(self.kill_group, group)
         os.kill(group, signal.SIGKILL)

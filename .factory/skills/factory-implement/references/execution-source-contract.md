@@ -166,7 +166,7 @@ semantic plan approval.
 ## Provenance and Normalized Hash
 
 The source record keeps kind, execution_mode, ref/path or direct text, selected
-scope and exact user directive. `hash` is SHA-256 of a deterministic JSON object
+scope and exact user directive. `hash` is SHA-256 of a canonical typed record
 containing normalized content, kind, mode, selected scope and directive.
 Normalize CRLF/CR to LF, strip trailing whitespace on each line and terminal
 blank whitespace. No semantic claims or approval content are removed.

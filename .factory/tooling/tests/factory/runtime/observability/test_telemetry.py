@@ -16,7 +16,7 @@ class TelemetryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.f = workflow_fixture.WorkflowFixture(self.addCleanup)
         self.f.init()
-        self.f.ledger.claim("write-label")
+        self.f.claim("write-label")
         self.state = self.f.ledger.read()
         self.dispatch = self.state["nodes"]["write-label"]
         self.cwd = self.state["workspace"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterator
 from copy import deepcopy
 from pathlib import Path
@@ -14,6 +15,7 @@ from factory import file_reader
 
 # Direct CLI execution and import-by-path use the same tool modules.
 from factory.context import context
+from factory.graphs.definition import load as load_definitions
 from factory.project.contracts import Policy, Selection
 from factory.project.profile_io import (
     load_profile,
@@ -70,6 +72,26 @@ class FactoryConfig(Settings):
 FACTORY_CONFIG = TypeAdapter[FactoryConfig](FactoryConfig)
 PROFILE_GROUPS = TypeAdapter[ProfileGroups](ProfileGroups, config=ConfigDict(strict=True))
 RUNTIME_CONFIG = TypeAdapter[Config](Config)
+
+
+def instruction_pin(config: Config) -> str:
+    """Identify the exact configuration path and its complete set of pinned files."""
+    checksum = hashlib.sha256()
+    for field in (
+        config["_path"],
+        *(part for pair in sorted(config["_files"].items()) for part in pair),
+    ):
+        raw = field.encode("utf-8")
+        checksum.update(len(raw).to_bytes(8))
+        checksum.update(raw)
+    return checksum.hexdigest()
+
+
+def verify_instruction_pin(config: Config, pin: str) -> None:
+    require(
+        pin == instruction_pin(config),
+        "Config/instructions changed since snapshot; reload instructions",
+    )
 
 
 def expand_profiles(groups: object) -> tuple[dict[str, Profile], dict[str, str]]:
@@ -212,6 +234,7 @@ def load_config(path: str | Path, *, policy: Policy | None = None) -> Config:
         "_defaults": runtime_defaults,
         "_project": policy,
         "_path": str(path),
+        "_documents": {},
         "_files": files,
         "_limits": limits,
     }
@@ -222,6 +245,9 @@ def load_config(path: str | Path, *, policy: Policy | None = None) -> Config:
             validation_message("Invalid runtime configuration", exc, RUNTIME_CONFIG)
         ) from None
     files = c["_files"]
+    definitions = acceptance_guard(load_definitions, path.parent / "graphs", "implement")
+    for name, definition in definitions.items():
+        files[str(path.parent / "graphs" / f"{name}.yaml")] = digest(definition.encode())
     dependencies: set[Path] = set()
     for relative_path in (
         "skills/factory-implement/SKILL.md",
@@ -351,7 +377,7 @@ def document_paths(config: Config) -> set[str]:
 
 
 def _capture_config_documents(config: Config) -> None:
-    contents = config.setdefault("_documents", {})
+    contents = config["_documents"]
     _, auxiliary = _decompose_command_files(config)
     policy = config["_project"]
     policy_root = Path(policy["path"]).parent
@@ -386,8 +412,16 @@ def _is_utf8(raw: bytes) -> bool:
 def check_config(state: State) -> None:
     config = state["config"]
     documents = document_paths(config)
+    graph_dir = Path(config["_path"]).parent / "graphs"
+    pinned = {str(graph_dir / f"{name}.yaml"): raw for name, raw in state["definitions"].items()}
     for path, expected in config["_files"].items():
-        if path in documents:
+        if path in pinned:
+            require(
+                digest(pinned[path].encode()) == expected,
+                "Workflow definition changed during intake",
+            )
+        elif path in documents:
+            require(path in config["_documents"], "Missing accepted document in graph state")
             acceptance_guard(context.accepted_bytes, config, Path(path))
         else:
             require(
@@ -395,6 +429,7 @@ def check_config(state: State) -> None:
                 "Executable configuration/tooling drift; reconcile explicitly",
             )
     for path in config.get("_project_documents", {}):
+        require(path in config["_documents"], "Missing accepted project document in graph state")
         acceptance_guard(context.accepted_bytes, config, Path(path))
 
 
@@ -451,7 +486,7 @@ def reconcile_source_documents(
     refresh: bool = False,
 ) -> None:
     """A document used as both approved source and instruction has one accepted text."""
-    contents = config.get("_documents", {})
+    contents = config["_documents"]
     for source in sources.values():
         if not source.get("path"):
             continue

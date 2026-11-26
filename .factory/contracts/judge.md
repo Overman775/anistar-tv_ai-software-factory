@@ -72,3 +72,5 @@ It also inspects the fix diff for new significant regressions. Each new
 significant regression receives the next unused `REV-*` ID.
 
 Execution procedure: `.factory/roles/judge.md` (executor reading).
+
+For `CHECKS_REQUESTED`, submit one `criterion_assessments` entry per assigned criterion. Give a conclusion, current upstream Tester execution IDs in `receipts`, and the exact missing check IDs in `requested_checks`. Several criteria may cite the same receipt. Keep each open finding under its original ID.

@@ -18,7 +18,7 @@ reservation. A focused assignment covers the changed behavior and affected
 consumers. A full assignment covers all applicable requirements on the final tree.
 
 Inspect selection and completion records, exact failures and run artifacts.
-Preserve all required receipts in the existing JSON report. Link specific
+Preserve all required receipts in the typed assignment report. Link specific
 failures to the relevant test or check. If the cause is uncertain, report the
 observation, available evidence and missing prerequisite. Apply the
 [Tester gates](../gates/roles/tester.md).
@@ -29,3 +29,5 @@ identities, diagnostics and report_ref; do not name successful tests or paste th
 full suite output. Match an existing Judge finding instead of creating a duplicate
 for the same defect; Tester cannot close a Judge-origin finding. Human-only failure
 or blocker observations remain actionable when structured diagnostics are absent.
+
+When a failed check has no established cause, return a terminal BLOCKED result with stage_result UNKNOWN_CAUSE. Include the failed check, its receipt and the observed symptom.

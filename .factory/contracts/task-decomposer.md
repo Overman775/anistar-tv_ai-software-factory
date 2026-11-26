@@ -5,13 +5,13 @@ documents; worker handoff follows common/worker-rules.md.
 
 ## Input
 
-Locked approved plan, decomposition-source.json, exact assigned artifact paths,
+Locked approved plan, source tuple, exact assigned artifact paths,
 source tuple, capability/AC coverage and relevant existing evidence.
 
 ## Allowed writes
 
 Exact assigned staging envelopes and Markdown, their temporary siblings, and the
-assigned checkpoint under `.factory/memory/staging/checkpoints/`; never approved plan
+assigned private working directory; never approved plan
 or published tasks.
 
 ## Result

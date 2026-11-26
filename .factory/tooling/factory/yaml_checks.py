@@ -32,7 +32,7 @@ def copy_bundle(source: Path, target: Path) -> None:
         ".coverage*",
         "htmlcov",
     )
-    for name in ("roles", "contracts", "gates", "workflow", "adapters", "tooling"):
+    for name in ("roles", "contracts", "gates", "graphs", "workflow", "adapters", "tooling"):
         shutil.copytree(source / name, target / name, ignore=ignored, symlinks=True)
     # Exercise the distributed structure without copying real user or lesson data.
     for rel in ("USER.md", "lessons/factory/.gitkeep", "lessons/project/.gitkeep"):
@@ -55,7 +55,7 @@ def copy_bundle(source: Path, target: Path) -> None:
 def source_files(agents: Path = FACTORY_ROOT) -> list[Path]:
     if agents.is_symlink() or (agents / "skills").is_symlink():
         raise ValueError(f"symlink YAML discovery root: {agents}")
-    roots = [agents / name for name in ("tooling", "project", "gates")]
+    roots = [agents / name for name in ("tooling", "project", "gates", "graphs")]
     roots += sorted((agents / "skills").glob("factory-*"))
     candidates = [file for file in agents.glob("*") if file.suffix in {".yaml", ".yml"}]
     for root in roots:
@@ -112,6 +112,14 @@ def _check_files(files: list[Path], agents: Path) -> int:
                 # Harness metadata has no factory-owned semantic contract.
                 print(f"{file}: YAML_SYNTAX: PASS (harness metadata)")
                 continue
+            elif file.parent == agents / "graphs":
+                from factory.graphs.definition import load
+                from factory.runtime.scheduling.orchestrator_graph import orchestrator_graph
+
+                if file.stem == "implement":
+                    orchestrator_graph(load(file.parent, file.stem))
+                else:
+                    load(file.parent, file.stem)
             elif "id" in data or file.stem in {"project", "project.example"}:
                 load_profile(file)
                 # Provenance also includes opaque rule files and executable inputs.

@@ -332,13 +332,6 @@ class ProtocolResult(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
-class InputLock(TypedDict):
-    workspace: Nonblank
-    files: dict[Nonblank, Hash | None]
-    manifest_sha256: Hash
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
 class ReviewSource(TypedDict):
     kind: Literal["review"]
     target: Nonblank
@@ -351,6 +344,8 @@ class ReviewAssignmentTask(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class ReviewAssignment(Identity):
+    dispatch: NotRequired[Nonblank]
+    check_receipts: NotRequired[dict[str, ToolResult]]
     profile: Nonblank
     name: Nonblank
     lens: Lens

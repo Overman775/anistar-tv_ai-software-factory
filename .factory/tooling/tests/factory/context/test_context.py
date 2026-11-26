@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from factory.adapters.acpx_adapter import prepare_prompt
 from factory.context import context
-from factory.runtime.history.task_records import read_evidence
+from factory.runtime.history.document import render
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from tests import CLI
@@ -162,7 +162,7 @@ class ContextTests(unittest.TestCase):
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         (file.parent / "gates/roles/implementer.md").write_text("Weakened completion gate")
         self.assertNotIn(
             "Weakened completion gate",
@@ -339,22 +339,23 @@ class ContextTests(unittest.TestCase):
         f = self.f
         f.require_fixture_review()
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         native = f.ledger.packet("write-label")
         # Both transports preserve the packet built for their own resolved profile.
         other = workflow_fixture.WorkflowFixture(self.addCleanup)
         other.fake_acp()
         other.init()
-        other.ledger.claim("write-label")
+        other.claim("write-label")
         state = other.ledger.read()
         from factory.runtime.scheduling.assignment import implement_packet
 
         expected = implement_packet(state, "write-label")
         prepared = prepare_prompt(other.ledger, "write-label")
         path = Path(prepared["prompt"])
-        self.assertEqual(path.suffixes[-2:], [".packet", ".json"])
+        self.assertEqual(path.suffixes[-2:], [".packet", ".md"])
         self.assertEqual(prepared["prompt_argv"][-2:], ["--file", str(path)])
-        self.assertEqual(expected, json.loads(path.read_bytes()))
+        self.assertEqual(expected, other.stored_packet("write-label"))
+        self.assertEqual(render(expected), path.read_bytes())
         self.assertIn("adapters/worker/native-packet.md", self.names(native))
         self.assertNotIn("adapters/worker/native-packet.md", self.names(expected))
         self.assertIn("adapters/worker/common.md", self.names(expected))
@@ -375,7 +376,7 @@ class ContextTests(unittest.TestCase):
         f = self.f
         f.g["nodes"][0]["read"] = ["missing.md"]
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         with self.assertRaisesRegex(Invalid, "Missing context file"):
             f.ledger.packet("write-label")
         (f.root / "missing.md").write_text("Generated execution brief")
@@ -392,7 +393,7 @@ class ContextTests(unittest.TestCase):
         (f.root / "rules.md").write_text("Project-specific mandatory constraint")
         f.g["nodes"][0]["read"] = ["rules.md"]
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         packet = f.ledger.packet("write-label")
         item = next(i for i in packet["instructions"] if i["path"].endswith("/rules.md"))
         self.assertEqual("project", item["audience"])
@@ -409,7 +410,7 @@ class ContextTests(unittest.TestCase):
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         (file.parent / "adapters/worker/codex.md").write_text("Changed worker permissions")
         self.assertNotIn(
             "Changed worker permissions",
@@ -421,7 +422,7 @@ class ContextTests(unittest.TestCase):
         file = f.config_file(lambda c: None)
         f.config = load_config(file)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         (file.parent / "contracts/common/communication.md").write_text(
             "Changed communication policy"
         )
@@ -442,7 +443,7 @@ class ContextTests(unittest.TestCase):
                 file = f.config_file(lambda c: None)
                 f.config = load_config(file)
                 f.init()
-                f.ledger.claim("write-label")
+                f.claim("write-label")
                 (
                     file.parent
                     / (
@@ -534,18 +535,16 @@ class ContextTests(unittest.TestCase):
         (f.root / "SKILL.md").write_text("Unscoped coordinator procedure")
         f.g["nodes"][0]["read"] = ["SKILL.md"]
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         with self.assertRaisesRegex(Invalid, "Coordinator instructions"):
             f.ledger.packet("write-label")
 
     def test_native_packet_rejects_implement_skill_as_worker_instructions(self) -> None:
         normal = self.f
         normal.init()
-        normal.ledger.claim("write-label")
-        bootstrap = normal.ledger.prepare_packet("write-label")
-        packet = json.loads(
-            read_evidence(normal.root, bootstrap["path"], run_id=bootstrap["run_id"])
-        )
+        normal.claim("write-label")
+        normal.ledger.prepare_packet("write-label")
+        packet = normal.stored_packet("write-label")
         adapter_name = normal.config["profiles"]["implementer"]["adapter"]
         worker_file = normal.config["adapters"][adapter_name]["worker_instructions"]
         worker_path = Path(normal.config["_path"]).parent / worker_file
@@ -565,7 +564,7 @@ class ContextTests(unittest.TestCase):
         )
         invalid.config = load_config(config)
         invalid.init()
-        invalid.ledger.claim("write-label")
+        invalid.claim("write-label")
         with self.assertRaisesRegex(Invalid, "worker_instructions"):
             invalid.ledger.prepare_packet("write-label")
         self.assertNotIn("packet_file", invalid.ledger.read()["nodes"]["write-label"])
@@ -627,7 +626,7 @@ class ContextTests(unittest.TestCase):
         f.init()
         f.start("write-label")
         f.ledger.finish("write-label", f.report("write-label"))
-        f.ledger.claim("verify-label")
+        f.claim("verify-label")
         packet = f.ledger.packet("verify-label")
         self.assertEqual("done", packet["dependency_results"]["write-label"]["status"])
         self.assertEqual(
@@ -640,7 +639,7 @@ class ContextTests(unittest.TestCase):
         f.start("write-label")
         first = f.ledger.packet("write-label")
         f.ledger.finish("write-label", f.report("write-label"))
-        f.ledger.claim("verify-label")
+        f.claim("verify-label")
         second = f.ledger.packet("verify-label")
         self.assertNotEqual(first["dispatch_id"], second["dispatch_id"])
         self.assertEqual(first["source"], second["source"])

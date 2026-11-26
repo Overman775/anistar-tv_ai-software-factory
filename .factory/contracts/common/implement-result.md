@@ -38,7 +38,7 @@ details and the immutable `report_ref`. Preserve actionable findings, their IDs,
 known limitations and incomplete work in the existing structured report fields.
 Use `report_ref` if the short summary is insufficient to decide a correction or review.
 
-Use `cli workflow read-report REF.json` with the exact `report_ref` object when
+Use `cli workflow read-report RUN NODE DISPATCH` with the IDs in the exact `report_ref` when
 full predecessor evidence is needed. The helper checks content and dispatch
 identity and supports archived references. Read every supplied mandatory
 instruction and keep consequential caveats in the next handoff. Prior PASS

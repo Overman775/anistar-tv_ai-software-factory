@@ -1,13 +1,16 @@
 """Find current accepted reports in terminal archives from this checkout."""
 
-import json
 import sqlite3
 from pathlib import Path
 
 from factory.database.sqlite import sqlite_history_repository, workflow_db
 from factory.database.sqlite.sqlite_lesson_index import fts_query
 from factory.runtime.knowledge.case_index import CaseMatch
-from factory.runtime.knowledge.case_reports import accepted_reports, verified_case
+from factory.runtime.knowledge.case_reports import (
+    accepted_reports,
+    archived_reference,
+    verified_case,
+)
 from factory.runtime.knowledge.lesson_index import search_terms
 from factory.runtime.workflow_core import relative
 from factory.runtime.workspace import checkout_ref
@@ -36,13 +39,14 @@ def _sync_catalog(root: Path, db: sqlite3.Connection) -> set[str]:
                 for case in accepted_reports(Path(state["workspace"]), state, branch):
                     body = "\n".join((case.report["summary"], case.report.get("evidence", "")))
                     db.execute(
-                        "INSERT INTO cases(title,body,run,task,ref,branch,workspace) VALUES (?,?,?,?,?,?,?)",
+                        "INSERT INTO cases(title,body,run,task,node,dispatch,branch,workspace) VALUES (?,?,?,?,?,?,?,?)",
                         (
                             case.title,
                             body,
                             run,
                             case.report["task_id"],
-                            json.dumps(case.ref),
+                            case.ref["node_id"],
+                            case.ref["dispatch_id"],
                             branch,
                             state["workspace"],
                         ),
@@ -70,8 +74,8 @@ def search_cases(root: Path, query: str) -> tuple[list[CaseMatch], list[str]]:
     seen: set[tuple[str, str]] = set()
     with sqlite_history_repository.database(root) as db:
         skipped = _sync_catalog(root, db)
-        for run, task, raw, excerpt in db.execute(
-            """SELECT run,task,ref,snippet(cases,1,'','',' … ',32) FROM cases
+        for run, task, node, dispatch, excerpt in db.execute(
+            """SELECT run,task,node,dispatch,snippet(cases,1,'','',' … ',32) FROM cases
                WHERE cases MATCH ? AND branch IS ? AND
                      (workspace=? OR EXISTS (SELECT 1 FROM history_bindings h
                        WHERE h.run_id=cases.run AND h.source=cases.workspace AND h.target=?))
@@ -81,7 +85,10 @@ def search_cases(root: Path, query: str) -> tuple[list[CaseMatch], list[str]]:
             if (run, task) in seen:
                 continue
             try:
-                case = verified_case(root, json.loads(raw), history=sqlite_history_repository)
+                ref = archived_reference(
+                    root, run, node, dispatch, history=sqlite_history_repository
+                )
+                case = verified_case(root, ref, history=sqlite_history_repository)
             except OSError, ValueError:
                 skipped.add(run)
                 continue

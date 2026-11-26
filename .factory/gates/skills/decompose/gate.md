@@ -1,33 +1,5 @@
 # Decompose gate
 
-For the normal route, use the [review request](../../../skills/factory-decompose/references/output-contract.md#review-request)
-to run this gate and bind the reviewer together. For standalone validation, from
-the project root run:
+`cli decompose run validate --run RUN --request KEY` checks delivered bytes against the registered manifest, approved source, CAP and AC coverage, task metadata, dependencies, estimates and cycles. The selected project checks run on that candidate. Record their actual output under the checked basis. A newly repaired candidate requires fresh checks and an independent verdict on its exact bytes.
 
-```bash
-.factory/tooling/bin/cli decompose graph \
-  --staging-dir .factory/memory/staging/tasks/ \
-  --source-lock .factory/memory/staging/decomposition-source.json \
-  --output .factory/memory/staging/mermaid_graph.txt
-```
-
-Any reported source, coverage, schema, Markdown, identity, dependency,
-deferred, estimate, or cycle violation blocks graph and assembly. Deterministic
-errors return to decomposer for one fast-fix pass, then the complete gate reruns.
-They do not invoke planning or require user approval.
-
-The graph validator also runs project decompose.complete commands after its common
-checks. The review request reruns it after any artifact change; final assembly independently
-revalidates it.
-Require the current policy/artifact hashes and PASS receipt; a saved old PASS is
-not reusable. Missing/failed/timed-out project checks block assembly. Scripts
-receive normalized tasks/envelopes on stdin and must not edit artifacts. They are
-trusted project code, not a sandbox; preserve existing execution permissions.
-
-Graph validation is preflight, not permission to complete. Final assembly uses
-`cli decompose assemble`: prepare a bound request, obtain an independent TaskReviewer report,
-then revalidate and create the local task bundle. Missing/stale evidence is BLOCKED;
-a confirmed violation is FAIL. All required conditions must PASS.
-See [review contract](review-contract.md) and
-[output procedure](../../../skills/factory-decompose/references/output-contract.md).
-Assembly never starts implementation or publication.
+The optional `cli decompose graph` diagnoses a supplied input directory. Only a checked process with an accepted [review](review-contract.md) can publish its local task bundle. [Public output](../../../skills/factory-decompose/references/output-contract.md)

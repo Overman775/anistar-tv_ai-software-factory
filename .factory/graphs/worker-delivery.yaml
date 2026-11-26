@@ -1,0 +1,14 @@
+id: worker-delivery
+entry: delivery
+nodes:
+  delivery:
+    decision: delivery
+    routes:
+      - {outcome: held, priority: 40, target: hold}
+      - {outcome: acp, priority: 30, target: acp}
+      - {outcome: bound, priority: 20, target: reuse}
+      - {outcome: native, priority: 10, target: spawn}
+  hold: {operation: wait}
+  acp: {operation: prepare_acp}
+  reuse: {operation: continue_native}
+  spawn: {operation: spawn_native}

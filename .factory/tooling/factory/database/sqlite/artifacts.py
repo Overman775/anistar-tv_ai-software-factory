@@ -7,8 +7,8 @@ from io import BytesIO
 from typing import BinaryIO
 
 from factory import file_reader
+from factory.database.sqlite import graph_documents
 from factory.runtime.history.artifact_ref import Artifact as Artifact
-from factory.runtime.history.artifact_ref import transport_report as transport_report
 from factory.runtime.workflow_core import digest, require
 
 
@@ -86,19 +86,39 @@ def put(db: sqlite3.Connection, run: str, item: Artifact) -> str:
                 require(
                     copied.hexdigest() == checksum, f"Artifact changed while saving: {item.name}"
                 )
-        db.execute(
-            "INSERT INTO artifacts(run_id,path,kind,sha256,node_id,dispatch_id) VALUES (?,?,?,?,?,?) "
+        document_id = (
+            graph_documents.write(db, item.kind, item.document)
+            if item.document is not None
+            else None
+        )
+        reference = db.execute(
+            "INSERT INTO artifacts(run_id,path,kind,sha256,node_id,dispatch_id,document_id) VALUES (?,?,?,?,?,?,?) "
             "ON CONFLICT(run_id,path) DO NOTHING",
-            (run, item.name, item.kind, checksum, item.node, item.dispatch),
+            (run, item.name, item.kind, checksum, item.node, item.dispatch, document_id),
         )
         row = db.execute(
-            "SELECT sha256,kind,node_id,dispatch_id FROM artifacts WHERE run_id=? AND path=?",
+            "SELECT sha256,kind,node_id,dispatch_id,document_id FROM artifacts WHERE run_id=? AND path=?",
             (run, item.name),
         ).fetchone()
         require(
-            row == (checksum, item.kind, item.node, item.dispatch),
+            row == (checksum, item.kind, item.node, item.dispatch, document_id),
             f"Immutable artifact differs: {item.name}",
         )
+        if reference.rowcount and item.kind == "report" and isinstance(item.document, dict):
+            report = item.document["report"]
+            db.executemany(
+                "INSERT INTO report_lessons VALUES (?,?,?,?,?)",
+                (
+                    (
+                        reference.lastrowid,
+                        lesson["id"],
+                        lesson["revision"],
+                        lesson["result"],
+                        report["outcome"],
+                    )
+                    for lesson in report.get("applied_lessons", [])
+                ),
+            )
         if not inserted.rowcount:
             for _ in contents(db, run, item.name, checksum):
                 pass

@@ -6,6 +6,8 @@ import sqlite3
 import subprocess
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from factory.database.port import DatabaseBackend
@@ -19,7 +21,7 @@ from factory.runtime.lessons import Lesson, catalog
 from factory.runtime.packets.content import PACKET_REFERENCE, delivery_state
 from factory.runtime.workflow_core import Invalid
 from tests import CLI
-from tests.factory.runtime.workflow_fixture import WorkflowFixture
+from tests.factory.runtime.workflow_fixture import WorkflowFixture, bound_teacher
 
 
 class HistoryStoreTests(unittest.TestCase):
@@ -110,8 +112,11 @@ class HistoryStoreTests(unittest.TestCase):
                     "SELECT attempt,report_path FROM closed_steps WHERE node_id=?", (node,)
                 ).fetchone(),
             )
-            compact = json.loads(db.execute("SELECT record FROM closed_runs").fetchone()[0])
-            self.assertNotIn("report", compact["state"]["nodes"][node])
+            self.assertNotIn("record", [row[1] for row in db.execute("PRAGMA table_info(runs)")])
+            self.assertEqual(
+                db.execute("SELECT count(*) FROM graph_edges WHERE run_id=?", (run,)).fetchone()[0],
+                sum(len(n["depends_on"]) for n in f.g["nodes"]),
+            )
             paths = db.execute(
                 "SELECT report_path FROM closed_attempts WHERE run_id=? AND node_id=?",
                 (run, node),
@@ -147,7 +152,9 @@ class HistoryStoreTests(unittest.TestCase):
             applies_when="Testing",
             action="Measure the shim",
         )
-        original = teacher.apply(f.root, key, card, None, incident=incident)
+        original = teacher.apply(
+            f.root, key, card, None, incident=incident, dispatch_id=bound_teacher(f.root, key)
+        )
         restored = f.root / "restored"
         restored_db = restored / sqlite_history_repository.DATABASE
         restored_db.parent.mkdir(parents=True)
@@ -175,9 +182,19 @@ class HistoryStoreTests(unittest.TestCase):
             delivery_state(restored, meta, chunk["total"], "handle-author")["acknowledged"],
         )
         self.assertEqual([key], teacher.pending(restored))
-        self.assertEqual(original, teacher.apply(restored, key, card, None, incident=incident))
+        self.assertEqual(
+            original,
+            teacher.apply(
+                restored,
+                key,
+                card,
+                None,
+                incident=incident,
+                dispatch_id=bound_teacher(restored, key),
+            ),
+        )
         self.assertEqual([incident], list(catalog(restored)[0].lesson.sources))
-        teacher.complete(restored, key)
+        teacher.complete(restored, key, dispatch_id=bound_teacher(restored, key))
         self.assertEqual([], teacher.pending(restored))
         subprocess.run(
             [
@@ -323,6 +340,8 @@ class HistoryStoreTests(unittest.TestCase):
     def test_old_files_do_not_publish_state_jobs_or_cases(self) -> None:
         f = WorkflowFixture(self.addCleanup)
         folder = f.root / ".factory/memory"
+        self.assertEqual([], teacher.pending(f.root))
+        self.assertEqual(([], []), case_search.search_cases(f.root, "obsolete"))
         for name in (
             "state/workflow.json",
             "teacher/old.json",
@@ -345,6 +364,30 @@ class HistoryStoreTests(unittest.TestCase):
             memory.read_evidence(
                 f.root, ".factory/memory/history/obsolete/reports/orphan.json", run_id="obsolete"
             )
+
+        first = f.ledger.read()["run_id"]
+        f.complete()
+        f.ledger.archive("completed", "first clean-install run")
+        f.ledger.clean()
+        self.assertNotEqual(first, "obsolete")
+        self.assertIn(first, {hit.run_id for hit in case_search.search_cases(f.root, "fixture")[0]})
+        self.assertNotIn("obsolete", str(teacher.pending(f.root)))
+        self.assertEqual(([], []), case_search.search_cases(f.root, "obsolete"))
+
+    def test_rejecting_incompatible_wal_preserves_payload_and_pending_writes(self) -> None:
+        fixture = WorkflowFixture(self.addCleanup)
+        path = fixture.root / sqlite_history_repository.DATABASE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(path)) as db, db:
+            db.setconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, True)
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("CREATE TABLE old_state(value TEXT)")
+            db.execute("INSERT INTO old_state VALUES ('pending')")
+        wal = Path(str(path) + "-wal")
+        before = path.read_bytes(), wal.read_bytes()
+        with self.assertRaisesRegex(Invalid, "Unsupported workflow database"):
+            fixture.init()
+        self.assertEqual((path.read_bytes(), wal.read_bytes()), before)
 
     def test_unsupported_databases_are_left_intact(self) -> None:
         for version in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10):

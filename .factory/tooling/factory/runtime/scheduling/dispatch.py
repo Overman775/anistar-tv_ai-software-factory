@@ -1,14 +1,19 @@
 """Transitions local to a single workflow dispatch."""
 
-from typing import Literal, cast
-
 from factory.runtime.contracts import Dispatch
+from factory.runtime.scheduling.attempt_graph import Action, advance
 from factory.runtime.workflow_core import Invalid, require
+
+
+def check_identity(dispatch: Dispatch, expected: str | None) -> None:
+    require(
+        expected is None or dispatch.get("dispatch_id") == expected, "Assignment dispatch is stale"
+    )
 
 
 def mark_unknown(dispatch: Dispatch, reason: str) -> None:
     require(dispatch["status"] in {"reserved", "running"}, "Not an in-flight request")
-    dispatch.update({"status": "unknown", "reason": reason})
+    dispatch.update({"status": advance(dispatch, "lost"), "reason": reason})
 
 
 def reconcile(dispatch: Dispatch, status: str, evidence: str) -> None:
@@ -25,4 +30,9 @@ def reconcile(dispatch: Dispatch, status: str, evidence: str) -> None:
             not dispatch.get("prompt_submitted") and not dispatch.get("handle"),
             "Cannot redispatch an already sent assignment",
         )
-    dispatch["status"] = cast(Literal["reserved", "running", "blocked"], status)
+    recovery: dict[str, Action] = {
+        "reserved": "recover_reserved",
+        "running": "recover_running",
+        "blocked": "recover_blocked",
+    }
+    dispatch["status"] = advance(dispatch, recovery[status])

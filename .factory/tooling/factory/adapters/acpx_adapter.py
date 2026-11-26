@@ -31,8 +31,9 @@ from factory.runtime.contracts import (
     State,
     agent_key,
 )
-from factory.runtime.history.artifact_ref import Artifact, transport_report
-from factory.runtime.packets.content import freeze_packet, materialize_packet, read_packet_bytes
+from factory.runtime.history.artifact_ref import Artifact
+from factory.runtime.packets.content import freeze_packet, materialize_packet, read_packet_document
+from factory.runtime.scheduling.attempt_graph import advance
 from factory.runtime.scheduling.run_sessions import RunSessions
 from factory.runtime.transport import streams as transport_streams
 from factory.runtime.workflow import Ledger
@@ -180,26 +181,31 @@ def prepare_prompt(ledger: Ledger, node_id: str) -> dict[str, Any]:
         _, _, conn, session = assignment(s, node_id)
         _check_dispatch_workspace(ledger, s, conn)
         require(not v.get("prompt_submitted"), "Prompt already submitted")
-        meta, data = freeze_packet(
+        meta, document = freeze_packet(
             ledger.root, s, n, v, packets=ledger.packets, history=ledger.history
         )
         p = ledger.root / meta["path"]
-        report = transport_report(s["run_id"], node_id, v["dispatch_id"])
-        artifacts = s.setdefault("transport_artifacts", [])
-        if report not in artifacts:
-            artifacts.append(report)
         ledger.save_artifacts(
             s,
             "prompt_prepared",
-            (Artifact(meta["path"], "packet", data, node_id, v["dispatch_id"]),),
+            (
+                Artifact(
+                    meta["path"],
+                    "packet",
+                    document.content,
+                    node_id,
+                    v["dispatch_id"],
+                    document=document.packet,
+                ),
+            ),
             node=node_id,
             session=session,
         )
-        materialize_packet(ledger.root, meta, data)
+        materialize_packet(ledger.root, meta, document.content)
         return {
             "prompt": str(p),
             "session": session,
-            "report": str(ledger.root / report),
+            "dispatch_id": v["dispatch_id"],
             "create": build_command(s, node_id, "create"),
             "show": build_command(s, node_id, "show"),
             "prompt_argv": build_command(s, node_id, "prompt", p),
@@ -221,7 +227,11 @@ class TransportAttempt:
 
 
 def _prepare_operation(
-    ledger: Ledger, node_id: str, operation: str, lifetime: ExitStack
+    ledger: Ledger,
+    node_id: str,
+    operation: str,
+    lifetime: ExitStack,
+    requested_dispatch: str | None,
 ) -> TransportAttempt:
     with ledger.locked():
         s = ledger.read()
@@ -232,6 +242,10 @@ def _prepare_operation(
             _check_dispatch_workspace(ledger, s, conn)
         v = s["nodes"][node_id]
         expected_run, expected_dispatch = s["run_id"], v["dispatch_id"]
+        require(
+            requested_dispatch is None or requested_dispatch == expected_dispatch,
+            "Stale ACP operation",
+        )
         require(
             v["status"] in {"reserved", "running", "unknown", "done", "blocked"},
             "Node not dispatched",
@@ -259,11 +273,11 @@ def _prepare_operation(
             ledger.packet_dispatch(s, node_id, runner="acpx")
             meta = v.get("packet_file")
             if meta is None:
-                raise Invalid("Prepare JSON packet before prompt")
-            data = read_packet_bytes(
+                raise Invalid("Prepare the assignment before sending a prompt")
+            document = read_packet_document(
                 ledger.root, s, n, meta, meta, packets=ledger.packets, history=ledger.history
             )
-            materialize_packet(ledger.root, meta, data)
+            materialize_packet(ledger.root, meta, document.content)
             prompt_path = ledger.root / meta["path"]
             bound = s["sessions"].get(agent_key(n))
             require(
@@ -351,7 +365,7 @@ def _record_outcome(ledger: Ledger, transport: TransportAttempt, exit_code: int 
             if operation == "create" and exit_code == 0:
                 RunSessions(state).confirm_acp_creation(transport.session)
             if operation in {"create", "prompt"} and exit_code != 0:
-                attempt["status"] = "unknown"
+                attempt["status"] = advance(attempt, "lost")
         streams = {
             kind: path.relative_to(ledger.root).as_posix()
             for kind, path in (("stdout", transport.out), ("stderr", transport.err))
@@ -402,10 +416,11 @@ def run_operation(
     operation: str,
     *,
     run: TransportRunner | None = None,
+    expected_dispatch: str | None = None,
 ) -> dict[str, Any]:
     # Journal before transport, then reconcile only the same dispatch.
     with ExitStack() as lifetime:
-        attempt = _prepare_operation(ledger, node_id, operation, lifetime)
+        attempt = _prepare_operation(ledger, node_id, operation, lifetime, expected_dispatch)
         result = _execute_operation(ledger, attempt, subprocess.run if run is None else run)
         return _reconcile_operation(ledger, attempt, result)
 
@@ -459,6 +474,7 @@ def build_parser(
     sub.add_parser("prepare").add_argument("node")
     r = sub.add_parser("run")
     r.add_argument("node")
+    r.add_argument("--dispatch", required=True)
     r.add_argument("operation", choices=["create", "show", "status", "prompt", "cancel", "close"])
     return p
 
@@ -491,7 +507,9 @@ def run(args: argparse.Namespace, p: argparse.ArgumentParser) -> int:
         elif args.action == "prepare":
             result = prepare_prompt(ledger, args.node)
         else:
-            result = run_operation(ledger, args.node, args.operation)
+            result = run_operation(
+                ledger, args.node, args.operation, expected_dispatch=args.dispatch
+            )
         if args.action == "doctor" and result["errors"]:
             failed = True
             event("operation_failed", error_code="executable_unavailable")

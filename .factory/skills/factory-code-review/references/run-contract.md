@@ -1,6 +1,6 @@
 # Review run contract
 
-Run from the reviewed workspace with the factory CLI. `cli review run`
+Run the accepted factory CLI from the reviewed workspace. If the candidate changes review tooling, invoke the CLI from the independent accepted installation. `cli review run`
 is the local lifecycle entry point, not an agent scheduler or server. Host adapters own
 spawn/wait/session operations. All three assignments use the configured reviewer role default, recorded in each assignment.
 
@@ -48,38 +48,19 @@ compares it to the actual checkout comparison. Full diff validation remains.
 
 ## Local lifecycle
 
-- `init --input REQUEST --run RUN`: creates a new directory; never overwrites.
-- `status --run RUN`: derives status from current validated artifacts, no second status ledger.
-- `assignment --id DIRECTION --run RUN`: emits assignment JSON for `cli context`.
-- `check --id CHECK --run RUN`: executes exact pinned command after dependency PASS.
-- `submit --id DIRECTION --input RESULT --run RUN`: preserves one returned attempt;
-  explicit failed/invalid output permits one recovery. Healthy results cannot be replaced. Recovery retains valid findings from an incomplete
-  attempt; only evidenced QA can dismiss or change their interpretation.
-- `finish --input QA --run RUN`: preserves QA and writes final-N/result.json + report.md.
-  Incomplete results retain valid findings. Final folders preserve history, not cached approvals.
+The new run and its frozen inputs, attempts, command receipts and QA live in SQLite. Use the returned run ID in a fresh CLI process. Host adapters own launch and observation.
 
-Manifest, local input hashes, attempt results and logs live only in RUN. Calls acquire
-an OS-owned lock in `.review.lock`; the file must remain in place. An interrupted check
-leaves `.check-in-progress`. A matching, validated saved attempt clears the marker after
-freshness checks. Otherwise inspect the command and logs, confirm it stopped and start a
-new review. A legacy `.busy` has no owner identity. Identify the old owner PID and verify
-that all its child commands stopped; then run `cli review run recover-legacy --run RUN
---legacy-owner-pid PID`. The command requires a dead owner PID, an empty marker and successful
-freshness and interrupted-check validation before it removes `.busy`. PID
-verification is available on POSIX only. The operator identifies the correct
-owner and verifies that its children stopped.
-Recovery accepts a lock whose inputs still match. It also accepts a lock-only
-upgrade from the three exact versions of `command_worker.py`, `cli review run`
-and this contract in Lab `dfe5cfba`, when all other recorded inputs still match
-and none of the changed files is a reviewed source, diff or command input.
-Runs with broader drift, including runs pinned to an unmodified
-`211d3162` factory, need new intake. Their old marker and input lock stay in place.
-A validated BLOCKED attempt retains its concrete execution error and may be
-retried within the existing attempt limit.
-Never treat elapsed time as failure. No distributed lease,
-remote queue, automatic retry of unknown execution or background model process exists.
-A command changing pinned bytes blocks the run; review is not an autofix mechanism.
-Recovery is for the same inputs. Changed revision requires new identity and fresh review.
+| Operation | Input and result |
+| --- | --- |
+| `init` | `--input REQUEST --run NAME` captures a reviewed subject. |
+| `status` | `--run RUN` returns independent directions, checks and unresolved command reservations. |
+| `assignment` | `--id DIRECTION --run RUN --request KEY` reserves one ticket. |
+| `bind`, `packet` | Supply the direction, run, dispatch and observed handle. Only the assigned direction's evidence is delivered. |
+| `note`, `submit` | The original dispatch records a partial observation or returned result. For submission provide `--input FILE`. |
+| `check` | Supply the declared check ID and stable request. The receipt covers the pinned command and input files. |
+| `reconcile-check` | After observing the original process and child stopped, supply `--id`, `--original-request`, evidence and a new request key. A missing exit result is BLOCKED. |
+| `cancel` | Supply the owner reason after reconciling outstanding checks and workers. History remains available. |
+| `finish`, `report` | QA supplies its assessed evidence via `--input FILE`. Read the resulting Markdown from the run. |
+| `history`, `clean` | The completed run retains attempts, observations and results by ID. |
 
-Standalone low-level protocol helpers are validation/diagnostic tools. Finish through
-`cli review run` to enforce local input freshness as well as artifact validation.
+Reuse a mutation key only for identical input. Reconcile an unknown process against its actual host handle. Observed failure can release the affected direction within its retry budget. Capture changed scope, head or mandatory inputs as a new review.

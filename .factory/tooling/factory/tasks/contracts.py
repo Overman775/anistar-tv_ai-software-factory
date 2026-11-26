@@ -30,6 +30,9 @@ class Task(TypedDict):
     reason: Nonblank
     risk: Literal["low", "moderate", "high"]
     kind: Literal["feature", "task", "refactor", "fix", "docs", "integration"]
+    inquiry: NotRequired[Literal["research", "diagnosis"]]
+    owner_review_ref: NotRequired[Nonblank]
+    write_scope: NotRequired[TaskScope]
     independent_review: bool
     scope: TaskScope
     depends_on: NotRequired[list[str]]

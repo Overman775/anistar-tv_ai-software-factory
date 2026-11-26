@@ -1,0 +1,27 @@
+id: implement
+entry: attempt
+assignments:
+  intake: implement-intake
+  source: implement-source
+  implementer: role-assignment
+  teacher: teacher
+nodes:
+  attempt:
+    decision: attempt
+    routes:
+      - {outcome: unknown, priority: 60, target: reconcile}
+      - {outcome: blocked, priority: 50, target: recovery}
+      - {outcome: tester, priority: 45, target: verify}
+      - {outcome: started, priority: 40, target: observe}
+      - {outcome: prerequisite, priority: 30, target: wait_source}
+      - {outcome: acceptance, priority: 20, target: accept}
+      - {outcome: pending, priority: 10, target: authorize}
+  reconcile: {operation: reconcile_transport}
+  recovery: {operation: correction_gate, after: choose_recovery}
+  choose_recovery: {call: implement-recovery}
+  observe: {operation: observe_attempt}
+  wait_source: {operation: wait_source_prerequisite}
+  accept: {operation: acceptance_gate}
+  authorize: {operation: assignment_gate, after: delivery}
+  delivery: {call: worker-delivery}
+  verify: {call: tester}

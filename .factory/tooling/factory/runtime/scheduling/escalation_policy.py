@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Literal
+from functools import cache
+from graphlib import CycleError
+from typing import Literal, cast
 
 from pydantic import TypeAdapter, ValidationError
+from pydantic_graph import Graph, GraphBuilder, StepContext
 
+from factory.dependency_graph import compile_dependencies, run_program
 from factory.runtime.contracts import (
     Config,
     EscalationPolicy,
@@ -55,13 +59,24 @@ def routing(
                 role in {"implementer", "developer", "test-writer"},
                 "Escalation supports Implementer in new Implement assignments",
             )
+    dependencies = {
+        name: [policy["to"]]
+        if (policy := profile.get("escalation")) and policy["to"] != "human"
+        else []
+        for name, profile in profiles.items()
+    }
+    ensure(
+        all(target in profiles for targets in dependencies.values() for target in targets),
+        "Unknown escalation target",
+    )
+    try:
+        chain = compile_dependencies(dependencies)
+    except CycleError as exc:
+        raise ValueError("Escalation cycle") from exc
     for name, profile in profiles.items():
-        seen, cursor = set(), name
-        while cursor != "human":
-            ensure(cursor not in seen, "Escalation cycle")
-            seen.add(cursor)
-            ensure(cursor in profiles, "Unknown escalation target")
-            current = profiles[cursor]
+        for target in chain.ancestors(name):
+            current = profiles[target]
+            ensure(current.get("escalation"), "Escalation chain must end at human")
             for key in ("role", "contract", "capabilities", "enforcement"):
                 ensure(
                     current[key] == profile[key],
@@ -71,11 +86,6 @@ def routing(
                 set(current["mcp"]) == set(profile["mcp"]),
                 "Escalation must preserve required tools",
             )
-            policy = current.get("escalation")
-            if policy is None:
-                ensure(cursor == name, "Escalation chain must end at human")
-                break
-            cursor = policy["to"]
     ensure(set(defaults) <= {f"roles/{role}.md" for role in roles}, "Unknown default role")
     runtime_defaults = {}
     for role, names in roles.items():
@@ -145,20 +155,74 @@ def guard(
     )
 
 
+type CorrectionRoute = tuple[str, Literal["blocked", "human", "retry", "escalate"]]
+
+
+@dataclass(frozen=True)
+class CorrectionInput:
+    kind: str
+    profile: str
+    policy: EscalationPolicy
+    failures: int
+    used: int
+    limit: int
+
+
+async def hold_for_resolution(ctx: StepContext) -> CorrectionRoute:
+    return cast(CorrectionInput, ctx.inputs).profile, "blocked"
+
+
+async def wait_for_human(ctx: StepContext) -> CorrectionRoute:
+    return "human", "human"
+
+
+async def retry_profile(ctx: StepContext) -> CorrectionRoute:
+    return cast(CorrectionInput, ctx.inputs).profile, "retry"
+
+
+async def escalate_profile(ctx: StepContext) -> CorrectionRoute:
+    return cast(CorrectionInput, ctx.inputs).policy["to"], "escalate"
+
+
+@cache
+def correction_graph() -> Graph:
+    builder = GraphBuilder(name="Correction", input_type=CorrectionInput, auto_instrument=False)
+    blocked = builder.step(hold_for_resolution)
+    human = builder.step(wait_for_human)
+    retry = builder.step(retry_profile)
+    escalate = builder.step(escalate_profile)
+    target = (
+        builder.decision(node_id="configured_escalation_target")
+        .branch(
+            builder.match(CorrectionInput, matches=lambda c: c.policy["to"] == "human").to(human)
+        )
+        .branch(
+            builder.match(CorrectionInput, matches=lambda c: c.policy["to"] == c.profile).to(retry)
+        )
+        .branch(builder.match(CorrectionInput).to(escalate))
+    )
+    route = (
+        builder.decision(node_id="diagnosis_and_budget")
+        .branch(
+            builder.match(
+                CorrectionInput, matches=lambda c: c.kind in {"environment", "requirements"}
+            ).to(blocked)
+        )
+        .branch(builder.match(CorrectionInput, matches=lambda c: c.used >= c.limit).to(human))
+        .branch(
+            builder.match(
+                CorrectionInput, matches=lambda c: c.failures >= c.policy["after_failed_attempts"]
+            ).to(target)
+        )
+        .branch(builder.match(CorrectionInput).to(retry))
+    )
+    builder.add_edge(builder.start_node, route)
+    builder.add(builder.edge_from(blocked, human, retry, escalate).to(builder.end_node))
+    return builder.build()
+
+
 def correction_decision(
     kind: str, profile_id: str, policy: EscalationPolicy, failures: int, used: int, budget: int
-) -> tuple[str, Literal["blocked", "human", "retry", "escalate"]]:
-    """Pure retry/escalation choice; no counters or sessions are changed here."""
-    target = profile_id
-    decision: Literal["blocked", "human", "retry", "escalate"]
-    if kind in {"environment", "requirements"}:
-        decision = "blocked"
-    elif used >= budget:
-        target, decision = "human", "human"
-    else:
-        if failures >= policy["after_failed_attempts"]:
-            target = policy["to"]
-        decision = (
-            "human" if target == "human" else ("escalate" if target != profile_id else "retry")
-        )
-    return target, decision
+) -> CorrectionRoute:
+    facts = CorrectionInput(kind, profile_id, policy, failures, used, budget)
+    return cast(CorrectionRoute, run_program(correction_graph(), inputs=facts))

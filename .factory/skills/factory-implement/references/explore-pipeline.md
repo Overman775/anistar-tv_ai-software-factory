@@ -8,6 +8,6 @@ actual adapter, checkpoint contract and distinct output identity. Never start
 implementation just because code was inspected. Save a concise read-only result
 in history; implementation begins only from authorized source intake. The
 implementation ledger schema is for implementation graphs; read-only work may
-use a compact JSON history record without fictional implementation/test gates.
+retain a typed outcome and evidence reference without fictional implementation/test gates.
 
 Use `.factory/workflow/orchestration.md`, shared gates, state and finalize contracts.

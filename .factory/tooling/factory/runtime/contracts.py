@@ -87,7 +87,25 @@ class ExternalApproval(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class UpstreamTask(TypedDict):
+    path: str
+    snapshot: str
+    content_hash: str
+    blocked_by: list[str]
+    depends_on: list[str]
+    acceptance_ids: list[str]
+    contributes_to_acceptance_ids: list[str]
+    local_acceptance_criteria: list[Criterion]
+    outcome: str
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class SourceFields(TypedDict, total=False):
+    decomposition_run: str
+    semantic_gap: Nonblank
+    no_plan_ref: Nonblank
+    delegated_planning_ref: Nonblank
+    upstream_tasks: dict[str, UpstreamTask]
     text: str
     path: str
     selected_scope: str | list[str]
@@ -307,29 +325,6 @@ class Orchestrator(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
-class LegacyTelemetrySettings(TypedDict):
-    """Keep previously frozen runs readable with their original settings."""
-
-    otlp_enabled: bool
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
-class FrozenLogReceiver(TypedDict):
-    endpoint: str
-    headers: NotRequired[dict[str, str]]
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
-class NestedTelemetrySettings(TypedDict):
-    """Read snapshots created before logs acquired an independent switch."""
-
-    logs: FrozenLogReceiver
-    enabled: NotRequired[bool]
-    endpoint: NotRequired[str]
-    headers: NotRequired[dict[str, str]]
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
 class Settings(TypedDict):
     project: Nonblank
     router: Nonblank
@@ -344,7 +339,7 @@ class Settings(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class Config(Settings):
-    telemetry: NotRequired[TelemetrySettings | LegacyTelemetrySettings | NestedTelemetrySettings]
+    telemetry: NotRequired[TelemetrySettings]
     logs: NotRequired[TelemetrySettings]
     profiles: dict[Alias, Profile]
     routing: Routing
@@ -356,7 +351,7 @@ class Config(Settings):
     # Declarative project data is composed and validated by the profile boundary.
     _project: Policy
     _project_documents: NotRequired[dict[str, str]]
-    _documents: NotRequired[dict[str, str]]
+    _documents: dict[str, str]
     _binary_dependencies: NotRequired[list[str]]
 
 
@@ -490,7 +485,68 @@ class AppliedLesson(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class WriteOffer(TypedDict, total=False):
+    code: list[Nonblank]
+    tests: list[Nonblank]
+    docs: list[Nonblank]
+    docs_current: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class WriteProof(TypedDict):
+    offer: WriteOffer
+    files: dict[str, str]
+    basis: dict[str, str]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class WriteDelivery(TypedDict):
+    steps: NotRequired[dict[str, str]]
+    request_id: Nonblank
+    proof: WriteProof
+
+
+RoleMaterialKind = Literal[
+    "reproduction",
+    "observation",
+    "request-check",
+    "cause",
+    "documents",
+    "document-review",
+    "analysis",
+]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class RoleMaterial(TypedDict):
+    kind: RoleMaterialKind
+    observation: Nonblank
+    paths: list[Nonblank]
+    checks: NotRequired[list[CheckId]]
+    receipts: NotRequired[list[Nonblank]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class RoleRecord(TypedDict):
+    request_id: Nonblank
+    material: RoleMaterial
+    files: dict[str, str]
+    links: dict[str, str]
+    verification_node: NotRequired[Nonblank]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class CriterionAssessment(TypedDict):
+    conclusion: Nonblank
+    receipts: list[Nonblank]
+    requested_checks: NotRequired[list[CheckId]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class ReportEvidence(TypedDict, total=False):
+    role_material: list[RoleMaterial]
+    criterion_assessments: dict[Nonblank, CriterionAssessment]
+    write_result: WriteOffer
     applied_lessons: list[AppliedLesson]
     applied_cases: list[AppliedCase]
     review_checks: list[ReviewCheck]
@@ -548,9 +604,22 @@ class PacketRef(TypedDict):
     revision: str
 
 
+type DispatchStatus = Literal["pending", "reserved", "running", "unknown", "done", "blocked"]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ReportSubmission(TypedDict):
+    request_id: str
+    report_id: str
+
+
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class Dispatch(TypedDict, total=False):
-    status: Required[Literal["pending", "reserved", "running", "unknown", "done", "blocked"]]
+    document_baseline: dict[str, str]
+    role_records: list[RoleRecord]
+    write_deliveries: list[WriteDelivery]
+    terminal_input: Nonblank
+    status: Required[DispatchStatus]
     attempt: Required[Budget]
     dispatch_id: str
     pool: str
@@ -561,12 +630,11 @@ class Dispatch(TypedDict, total=False):
     report: Report
     assignment: Assignment
     report_ref: ReportRef
+    submission: ReportSubmission
     prompt: dict[str, str]
     packet_file: PacketRef
-    packet_chunks_read: int
     packet_receipt: str
-    packet_confirmed: bool
-    packet_delivery_version: Literal[2]
+    confirmed_packet_sha256: str
     prompt_submitted: bool
     prompt_hash: str
     gate_result: GateResult
@@ -593,6 +661,32 @@ class CompositeStage(TypedDict):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class ProcessOwner(TypedDict):
+    execution_id: Nonblank
+    process_group: Positive
+    platform: Literal["posix", "nt"]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class StageFacts(TypedDict):
+    input_scope: list[str]
+    files: dict[str, str]
+    after_files: dict[str, str]
+    exit_code: int | None
+    error: str | None
+    mode: NotRequired[Literal["full", "filtered", "update"] | None]
+    selection: NotRequired[TestSelection | None]
+    verification: NotRequired[list[Verification]]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
+class ProcessFacts(TypedDict):
+    execution_id: Nonblank
+    process_group: Positive
+    stages: dict[str, StageFacts]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class ExecutionReceipt(TypedDict, total=False):
     run_id: Required[str]
     node_id: Required[str]
@@ -604,6 +698,8 @@ class ExecutionReceipt(TypedDict, total=False):
     status: Required[str]
     started_at: Required[float]
     runner_pid: int
+    owner: ProcessOwner
+    process_facts: ProcessFacts
     request_id: Required[str]
     composite_stages: list[CompositeStage]
     composite_parent: str
@@ -639,11 +735,13 @@ class RetroNote(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class LedgerEvent(TypedDict):
+    route: NotRequired[list[str]]
     lesson_retro: NotRequired[RetroNote]
     lesson_incident: NotRequired[str]
     lesson_checkout: NotRequired[str | None]
     lesson_user: NotRequired[str]
     lesson_reports: NotRequired[list[ReportRef]]
+    lesson_accepted_reports: NotRequired[dict[str, ReportRef]]
     lesson_applications: NotRequired[list[AppliedLesson]]
     lesson_applied_cases: NotRequired[list[AppliedCase]]
     at: float
@@ -696,7 +794,8 @@ class CorrectionSummary(TypedDict):
     cause: Literal["static", "tests", "docs", "review"]
     reason: Nonblank
     handoff: Nonblank
-    evidence: Report
+    evidence: ReportSummary
+    report_ref: ReportRef
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -735,6 +834,9 @@ class Session(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class State(TypedDict):
+    route_holds: NotRequired[dict[str, str]]
+    definitions: dict[str, Nonblank]
+    contract_baseline: dict[str, str]
     lesson_run_checkout: str | None
     final_teacher_event: NotRequired[str]
     run_id: str
@@ -753,7 +855,7 @@ class State(TypedDict):
     acp_created: NotRequired[dict[str, str]]
     epochs: NotRequired[dict[str, int]]
     retired_handles: NotRequired[list[str]]
-    handle_owners: NotRequired[dict[str, str]]
+    handle_owners: dict[str, str]
     events: list[LedgerEvent]
     corrections: NotRequired[list[CorrectionRecord]]
     review_findings: NotRequired[dict[str, dict[str, FindingRecord]]]

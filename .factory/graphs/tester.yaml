@@ -1,0 +1,21 @@
+id: tester
+entry: assignment
+nodes:
+  assignment:
+    decision: tester_state
+    routes:
+      - {outcome: started, priority: 30, target: inspect}
+      - {outcome: prerequisite, priority: 20, target: wait_source}
+      - {outcome: pending, priority: 10, target: check_eligibility}
+  inspect: {operation: observe_attempt}
+  wait_source: {operation: wait_source_prerequisite}
+  check_eligibility: {operation: verification_gate, after: order}
+  order:
+    decision: check_order
+    routes:
+      - {outcome: full_with_peer, priority: 20, target: wait_peer}
+      - {outcome: focused_with_peer, priority: 20, target: release}
+      - {outcome: eligible, priority: 10, target: release}
+  wait_peer: {operation: wait_for_verification}
+  release: {operation: verified_assignment, after: delivery}
+  delivery: {call: worker-delivery}

@@ -16,7 +16,7 @@ Delegated handoff follows `.factory/contracts/common/worker-rules.md`.
 ## Input
 
 - Raw request/spec/ticket or requested semantic plan revision.
-- Current `.factory/memory/staging/planning-session.md` with source lock, decisions,
+- Current Planning packet with source lock, decisions,
   contradictions, and bounded unknowns.
 - Full canonical architecture documents selected by the project profile.
 - Bounded relevant code/analysis, Architect input and plan contracts.
@@ -28,19 +28,7 @@ for missing evidence or a contradiction found during preflight.
 
 ## Allowed Writes
 
-- `.factory/memory/staging/planning-plan.md.candidate` only.
-
-Write and validate candidate only. Read live `planning-plan.md` as `--previous`
-when present; never rename over it. Coordinator alone promotes after independent
-semantic preflight and transition validation.
-
-## Forbidden Writes
-
-- Live `.factory/memory/staging/planning-plan.md`.
-- Production code and tests.
-- `docs/plans/` approval copy.
-- Task decomposition, task IDs, estimates, dependencies, `docs/tasks/`.
-- Factory Implement state and `implementation-plan.md`.
+Author candidate Markdown in a private working file and return exact bytes with the original dispatch. The coordinator alone reviews, approves and publishes it. Production files, public plans and decomposed tasks lie outside the assignment.
 
 ## Done Signal
 

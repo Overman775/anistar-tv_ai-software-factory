@@ -226,7 +226,7 @@ def accepted_path(config: Config, root: str | Path, rel: str, *, exists: bool = 
     """Resolve an accepted path without inspecting its candidate replacement."""
     _validate_path(rel)
     target = Path(root) / rel
-    if str(target) in config.get("_documents", {}):
+    if str(target) in config["_documents"]:
         return target
     return path(root, rel, exists=exists)
 
@@ -235,7 +235,7 @@ def accepted_bytes(
     config: Config, file: Path, fallback: Callable[[Path], bytes] = file_reader.read_bytes
 ) -> bytes:
     key = str(file)
-    pinned = config.get("_documents", {}).get(key)
+    pinned = config["_documents"].get(key)
     expected = config.get("_project_documents", {}).get(key) or config["_files"].get(key)
     recovery = (
         f"Accepted document bytes unavailable or invalid: {file}. "
@@ -537,7 +537,7 @@ def build(
         }
         selected = []
     else:
-        if not active or "_documents" not in config:
+        if not active:
             check_frozen(policy["files"])
             check_frozen(config.get("_project_documents", {}))
         selected = selected_materials(

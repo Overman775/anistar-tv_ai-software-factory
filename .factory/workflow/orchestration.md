@@ -37,16 +37,14 @@ If the native host cannot place a worker in that checkout, report a blocker.
 Keep the path and branch in the handoff so continuation opens the same checkout.
 See [workspace selection](README.md#workspace-selection) for setup and failure modes.
 
-Save `.factory/tooling/bin/cli workflow config`
-output as JSON in OS temporary storage. Keep it through `init`; do not send it
-to workers. Use `cli workflow read-instructions SNAPSHOT PATH...` for mandatory Implement factory instructions.
+Keep the instruction pin printed by `.factory/tooling/bin/cli workflow config` through initialization.
+Read mandatory Implement instructions with `cli workflow read-instructions PIN PATH...`.
 Paths are relative to `.factory/`. Use the returned content, including when
 rereading this policy and the entry skill. The command verifies the same bytes.
 Read the Orchestrator role and contract, communication and project policy,
 execution source contract, configured router, this policy and their applicable
 Implement instruction links through that command. Other process handoffs follow
-their own entry instructions. On changed bytes, stop and reload the snapshot and
-instructions; pass the same snapshot to `init`.
+their own entry instructions. On changed bytes, obtain a fresh pin, reread the instructions and pass that pin to `init`.
 
 Resolve project inputs with `.factory/tooling/bin/cli project context --process implement --audience coordinator`.
 Add `--scope PATH` for each known scope. Read returned instructions and applicable
@@ -87,181 +85,19 @@ graphs in history.
 
 ## Graph and verification
 
-Build/reuse slices, tasks and agent steps; record why the selected team is sufficient.
-Use the [state contract](../skills/factory-implement/references/shared-state.md)
-and [workflow usage](README.md). Run `cli workflow init GRAPH --config-pin CONFIG_SNAPSHOT`
-to verify observed instruction versions; validate before dispatch.
-Persist an acyclic graph before the first worker. Include the run-level `after_archive: teacher` step in the first execution sketch and every revision. Show it after final acceptance and successful archival. Each logical agent has one ID;
-Implementer instances have distinct IDs. Steps bind task, slice, source hashes,
-profile, inputs, owned paths, dependencies and output. Fixes reuse nodes with new
-attempts. Runtime state is authoritative; Mermaid sequenceDiagram only projects it: one lifeline
-per agent, `par` for safe parallelism, dashed findings through the parent to owner.
+For direct work register the typed execution with `graph_inputs.propose`; for an approved plan use `graph_inputs.propose_plan(root, execution, source_id, plan)`. To consume published Decompose tasks pass `decomposition_run=RUN_ID`. IDs, coverage, parent edges and prerequisites are verified from that run. Supply write scope, investigation objective, relevant public surfaces, binding directives and mandatory gates. Use empty nodes and agents for the ordinary graph-built route. Initialize with `cli workflow init PROPOSAL_ID --config-pin PIN`.
 
-Launch only ready, reserved assignments. Plan roles and assignments in advance;
-create or resume a physical worker only when it can perform concrete authorized
-work now, with available inputs, resources and a defined output. Do not create
-a session whose only assignment is to wait for future work or a dependency.
-
-Preparatory work may start early only as an ordinary assignment supported by
-an existing stage and role contract, with a useful deliverable. Do not introduce
-a preparation stage or create a separate node merely to read context. The parent
-can do lightweight preparation inline; otherwise keep it in the worker's assignment.
-Before dispatch, ensure the worker can satisfy the stage's result contract with
-currently available inputs. Implement reports require current hashes of the entire
-task scope, including files outside the worker's owned paths; concurrent writes
-can invalidate that evidence. Coordinate a stable handoff before accepting it;
-never omit hashes, reuse stale evidence or run a retry loop to race active writes.
-If these conditions cannot be met, defer the assignment. Never remove dependencies
-to start early; code-dependent tests and final review wait for their required inputs.
-
-An existing session waiting between assignments is not a new idle worker.
-Reuse it only under the existing role, context and host rules; do not automatically
-recreate it to avoid waiting. Do not assume an idle session releases a host slot.
-Dependent slices wait for predecessor acceptance; independent slices may overlap
-when ownership/resources permit. Concurrent writers never
-own overlapping paths. Shared build, generation/check commands serialize
-on `project-checks`. Authoritative snapshot checks require a quiescent checkout;
-never merge active writes into a tested snapshot.
-
-After writers join, verify the integrated tree and end-to-end behavior, then
-accept each slice. Batch acceptance additionally requires cross-slice scenarios
-and mandatory deferred work; local PASS is not integration PASS.
+`workflow status` shows eligible nodes, source stops, selected roles and required checks. Resolve a named external fact with `workflow resume-task TASK EVIDENCE --stop STOP_ID`. Worker packages include their exact inputs, scope, authority, evidence and requested result. [State contract](../skills/factory-implement/references/shared-state.md) · [CLI](README.md)
 
 ## Gates and corrections
 
-Read the [shared acceptance contract](../gates/common/verification-rules.md),
-[Implement gates](../gates/skills/implement.md) and coordinator
-[acceptance data](../skills/factory-implement/references/acceptance-data.md).
-Carry stable AC IDs through source, tasks, required checks and results.
-Acceptance criteria neither replace mandatory project gates nor limit additional
-risk-based checks.
+Read the offered operation, target, evidence and remaining budget in `workflow status`. Inspect `workflow explain NODE --dispatch TICKET` for the recorded route. Qualify a confirmed finding with owner and affected paths. State what is still unknown when evidence cannot identify the cause. The graph checks the permitted transition again on mutation. Only the coordinator can issue a correction, grant an additional check or accept a result.
 
-Apply Implement's shared gates: architecture, source integrity, static/test/build,
-golden, refactor and evidence. Reports bind final scope and file hashes;
-process exit or ACP delivery is not a gate verdict.
-
-Wait for outstanding native packet confirmations, including other nodes, before
-`checks run`. The command identifies waiting nodes; a ready check reservation does
-not clear this delivery gate.
-
-Register applicable mandatory commands in task `required_checks.execution` before
-intake, with argv/cwd/timeout and additional input files. Execute through
-`cli checks run NODE CHECK_ID --request REQUEST_ID --dispatch DISPATCH_ID` under project-checks; use the stored result
-unchanged in the report. Never infer PASS from successful transport, CLI `ok`,
-a missing exit code or a RUNNING receipt. A command failure needs diagnosis before
-an explicit retry. See workflow README for synchronous locking and process recovery.
-The runner does not decide whether test assertions or test selection are correct.
-
-Update affected docs/specs within authorized scope before final verification;
-author/DocWriter selection follows the router. If none apply, record
-`not_applicable` with a reason. Final review covers code, tests and docs; eligible low-risk, local, reversible work with an explicit behavior and reliable oracle may finish after Tester verification when no user or project rule requires independent review. Higher risk, required independence and multi-task integration require an independent Judge. Subsequent writes invalidate affected verification and review.
-
-Return code and test defects to the original Implementer; never weaken correct
-assertions to pass broken code. Keep finding IDs across reviews. Ambiguous
-ownership or environment failure returns to the parent; repeated failures require
-diagnosis before team expansion (router).
-When Judge returns `BLOCKED` with `CHECKS_REQUESTED`, check the candidate and the requested registered check. Use `cli workflow revise` to append a Tester `verify` node with the requested `required_check_ids` and add it to the existing review's `depends_on`. Preserve the task, author and current full verification. After Tester returns, dispatch Judge with the new receipt. A changed candidate needs fresh verification. A missing assertion needs an author correction.
-
-For Judge corrections use [persistent review findings](../contracts/common/review-findings.md):
-route open IDs to their owner, then ready IDs to independent re-review. Never erase
-the registry during retries/revisions or treat an author handoff as closure.
-
-Retry budgets belong to stable task+cause and come from `execution.retry_budgets`.
-Initial work is separate from retries; integration uses feature review budget
-when the fixed batch contains a feature. Session/profile/graph changes never
-reset counters. Requirements, project gates and additional checks stay intact.
-
-If an accepted BugHunter diagnosis attributes a blocked Tester verification to
-production code, use [revise with a test retry](README.md#repair-revision-and-recovery)
-before the Implementer edits. Point to the failed dispatch and diagnosis in the
-decision. Dispatch Tester again after accepting the repair.
-
-For profiles with escalation, use `cli workflow correct NODE DECISION_JSON` after
-reviewing terminal failed/blocked evidence. NODE identifies the responsible
-worker's work, not necessarily the checking node. Include exact author/evidence
-dispatch IDs, cause, diagnosis, reason, terminal evidence and a scoped handoff.
-Use the schema in workflow README. The coordinator verifies diagnosis and actual
-termination; the helper enforces identity, current source/files, budget and target.
-Quiesce the whole run first. Never turn unknown work into a failure or resubmit
-it merely because a wait timed out.
-
-The correction transaction records the decision, invalidates affected dependent
-results and opens only a permitted retry. Quality consumes one remaining retry;
-profile changes require an evidenced unsuccessful attempt and the configured threshold.
-Before a profile change, retain old handles/connection identities and close a
-terminal ACP session through its adapter while the old node assignment still
-addresses it. The node-scoped ACP helper addresses the new assignment after
-correction; it cannot close the old session by that node then. Native closure
-uses the actual host API, with retained capacity recorded if unavailable.
-A changed profile gets a fresh logical agent and physical session for the corrected
-author's affected nodes in this task. Other agents, independent nodes and other
-tasks keep their assignments. The helper never closes a
-backend or spawns a model. Same-profile retries may reuse a suitable session.
-Check returned decision: CLI success is not task success; human/blocked stops
-claim and acceptance. `resume-task` requires resolved blocker/human evidence and
-opens the stopped work and its dependents as pending, spending one remaining
-recovery for environment or one retry of the original cause otherwise. It never
-resets budgets. An exhausted budget cannot be resumed through this command.
-
-Use ordinary `retry` for non-escalating profiles and the separately budgeted
-transport recovery without terminal FAIL/BLOCKED reports in affected nodes.
-Reported blockers in escalation-enabled Implementer assignments require
-correct and resume-task. Non-escalating profiles use ordinary retry with recorded
-blocker resolution; do not invoke an unsupported escalation transition. The next packet contains task-scoped correction history,
-current source/AC, findings, dependencies and remaining budgets. Prior reports
-are historical evidence, not proof that current files pass. No automatic parent
-or predecessor transcript inheritance and no worker-side escalation policy.
-
-Before finishing a predecessor needed downstream, read its author report against
-the [dependency-handoff contract](../contracts/common/implement-result.md#dependency-handoff);
-compare it with the locked source and applicable documents for the downstream
-consumer. Return missing or ambiguous facts to the same bound author for a
-report-only amendment after the terminal turn and writer reconciliation, if the
-adapter permits continuation; reread before `finish`. If continuation is
-unavailable, preserve the terminal report and use the normal verification-failure
-and correction path, or block; do not change its outcome or dispatch the successor.
-After `finish`, the ledger holds
-a copy: use the existing correction/retry path and invalidate dependent evidence,
-not an edit to the output file. For an explicitly required durable handoff, also
-apply the required observation in [acceptance data](../skills/factory-implement/references/acceptance-data.md)
-before predecessor acceptance and successor dispatch.
-
-Before successor dispatch, check predecessor reports. For facts discovered after
-a terminal report, provide authorized scoped sources
-for dependent workers; do not keep required handoff only in chat. The packet follows relevant dependencies through
-acceptance, deduplicates nodes and preserves full evidence for verification/review.
-It does not infer missing reasons or import every task in a slice/run. Supply any
-additional required source through scoped reading; keep messages Telegraphic.
+Refer to [verification rules](../gates/common/verification-rules.md) for the evidence standard. Implementer hands over code, tests, documentation or the basis for current documentation; Tester executes scoped or integrated checks. Judge assesses the current AC evidence and can request additional verification. Retain open findings and the original review subject when recording new receipts.
 
 ## Sessions and recovery
 
-For each ready node, recheck source, model/tools/permissions and host capacity;
-reserve with `claim`, then execute the selected adapter's packet delivery and
-session-binding procedure. Native/ACP launch commands belong to that adapter.
-Use [shared adapter rules](../adapters/common.md) for context ownership; workers
-receive worker instructions and assignments, not coordinator instructions.
-Do not run multiple active turns in one session. Validate returned evidence
-before `finish` or routing findings to their owner.
-
-Reuse sessions for related work only after checking specialization, instructions,
-context and newly locked assignment; a new slice alone needs no new agent.
-Reviewers never share author sessions. If unavailable or context is harmful,
-explicitly replace the session, record epoch and old/new handles, and hand off
-goal, decisions, completed work, findings and evidence. Verify against files;
-new sessions have no automatic memory.
-
-Native and per-ACP limits cap unresolved assignments across roles, excluding the
-parent. Host open-thread limits and provider quotas also apply; completed open
-sessions may still consume slots. Retiring a record does not close a host thread;
-without real closure, wait/report capacity. Disable nested delegation unless its
-capacity is included. Backend aliases share one pool; never duplicate quotas.
-
-Reserve slots/paths and persist dispatch ID before transport, then record the
-returned handle. Interrupted/ambiguous requests stay `unknown` and retain resources;
-inspect runtime, diff, artifacts and source before recovery, never blindly resend.
-Silence is not failure. Explicit failure allows one same-role recovery only after
-confirming the old writer stopped. Cancel only on user instruction or an explicitly
-allowed failure condition; cancellation acknowledgement does not prove writes ended.
+After reserving a dispatch, bind the observed native handle or ACP session. Deliver only the accepted worker packet. A reservation alone does not prove that a worker started. Reconcile a lost reply against the stored ticket and host. A quiet worker remains active until terminal evidence arrives. Retry an identical mutation with its original key. Read `workflow status` after returning from a pause; use its applicable adapter action and preserve the remaining budget.
 
 ## History
 
@@ -282,31 +118,11 @@ Report any failed archival or cleanup with the remaining path and cause.
 
 ## Final integration execution
 
-Distinguish slice-local gates from final run gates before dispatch. Slice acceptance
-unblocks dependents; it never claims whole-run completion. Assign final integration
-verification to Tester with all required test, build and static checks. An independent
-Judge receives combined source/AC, the slice map and the current Tester evidence for
-review when required. For eligible low-risk work the coordinator may accept after
-Tester verification. Preserve all mandatory project and user gates.
-Store full command logs; hand off short results and bounded failure excerpts.
-Reviewer diagnoses affected task and owner using evidence; coordinator routes code
-and test fixes to their Implementer, and unknown causes to diagnosis. Cross-slice
-defects need explicit correction ownership and rechecking combined behavior.
-No product writes by the reviewer. Retry invalidates downstream evidence; final
-verification and review rerun on corrected bytes before accept/archive.
-
+Slice acceptance releases its own dependents. Final acceptance needs evidence for all project and owner obligations against the combined changes. Tester owns execution. Judge owns any required independent verdict. Record the actual checks, exclusions, source and revision.
 
 ## Reconciliation
 
-Call `cli workflow status` after dispatch, transport return, check result,
-correction, scope change and on resumed entry. Reconcile saved dispatches,
-session handles, pending executions and reports before any repeat request.
-Inspect new terminal reports once per dispatch and acknowledge with `ack-result`. Claim
-runnable assignments, accept eligible nodes, wait on active handles, and
-perform only evidence-supported correction or reconciliation. Report material
-progress in commentary. Keep the turn active while work remains and the host
-supports waiting. The native adapter supplies no autonomous launcher or wakeup.
-Respect recorded user pause/stop. Final completion follows successful archive.
+Use the returned action and exact run, node and ticket for every handoff. Reconcile a recorded execution before issuing another command. Acknowledge a terminal result via `ack-result`. For a missing or ambiguous rule retain the reported branch, facts and reason. Healthy independent branches can proceed while that branch waits.
 
 ## Task guidance
 
@@ -335,11 +151,4 @@ messages follow the shared communication contract.
 
 ## Teacher at run completion
 
-Task acceptance records evidence for the final review. After successful
-`cli workflow archive completed SUMMARY`, or when resuming a completed run,
-run `cli workflow status`. When `result.after_archive.status` is `ready`, dispatch
-the indicated event ID as the run's
-single [Teacher assignment](../skills/factory-lessons/references/dispatch.md)
-before final handoff. It covers all accepted tasks and retrospective notes
-already recorded for this run. Ready and waiting events survive cleanup on
-their original checkout.
+Read `workflow status` after archive. Deliver the named Capture event through the [Teacher assignment](../skills/factory-lessons/references/dispatch.md). The event retains the archived run ID across cleanup, owner input and subsequent runs. A cancelled run produces no Capture event.

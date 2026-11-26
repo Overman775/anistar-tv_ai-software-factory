@@ -7,8 +7,11 @@ Copy identities from the assignment. Use the displayed `finish_requirements`.
 For projected integration work, `task.scope` shows the worker's local paths.
 Use `prepare-report` to capture the authoritative snapshot at handoff.
 `checks` contains actual results, never planned commands masquerading as evidence.
-At author handoff, the worker may call `cli workflow prepare-report NODE DRAFT [RECEIPT_ID ...]`.
-Use `-` for DRAFT to read JSON from stdin when no assigned draft path is available.
+At author handoff, publish the typed draft with
+`factory.runtime.graph_inputs.draft_report(workspace, draft)`. Pass the returned ID to
+`cli workflow prepare-report NODE DRAFT_ID [RECEIPT_ID ...]`. Both native and ACP workers
+use the same command. Its response contains the dispatch ID and immutable report ID.
+If the response is lost, the coordinator can recover both from `workflow status`.
 The draft carries run_id, dispatch_id, source_hash and node_id from the assignment,
 author fields and any observation checks,
 but no `files` field. The helper checks the bound dispatch, adds selected current
@@ -18,7 +21,7 @@ those exhaustive dependency paths; without that declaration it captures the full
 task scope. Other reports always capture the full task scope. PASS
 requires passed receipts; FAIL/BLOCKED may include authentic fresh FAIL/BLOCKED
 receipts without relabeling them. An invalid source snapshot permits a FAIL/BLOCKED handoff. PASS requires an
-intact snapshot, and finish records observed drift for a terminal failure. Save its `result` as the report. The coordinator
+intact snapshot, and finish records observed drift for a terminal failure. Return the report ID to the coordinator for `workflow finish NODE REPORT_ID`. The coordinator
 must not use this helper to refresh a returned report or manufacture a fresh handoff; request
 a new author handoff instead. `finish` still checks freshness. A full intermediate handoff must include every declared dependency.
 Failed/blocked work is preserved. ACP/CLI transport success is not work success.

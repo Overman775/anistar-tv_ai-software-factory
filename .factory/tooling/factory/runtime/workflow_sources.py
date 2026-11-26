@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import sys
@@ -12,12 +11,14 @@ from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
 from factory.environment import bundle_python_environment
+from factory.runtime import upstream
 from factory.runtime.contracts import LockedSource, Source
 from factory.runtime.reports import acceptance
 from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
     digest,
+    graph_identity,
     relative,
     require,
 )
@@ -114,6 +115,20 @@ def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> L
             src.get("acceptance") == extracted,
             "Acceptance differs from approved plan; re-intake required",
         )
+        declared = upstream.plan_identity(content.decode(), src["path"], src["selected_scope"])
+        for label in ("plan_id", "plan_revision", "approved_revision"):
+            if check_expected and label in src:
+                require(src.get(label) == declared.get(label), "Approved plan identity changed")
+        src.update(declared)
+    if "decomposition_run" in src or "upstream_tasks" in src:
+        require(
+            src["kind"] == "approved_plan" and bool(src.get("decomposition_run")),
+            "Decomposition needs its approved source and published run ID",
+        )
+        imported = upstream.decomposition(Path(root), content.decode(), src["decomposition_run"])
+        if check_expected and "upstream_tasks" in src:
+            require(src["upstream_tasks"] == imported, "SOURCE_DRIFT in prepared decomposition")
+        src["upstream_tasks"] = imported
     acceptance_guard(acceptance.criteria_map, src.get("acceptance"))
     if src["kind"] == "factory_decompose_task":
         match = re.search(r"(?m)^- \*\*Acceptance criteria:\*\* (.+)$", content.decode())
@@ -140,13 +155,18 @@ def lock_source(root: str | Path, raw: object, check_expected: bool = True) -> L
         "kind": src["kind"],
         "execution_mode": src["execution_mode"],
         "directive": src.get("directive", "none"),
+        "decomposition_run": src.get("decomposition_run"),
+        "no_plan_ref": src.get("no_plan_ref"),
+        "delegated_planning_ref": src.get("delegated_planning_ref"),
+        "semantic_gap": src.get("semantic_gap"),
         "acceptance": src["acceptance"],
         "selected_acceptance_ids": src.get("selected_acceptance_ids"),
         "acceptance_origin": src.get("acceptance_origin"),
         "parent_plan_ref": src.get("parent_plan_ref"),
+        "upstream_tasks": src.get("upstream_tasks"),
     }
     content_hash = digest(content)
-    semantic_hash = digest(json.dumps(semantic, sort_keys=True, ensure_ascii=False).encode())
+    semantic_hash = graph_identity(semantic)
     if check_expected:
         require(
             not src.get("content_hash") or src["content_hash"] == content_hash,

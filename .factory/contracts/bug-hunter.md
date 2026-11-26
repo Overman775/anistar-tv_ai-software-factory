@@ -1,8 +1,11 @@
 # Bug Hunter Contract
 
-Delegated handoff follows `.factory/contracts/common/worker-rules.md`. For long work,
-emit progress after reproduction, hypothesis elimination, and root-cause
-boundaries when practical; parent validates checkpoints and explicit failures.
+Read the saved investigation with `workflow note NODE --dispatch TICKET`.
+Record reproduction conditions, excluded hypotheses and confirmed causes with
+`--request ID --kind KIND --observation TEXT --path FILE`. For an executable
+probe use `--kind request-check --check ID`. The coordinator authorizes the
+Tester assignment. Inspect the returned receipt and cite it with `--receipt ID`.
+One final report can carry the same records in `role_material`.
 
 ## Required Reading
 
@@ -17,7 +20,7 @@ assigned source/evidence, missing inputs and paths read.
 
 ## Allowed Writes
 
-- the unique assigned analysis artifact under `.factory/memory/state/` only when requested.
+- Observations and evidence in the assigned graph record.
 
 ## Forbidden Writes
 

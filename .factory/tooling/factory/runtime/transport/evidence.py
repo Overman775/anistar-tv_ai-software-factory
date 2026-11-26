@@ -28,10 +28,14 @@ def transport_paths(root: Path, state: State) -> list[Path]:
     return paths
 
 
-def pending_transports(root: Path, state: State) -> dict[str, tuple[str, str, str]]:
+def pending_transports(
+    root: Path, state: State, *, dispatch_id: str | None = None, mutating_only: bool = False
+) -> dict[str, tuple[str, str, str]]:
     """Check unfinished ACPX calls while the ledger is locked and identify recoverable streams."""
     pending = {}
     for event in state["events"]:
+        if dispatch_id is not None and event.get("dispatch_id") != dispatch_id:
+            continue
         stdout = event.get("stdout")
         if not stdout:
             continue
@@ -41,12 +45,15 @@ def pending_transports(root: Path, state: State) -> dict[str, tuple[str, str, st
             pending.pop(stdout, None)
     streams = {}
     for stdout, event in pending.items():
+        if mutating_only and event.get("operation") not in {"create", "prompt", "cancel", "close"}:
+            continue
         require(stdout in state.get("transport_artifacts", []), "Unknown transport output")
         lease = relative(root, stdout + ".lock")
         if lease.exists():
             with lock(lease):
                 pass
-            lease.unlink(missing_ok=True)
+            if dispatch_id is None:
+                lease.unlink(missing_ok=True)
         for kind, name in (("stdout", stdout), ("stderr", event["stderr"])):
             transport_streams.require_idle(relative(root, name))
             streams[name] = (kind, event["node"], event["dispatch_id"])

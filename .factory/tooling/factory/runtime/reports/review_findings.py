@@ -94,6 +94,50 @@ def consistent(report: Report, review: bool = False) -> None:
             raise ValueError("Contradictory verdict/outcome")
 
 
+def check_assessments(state: State, node: Node, report: Report) -> None:
+    """A Judge can cite one receipt for several criteria and request a registered check."""
+    from factory.project.profile_rules import registered_check
+    from factory.runtime.workflow_graph import ancestors
+
+    requests_checks = report["stage_result"] == "CHECKS_REQUESTED"
+    assessments = report.get("criterion_assessments")
+    if assessments is None and not requests_checks:
+        return
+    ensure(node["stage"] == "review", "Criterion assessments belong to Judge")
+    task = state["graph"]["tasks"][node["task"]]
+    criteria = set(task["acceptance_ids"]) | {
+        "local:" + c["id"] for c in task.get("local_acceptance_criteria", [])
+    }
+    ensure(
+        assessments is not None and set(assessments) == criteria,
+        "Judge must assess every assigned criterion",
+    )
+    assert assessments is not None
+    parents = ancestors({n["id"]: n for n in state["graph"]["nodes"]}, node["id"])
+    received = {
+        check.get("execution_id")
+        for parent in parents
+        if (dispatch := state["nodes"][parent]).get("role") == "tester"
+        and dispatch["status"] == "done"
+        if (verified := dispatch.get("report")) and verified["files"] == report["files"]
+        for check in verified["checks"]
+        if check.get("execution_id")
+    }
+    available = {c["id"] for c in task["required_checks"]}
+    requested = set()
+    for assessment in assessments.values():
+        ids = assessment.get("requested_checks", [])
+        ensure(
+            set(assessment["receipts"]) <= received,
+            "Judge cited a receipt outside the current candidate",
+        )
+        ensure(assessment["receipts"] or ids, "Judge assessment needs a receipt or specific check")
+        for name in set(ids) - available:
+            registered_check(state["config"]["_project"]["data"], name, task["scope"])
+        requested.update(ids)
+    ensure(bool(requested) == requests_checks, "CHECKS_REQUESTED needs a concrete missing check")
+
+
 def _new_finding(state: State, node: Node, tid: str, update: Finding) -> FindingRecord:
     """Resolve an unambiguous writer and create an independent registry entry."""
     writers = [

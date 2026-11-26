@@ -27,12 +27,11 @@ class RunSessions:
                 handle == self.acp_name(agent_id),
                 "ACP session belongs to a different agent or epoch",
             )
-        owner = state.get("handle_owners", {}).get(handle)
+        owner = state["handle_owners"].get(handle)
         require(
             owner is None or owner == agent_id,
             "Session previously belonged to a different logical agent",
         )
-        # Older snapshots can contain a binding without a historical owner index.
         for other, session in state["sessions"].items():
             require(
                 other == agent_id or session["handle"] != handle,
@@ -54,7 +53,7 @@ class RunSessions:
                 "Effective model changed; replace physical session with handoff",
             )
         self.state["sessions"][agent_id] = {"handle": handle, "model": model}
-        self.state.setdefault("handle_owners", {})[handle] = agent_id
+        self.state["handle_owners"][handle] = agent_id
 
     def replace(self, agent_id: str) -> Session | None:
         state = self.state

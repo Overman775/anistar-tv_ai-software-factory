@@ -37,24 +37,14 @@ class CurrentProtocolScenarios(unittest.TestCase):
         return temp, ProtocolFixture(Path(temp.name), **kwargs)
 
     def test_lens_lifecycle_contract_is_identity_bound_and_preserves_partial_truth(self) -> None:
-        skill = (SCRIPTS.parents[2] / "skills/factory-code-review/SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        normalized = " ".join(skill.split())
-        for token in (
-            "`review_id + base_sha + head_sha + scope_hash + canonical lens`",
-            "valid COMPLETE terminalizes that assignment",
-            "Retry only same FAILED/invalid assignment once",
-            "never restart healthy assignments",
-            "Partial INCOMPLETE preserves valid findings without synthesized missing conclusions",
-            "New identity uses fresh assignments",
-            "QA remains coordinator-owned",
-        ):
-            self.assertIn(" ".join(token.split()), normalized)
-        self.assertIn(
-            ".factory/contracts/common/agent-checkpoint.md#same-run-role-continuation",
-            skill,
-        )
+        contract = (
+            SCRIPTS.parents[2] / "skills/factory-code-review/references/run-contract.md"
+        ).read_text()
+        self.assertIn("scope_hash", contract)
+        self.assertIn("Only the assigned direction", contract)
+        self.assertIn("affected direction within its retry budget", contract)
+        skill = (SCRIPTS.parents[2] / "skills/factory-code-review/SKILL.md").read_text()
+        self.assertIn("valid findings while another direction is incomplete", skill)
 
     def test_policy_snapshot_includes_nested_validators_with_distinct_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,6 +1,6 @@
 # Planning gate
 
-Architect returns only `planning-plan.md.candidate`; live target stays unchanged.
+Architect returns only candidate Markdown; live target stays unchanged.
 Architect self-checks. Orchestrator independently checks
 behavior, full capability coverage, decisions, architecture/ownership, typed
 contracts, external handling, readiness, QA separation, downstream usability,

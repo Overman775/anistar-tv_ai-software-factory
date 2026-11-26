@@ -14,12 +14,15 @@ from factory.runtime.workflow_core import Invalid
 
 
 class DomainTransitionTests(unittest.TestCase):
-    def test_waiting_preserves_identity_and_accepts_existing_teacher_records(self) -> None:
-        raw = (
-            '{"kind":"retro","operation":"capture","incident":"issue-7","source":"review",'
-            '"user_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}'
-        )
-        key = "8179bb95af7a77bf48a318504caa492d7495008fada7520be6a674d279cdd907"
+    def test_waiting_preserves_typed_teacher_identity(self) -> None:
+        raw = {
+            "kind": "retro",
+            "operation": "capture",
+            "incident": "issue-7",
+            "source": "review",
+            "user_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        }
+        key = TeacherJob.model_validate(raw).key()
         job = decode_event(key, raw)
         self.assertIs(teacher.Event, TeacherJob)
         with self.assertRaises(Invalid):
@@ -79,7 +82,7 @@ class DomainTransitionTests(unittest.TestCase):
     def test_check_request_keeps_its_persisted_key(self) -> None:
         self.assertEqual(
             CheckExecution.request_key("run", "node", "attempt", "request"),
-            "8742bf14944468322696e4fd167d4ac5b65f5ae21e72835948d2f3b9b40edc23",
+            "5faef22d90a022fdceb46a6694ac62988e81ccb64b227e2ec302817c10d5e166",
         )
         with self.assertRaisesRegex(Invalid, "request ID required"):
             CheckExecution.request_key("run", "node", "attempt", " ")

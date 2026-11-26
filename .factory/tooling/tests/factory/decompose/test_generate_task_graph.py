@@ -8,14 +8,13 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 from factory.decompose import generate_task_graph as graph
 from factory.decompose.contracts import LoadedTask
 from factory.decompose.graph.relations import TaskRelationGraph
 from factory.decompose.graph.task_data import load_tasks
 from factory.decompose.graph.validation import validate_markdown_files
-from factory.decompose.staging.metadata import apply, project
+from factory.decompose.staging.metadata import project
 from tests import CLI
 from tests.factory.decompose.fixture_task_graph import TaskGraphFixture
 from tests.fixture_bundle import ROOT as FIXTURE_ROOT
@@ -168,135 +167,6 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
             project(link / "tasks", link / "source.json")
         with self.assertRaisesRegex(ValueError, "Symlink in projection path"):
             project(self.tasks_dir, link / "source.json")
-
-    def test_metadata_apply_saves_checkpoint_and_updates_drafts(self) -> None:
-        labels = (
-            "ID",
-            "Plan source",
-            "Covers capabilities",
-            "Acceptance criteria",
-            "Contribution to plan criteria",
-            "Purpose",
-            "Scope",
-            "Estimate",
-            "Parent task",
-            "Depends on",
-            "Blocked by",
-        )
-        prose = "\n## Context\nAuthor prose remains.\n"
-        draft = "# Title\n" + "".join(f"- **{name}:** old\n" for name in labels) + prose
-        task = self.task()
-        self.write_tasks([task], markdown=draft)
-        envelope = self.tasks_dir / "generated/task_result.json"
-        original = envelope.read_bytes()
-        data = json.loads(original)
-        data["total_min_hours"] = 999
-        envelope.write_text(json.dumps(data))
-        original = envelope.read_bytes()
-        result = apply(self.tasks_dir, self.source_lock, "snapshot-1")
-        checkpoint = Path(str(result["checkpoint"]))
-        self.assertEqual(original, (checkpoint / "tasks/generated/task_result.json").read_bytes())
-        self.assertEqual(
-            task["estimate"]["min_hours"], json.loads(envelope.read_text())["total_min_hours"]
-        )
-        doc = self.tasks_dir / "generated" / task["filename"]
-        self.assertTrue(doc.read_text().endswith(prose))
-        self.assertIn(task["id"], doc.read_text())
-        with self.assertRaisesRegex(ValueError, "Checkpoint already exists"):
-            apply(self.tasks_dir, self.source_lock, "snapshot-1")
-
-    def test_metadata_apply_interruption_preserves_complete_checkpoint(self) -> None:
-        labels = (
-            "ID",
-            "Plan source",
-            "Covers capabilities",
-            "Acceptance criteria",
-            "Contribution to plan criteria",
-            "Purpose",
-            "Scope",
-            "Estimate",
-            "Parent task",
-            "Depends on",
-            "Blocked by",
-        )
-        draft = (
-            "# Title\n"
-            + "".join(f"- **{name}:** old\n" for name in labels)
-            + "\n## Context\nKeep.\n"
-        )
-        task = self.task()
-        self.write_tasks([task], markdown=draft)
-        extra = self.tasks_dir / "generated/author-notes.txt"
-        extra.write_text("Keep all staging")
-        with patch(
-            "factory.decompose.staging.metadata.os.replace", side_effect=OSError("interrupted")
-        ):
-            with self.assertRaisesRegex(OSError, "interrupted"):
-                apply(self.tasks_dir, self.source_lock, "interrupted-1")
-        checkpoint = self.tasks_dir.parent / "checkpoints/interrupted-1/tasks/generated"
-        self.assertEqual(draft, (checkpoint / task["filename"]).read_text())
-        self.assertEqual("Keep all staging", (checkpoint / "author-notes.txt").read_text())
-        self.assertEqual(draft, (self.tasks_dir / "generated" / task["filename"]).read_text())
-
-    def test_metadata_apply_rejects_plan_drift_before_staging_writes(self) -> None:
-        labels = (
-            "ID",
-            "Plan source",
-            "Covers capabilities",
-            "Acceptance criteria",
-            "Contribution to plan criteria",
-            "Purpose",
-            "Scope",
-            "Estimate",
-            "Parent task",
-            "Depends on",
-            "Blocked by",
-        )
-        draft = (
-            "# Title\n"
-            + "".join(f"- **{name}:** old\n" for name in labels)
-            + "\n## Context\nKeep.\n"
-        )
-        task = self.task()
-        self.write_tasks([task], markdown=draft)
-        (self.root / "plan.md").write_text("changed after approval")
-        with self.assertRaisesRegex(ValueError, "SOURCE_DRIFT"):
-            apply(self.tasks_dir, self.source_lock, "drift")
-        self.assertEqual(draft, (self.tasks_dir / "generated" / task["filename"]).read_text())
-        self.assertFalse((self.tasks_dir.parent / "checkpoints/drift").exists())
-
-    def test_metadata_apply_rechecks_plan_after_projection(self) -> None:
-        labels = (
-            "ID",
-            "Plan source",
-            "Covers capabilities",
-            "Acceptance criteria",
-            "Contribution to plan criteria",
-            "Purpose",
-            "Scope",
-            "Estimate",
-            "Parent task",
-            "Depends on",
-            "Blocked by",
-        )
-        draft = (
-            "# Title\n"
-            + "".join(f"- **{name}:** old\n" for name in labels)
-            + "\n## Context\nKeep.\n"
-        )
-        task = self.task()
-        self.write_tasks([task], markdown=draft)
-        original_project = project
-
-        def mutate_plan(staging: Path, source: Path) -> Any:
-            result = original_project(staging, source)
-            (self.root / "plan.md").write_text("changed after projection")
-            return result
-
-        with patch("factory.decompose.staging.metadata.project", side_effect=mutate_plan):
-            with self.assertRaisesRegex(ValueError, "inputs changed"):
-                apply(self.tasks_dir, self.source_lock, "drift-after-projection")
-        self.assertEqual(draft, (self.tasks_dir / "generated" / task["filename"]).read_text())
 
     def test_empty_capability_ids_source_lock_is_rejected(self) -> None:
         _, messages = graph.load_source_lock(str(self.source_lock))
@@ -837,6 +707,13 @@ class GenerateTaskGraphTest(unittest.TestCase, TaskGraphFixture):
         self.assertIn("Graph gate: PASS", result.stderr)
         self.assertTrue((self.root / "graph.md").is_file())
         self.assertFalse((self.root / "violations.json").exists())
+
+    def test_cli_renders_pydantic_graph_after_validation(self) -> None:
+        self.write_tasks([self.task()])
+        result = self.run_cli("--view", "pydantic", "--json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = Path(json.loads(result.stdout)["graph"])
+        self.assertIn("stateDiagram-v2", output.read_text(encoding="utf-8"))
 
     def test_cli_empty_staging_is_hard_failure(self) -> None:
         result = self.run_cli()

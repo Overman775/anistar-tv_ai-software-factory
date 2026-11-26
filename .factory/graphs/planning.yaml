@@ -1,0 +1,25 @@
+id: planning
+entry: next
+nodes:
+  next:
+    decision: planning_outcome
+    routes:
+      - {outcome: intake, target: architect}
+      - {outcome: needs_exploration, target: explorer}
+      - {outcome: analysis_ready, target: architect}
+      - {outcome: needs_user_decision, target: owner}
+      - {outcome: blocked_requirements, target: owner}
+      - {outcome: blocked_external_source, target: owner}
+      - {outcome: answer_received, target: architect}
+      - {outcome: plan_ready, target: review}
+      - {outcome: needs_work, target: architect}
+      - {outcome: approved, target: publish}
+      - {outcome: install_ready, target: install}
+      - {outcome: published, target: finish}
+  architect: {operation: plan_assignment}
+  explorer: {operation: explore_assignment}
+  owner: {operation: wait_for_input}
+  review: {operation: review_candidate}
+  publish: {operation: publish_approved}
+  install: {operation: install_plan}
+  finish: {operation: finish_process}

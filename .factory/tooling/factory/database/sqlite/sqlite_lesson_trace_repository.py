@@ -1,11 +1,12 @@
 """Local evidence of lesson retrieval, worker reports and Teacher decisions."""
 
-import json
 import sqlite3
 import sys
 from pathlib import Path
 
 from factory.database.sqlite import workflow_db
+from factory.database.sqlite.lesson_hits import read_hits
+from factory.database.sqlite.sqlite_teacher_job_repository import load_job
 from factory.diagnostics.events import event
 from factory.diagnostics.records import error_code
 from factory.runtime.knowledge.lesson_trace_repository import (
@@ -34,10 +35,10 @@ def record_search(
             node = None
             if run_id is not None:
                 owner = db.execute(
-                    """SELECT n.key FROM runs r, json_each(r.record,'$.nodes') n
+                    """SELECT n.node_id FROM runs r JOIN graph_attempts n ON n.run_id=r.run_id
                        WHERE r.run_id=? AND r.current=1 AND r.sha256 IS NULL
-                       AND n.value ->> '$.status' IN ('reserved','running')
-                       AND n.value ->> '$.dispatch_id'=? LIMIT 1""",
+                       AND n.status IN ('reserved','running')
+                       AND n.dispatch_id=? LIMIT 1""",
                     (run_id, dispatch_id),
                 ).fetchone()
                 if owner:
@@ -50,7 +51,7 @@ def record_search(
                     run_id = dispatch_id = None
             search = db.execute(
                 """INSERT INTO lesson_searches(run_id,node_id,dispatch_id,elapsed_ms,status,
-                   query_sha256,matches,error_type) VALUES (?,?,?,?,?,?,?,?)""",
+                   query_sha256,error_type) VALUES (?,?,?,?,?,?,?)""",
                 (
                     run_id,
                     node,
@@ -58,9 +59,15 @@ def record_search(
                     elapsed,
                     "error" if error else "hit" if matches else "miss",
                     digest(query.strip().encode()),
-                    json.dumps(matches),
                     error,
                 ),
+            )
+            db.executemany(
+                "INSERT INTO lesson_hits VALUES (?,?,?,?,?)",
+                [
+                    (search.lastrowid, i, hit["id"], hit["scope"], hit["revision"])
+                    for i, hit in enumerate(matches)
+                ],
             )
             wording = query.strip()
             if (
@@ -106,7 +113,9 @@ def read_trace(root: Path, run: str | None, limit: int) -> LessonTrace:
         for row in db.execute(
             "SELECT * FROM lesson_searches" + where + " ORDER BY id DESC LIMIT ?", (*args, limit)
         ):
-            result.searches.append(SearchRow.model_validate(dict(row)))
+            result.searches.append(
+                SearchRow.model_validate({**dict(row), "matches": read_hits(db, row["id"])})
+            )
         for row in db.execute(
             "SELECT *,count(*) OVER () AS total FROM lesson_applications"
             + where
@@ -116,11 +125,9 @@ def read_trace(root: Path, run: str | None, limit: int) -> LessonTrace:
             fields = dict(row)
             result.reported_applications = fields.pop("total")
             result.applications.append(ApplicationRow.model_validate(fields))
-        teacher_where = (
-            " WHERE record ->> '$.kind'='accept' AND record ->> '$.incident'=?" if run else ""
-        )
-        states = """CASE WHEN record ->> '$.cancelled_by' IS NOT NULL THEN 'cancelled'
-                    WHEN done=1 THEN 'completed' WHEN record ->> '$.waiting_for' IS NOT NULL
+        teacher_where = " WHERE kind='accept' AND incident=?" if run else ""
+        states = """CASE WHEN cancelled_by IS NOT NULL THEN 'cancelled'
+                    WHEN done=1 THEN 'completed' WHEN waiting_for IS NOT NULL
                     THEN 'waiting' ELSE 'pending' END"""
         result.teacher_counts = dict(
             db.execute(
@@ -132,14 +139,16 @@ def read_trace(root: Path, run: str | None, limit: int) -> LessonTrace:
             "SELECT id,created_at,updated_at,"
             + states
             + """ AS status,
-                record ->> '$.kind' AS kind, CASE WHEN record ->> '$.delete_target' IS NOT NULL
-                THEN 'delete' ELSE record ->> '$.operation' END AS operation,
-                CASE WHEN record ->> '$.kind'='accept' THEN record ->> '$.incident' END AS run_id,
-                coalesce(record -> '$.changes','[]') AS changes, record ->> '$.resolution' AS reason
+                kind AS kind, CASE WHEN delete_target IS NOT NULL
+                THEN 'delete' ELSE operation END AS operation,
+                CASE WHEN kind='accept' THEN incident END AS run_id,
+                resolution AS reason
                 FROM teacher_jobs"""
             + teacher_where
             + " ORDER BY updated_at DESC,id LIMIT ?",
             (*args, limit),
         ):
-            result.teacher.append(TeacherRow.model_validate(dict(row)))
+            result.teacher.append(
+                TeacherRow.model_validate({**dict(row), "changes": load_job(db, row["id"]).changes})
+            )
     return result

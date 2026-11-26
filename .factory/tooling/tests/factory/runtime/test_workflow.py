@@ -22,6 +22,7 @@ from factory.database.sqlite import sqlite_history_repository, sqlite_run_reposi
 from factory.runtime import teacher
 from factory.runtime.contracts import FindingRecord
 from factory.runtime.history import report_history
+from factory.runtime.history.document import render
 from factory.runtime.history.task_records import read_task, resolve_evidence
 from factory.runtime.run_repository import ArchiveReference
 from factory.runtime.scheduling.run_sessions import RunSessions
@@ -42,12 +43,18 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def setUp(self) -> None:
         WorkflowFixture.__init__(self, self.addCleanup)
 
-    def test_cli_diagram_json_exposes_graph_and_current_dispatch_status(self) -> None:
+    def test_cli_diagram_renders_graph_and_status_identifies_current_dispatch(self) -> None:
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         argv = [*CLI, "workflow", "--workspace", str(self.root), "diagram"]
         default = subprocess.run(argv, capture_output=True, text=True, check=True)
         machine = subprocess.run([*argv, "--json"], capture_output=True, text=True, check=True)
+        native = subprocess.run(
+            [*argv, "--view", "pydantic", "--json"], capture_output=True, text=True, check=True
+        )
+        mermaid = json.loads(native.stdout)["result"]["mermaid"]
+        self.assertIn("stateDiagram-v2", mermaid)
+        self.assertIn("task_write-label --> task_verify-label", mermaid)
         state = self.ledger.read()
         self.assertTrue(default.stdout.startswith("sequenceDiagram\n"))
         self.assertEqual(
@@ -56,16 +63,14 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
                 "ok": True,
                 "result": {
                     "run_id": state["run_id"],
-                    "status": "active",
-                    "graph": state["graph"],
-                    "node_statuses": {
-                        "write-label": "reserved",
-                        "verify-label": "pending",
-                        "accept-label": "pending",
-                    },
+                    "mermaid": default.stdout.rstrip("\n") + "\n",
                 },
             },
         )
+        status = subprocess.check_output([*argv[:-1], "status"], text=True)
+        dispatch = json.loads(status)["result"]["dispatches"]["write-label"]
+        self.assertEqual("reserved", dispatch["status"])
+        self.assertEqual(state["nodes"]["write-label"]["dispatch_id"], dispatch["dispatch_id"])
 
     def test_orchestrator_alias_is_optional_and_must_be_known(
         self,
@@ -81,17 +86,10 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             load_config(path)
 
     def test_python_init_checks_supplied_config_pin_before_creating_run(self) -> None:
-        pin = {
-            "ok": True,
-            "result": {"_path": self.config["_path"], "_files": self.config["_files"]},
-        }
-        for invalid in (
-            None,
-            {},
-            {"ok": False, "result": pin["result"]},
-            {"ok": True, "result": {"_path": "another", "_files": self.config["_files"]}},
-            {"ok": True, "result": {"_path": self.config["_path"], "_files": {}}},
-        ):
+        from factory.runtime.workflow_config import instruction_pin
+
+        pin = instruction_pin(self.config)
+        for invalid in ("", "config.json", instruction_pin({**self.config, "_files": {}})):
             with (
                 self.subTest(invalid=type(invalid)),
                 self.assertRaisesRegex(Invalid, "changed since snapshot"),
@@ -102,9 +100,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_pinned_entry_rejects_changed_instructions_before_init(self) -> None:
         path = self.config_file(lambda c: None)
-        graph = self.root / "graph.json"
-        graph.write_text(json.dumps(self.g))
-        snapshot = self.root / "config.json"
+        from factory.runtime.graph_inputs import propose
+
+        graph = propose(self.root, self.g)
         command = [
             *CLI,
             "workflow",
@@ -114,8 +112,8 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             str(path),
         ]
         result = subprocess.run(command + ["config"], capture_output=True, text=True, check=True)
-        snapshot.write_text(result.stdout)
-        init = command + ["init", str(graph), "--config-pin", str(snapshot)]
+        pin = result.stdout.strip()
+        init = command + ["init", str(graph), "--config-pin", pin]
         for relative in (
             "skills/factory-implement/SKILL.md",
             "roles/orchestrator.md",
@@ -128,7 +126,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             original = file.read_text()
             file.write_text(original + "\nchanged\n")
             read = subprocess.run(
-                command + ["read-instructions", str(snapshot), relative],
+                command + ["read-instructions", pin, relative],
                 capture_output=True,
                 text=True,
             )
@@ -140,7 +138,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             self.assertFalse(has_current(self.ledger))
             file.write_text(original)
         result = subprocess.run(
-            command + ["read-instructions", str(snapshot), "roles/orchestrator.md"],
+            command + ["read-instructions", pin, "roles/orchestrator.md"],
             capture_output=True,
             text=True,
         )
@@ -206,7 +204,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         adapter.write_text(adapter.read_text() + "\n# Changed transport implementation\n")
         before = self.ledger.read()
         with self.assertRaisesRegex(Invalid, "drift"):
-            self.ledger.claim("write-label")
+            self.claim("write-label")
         self.assertEqual(before, self.ledger.read())
 
     def test_graph_uses_explicit_workspace_independent_of_cwd(self) -> None:
@@ -219,7 +217,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         with patch.object(Path, "cwd", return_value=foreign):
             validate_graph(self.g, self.config, self.root)
             self.init()
-            self.ledger.claim("write-label")
+            self.claim("write-label")
         self.assertEqual("reserved", self.ledger.read()["nodes"]["write-label"]["status"])
 
     def test_scope_rejects_existing_directory_before_init_and_revision(self) -> None:
@@ -244,7 +242,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.g["nodes"][0]["owns"] = ["lib"]
         validate_graph(self.g, self.config, self.root)
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
 
     def test_workspace_symlink_and_hardlink_are_rejected_from_other_cwd(self) -> None:
         foreign = self.root / "foreign"
@@ -281,14 +279,14 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.config["profiles"]["implementer"]["enforcement"] = "required"
         self.init()
         with self.assertRaisesRegex(Invalid, "BLOCKED_CAPABILITIES"):
-            self.ledger.claim("write-label")
+            self.claim("write-label")
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "pending")
 
     def test_readonly_profile_cannot_claim_writer(self) -> None:
         self.config["profiles"]["implementer"]["capabilities"]["edit"] = False
         self.init()
         with self.assertRaisesRegex(Invalid, "forbids edits"):
-            self.ledger.claim("write-label")
+            self.claim("write-label")
 
     def test_task_reviewer_repair_profile_cannot_write_product_scope(self) -> None:
         import yaml
@@ -297,18 +295,18 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertTrue(self.config["profiles"]["task-reviewer"]["capabilities"]["edit"])
         self.assertTrue(example["profiles"]["task-reviewer"]["capabilities"]["edit"])
         self.g["agents"]["author"] = {"role": "task-reviewer", "profile": "task-reviewer"}
-        with self.assertRaisesRegex(Invalid, "Role cannot write product scope"):
+        with self.assertRaisesRegex(Invalid, "Role outside Implement workflow: task-reviewer"):
             self.init()
 
     def test_packet_accepts_task_without_optional_dependencies(self) -> None:
         self.g["tasks"]["label"].pop("depends_on", None)
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         self.assertEqual({}, self.ledger.packet("write-label")["dependency_results"])
 
     def test_native_packet_includes_adapter_and_capabilities(self) -> None:
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         packet = self.ledger.packet("write-label")
         run = self.ledger.read()["run_id"]
         self.assertEqual(packet, self.ledger.packet("write-label"))
@@ -317,9 +315,15 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             for a in sqlite_history_repository.listing(self.root, run)
             if a["kind"] == "inline-packet"
         ]
-        exported = self.root / "inline.json"
+        exported = self.root / "inline.md"
         sqlite_history_repository.export(self.root, run, str(saved["path"]), exported)
-        self.assertEqual(packet, json.loads(exported.read_bytes()))
+        self.assertEqual(render(packet), exported.read_bytes())
+        self.assertEqual(
+            packet,
+            self.ledger.history.document(
+                self.root, run, str(saved["path"]), str(saved["sha256"]), "inline-packet"
+            ),
+        )
         self.assertEqual(packet["profile"]["adapter"], "codex")
         self.assertEqual(
             packet["model"]["id"],
@@ -333,13 +337,13 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def test_acp_packet_includes_adapter_and_policy(self) -> None:
         self.fake_acp()
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         result = prepare_prompt(self.ledger, "write-label")
         content = Path(result["prompt"]).read_text(encoding="utf-8")
         self.assertIn("ACP worker adapter", content)
         self.assertNotIn("# Router", content)
-        self.assertIn('"capabilities"', content)
-        self.assertIn('"enforcement": "instructions"', content)
+        self.assertIn("- capabilities", content)
+        self.assertIn("- enforcement = instructions", content)
 
     def test_missing_router_is_rejected(self) -> None:
         for mutate in (lambda c: c.pop("router"), lambda c: c.update(router="missing.md")):
@@ -358,7 +362,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         policy.write_text("Distinct router policy")
         self.config = load_config(path)
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         packet = self.ledger.packet("write-label")
         self.assertFalse(
             any(f["content"] == "Distinct router policy" for f in packet["instructions"])
@@ -428,7 +432,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def test_dependency_blocks_early_dispatch(self) -> None:
         self.init()
         with self.assertRaisesRegex(Invalid, "Dependencies"):
-            self.ledger.claim("verify-label")
+            self.claim("verify-label")
 
     def test_source_path_edit_keeps_original_writer_source(self) -> None:
         (self.root / "request.md").write_text("source")
@@ -438,7 +442,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         }
         self.init()
         (self.root / "request.md").write_text("different source")
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         self.assertEqual("source", self.ledger.packet("write-label")["source"]["snapshot"])
 
     def test_reintake_refreshes_source_also_used_as_reading(self) -> None:
@@ -455,7 +459,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         after = self.ledger.read()
         self.assertEqual("pending", after["nodes"]["write-label"]["status"])
         self.assertEqual(before["run_id"], after["run_id"])
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         packet = self.ledger.packet("write-label")
         self.assertEqual("Authorized new source", packet["source"]["snapshot"])
         self.assertIn("Authorized new source", [i["content"] for i in packet["instructions"]])
@@ -463,16 +467,16 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_unverified_model_cannot_bind(self) -> None:
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         with self.assertRaisesRegex(Invalid, "model differs"):
             self.ledger.bind("write-label", "h", "invented-model")
 
     def test_no_blind_redispatch(self) -> None:
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         self.ledger.unknown("write-label", "lost response")
         with self.assertRaisesRegex(Invalid, "Already dispatched"):
-            self.ledger.claim("write-label")
+            self.claim("write-label")
         with self.assertRaisesRegex(Invalid, "Outstanding"):
             self.ledger.archive("cancelled", "cancel")
 
@@ -599,7 +603,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         saved_steps = self.ledger.read()["nodes"]
         self.ledger.archive("completed", "done")
         self.ledger.clean()
-        archive_bytes = sqlite_history_repository.journal_bytes(self.root, archived_id)
+        archived_inventory = sqlite_history_repository.inventory(self.root, archived_id)
         before_next_run = read_task(self.root, "label", run_id=archived_id)
         self.assertEqual(before_next_run["run_id"], archived_id)
         self.assertEqual(before_next_run["run_status"], "completed")
@@ -648,7 +652,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.assertEqual(archived["open_findings"], {})
         self.assertEqual(record_bytes(self.ledger), active_bytes)
         self.assertEqual(
-            sqlite_history_repository.journal_bytes(self.root, archived_id), archive_bytes
+            sqlite_history_repository.inventory(self.root, archived_id), archived_inventory
         )
 
     def test_factory_ancestor_symlink_rejected_before_lock_or_read(self) -> None:
@@ -778,27 +782,27 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.parallel_graph()
         self.init()
         for i in [0, 1, 2, 4, 5, 6]:
-            self.ledger.claim(f"worker{i}")
+            self.claim(f"worker{i}")
         for i in [3, 7]:
             with self.assertRaisesRegex(Invalid, "QUEUED_CAPACITY"):
-                self.ledger.claim(f"worker{i}")
+                self.claim(f"worker{i}")
         self.ledger.unknown("worker0", "lost response")
         with self.assertRaisesRegex(Invalid, "QUEUED_CAPACITY"):
-            self.ledger.claim("worker3")
+            self.claim("worker3")
 
     def test_overlapping_writers_blocked(self) -> None:
         self.parallel_graph()
         self.g["nodes"][1]["owns"] = self.g["nodes"][0]["owns"]
         self.init()
-        self.ledger.claim("worker0")
+        self.claim("worker0")
         with self.assertRaisesRegex(Invalid, "QUEUED_OWNERSHIP"):
-            self.ledger.claim("worker1")
+            self.claim("worker1")
 
     def test_native_session_cannot_be_reassigned_to_other_agent(self) -> None:
         self.parallel_graph()
         self.init()
         self.start("worker0", "shared")
-        self.ledger.claim("worker1")
+        self.claim("worker1")
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             self.ledger.bind("worker1", "shared", "gpt-6.1-sol")
 
@@ -814,12 +818,11 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         sessions.bind("author", name, "fixture-model", expected_model=None)
         self.assertEqual(state["handle_owners"][name], "author")
 
-    def test_acp_request_respects_native_binding_in_older_snapshot(self) -> None:
+    def test_acp_request_rejects_shared_physical_session(self) -> None:
         state = self.init()
         sessions = RunSessions(state)
         name = sessions.acp_name("author")
         state["sessions"]["reviewer"] = {"handle": name, "model": "fixture-model"}
-        state.pop("handle_owners", None)
         before = deepcopy(state)
         with self.assertRaisesRegex(Invalid, "Physical session shared"):
             sessions.request_acp_creation("author")
@@ -885,7 +888,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
     def test_prompt_contains_instruction_content_and_no_blanket_approval(self) -> None:
         self.fake_acp()
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         prepared = prepare_prompt(self.ledger, "write-label")
         self.assertIn("Implementer contract", Path(prepared["prompt"]).read_text(encoding="utf-8"))
         self.assertNotIn("--approve-all", prepared["prompt_argv"])
@@ -896,7 +899,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.config["acpx"]["connections"]["zcode"]["permissions"] = "approve-all"
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         with self.assertRaisesRegex(Invalid, "requires an explicit execution.workspace"):
             prepare_prompt(self.ledger, "write-label")
         with self.assertRaisesRegex(Invalid, "requires an explicit execution.workspace"):
@@ -908,7 +911,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.config["acpx"]["connections"]["zcode"]["permissions"] = "approve-all"
         self.config["execution"]["workspace"] = "shared"
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         argv = prepare_prompt(self.ledger, "write-label")["prompt_argv"]
         self.assertIn("--approve-all", argv)
         self.assertEqual(argv[argv.index("--cwd") + 1], str(self.ledger.root))
@@ -929,7 +932,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim(node_id)
+        self.claim(node_id)
         responses = iter(("ready", "idle"))
 
         def poll(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -1003,7 +1006,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
 
         def stop(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
             kwargs["stderr"].write("partial diagnostic")
@@ -1038,7 +1041,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         state = self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         child = self.root / "writer.py"
         child.write_text(
             "import os, time\n"
@@ -1100,7 +1103,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         state = self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         with ExitStack() as children:
 
             def spawn(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
@@ -1138,16 +1141,21 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
 
         def late_failure(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
             kwargs["stderr"].write("late failure")
             self.ledger.unknown("write-label", "reconciling")
-            self.ledger.resolve("write-label", "blocked", "verified termination")
+            with self.assertRaisesRegex(Invalid, "locked"):
+                self.ledger.resolve("write-label", "blocked", "verified termination")
             return subprocess.CompletedProcess(argv, 2)
 
         result = run_operation(self.ledger, "write-label", "create", run=late_failure)
-        self.assertTrue(result["stale"])
+        self.assertEqual(result["exit_code"], 2)
+        self.assertIn("session", result)
+        self.assertNotIn("stale", result)
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "unknown")
+        self.ledger.resolve("write-label", "blocked", "verified termination")
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "blocked")
         self.ledger.archive("cancelled", "stopped")
         self.ledger.clean()
@@ -1160,7 +1168,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         prepared = prepare_prompt(self.ledger, "write-label")
         run_operation(self.ledger, "write-label", "create", run=self.transport)
         self.ledger.bind(
@@ -1232,7 +1240,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         install_connection(self.config, self.root, "opencode")
         self.init()
         node = "write-label"
-        self.ledger.claim(node)
+        self.claim(node)
         prepared = prepare_prompt(self.ledger, node)
         calls: list[list[str]] = []
 
@@ -1280,7 +1288,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp(code=2)
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         run_operation(self.ledger, "write-label", "create", run=self.transport)
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "unknown")
         with self.assertRaises(Invalid):
@@ -1340,7 +1348,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.start("write-label")
         self.ledger.finish("write-label", self.report("write-label"))
         self.ledger.replace_session("author", "new context", "old writer terminal", "handoff")
-        self.ledger.claim("verify-label")
+        self.claim("verify-label")
         with self.assertRaisesRegex(Invalid, "Retired physical"):
             self.ledger.bind("verify-label", "handle-author", "gpt-6.1-sol")
 
@@ -1392,14 +1400,14 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp(code=2)
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         old = run_operation(self.ledger, "write-label", "create", run=self.transport)["session"]
         self.ledger.resolve("write-label", "blocked", "fixture process exited, no backend session")
         self.ledger.replace_session(
             "author", "failed creation", "terminal verified", "no work done"
         )
         self.ledger.retry("write-label", "recovery", "creation failed", "terminal verified")
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         before = self.ledger.read()
         profile = self.config["profiles"]["middle-implementer-zcode"]
         model = self.config["models"][profile["model"]]["id"] or "fixture-model"
@@ -1413,23 +1421,30 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.fake_acp()
         install_connection(self.config, self.root, "zcode")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
 
         def old_call(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
             self.ledger.unknown("write-label", "transport outcome lost")
-            self.ledger.retry("write-label", "recovery", "terminal confirmed", "fixture exited")
-            self.ledger.claim("write-label")
+            with self.assertRaisesRegex(Invalid, "Resolve"):
+                self.ledger.retry("write-label", "recovery", "terminal confirmed", "fixture exited")
+            with self.assertRaisesRegex(Invalid, "locked"):
+                self.ledger.resolve("write-label", "blocked", "backend session stopped")
             return subprocess.CompletedProcess([], 2)
 
         result = run_operation(self.ledger, "write-label", "create", run=old_call)
-        self.assertTrue(result["stale"])
+        self.assertEqual(result["exit_code"], 2)
+        self.assertIn("session", result)
+        self.assertNotIn("stale", result)
         saved = next(
             row
             for row in sqlite_history_repository.listing(self.root, result["run_id"])
             if row["path"] == result["stdout_ref"]
         )
         self.assertEqual(saved["dispatch_id"], result["dispatch_id"])
-        self.assertEqual(self.ledger.read()["events"][-1]["status"], "stale")
+        self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "unknown")
+        self.ledger.resolve("write-label", "blocked", "backend session confirmed stopped")
+        self.ledger.retry("write-label", "recovery", "terminal confirmed", "fixture exited")
+        self.claim("write-label")
         self.assertEqual(self.ledger.read()["nodes"]["write-label"]["status"], "reserved")
 
     def test_source_reintake_retains_failure_budget(self) -> None:
@@ -1474,8 +1489,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             destination = self.root / rel
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text((ROOT / rel).read_text())
+        shutil.copytree(Path(original).parent / "graphs", self.root / "graphs")
         self.init()
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         result = prepare_prompt(self.ledger, "write-label")
         self.assertNotIn(
             "Distinct configured orchestration policy",
@@ -1501,7 +1517,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.init()
         graph = deepcopy(self.ledger.read()["graph"])
         self.ledger.reintake(graph, "recheck", "fixture-message-42")
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         self.assertEqual(
             self.ledger.read()["graph"]["sources"]["request"]["external_approval"]["evidence_ref"],
             "fixture-message-42",
@@ -1519,7 +1535,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
                 "selected_scope"
             ],
         )
-        self.ledger.claim("write-label")
+        self.claim("write-label")
 
     def test_external_approval_missing_or_incomplete_rejected(self) -> None:
         source = self.external_source()
@@ -1562,7 +1578,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
             self.ledger.reintake(
                 deepcopy(self.ledger.read()["graph"]), "new content", "generic continue"
             )
-        self.ledger.claim("write-label")
+        self.claim("write-label")
         self.assertNotEqual(
             "Changed after approval", self.ledger.packet("write-label")["source"]["snapshot"]
         )
@@ -1604,9 +1620,9 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.parallel_graph()
         self.g["nodes"][1]["owns"] = ["docs/FILE0.txt"]
         self.init()
-        self.ledger.claim("worker0")
+        self.claim("worker0")
         with self.assertRaisesRegex(Invalid, "QUEUED_OWNERSHIP"):
-            self.ledger.claim("worker1")
+            self.claim("worker1")
 
     def test_terminal_source_drift_report_is_recorded_as_blocked(self) -> None:
         (self.root / "request.md").write_text("original")
@@ -1756,7 +1772,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.batch()
         self.init()
         with self.assertRaisesRegex(Invalid, "Dependencies"):
-            self.ledger.claim("write-second")
+            self.claim("write-second")
 
     def test_integrated_snapshot_can_supersede_accepted_predecessor(self) -> None:
         self.batch()

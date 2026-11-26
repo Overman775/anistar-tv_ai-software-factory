@@ -6,9 +6,13 @@ from typing import Literal
 
 from factory import file_reader
 from factory.database.provider import current_database
+from factory.graphs.definition import load as load_definitions
+from factory.graphs.definition import parse
+from factory.paths import FACTORY_ROOT
 from factory.runtime.contracts import (
     AppliedCase,
     AppliedLesson,
+    Config,
     Node,
     State,
 )
@@ -21,7 +25,7 @@ from factory.runtime.knowledge.teacher_job_repository import TeacherJobRepositor
 from factory.runtime.knowledge.teacher_models import IncidentEvidence as IncidentEvidence
 from factory.runtime.knowledge.teacher_models import SearchEvidence as SearchEvidence
 from factory.runtime.knowledge.teacher_models import TeacherJob as TeacherJob
-from factory.runtime.knowledge.teacher_models import decode_event as decode_event
+from factory.runtime.knowledge.teacher_models import TeacherProfile
 from factory.runtime.lessons import (
     BASE,
     Lesson,
@@ -36,15 +40,51 @@ from factory.runtime.workspace import checkout_ref
 Event = TeacherJob
 
 
+def launch_profile(config: Config) -> TeacherProfile:
+    name = config["_defaults"].get("teacher")
+    if name is None:
+        raise ValueError("Configure profiles.teacher in .factory/factory.yaml")
+    profile = config["profiles"][name]
+    model = config["models"][profile["model"]]
+    require(model["id"] and model.get("effort"), "Teacher requires an explicit model ID and effort")
+    return {
+        "profile_name": name,
+        "profile": profile,
+        "model": model,
+        "adapter": config["adapters"][profile["adapter"]],
+    }
+
+
 def read_event(root: Path, key: str, *, jobs: TeacherJobRepository | None = None) -> TeacherJob:
     jobs = current_database().teacher if jobs is None else jobs
     require(
         len(key) == 64 and all(c in "0123456789abcdef" for c in key), "Invalid Teacher event ID"
     )
-    return decode_event(key, jobs.read(root, key))
+    return jobs.read(root, key)
+
+
+HANDLER_FILES = (
+    "graphs/definition.py",
+    "graphs/program.py",
+    "dependency_graph.py",
+    "runtime/workflow_core.py",
+    "runtime/teacher.py",
+    "runtime/knowledge/teacher_models.py",
+    "runtime/scheduling/teacher_dispatch.py",
+)
+
+
+def handler_hashes() -> dict[str, str]:
+    return {
+        path: digest((FACTORY_ROOT / "tooling/factory" / path).read_bytes())
+        for path in HANDLER_FILES
+    }
 
 
 def require_checkout(root: Path, event: TeacherJob) -> None:
+    require(
+        event.handlers == handler_hashes(), "Restore the registered Teacher handlers for this event"
+    )
     if event.checkout is not None:
         require(event.checkout == checkout_ref(root), f"Teacher event belongs to {event.checkout}")
 
@@ -54,6 +94,11 @@ def enqueue(root: Path, event: TeacherJob, *, jobs: TeacherJobRepository | None 
     key = event.key()
 
     def prepare() -> TeacherJob:
+        installed = root / ".factory"
+        bundle = installed if (installed / "factory.yaml").exists() else FACTORY_ROOT
+        event.definitions = load_definitions(bundle / "graphs", event.graph_entry)
+        event.handlers = handler_hashes()
+        validate_delivery(event.graph_entry, event.definitions)
         if event.delete_target:
             require_checkout(root, event)
             event.delete_snapshot = next(
@@ -140,16 +185,37 @@ def acceptance_details(root: Path, state: State, node: Node) -> dict[str, object
     return {
         "lesson_incident": incident,
         "lesson_checkout": branch,
-        "lesson_user": config.get("_documents", {}).get(str(user), ""),
+        "lesson_user": config["_documents"].get(str(user), ""),
         "lesson_reports": list(refs.values()),
+        "lesson_accepted_reports": {
+            node_id: state["nodes"][node_id]["report_ref"]
+            for node_id in sorted(task_nodes)
+            if state["nodes"][node_id]["status"] == "done"
+            and "report_ref" in state["nodes"][node_id]
+        },
         **({"lesson_applications": lessons} if lessons else {}),
         **({"lesson_applied_cases": applied} if applied else {}),
     }
 
 
-def run_review_event(state: State) -> TeacherJob | None:
-    if state["status"] != "completed":
-        return None
+def validate_delivery(name: str, documents: dict[str, str]) -> None:
+    from factory.runtime.scheduling.teacher_dispatch import delivery_graph
+
+    delivery_graph(name, tuple(sorted(documents.items())))
+
+
+def teacher_definitions(documents: dict[str, str], name: str) -> dict[str, str]:
+    from factory.graphs.definition import Call
+
+    subset = {name: documents[name]}
+    for node in parse(name, documents[name]).nodes.values():
+        if isinstance(node, Call):
+            subset.update(teacher_definitions(documents, node.call))
+    return subset
+
+
+def run_review_event(state: State) -> TeacherJob:
+    require(state["status"] == "completed", "Teacher review requires a completed run")
     incidents: dict[str, IncidentEvidence] = {}
     for record in state["events"]:
         incident = record.get("lesson_incident")
@@ -161,21 +227,30 @@ def run_review_event(state: State) -> TeacherJob | None:
         if "lesson_reports" in record:
             # Reacceptance includes earlier attempts but replaces superseded claims of reuse.
             evidence.reports = record["lesson_reports"]
+            evidence.accepted_reports = record["lesson_accepted_reports"]
             evidence.applied_cases = record.get("lesson_applied_cases", [])
             evidence.applied_lessons = record.get("lesson_applications", [])
         if "lesson_retro" in record:
             evidence.retro.append(record["lesson_retro"])
     config = state["config"]
     user = Path(config["_path"]).parent / "memory/USER.md"
+    name = parse("implement", state["definitions"]["implement"]).assignments["teacher"]
     return TeacherJob(
+        graph_entry=name,
+        definitions=teacher_definitions(state["definitions"], name),
+        handlers={
+            path: config["_files"][str(Path(config["_path"]).parent / "tooling/factory" / path)]
+            for path in HANDLER_FILES
+        },
         kind="accept",
         operation="capture",
         incident=state["run_id"],
         source=state["archive_path"],
         checkout=state["lesson_run_checkout"],
-        user_instructions=config.get("_documents", {}).get(str(user), ""),
+        user_instructions=config["_documents"].get(str(user), ""),
         observation=state.get("summary", ""),
         incidents=incidents,
+        profile=launch_profile(config) if config["_defaults"].get("teacher") else None,
     )
 
 
@@ -188,15 +263,19 @@ def finalizer(
         return {"role": role, "status": "skipped" if state["status"] == "cancelled" else "planned"}
     key = state.get("final_teacher_event")
     if key is None:
-        # Older completed snapshots have the same deterministic job, without its stored ID.
-        review = run_review_event(state)
-        assert review is not None
-        key = review.key()
+        raise ValueError("Completed run is missing its Teacher assignment")
     event = read_event(root, key, jobs=jobs)
     status = "done" if event.done else "waiting" if event.waiting_for else "ready"
+    if status == "ready" and event.attempts and event.attempts[-1].status != "stopped":
+        status = event.attempts[-1].status
+    if not event.done and event.handlers != handler_hashes():
+        status = "restore_handlers"
     if status == "ready" and event.checkout and event.checkout != checkout_ref(root):
         status = "wrong_checkout"
-    return {"role": role, "status": status, "event_id": key}
+    result = {"role": role, "status": status, "event_id": key}
+    if event.attempts:
+        result["dispatch_id"] = event.attempts[-1].dispatch_id
+    return result
 
 
 def pending(
@@ -206,11 +285,41 @@ def pending(
     return jobs.pending(root, waiting, lambda: checkout_ref(root))
 
 
-def park(root: Path, key: str, question: str, *, jobs: TeacherJobRepository | None = None) -> None:
+def park(
+    root: Path,
+    key: str,
+    question: str,
+    *,
+    jobs: TeacherJobRepository | None = None,
+    dispatch_id: str | None = None,
+) -> None:
     with lock(relative(root, f"{BASE}/teacher/write.lock"), wait=True):
         event = read_event(root, key, jobs=jobs)
         require_checkout(root, event)
+        event.check_dispatch(dispatch_id)
         event.wait_for_owner(question)
+        update_event(root, key, event, jobs=jobs)
+
+
+def reply(
+    root: Path, key: str, reference: str, answer: str, *, jobs: TeacherJobRepository | None = None
+) -> None:
+    with lock(relative(root, f"{BASE}/teacher/write.lock"), wait=True):
+        event = read_event(root, key, jobs=jobs)
+        require_checkout(root, event)
+        for prior in event.owner_replies:
+            if prior["reference"] == reference:
+                require(prior["answer"] == answer, "Owner reply reference already used")
+                return
+        require(
+            not event.done and event.waiting_for and reference.strip() and answer.strip(),
+            "An open owner question and cited answer are required",
+        )
+        assert event.waiting_for is not None
+        event.owner_replies.append(
+            {"question": event.waiting_for, "reference": reference, "answer": answer}
+        )
+        event.waiting_for = None
         update_event(root, key, event, jobs=jobs)
 
 
@@ -223,6 +332,7 @@ def route(root: Path, key: str, *, jobs: TeacherJobRepository | None = None) -> 
         "observation": event.observation,
         "user_instructions": event.user_instructions,
         "waiting_for": event.waiting_for,
+        "owner_replies": event.owner_replies,
         "done": event.done,
     }
 
@@ -234,7 +344,10 @@ def packet(root: Path, key: str, *, jobs: TeacherJobRepository | None = None) ->
         entries = lookup(root, event.edit_target)
     else:
         entries = catalog(root)
-    return {"event": event.model_dump(), "catalog": [e.model_dump() for e in entries]}
+    return {
+        "event": event.model_dump(exclude={"definitions", "graph_entry", "handlers"}),
+        "catalog": [e.model_dump() for e in entries],
+    }
 
 
 def search_feedback(
@@ -261,10 +374,12 @@ def apply(
     incident: str | None = None,
     *,
     jobs: TeacherJobRepository | None = None,
+    dispatch_id: str | None = None,
 ) -> dict[str, object]:
     with lock(relative(root, f"{BASE}/teacher/write.lock"), wait=True):
         event = read_event(root, key, jobs=jobs)
         require_checkout(root, event)
+        event.check_dispatch(dispatch_id)
         require(not event.done, "Teacher event already complete")
         require(not event.waiting_for, "Awaiting owner reply")
         if event.operation == "edit":
@@ -331,12 +446,18 @@ def _record_deletion(
 
 
 def delete(
-    root: Path, key: str, revision: str, *, jobs: TeacherJobRepository | None = None
+    root: Path,
+    key: str,
+    revision: str,
+    *,
+    jobs: TeacherJobRepository | None = None,
+    dispatch_id: str | None = None,
 ) -> None:
     with lock(relative(root, f"{BASE}/teacher/write.lock"), wait=True):
         event = read_event(root, key, jobs=jobs)
         require_checkout(root, event)
         require(event.kind == "user" and event.delete_target, "Explicit user deletion required")
+        event.check_dispatch(dispatch_id)
         require(not event.done, "Teacher event already complete")
         require(not event.waiting_for, "Awaiting owner reply")
         # The rename is both removal and a receipt for retries before completion.
@@ -372,10 +493,13 @@ def complete(
     reason: str | None = None,
     *,
     jobs: TeacherJobRepository | None = None,
+    dispatch_id: str | None = None,
 ) -> None:
     with lock(relative(root, f"{BASE}/teacher/write.lock"), wait=True):
         event = read_event(root, key, jobs=jobs)
         require_checkout(root, event)
+        if cancelled_by is None:
+            event.check_dispatch(dispatch_id)
         if not event.done:
             if cancelled_by is not None:
                 require(

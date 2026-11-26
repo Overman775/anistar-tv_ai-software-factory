@@ -3,21 +3,29 @@
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from factory.runtime import command_worker, teacher
+from factory.runtime import teacher
 from factory.runtime.agent_commands import command_shell, factory_command
-from factory.runtime.contracts import Dispatch, ExecutionReceipt, Node, State
+from factory.runtime.contracts import Dispatch, State
 from factory.runtime.history import report_history
 from factory.runtime.history.history_repository import HistoryRepository
 from factory.runtime.knowledge.teacher_job_repository import TeacherJobRepository
 from factory.runtime.packets.content import pending_packet_confirmations
 from factory.runtime.scheduling import escalation
+from factory.runtime.scheduling.orchestrator_graph import (
+    Accept,
+    Assign,
+    Checkpoint,
+    GateEvidence,
+    Hold,
+    assignment_ticket,
+    stop_identity,
+)
 from factory.runtime.workflow_config import check_config
-from factory.runtime.workflow_core import Invalid, require
+from factory.runtime.workflow_core import Invalid, graph_identity, require
 from factory.runtime.workflow_graph import (
     validate_assignment_lineage,
     validate_graph,
 )
-from factory.tasks.contracts import Task
 
 
 class EvidenceLedger(Protocol):
@@ -27,10 +35,7 @@ class EvidenceLedger(Protocol):
     def read(self) -> State: ...
 
 
-def explain(
-    ledger: EvidenceLedger, node_id: str, dispatch_id: str, run_id: str | None
-) -> dict[str, Any]:
-    """Read the specific attempt, including superseded attempts and sealed runs."""
+def lookup_state(ledger: EvidenceLedger, run_id: str | None) -> State:
     if run_id is None:
         state = ledger.read()
     else:
@@ -43,6 +48,14 @@ def explain(
             if current is not None and current["run_id"] == run_id
             else ledger.history.archived_state(ledger.root, run_id)
         )
+    return state
+
+
+def explain(
+    ledger: EvidenceLedger, node_id: str, dispatch_id: str, run_id: str | None
+) -> dict[str, Any]:
+    """Read the specific attempt, including superseded attempts and sealed runs."""
+    state = lookup_state(ledger, run_id)
     run_id = state["run_id"]
     selected = state["nodes"].get(node_id)
     is_current = selected is not None and selected.get("dispatch_id") == dispatch_id
@@ -109,15 +122,58 @@ def explain(
     }
 
 
-class QueryLedger(Protocol):
-    root: Path
-
-    def active_commands(self, state: State) -> dict[str, ExecutionReceipt]: ...
-    def acceptance_task(self, state: State, nodes: dict[str, Node], node_id: str) -> Task: ...
-    def claim_pool(self, state: State, nodes: dict[str, Node], node_id: str) -> str: ...
+class QueryLedger(GateEvidence, Protocol):
     def check_completion(
         self, state: State, *, config_error: str | None = None, config_checked: bool = False
     ) -> None: ...
+
+
+def verification_progress(state: State) -> dict[str, object]:
+    """Project assigned obligations and the latest attempt for this exact candidate."""
+    progress: dict[str, object] = {}
+    executions = state.get("executions", {})
+    for node, dispatch in state["nodes"].items():
+        assignment = dispatch.get("assignment")
+        if dispatch.get("role") != "tester" or assignment is None:
+            continue
+        ticket = dispatch["dispatch_id"]
+        commands = {
+            rec["spec"]["id"]: (key, rec)
+            for key, rec in executions.items()
+            if rec["dispatch_id"] == ticket and rec["node_id"] == node
+        }
+        report = dispatch.get("report")
+        observations = {
+            entry["id"]: entry
+            for entry in (report.get("checks", []) if report else [])
+            if entry.get("kind") == "observation"
+        }
+        rows: dict[str, dict[str, object]] = {}
+        for spec in assignment["requirements"]["required_checks"]:
+            key = spec["id"]
+            row: dict[str, object] = {"kind": spec["kind"], "status": "PENDING"}
+            if spec["kind"] == "observation":
+                observed = observations.get(key)
+                row["status"] = (
+                    observed.get("result", "BLOCKED") if observed else "AWAITING_OBSERVATION"
+                )
+                row["method"] = spec["method"]
+                if observed:
+                    row["evidence"] = observed.get("evidence")
+            elif key in commands:
+                execution, record = commands[key]
+                row.update(
+                    status=record["status"], request_id=record["request_id"], execution_id=execution
+                )
+                if "result" in record:
+                    row["receipt"] = execution
+            rows[key] = row
+        progress[node] = {
+            "dispatch_id": ticket,
+            "source_hash": assignment["source"]["hash"],
+            "checks": rows,
+        }
+    return progress
 
 
 def next_actions(
@@ -131,7 +187,7 @@ def next_actions(
         key: {
             field: value
             for field, value in current.items()
-            if field in {"status", "dispatch_id", "profile", "handle", "reason"}
+            if field in {"status", "dispatch_id", "profile", "handle", "reason", "submission"}
         }
         for key, current in state["nodes"].items()
         if current["status"] in escalation.ACTIVE
@@ -144,7 +200,7 @@ def next_actions(
             "node_id": r["node_id"],
             "dispatch_id": r["dispatch_id"],
             "check_id": r["spec"]["id"],
-            "owner_registered": command_worker.artifact(ledger.root, r, ".owner.json").exists(),
+            "owner_registered": "owner" in r,
             "reconcile_command": factory_command(
                 ledger.root, config, "checks", "reconcile", rid, shell=shell
             ),
@@ -153,6 +209,23 @@ def next_actions(
     }
     result: dict[str, Any] = {
         "run_status": state["status"],
+        "task_routes": {
+            key: {
+                "kind": task["kind"],
+                "risk": task["risk"],
+                "reason": task["reason"],
+                "owner_review_ref": task.get("owner_review_ref"),
+                "independent_review": task["independent_review"],
+                "roles": list(
+                    dict.fromkeys(
+                        state["graph"]["agents"][n["agent"]]["role"]
+                        for n in state["graph"]["nodes"]
+                        if n["task"] == key and n["agent"]
+                    )
+                ),
+            }
+            for key, task in state["graph"]["tasks"].items()
+        },
         "pause_reason": state.get("pause_reason"),
         "automatic_continuation": False,
         "dispatches": active,
@@ -162,6 +235,7 @@ def next_actions(
             if any(n["id"] in active and n.get("agent") == key for n in state["graph"]["nodes"])
         },
         "commands": commands,
+        "verification": verification_progress(state),
         "after_archive": teacher.finalizer(ledger.root, state, jobs=jobs),
         "pending_teacher_events": teacher.pending(ledger.root, jobs=jobs),
         "pending_packet_confirmations": pending_packet_confirmations(state),
@@ -170,6 +244,9 @@ def next_actions(
     ready, accepts = [], []
     blockers: dict[str, str] = {}
     corrections: dict[str, list[str]] = {}
+    handoffs: dict[str, list[dict[str, object]]] = {}
+    repair_routes = {}
+    source_stops: dict[str, dict[str, str]] = {}
     config_error = None
     if state["status"] == "active":
         nodes = validate_graph(state["graph"], state["config"], ledger.root)
@@ -185,6 +262,9 @@ def next_actions(
                 )
             except Invalid as exc:
                 blockers["run"] = str(exc)
+        checkpoint = Checkpoint(state, nodes, ledger, blockers.get("run"))
+        source_stops = checkpoint.source_stops
+        outcomes = checkpoint.evaluate(list(state["nodes"]))
         for key, current in state["nodes"].items():
             report = current.get("report")
             if report and current.get("dispatch_id") not in state.get("processed_results", []):
@@ -194,28 +274,46 @@ def next_actions(
                     "stage_result": report.get("stage_result"),
                     "report_ref": current.get("report_ref"),
                 }
-            if current["status"] == "unknown":
-                blockers[key] = "Reconcile actual transport ownership before retry"
-            if current["status"] == "blocked":
-                blockers[key] = str(report.get("stage_result", "Blocked")) if report else "Blocked"
-                if (
-                    not active
-                    and not commands
-                    and not state.get("pause_reason")
-                    and "run" not in blockers
-                ):
-                    corrections[key] = escalation.possible_actions(state, nodes[key], current)
-            if current["status"] != "pending" or "run" in blockers:
-                continue
-            try:
-                if nodes[key]["stage"] == "accept":
-                    ledger.acceptance_task(state, nodes, key)
-                    accepts.append(key)
-                else:
-                    ledger.claim_pool(state, nodes, key)
-                    ready.append(key)
-            except Invalid as exc:
-                blockers[key] = str(exc)
+            outcome = outcomes[key]
+            if isinstance(outcome, Hold):
+                if outcome.reason != blockers.get("run"):
+                    blockers[key] = outcome.reason
+                if outcome.corrections:
+                    corrections[key] = list(outcome.corrections)
+                if outcome.corrections and outcome.next_role:
+                    handoffs[key] = [
+                        {
+                            "command": "workflow " + action,
+                            "role": outcome.next_role,
+                            "reason": outcome.reason,
+                            "source": current.get("report_ref"),
+                            **(
+                                {"criteria": report["criterion_assessments"]}
+                                if report and "criterion_assessments" in report
+                                else {}
+                            ),
+                            "node_id": key,
+                        }
+                        for action in outcome.corrections
+                    ]
+                if outcome.targets:
+                    repair_routes[key] = list(outcome.targets)
+                    handoffs[key] = [
+                        {
+                            "command": "workflow " + target["action"],
+                            "role": state["nodes"][target["node_id"]]["role"],
+                            "node_id": target["node_id"],
+                            "dispatch_id": target["dispatch_id"],
+                            "stage": target["stage"],
+                            "source": target["evidence"],
+                            "reason": outcome.reason,
+                        }
+                        for target in outcome.targets
+                    ]
+            elif isinstance(outcome, Accept):
+                accepts.append(key)
+            elif isinstance(outcome, Assign):
+                ready.append(key)
     completion = False
     if state["status"] == "active" and not active:
         try:
@@ -239,6 +337,10 @@ def next_actions(
                 run_id,
                 shell=shell,
             )
+    tickets = {
+        key: assignment_ticket(run_id, state["revision"], key, state["nodes"][key]["attempt"] + 1)
+        for key in ready
+    }
     result = {
         **result,
         "run_id": run_id,
@@ -246,13 +348,21 @@ def next_actions(
         "read_commands": read_commands,
         "results": results,
         "runnable": ready,
+        "assignment_tickets": tickets,
         "acceptance": accepts,
         "blockers": blockers,
         "corrections": corrections,
+        "repair_routes": repair_routes,
+        "handoffs": handoffs,
+        "source_stops": source_stops,
+        "task_stops": {
+            task: {"stop_id": stop_identity(state, task), "reason": stop["reason"]}
+            for task, stop in state.get("escalation_stops", {}).items()
+        },
         "completion_eligible": completion,
     }
 
-    cursor = f"{state['run_id']}:{len(state['events'])}:{report_history.identity(result)[:16]}"
+    cursor = f"{state['run_id']}:{len(state['events'])}:{graph_identity(result)[:16]}"
     if after == cursor and not commands:
         return {
             "cursor": cursor,

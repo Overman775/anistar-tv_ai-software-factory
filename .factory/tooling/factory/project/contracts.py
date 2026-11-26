@@ -97,6 +97,7 @@ class Gate(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class ProjectData(TypedDict):
+    public_contracts: NotRequired[dict[Nonblank, Annotated[list[Nonblank], Field(min_length=1)]]]
     id: Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]*$")]
     documents: NotRequired[dict[Annotated[str, Field(min_length=1)], Document]]
     rules: NotRequired[dict[Literal["coordinator", "worker"], list[Rule]]]

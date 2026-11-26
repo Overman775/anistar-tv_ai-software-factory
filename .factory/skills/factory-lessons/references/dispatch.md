@@ -8,10 +8,15 @@ When resuming other authorized lesson work, recover its ID from `cli lessons pen
 read `cli lessons route EVENT` for its persisted operation and pinned owner text.
 Pass [Capture](capture.md) for capture, [Edit](edit.md) for edit, and [Refresh](refresh.md)
 for audit or delete. The waiting list is for owner
-follow-up; skip those entries during automatic dispatch. Retune supplies its own procedure.
+follow-up. Record a cited answer with `cli lessons reply EVENT REFERENCE ANSWER`, then reconcile that event’s original assignment. Retune supplies its own procedure.
 
-Coordinator: run `.factory/tooling/bin/cli lessons teacher-launch`
-in the assigned checkout. Resolve again for each new assignment. Follow the returned
+Coordinator: run `.factory/tooling/bin/cli lessons teacher-launch EVENT` in the assigned checkout.
+Launch the worker only when the result grants `spawn` or `prepare_acp`. On `reconcile`, inspect the
+existing assignment. Bind the observed handle with `lessons teacher-launch EVENT --bind DISPATCH HANDLE`.
+Pass DISPATCH to the worker for `--dispatch` on publish, delete, wait-owner and complete.
+If a launch response was lost, verify the worker's status. If it has stopped, use
+`lessons teacher-launch EVENT --stopped DISPATCH EVIDENCE` and claim with the returned `--ticket`.
+For Retune outside an event, inspect the profile with `lessons teacher-launch`. Follow the returned
 adapter instructions, its capacity rules, and the exact model ID and effort.
 For Codex native use a fresh generic worker with `model` set to the returned
 model ID, `reasoning_effort` set to its effort, and `fork_turns="none"`.
@@ -35,7 +40,7 @@ limitation. Stop processing that ID for this drain and report it for follow-up.
 One completed workflow run produces one Capture assignment. Pass its single
 event ID to one Teacher for all packet incidents, including linked retro notes.
 Do not launch a worker per task or per note. For a demonstrated reuse observed outside the workflow,
-`cli lessons capture-case REF.json OBSERVATION` remains an explicit intake.
+`cli lessons capture-case RUN NODE DISPATCH OBSERVATION` remains an explicit intake.
 Include how the current result was verified.
 
 Wait for the worker result and verify the durable decision. Record the actual

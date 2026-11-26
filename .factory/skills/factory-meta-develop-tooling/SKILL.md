@@ -29,9 +29,9 @@ One agent performing multiple activities reads each applicable contract.
 Workflow-owned roles, coordinator handoffs and pinned-policy mechanisms apply when
 working in that workflow; otherwise follow repository instructions and task authority.
 
-For Python changes, read [Python tooling](references/python.md).
-For factory-owned YAML changes, read [YAML tooling](references/yaml.md).
-Follow [interpreter setup](../factory-install/references/integration.md#interpreter).
+Read the [development references](#development-references) for the affected language and interpreter setup.
+When changing a process route, gate or subgraph, trace one assignment from the
+YAML decision to the handler and its recorded outcome. [Graph development](references/graphs.md)
 Use the project launcher's `help --json` catalog and `COMMAND --help` for command
 arguments and supported modes.
 
@@ -113,3 +113,13 @@ Distinguish implementation from verified readiness. Preserve contract changes
 in the source-owned documentation and repair affected references. Before completion,
 synchronize affected installed-bundle contracts, CLI help and command examples
 with the verified implementation.
+
+## Development references
+
+- Process routes, subgraphs and recovery — [graph development](references/graphs.md) and [coordinator gates and corrections](../../workflow/orchestration.md#gates-and-corrections).
+- Python models, storage and tests — [Python tooling](references/python.md). Factory-owned configuration and validators — [YAML tooling](references/yaml.md).
+- Launcher setup and local checks — [interpreter setup](../factory-install/references/integration.md#interpreter) and [target checks](references/python.md#target-checks).
+- Role responsibilities and acceptance evidence — [agent contracts](../../contracts/README.md) and [verification rules](../../gates/common/verification-rules.md).
+
+In Lab, read `specs/workflow-graphs.md` for the graph contract and `specs/tooling.md`
+for the CLI, code map and checker. Both paths start at the selected variant root, beside `src/`.

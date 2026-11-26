@@ -10,10 +10,10 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
 from typing_extensions import TypedDict
 
 from factory.context import context
+from factory.dependency_graph import compile_dependencies
+from factory.runtime import upstream
 from factory.runtime.agent_commands import check_commands
 from factory.runtime.contracts import (
-    CheckEvidence,
-    CheckResult,
     FindingView,
     LockedSource,
     Node,
@@ -23,9 +23,10 @@ from factory.runtime.contracts import (
     agent_key,
 )
 from factory.runtime.history import report_history
-from factory.runtime.history.artifact_ref import transport_report
 from factory.runtime.reports import finish_requirements, review_findings
+from factory.runtime.reports.summary import REPORT_SUMMARY, compact_tester_report
 from factory.runtime.scheduling import escalation
+from factory.runtime.workflow_core import graph_identity
 from factory.tasks.contracts import Task
 from factory.validation import validation_message
 
@@ -64,12 +65,11 @@ class ImplementPacket(context.ContextPacket):
     integration_owners: dict[str, IntegrationOwner]
     review_findings: dict[str, FindingView]
     correction: escalation.WorkerCorrection
-    report_path: NotRequired[str]
+    source_resolutions: NotRequired[dict[str, str]]
     check_commands: NotRequired[list[dict[str, str]]]
 
 
 IMPLEMENT_PACKET = TypeAdapter[ImplementPacket](ImplementPacket)
-REPORT_SUMMARY = TypeAdapter[ReportSummary](ReportSummary)
 
 
 def validate_packet(value: object) -> ImplementPacket:
@@ -90,14 +90,12 @@ def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
     task = state["graph"]["tasks"][node["task"]]
     allowed = {node["task"], *task.get("depends_on", [])}
     allowed.update(nodes[key]["task"] for key in node["depends_on"])
-    pending = list(node["depends_on"])
-    selected: set[str] = set()
-    while pending:
-        key = pending.pop()
-        if key in selected or nodes[key]["task"] not in allowed:
-            continue
-        selected.add(key)
-        pending.extend(nodes[key]["depends_on"])
+    visible = {
+        key: [dep for dep in item["depends_on"] if nodes[dep]["task"] in allowed]
+        for key, item in nodes.items()
+        if item["task"] in allowed
+    }
+    selected = compile_dependencies(visible).ancestors(node["id"])
 
     results: dict[str, DependencyResult] = {}
     for key in sorted(selected):
@@ -122,134 +120,9 @@ def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
     return results
 
 
-def compact_tester_report(state: State, node_id: str, report: ReportSummary) -> ReportSummary:
-    """Delivery projection only; original reports and immutable references stay intact."""
-    result = deepcopy(report)
-    result["summary"] = "Verification " + report["outcome"]
-    result.pop("evidence", None)
-    # Canonical findings and gate prose remain available through report_ref; their
-    # duplicated free text can contain successful test names and full-suite output.
-    result.pop("gate_results", None)
-    result.pop("findings", None)
-    checks: list[CheckResult] = []
-    observations = []
-    for check in report["checks"]:
-        execution_id = check.get("execution_id")
-        receipt = state.get("executions", {}).get(execution_id or "")
-        linked = (
-            receipt is not None
-            and receipt["node_id"] == node_id
-            and receipt["dispatch_id"] == report["dispatch_id"]
-            and receipt["run_id"] == report["run_id"]
-            and receipt["spec"]["id"] == check["id"]
-        )
-        status = (
-            receipt["status"] if linked and receipt is not None else check.get("result", "BLOCKED")
-        )
-        if linked and receipt is not None:
-            for observation in receipt.get("verification", []):
-                observed = deepcopy(observation)
-                if observed["scope"] == "unknown":
-                    observed["scope"] = receipt.get("selection", {}).get(
-                        "mode", receipt.get("mode", "unknown")
-                    )
-                for failure in observed["failures"]:
-                    failure["check_id"] = check["id"]
-                observations.append(observed)
-            skipped_stages = [
-                stage["spec"]["id"]
-                for stage in receipt.get("composite_stages", [])
-                if stage["execution_id"] not in state.get("executions", {})
-            ]
-            if skipped_stages:
-                observations.append(
-                    {
-                        "suite": "combined-gate",
-                        "scope": receipt.get("mode", "unknown"),
-                        "phase": "not-executed",
-                        "result": "BLOCKED",
-                        "counts": {},
-                        "failures": [],
-                        "diagnostics": ["Not executed checks: " + ", ".join(skipped_stages)],
-                    }
-                )
-        if status == "PASS":
-            continue
-        compact: CheckEvidence = {
-            "id": check["id"],
-            "result": status,
-            "reason": "Structured diagnostics unavailable; inspect immutable report/check evidence",
-        }
-        if linked and receipt is not None:
-            compact["evidence"] = receipt["output"]
-            compact["execution_id"] = execution_id or ""
-            if receipt.get("error"):
-                compact["reason"] = receipt["error"] or ""
-        checks.append(compact)
-    counts: dict[str, int] = {}
-    for observation in observations:
-        for key, value in observation["counts"].items():
-            counts[key] = counts.get(key, 0) + value
-    scopes = {item["scope"] for item in observations}
-    result["verification"] = [
-        {
-            "suite": "overall",
-            "scope": next(iter(scopes)) if len(scopes) == 1 else "unknown",
-            "phase": "verify",
-            "result": result["outcome"],
-            "counts": counts,
-            "failures": [failure for item in observations for failure in item["failures"]],
-            "diagnostics": [
-                text
-                for item in observations
-                if item["result"] != "PASS"
-                for text in item["diagnostics"]
-            ]
-            or (
-                [
-                    "Structured diagnostics unavailable; inspect immutable report/check evidence",
-                    *(
-                        [
-                            "Unstructured reporter observation: "
-                            + (report.get("evidence") or report["summary"])[:500]
-                        ]
-                        if report["outcome"] != "PASS"
-                        else []
-                    ),
-                ]
-                if not observations
-                else []
-            ),
-        }
-    ]
-    result["checks"] = checks
-    return result
-
-
 def correction_context(state: State, task_id: str) -> escalation.WorkerCorrection:
     correction = escalation.worker_context(state, task_id)
     nodes = {node["id"]: node for node in state["graph"]["nodes"]}
-    for entry in correction.get("history", []):
-        report = entry["evidence"]
-        node = nodes.get(report["node_id"])
-        if node is None or node["stage"] != "verify":
-            continue
-        agent = state["graph"]["agents"].get(agent_key(node))
-        if agent is None or agent["role"] != "tester":
-            continue
-        summary = REPORT_SUMMARY.validate_python(
-            {key: value for key, value in report.items() if key != "files"}
-        )
-        entry["evidence"] = compact_tester_report(state, node["id"], summary)
-        for event in reversed(state["events"]):
-            previous = event.get("previous")
-            if (
-                isinstance(previous, dict)
-                and previous.get("dispatch_id") == report["dispatch_id"]
-                and "report_ref" in previous
-            ):
-                entry["report_ref"] = report_history.reference(dict(previous).get("report_ref"))
-                break
     failures: list[escalation.VerificationFailureHandoff] = []
     seen = {entry["evidence"]["node_id"] for entry in correction.get("history", [])}
     for event in reversed(state["events"]):
@@ -320,7 +193,7 @@ def delivered_findings(
                         detail += " (" + failure["location"] + ")"
                     details.append(detail)
         if not details:
-            # Legacy reports may contain the only actionable failure observation.
+            # A pre-execution blocker can have only the worker’s observation.
             continue
         evidence = "Originating Tester dispatch failure diagnostics:\n" + "\n".join(
             dict.fromkeys(details)
@@ -346,6 +219,18 @@ def delivered_findings(
 
 def worker_node(node: Node) -> Node:
     return deepcopy(node)
+
+
+def projected_source(source: LockedSource, task: Task, node: Node) -> LockedSource:
+    if "upstream_tasks" not in source or (
+        task["kind"] == "integration" and node["stage"] in {"verify", "review"}
+    ):
+        return source
+    result = source.copy()
+    result["upstream_tasks"] = {
+        key: original for key, original in source["upstream_tasks"].items() if key == node["task"]
+    }
+    return result
 
 
 def projected_task(
@@ -385,11 +270,9 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         slice_id=task["slice"],
         task=task,
         node=worker_node(node),
-        source=source,
+        source=projected_source(source, task, node),
         finish_requirements=obligations,
-        assignment_sha256=report_history.identity(
-            report_history.assignment(state, node, obligations)
-        ),
+        assignment_sha256=graph_identity(report_history.assignment(state, node, obligations)),
         source_hash=state["graph"]["sources"][task["source"]]["hash"],
         dependency_results=dependency_results(state, node),
         acceptance_sources={
@@ -418,11 +301,6 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         ),
         correction=correction_context(state, node["task"]),
     )
-    if state["config"]["profiles"][agent["profile"]]["runner"] == "acpx":
-        envelope["report_path"] = str(
-            Path(state["workspace"])
-            / transport_report(state["run_id"], node_id, current["dispatch_id"])
-        )
     packet = dict(
         context.build(
             state["config"],
@@ -433,6 +311,8 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
             envelope,
         )
     )
+    if resolutions := upstream.resolution_evidence(state, node["task"]):
+        packet["source_resolutions"] = resolutions
     packet["task"] = projected_task(task, node, obligations)
     if "project-checks" in node.get("resources", []):
         packet["check_commands"] = [

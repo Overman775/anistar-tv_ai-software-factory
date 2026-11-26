@@ -59,7 +59,7 @@ def read_evidence(
         )
         allow_loose = not (
             name.startswith(f"{BASE}/history/{run_id}/reports/")
-            or (result.parent == root / BASE / "state" and name.endswith(".packet.json"))
+            or (result.parent == root / BASE / "state" and name.endswith(".packet.md"))
         )
         data = history.stored_evidence(root, run_id, name, allow_loose=allow_loose)
         if data is not None:

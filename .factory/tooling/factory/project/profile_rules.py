@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
+from graphlib import CycleError
 from pathlib import PurePosixPath
 from typing import Any, cast
 
@@ -11,6 +12,7 @@ from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from factory.checks.contracts import CheckSpec
 from factory.decisions.decision_contract import validate_answers, validate_definition
+from factory.dependency_graph import DependencyGraph, compile_dependencies
 from factory.project.contracts import (
     BoundaryGate,
     Nonblank,
@@ -156,14 +158,24 @@ def rule_groups(profile: ProjectData) -> dict[str, list[Rule]]:
     return {audience: entries for audience, entries in profile.get("rules", {}).items()}
 
 
+def validate_document_paths(profile: ProjectData) -> None:
+    for source, paths in profile.get("public_contracts", {}).items():
+        relative(source)
+        for path in paths:
+            relative(path)
+            require(path != source, "A public contract needs separate documentation")
+    documents = profile.get("documents", {})
+    for value in documents.values():
+        relative(value["path"])
+
+
 def validate(raw: object) -> ProjectData:
     try:
         profile = PROJECT.validate_python(raw)
     except ValidationError as exc:
         raise ValueError(validation_message("Project policy", exc, PROJECT)) from None
+    validate_document_paths(profile)
     documents = profile.get("documents", {})
-    for value in documents.values():
-        relative(value["path"])
     validate_gate_containers(profile)
     groups = rule_groups(profile)
     all_rules = [item for entries in groups.values() for item in entries]
@@ -240,11 +252,10 @@ def validate(raw: object) -> ProjectData:
             )
             for path in execution.get("inputs", []) + outputs:
                 relative(path)
-    done: set[str] = set()
-    while done != checks:
-        ready = {x["id"] for x in project_checks(profile) if set(x.get("after", [])) <= done} - done
-        require(ready, "check dependency cycle")
-        done |= ready
+    try:
+        project_check_graph(profile)
+    except CycleError as exc:
+        raise ValueError("Project policy: check dependency cycle") from exc
     for criterion in review_criteria(profile):
         from factory.project.review_definition import CORE_CRITERIA
 
@@ -406,6 +417,17 @@ def project_checks(profile: ProjectData, *, all_processes: bool = True) -> list[
         if all_processes or any(at.startswith("implement.") for at in gate["at"])
         for check in gate.get("checks", [])
     ]
+
+
+def project_check_graph(profile: ProjectData, *, all_processes: bool = True) -> DependencyGraph:
+    checks = project_checks(profile, all_processes=all_processes)
+    selected = {c["id"] for c in checks}
+    return compile_dependencies(
+        {
+            c["id"]: [dep for dep in c.get("after", []) if all_processes or dep in selected]
+            for c in checks
+        }
+    )
 
 
 def local_policy_files(profile: ProjectData, profile_root: str = ".") -> list[str]:

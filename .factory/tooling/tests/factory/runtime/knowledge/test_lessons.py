@@ -15,18 +15,20 @@ from unittest.mock import Mock, patch
 from factory.adapters.acpx_adapter import prepare_prompt
 from factory.database.port import DatabaseBackend
 from factory.database.provider import current_database, use_database
-from factory.database.sqlite import workflow_db
+from factory.database.sqlite import artifacts, workflow_db
 from factory.paths import FACTORY_ROOT
-from factory.runtime import lessons, teacher
+from factory.runtime import graph_inputs, lessons, teacher
 from factory.runtime.history import report_history
+from factory.runtime.history.document import render
 from factory.runtime.knowledge.case_search import search_cases
 from factory.runtime.knowledge.teacher_job_repository import TeacherJobRepository
 from factory.runtime.lessons import BASE, Lesson, catalog, lookup, search_lessons
 from factory.runtime.observability import lesson_telemetry
+from factory.runtime.scheduling.assignment import validate_packet
 from factory.runtime.workflow_config import load_config
 from factory.runtime.workflow_core import Invalid
 from tests import CLI
-from tests.factory.runtime.workflow_fixture import WorkflowFixture
+from tests.factory.runtime.workflow_fixture import WorkflowFixture, bound_teacher
 
 
 class LessonTests(unittest.TestCase):
@@ -49,13 +51,18 @@ class LessonTests(unittest.TestCase):
         )
         self.key = teacher.enqueue(self.root, self.event)
 
-    def test_cache_upgrade_and_incremental_edits_are_atomic(self) -> None:
+    def test_old_cache_is_rejected_and_fresh_incremental_edits_are_atomic(self) -> None:
         cache = self.root / BASE / "cache/lessons.sqlite3"
         cache.parent.mkdir(parents=True)
         with closing(sqlite3.connect(cache)) as db, db:
             db.execute("CREATE TABLE version(signature TEXT)")
             db.execute("CREATE VIRTUAL TABLE lessons USING fts5(id,content)")
             db.execute("INSERT INTO lessons VALUES ('orphan','legacy')")
+        original_cache = cache.read_bytes()
+        with self.assertRaisesRegex(OSError, "Unsupported lesson index"):
+            search_lessons(self.root, "legacy")
+        self.assertEqual(cache.read_bytes(), original_cache)
+        cache.unlink()
         for key in ("first", "middle", "third"):
             teacher.apply(self.root, self.key, self.card.model_copy(update={"id": key}), None)
         self.assertEqual(search_lessons(self.root, "legacy"), [])
@@ -88,24 +95,23 @@ class LessonTests(unittest.TestCase):
     def test_typed_telemetry_preserves_unlimited_totals_and_wire_shape(self) -> None:
         with workflow_db.database(self.root) as db:
             db.execute(
-                """INSERT INTO runs(run_id,record,current) VALUES ('run','{"status":"active"}',1)"""
+                """INSERT INTO runs(run_id,status,workspace,revision,current) VALUES ('run','active','.',1,1)"""
             )
             for i in range(4):
-                raw = json.dumps(
-                    {
-                        "report": {
-                            "outcome": "PASS",
-                            "applied_lessons": [
-                                {"id": "lesson", "revision": "a" * 64, "result": str(i)}
-                            ],
-                        }
+                document = {
+                    "report": {
+                        "outcome": "PASS",
+                        "applied_lessons": [
+                            {"id": "lesson", "revision": "a" * 64, "result": str(i)}
+                        ],
                     }
-                ).encode()
-                db.execute("INSERT INTO artifact_blobs(sha256,body) VALUES (?,?)", (str(i), raw))
-                db.execute(
-                    """INSERT INTO artifacts(run_id,path,kind,sha256,node_id,dispatch_id)
-                           VALUES ('run',?,'report',?,'node','dispatch')""",
-                    (str(i), str(i)),
+                }
+                artifacts.put(
+                    db,
+                    "run",
+                    artifacts.Artifact(
+                        str(i), "report", render(document), "node", f"d{i}", document=document
+                    ),
                 )
         trace = lesson_telemetry.read_trace(self.root, "run", 1)
         self.assertEqual(trace.reported_applications, 4)
@@ -115,8 +121,10 @@ class LessonTests(unittest.TestCase):
     def test_lesson_trace_survives_clean_and_restore(self) -> None:
         f = WorkflowFixture(self.addCleanup)
         seed = teacher.enqueue(f.root, self.event)
-        original = teacher.apply(f.root, seed, self.card, None)
-        teacher.complete(f.root, seed)
+        original = teacher.apply(
+            f.root, seed, self.card, None, dispatch_id=bound_teacher(f.root, seed)
+        )
+        teacher.complete(f.root, seed, dispatch_id=bound_teacher(f.root, seed))
         run = f.init()["run_id"]
         f.start("write-label")
         dispatch = f.ledger.read()["nodes"]["write-label"]["dispatch_id"]
@@ -147,10 +155,16 @@ class LessonTests(unittest.TestCase):
         evidence = teacher.read_event(f.root, key).incidents
         assert evidence is not None
         self.assertEqual(next(iter(evidence.values())).applied_lessons, [use])
-        teacher.apply(f.root, key, self.card, hit["revision"])
-        teacher.apply(f.root, key, self.card, hit["revision"])
-        teacher.complete(f.root, key, reason="Confirmed in this run")
-        teacher.complete(f.root, key)
+        teacher.apply(
+            f.root, key, self.card, hit["revision"], dispatch_id=bound_teacher(f.root, key)
+        )
+        teacher.apply(
+            f.root, key, self.card, hit["revision"], dispatch_id=bound_teacher(f.root, key)
+        )
+        teacher.complete(
+            f.root, key, reason="Confirmed in this run", dispatch_id=bound_teacher(f.root, key)
+        )
+        teacher.complete(f.root, key, dispatch_id=bound_teacher(f.root, key))
         # A search outside an assignment remains visible only in workspace totals.
         self.assertEqual([], json.loads(cli("search", "standalone")))
         restored = self.root / "restored"
@@ -290,10 +304,9 @@ class LessonTests(unittest.TestCase):
             teacher.apply(self.root, key, self.card.model_copy(update={"id": "extra-1"}), None)
 
     def test_user_creation_edit_delete_through_cli(self) -> None:
-        def cli(*args: str, payload: Lesson | None = None) -> str:
+        def cli(*args: str) -> str:
             result = subprocess.run(
                 [*CLI, "lessons", "--workspace", str(self.root), *args],
-                input=payload.model_dump_json(exclude={"sources"}) if payload else None,
                 capture_output=True,
                 text=True,
                 check=True,
@@ -301,12 +314,20 @@ class LessonTests(unittest.TestCase):
             return result.stdout
 
         created = json.loads(cli("user", "case", "chat/msg1", "Observed a stale packet"))
-        entry = json.loads(cli("publish", created, "-", payload=self.card))
+        entry = json.loads(
+            cli("publish", created, graph_inputs.propose_lesson(self.root, self.card))
+        )
         cli("complete", created)
         edited = json.loads(cli("user", "msg2", "chat/msg2", "Clarify the lookup tag"))
         card = self.card.model_copy(update={"tags": ["передача", "item-count"]})
         updated = json.loads(
-            cli("publish", edited, "-", "--revision", entry["revision"], payload=card)
+            cli(
+                "publish",
+                edited,
+                graph_inputs.propose_lesson(self.root, card),
+                "--revision",
+                entry["revision"],
+            )
         )
         cli("complete", edited)
         self.assertEqual(entry["lesson"]["sources"], updated["lesson"]["sources"])
@@ -509,26 +530,19 @@ class LessonTests(unittest.TestCase):
             search_lessons(self.root, "packet")
 
     def test_event_checks_pinned_owner_text_and_rejects_old_queue_format(self) -> None:
-        raw = teacher.read_event(self.root, self.key).model_dump()
-        raw["user_instructions"] = "Changed after capture"
         with workflow_db.database(self.root) as db:
-            db.execute("UPDATE teacher_jobs SET record=? WHERE id=?", (json.dumps(raw), self.key))
+            db.execute(
+                "UPDATE teacher_jobs SET user_instructions='Changed after capture' WHERE id=?",
+                (self.key,),
+            )
         with self.assertRaisesRegex(Invalid, "instructions digest"):
             teacher.packet(self.root, self.key)
-        legacy = self.event.model_dump(exclude={"checkout", "user_sha256"})
         with workflow_db.database(self.root) as db:
-            db.execute(
-                "UPDATE teacher_jobs SET record=? WHERE id=?", (json.dumps(legacy), self.key)
-            )
+            db.execute("UPDATE teacher_jobs SET user_sha256=NULL WHERE id=?", (self.key,))
         with self.assertRaisesRegex(Invalid, "instructions digest"):
             teacher.read_event(self.root, self.key)
-        legacy = self.event.model_dump(exclude={"operation"})
-        with workflow_db.database(self.root) as db:
-            db.execute(
-                "UPDATE teacher_jobs SET record=? WHERE id=?", (json.dumps(legacy), self.key)
-            )
-        with self.assertRaisesRegex(Invalid, "Missing Teacher operation"):
-            teacher.pending(self.root)
+        with workflow_db.database(self.root) as db, self.assertRaises(sqlite3.IntegrityError):
+            db.execute("UPDATE teacher_jobs SET operation=NULL WHERE id=?", (self.key,))
 
     def test_teacher_poll_validates_only_the_requested_checkout_and_queue(self) -> None:
         subprocess.run(["git", "init", "-q", "-b", "current", str(self.root)], check=True)
@@ -545,7 +559,7 @@ class LessonTests(unittest.TestCase):
         teacher.park(self.root, parked, "Which change?")
         with workflow_db.database(self.root) as db:
             db.execute(
-                """UPDATE teacher_jobs SET record=json_set(record, '$.user_instructions', 'changed')
+                """UPDATE teacher_jobs SET user_instructions='changed'
                    WHERE id IN (?, ?)""",
                 (foreign, parked),
             )
@@ -671,7 +685,7 @@ class TeacherWorkflowTests(unittest.TestCase):
         card = Lesson(
             id="new", scope="factory", title="New", observed="New", applies_when="New", action="New"
         )
-        teacher.apply(f.root, key, card, None)
+        teacher.apply(f.root, key, card, None, dispatch_id=bound_teacher(f.root, key))
         self.assertIs(teacher.search_feedback(f.root, key, incident)[0].same_catalog, False)
         with self.assertRaisesRegex(Invalid, "accepted incident"):
             teacher.search_feedback(f.root, key, "different")
@@ -693,7 +707,7 @@ class TeacherWorkflowTests(unittest.TestCase):
             root = Path(tmp)
             search_lessons(root, "original")
             with workflow_db.database(root) as db:
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (2,))
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (0,))
                 self.assertEqual(
                     db.execute("SELECT count(*) FROM lesson_searches").fetchone(), (1,)
                 )
@@ -732,8 +746,8 @@ class TeacherWorkflowTests(unittest.TestCase):
             action="Check the label",
             applies_when="Renaming label",
         )
-        teacher.apply(f.root, key, c, None)
-        teacher.complete(f.root, key)
+        teacher.apply(f.root, key, c, None, dispatch_id=bound_teacher(f.root, key))
+        teacher.complete(f.root, key, dispatch_id=bound_teacher(f.root, key))
         retro = teacher.enqueue(
             f.root,
             teacher.Event(
@@ -743,7 +757,9 @@ class TeacherWorkflowTests(unittest.TestCase):
                 observation="Confirmed same issue",
             ),
         )
-        teacher.apply(f.root, retro, c, catalog(f.root)[0].revision)
+        teacher.apply(
+            f.root, retro, c, catalog(f.root)[0].revision, dispatch_id=bound_teacher(f.root, retro)
+        )
         self.assertEqual(1, len(catalog(f.root)[0].lesson.sources))
         self.assertEqual("label", search_lessons(f.root, "label")[0].id)
 
@@ -831,10 +847,10 @@ class TeacherWorkflowTests(unittest.TestCase):
             action="Verify label",
         )
         with self.assertRaisesRegex(Invalid, "Select a packet incident"):
-            teacher.apply(f.root, key, card, None)
-        teacher.apply(f.root, key, card, None, incident)
+            teacher.apply(f.root, key, card, None, dispatch_id=bound_teacher(f.root, key))
+        teacher.apply(f.root, key, card, None, incident, dispatch_id=bound_teacher(f.root, key))
         self.assertEqual([incident], list(catalog(f.root)[0].lesson.sources))
-        teacher.complete(f.root, key)
+        teacher.complete(f.root, key, dispatch_id=bound_teacher(f.root, key))
         self.assertEqual([], teacher.pending(f.root))
 
     def test_archive_failure_and_retry_publish_one_job(self) -> None:
@@ -855,11 +871,81 @@ class TeacherWorkflowTests(unittest.TestCase):
             {"role": "teacher", "status": "ready", "event_id": key},
             f.ledger.next_actions()["after_archive"],
         )
-        teacher.complete(f.root, key)
+        teacher.complete(f.root, key, dispatch_id=bound_teacher(f.root, key))
         self.assertEqual("done", f.ledger.next_actions()["after_archive"]["status"])
         f.ledger.archive("completed", "verified")
         f.ledger.clean()
         self.assertEqual([], teacher.pending(f.root))
+
+    def test_cited_reply_after_clean_stays_with_archived_run(self) -> None:
+        f = WorkflowFixture(self.addCleanup)
+
+        def cli(*args: str) -> object:
+            return json.loads(
+                subprocess.check_output([*CLI, "lessons", "--workspace", str(f.root), *args])
+            )
+
+        run_a = f.init()["run_id"]
+        f.complete()
+        f.ledger.archive("completed", "Verified A")
+        [event_a] = teacher.pending(f.root)
+        first = cli("teacher-launch", event_a)
+        assert isinstance(first, dict)
+        ticket = first["dispatch_id"]
+        second = cli("teacher-launch", event_a)
+        assert isinstance(second, dict)
+        self.assertEqual(("reconcile", ticket), (second["action"], second["dispatch_id"]))
+        cli("teacher-launch", event_a, "--bind", ticket, "teacher-session-A")
+        cli("wait-owner", event_a, "Which observation?", "--dispatch", ticket)
+        parked = cli("teacher-launch", event_a)
+        assert isinstance(parked, dict)
+        self.assertEqual("wait", parked["action"])
+        held = teacher.read_event(f.root, event_a)
+        with patch.object(teacher, "handler_hashes", return_value={}):
+            with self.assertRaisesRegex(ValueError, "Restore the registered Teacher handlers"):
+                teacher.require_checkout(f.root, held)
+        f.ledger.clean()
+        run_b = f.init()["run_id"]
+        self.assertNotEqual(run_b, run_a)
+        before = f.ledger.read()
+        next_ticket = f.ledger.next_actions()["assignment_tickets"]
+        for _ in range(2):
+            cli("reply", event_a, "owner-message-27", "Use the verified symptom")
+            cli(
+                "complete",
+                event_a,
+                "--dispatch",
+                ticket,
+                "--reason",
+                "Captured in the existing lesson",
+            )
+        ended = cli("teacher-launch", event_a)
+        assert isinstance(ended, dict)
+        self.assertEqual("done", ended["action"])
+        saved = teacher.read_event(f.root, event_a)
+        self.assertTrue(saved.done)
+        self.assertEqual(
+            (run_a, ticket, "teacher-session-A"),
+            (saved.incident, saved.attempts[0].dispatch_id, saved.attempts[0].handle),
+        )
+        self.assertEqual(1, len(saved.attempts))
+        self.assertEqual(
+            [
+                {
+                    "reference": "owner-message-27",
+                    "question": "Which observation?",
+                    "answer": "Use the verified symptom",
+                }
+            ],
+            saved.owner_replies,
+        )
+        self.assertEqual(before, f.ledger.read())
+        self.assertEqual(next_ticket, f.ledger.next_actions()["assignment_tickets"])
+        f.complete()
+        f.ledger.archive("completed", "Verified B")
+        [event_b] = teacher.pending(f.root)
+        self.assertNotEqual(event_b, event_a)
+        self.assertEqual(run_b, teacher.read_event(f.root, event_b).incident)
 
     def test_cancelled_run_keeps_evidence_without_automatic_teacher(self) -> None:
         f = WorkflowFixture(self.addCleanup)
@@ -885,13 +971,18 @@ class TeacherWorkflowTests(unittest.TestCase):
                     f.fake_acp()
                 f.init()
                 user.write_text("Unaccepted replacement", encoding="utf-8")
-                f.ledger.claim("write-label")
+                f.claim("write-label")
                 if runner == "acpx":
-                    packet = json.loads(
-                        Path(prepare_prompt(f.ledger, "write-label")["prompt"]).read_bytes()
+                    prompt = Path(prepare_prompt(f.ledger, "write-label")["prompt"])
+                    ref = f.ledger.read()["nodes"]["write-label"]["packet_file"]
+                    packet = validate_packet(
+                        f.ledger.history.document(
+                            f.root, ref["run_id"], ref["path"], ref["sha256"], "packet"
+                        )
                     )
+                    self.assertEqual(prompt.read_bytes(), render(packet))
                 else:
-                    packet = f.ledger.packet("write-label")
+                    packet = validate_packet(f.ledger.packet("write-label"))
                 [item] = [
                     doc for doc in packet["instructions"] if doc["path"] == str(user.resolve())
                 ]
@@ -942,15 +1033,13 @@ class ArchivedCaseSearchTests(unittest.TestCase):
             applies_when="Before measuring the plate",
             action="Check the plate after it cools",
         )
-        teacher.apply(f.root, before[0], lesson, None)
+        teacher.apply(f.root, before[0], lesson, None, dispatch_id=bound_teacher(f.root, before[0]))
         hits = json.loads(subprocess.check_output([*command, "search", query, "--include-history"]))
         self.assertEqual(["lesson", "case"], [hit["source_type"] for hit in hits])
         _, case = hits
         self.assertEqual((node, 3), (case["node"], case["ordinal"]))
         self.assertEqual(case["report_ref"]["sha256"], case["sha256"])
 
-        reference = f.root / "ref.json"
-        reference.write_text(json.dumps(case["report_ref"]), encoding="utf-8")
         payload = json.loads(
             subprocess.check_output(
                 [
@@ -959,14 +1048,23 @@ class ArchivedCaseSearchTests(unittest.TestCase):
                     "--workspace",
                     str(f.root),
                     "read-report",
-                    str(reference),
+                    case["report_ref"]["run_id"],
+                    node,
+                    case["dispatch_id"],
                 ]
             )
         )
         self.assertEqual(evidence, payload["result"]["report"]["evidence"])
         self.assertEqual(case["dispatch_id"], payload["result"]["report"]["dispatch_id"])
 
-        capture = [*command, "capture-case", str(reference), "Reused on fixture occurrence two"]
+        capture = [
+            *command,
+            "capture-case",
+            case["run_id"],
+            node,
+            case["dispatch_id"],
+            "Reused on fixture occurrence two",
+        ]
         key = json.loads(subprocess.check_output(capture))
         event = teacher.read_event(f.root, key)
         self.assertEqual("capture", event.route())
@@ -985,7 +1083,7 @@ class ArchivedCaseSearchTests(unittest.TestCase):
             )
         self.assertEqual(key, json.loads(subprocess.check_output(capture)))
         self.assertEqual(["invar"], [entry.lesson.id for entry in catalog(f.root)])
-        reference.write_text(json.dumps(failed), encoding="utf-8")
+        capture[-2] = failed["dispatch_id"]
         blocked = subprocess.run(capture, capture_output=True, text=True, check=False)
         self.assertNotEqual(0, blocked.returncode)
         self.assertIn("not current accepted evidence", blocked.stderr)
@@ -1002,7 +1100,7 @@ class ArchivedCaseSearchTests(unittest.TestCase):
         f.ledger.archive("completed", "Original accepted case")
         f.ledger.clean()
         for key in teacher.pending(f.root):
-            teacher.complete(f.root, key)
+            teacher.complete(f.root, key, dispatch_id=bound_teacher(f.root, key))
 
         state = f.init()
         cases, _ = search_cases(f.root, "invar shuttle")
@@ -1040,8 +1138,8 @@ class ArchivedCaseSearchTests(unittest.TestCase):
             applies_when="Calibrating a replacement shuttle",
             action="Verify clearance after calibration.",
         )
-        teacher.apply(f.root, event_id, card, None)
-        teacher.complete(f.root, event_id)
+        teacher.apply(f.root, event_id, card, None, dispatch_id=bound_teacher(f.root, event_id))
+        teacher.complete(f.root, event_id, dispatch_id=bound_teacher(f.root, event_id))
         self.assertEqual([incident], list(catalog(f.root)[0].lesson.sources))
         self.assertEqual([], teacher.pending(f.root))
 
@@ -1072,7 +1170,7 @@ class ArchivedCaseSearchTests(unittest.TestCase):
         subprocess.run([*command, "symbolic-ref", "HEAD", "refs/heads/archive-source"], check=True)
         with workflow_db.database(f.root) as db:
             db.execute(
-                "UPDATE runs SET record=json_set(record,'$.state.summary','changed') WHERE run_id=?",
+                "UPDATE runs SET summary='changed' WHERE run_id=?",
                 (run,),
             )
         self.assertEqual(([], [run]), search_cases(f.root, "hematite"))

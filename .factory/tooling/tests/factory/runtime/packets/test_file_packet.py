@@ -9,7 +9,7 @@ from typing import Any
 from unittest.mock import Mock, patch
 
 from factory.database.port import DatabaseBackend
-from factory.database.provider import use_database
+from factory.database.provider import current_database, use_database
 from factory.database.sqlite import sqlite_history_repository, workflow_db
 from factory.diagnostics.query import read_journal
 from factory.logging_config import diagnostic_operation
@@ -20,12 +20,14 @@ from factory.runtime.packets.content import (
     PACKET_REFERENCE,
     PACKET_RESPONSE_LIMIT,
     delivery_state,
+    packet_chunks,
+    packet_confirmed,
     packet_response,
-    save_receipt,
 )
+from factory.runtime.packets.delivery import PacketDelivery
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import Invalid, digest
+from factory.runtime.workflow_core import Invalid
 from tests import CLI
 from tests.factory.runtime import workflow_fixture
 from tests.factory.runtime.store_fixture import has_current, overwrite, record_bytes
@@ -35,7 +37,7 @@ class FilePacketTests(unittest.TestCase):
     def setUp(self) -> None:
         self.f = workflow_fixture.WorkflowFixture(self.addCleanup)
         self.f.init()
-        self.f.ledger.claim("write-label")
+        self.f.claim("write-label")
 
     def prepare(self) -> dict[str, Any]:
         return self.f.ledger.prepare_packet("write-label")
@@ -82,7 +84,7 @@ class FilePacketTests(unittest.TestCase):
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         (f.root / "AGENTS.md").write_text(('Ж🙂"\\' + "\n") * 8000)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.f = f
         b = self.prepare()
         self.assertEqual(b, self.prepare())
@@ -122,13 +124,15 @@ class FilePacketTests(unittest.TestCase):
         raw = read_evidence(self.f.root, b["path"], run_id=b["run_id"]).decode()
         self.assertEqual(raw, "".join(parts))
         self.assertEqual(len(parts), result["total"])
-        self.assertEqual(json.loads(raw)["dispatch_id"], b["dispatch_id"])
+        self.assertIn(
+            "- dispatch_id = " + b["dispatch_id"], raw.decode() if isinstance(raw, bytes) else raw
+        )
         with self.assertRaisesRegex(Invalid, "Invalid packet chunk"):
             self.f.ledger.read_packet("write-label", self.meta(b), len(parts) + 1)
         self.f.ledger.confirm_packet(
             "write-label", self.meta(b), result["acknowledgement"], result["materials"]
         )
-        self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
+        self.assertTrue(packet_confirmed(self.f.ledger.read()["nodes"]["write-label"]))
 
     def test_lost_output_and_lost_receipt_replay_without_ledger_writes(self) -> None:
         b = self.prepare()
@@ -157,18 +161,18 @@ class FilePacketTests(unittest.TestCase):
         first = self.f.ledger.read_packet("write-label", meta, 1)
         with workflow_db.database(self.f.root) as db:
             db.execute("DELETE FROM packet_deliveries")
-        with self.assertRaisesRegex(Invalid, "Invalid packet delivery receipt"):
-            save_receipt(
-                self.f.root,
-                {"packet": meta, "served": 1, "acknowledged": 0, "recipient": "handle-author"},
-            )
-        state = self.f.ledger.read()
+        state: dict[str, Any] = dict(self.f.ledger.read())
         state["nodes"]["write-label"]["packet_confirmed"] = True
+        overwrite(self.f.ledger, state)
+        with self.assertRaisesRegex(Invalid, "Invalid persisted state"):
+            self.f.ledger.next_actions()
+        del state["nodes"]["write-label"]["packet_confirmed"]
+        state["nodes"]["write-label"]["confirmed_packet_sha256"] = "0" * 64
         overwrite(self.f.ledger, state)
         self.assertEqual(
             ["write-label"], self.f.ledger.next_actions()["pending_packet_confirmations"]
         )
-        obsolete = first["acknowledgement"].removeprefix("v2:")
+        obsolete = first["acknowledgement"].replace("chunk:", "v2:")
         with self.assertRaisesRegex(Invalid, "preceding chunk"):
             self.f.ledger.read_packet("write-label", meta, 2, obsolete)
         with self.assertRaisesRegex(Invalid, "restart at chunk 1"):
@@ -183,15 +187,8 @@ class FilePacketTests(unittest.TestCase):
             delivery_state(self.f.root, {**meta, "source_hash": "other"}, 2, "handle-author")
         orphan: PacketRef = {**meta, "path": meta["path"] + "missing"}
         with self.assertRaisesRegex(Invalid, "Invalid packet delivery receipt"):
-            save_receipt(
-                self.f.root,
-                {
-                    "packet": orphan,
-                    "recipient": "handle-author",
-                    "version": 2,
-                    "served": 1,
-                    "acknowledged": 0,
-                },
+            current_database().packets.save_receipt(
+                self.f.root, orphan, "handle-author", PacketDelivery(1, 0)
             )
         with self.assertRaisesRegex(Invalid, "CHECK constraint"):
             with workflow_db.database(self.f.root) as db:
@@ -217,7 +214,7 @@ class FilePacketTests(unittest.TestCase):
                 self.f.ledger.confirm_packet(
                     "write-label", meta, chunk["acknowledgement"], chunk["materials"]
                 )
-        self.assertFalse(self.f.ledger.read()["nodes"]["write-label"].get("packet_confirmed"))
+        self.assertFalse(packet_confirmed(self.f.ledger.read()["nodes"]["write-label"]))
         with diagnostic_operation(self.f.root, "confirm-packet"):
             for _ in range(2):
                 self.f.ledger.confirm_packet(
@@ -225,7 +222,7 @@ class FilePacketTests(unittest.TestCase):
                 )
         records = read_journal(self.f.root, "dispatch_id", meta["dispatch_id"], 0, 30)["records"]
         self.assertEqual([record["event"] for record in records], ["packet_confirmed"])
-        self.assertTrue(self.f.ledger.read()["nodes"]["write-label"]["packet_confirmed"])
+        self.assertTrue(packet_confirmed(self.f.ledger.read()["nodes"]["write-label"]))
 
     def test_rejects_bootstrap_digest_content_and_symlink_tampering(self) -> None:
         self.bind()
@@ -280,7 +277,8 @@ class FilePacketTests(unittest.TestCase):
         self.assertEqual(chunk["ordinal"], 1)
         self.assertEqual(chunk["binding"], "running")
         self.assertFalse(chunk["ready_for_work"])
-        self.assertTrue(chunk["content"].startswith("{"))
+        data = read_evidence(self.f.root, b["path"], run_id=b["run_id"])
+        self.assertEqual(chunk["content"], packet_chunks(data)[0])
         read_command = (
             shlex.split(b["read_command"])
             if b["read_shell"] == "POSIX shell"
@@ -336,7 +334,7 @@ class FilePacketTests(unittest.TestCase):
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         f.g["sources"]["request"] = f.external_source()
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.bind(f)
         b = f.ledger.prepare_packet("write-label")
         (f.root / "external.md").write_text("Changed after approval")
@@ -360,7 +358,7 @@ class FilePacketTests(unittest.TestCase):
 
     def test_unregistered_preexisting_file_is_never_overwritten(self) -> None:
         s = self.f.ledger.read()
-        rel = f"{s['run_id']}-write-label-{s['nodes']['write-label']['dispatch_id']}.packet.json"
+        rel = f"{s['run_id']}-write-label-{s['nodes']['write-label']['dispatch_id']}.packet.md"
         p = self.f.ledger.dir / rel
         p.write_text("foreign")
         with self.assertRaisesRegex(Invalid, "already exists"):
@@ -372,7 +370,7 @@ class FilePacketTests(unittest.TestCase):
         config_file = f.config_file(lambda config: None)
         f.config = load_config(config_file)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.bind(f)
         b = f.ledger.prepare_packet("write-label")
         original = config_file.read_text()
@@ -430,7 +428,7 @@ class FilePacketTests(unittest.TestCase):
         self.f.ledger.bind("write-label", "handle-author", model)
         self.f.ledger.finish("write-label", self.f.report("write-label", "FAIL"))
         self.f.ledger.retry("write-label", "tests", "fix", "terminal")
-        self.f.ledger.claim("write-label")
+        self.f.claim("write-label")
         new = self.prepare()
         self.bind()
         self.assertNotEqual(new["dispatch_id"], b["dispatch_id"])
@@ -442,7 +440,7 @@ class PacketCleanupTests(unittest.TestCase):
     def setUp(self) -> None:
         self.f = workflow_fixture.WorkflowFixture(self.addCleanup)
         self.f.init()
-        self.f.ledger.claim("write-label")
+        self.f.claim("write-label")
         self.first = self.transport_copy()
 
     def transport_copy(self) -> dict[str, Any]:
@@ -464,7 +462,7 @@ class PacketCleanupTests(unittest.TestCase):
     def archived_with_retry(self) -> tuple[dict[str, Any], str]:
         self.blocked()
         self.f.ledger.retry("write-label", "tests", "fix", "terminal")
-        self.f.ledger.claim("write-label")
+        self.f.claim("write-label")
         second = self.transport_copy()
         self.blocked()
         history = self.f.ledger.archive("cancelled", "explicit cancellation")
@@ -522,13 +520,13 @@ class PacketCleanupTests(unittest.TestCase):
         foreign = self.f.ledger.dir / "foreign.packet.json"
         foreign.write_text("preserve")
         run = second["run_id"]
-        compact = json.loads(sqlite_history_repository.journal_bytes(self.f.root, run))
-        compact["state"]["transport_artifacts"].append(str(foreign.relative_to(self.f.ledger.root)))
-        raw = json.dumps(compact)
+        from factory.database.sqlite import graph_state
+
+        state = self.f.ledger.read()
+        state["transport_artifacts"].append(str(foreign.relative_to(self.f.ledger.root)))
         with workflow_db.database(self.f.root) as db:
-            db.execute(
-                "UPDATE runs SET record=?,sha256=? WHERE run_id=?", (raw, digest(raw.encode()), run)
-            )
+            graph_state.write(db, state)
+            db.execute("UPDATE runs SET sha256=? WHERE run_id=?", (graph_state.seal(db, run), run))
         with self.assertRaisesRegex(Invalid, "ownership"):
             self.f.ledger.clean()
         for b in (self.first, second):

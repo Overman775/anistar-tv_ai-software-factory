@@ -1,11 +1,10 @@
 """Verify a narrowly scoped continuation after an external decision."""
 
-import json
 import re
 from copy import deepcopy
 from pathlib import Path
 
-from factory.project.profile_rules import project_checks
+from factory.project.profile_rules import project_check_graph, project_checks
 from factory.runtime.commands.evidence import check_receipts
 from factory.runtime.contracts import (
     ApprovalRequest,
@@ -14,7 +13,7 @@ from factory.runtime.contracts import (
     Report,
     State,
 )
-from factory.runtime.workflow_core import Invalid, digest, require, snapshot
+from factory.runtime.workflow_core import Invalid, graph_identity, require, snapshot
 from factory.tasks.contracts import Task
 
 
@@ -44,7 +43,8 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
         "Approval requires a single isolated failed check",
     )
     failed_id = failed[0]["spec"]["id"]
-    policies = project_checks(state["config"]["_project"]["data"], all_processes=False)
+    profile = state["config"]["_project"]["data"]
+    policies = project_checks(profile, all_processes=False)
     policy = next(
         (
             check
@@ -80,14 +80,7 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
         not any(finding.get("blocking") for finding in report.get("findings", [])),
         "Approval cannot resolve a blocking finding",
     )
-    deferred = {failed_id}
-    while (
-        downstream := {
-            check["id"] for check in policies if deferred.intersection(check.get("after", []))
-        }
-        - deferred
-    ):
-        deferred.update(downstream)
+    deferred = project_check_graph(profile, all_processes=False).affected_by({failed_id})
     required = {check["id"] for check in task["required_checks"] if check["kind"] != "observation"}
     missing = required - latest.keys() - deferred
     require(not missing, "Missing required check before approval: " + ", ".join(sorted(missing)))
@@ -117,7 +110,7 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
         before,
         bound,
     ]
-    bound["id"] = digest(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    bound["id"] = graph_identity(identity)
     report["approval_request"] = bound
 
 

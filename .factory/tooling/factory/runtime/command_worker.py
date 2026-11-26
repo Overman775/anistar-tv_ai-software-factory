@@ -9,56 +9,25 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, NotRequired
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import ConfigDict, TypeAdapter, ValidationError, with_config
-from typing_extensions import TypedDict
+from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
-from factory.diagnostics.events import event
 from factory.runtime.commands import verification, windows_job
 from factory.runtime.commands.process import run_process
-from factory.runtime.contracts import ExecutionReceipt, Nonblank, Positive, TestSelection
+from factory.runtime.contracts import ExecutionReceipt, ProcessFacts, ProcessOwner, TestSelection
 from factory.runtime.workflow_config import check_config
 from factory.runtime.workflow_core import (
     Invalid,
-    atomic_json,
-    read_json,
     relative,
     require,
     snapshot,
 )
 from factory.runtime.workflow_core import lock as lock
-from factory.validation import validation_message
 
 if TYPE_CHECKING:
     from factory.runtime.run_journal import RunJournal
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
-class ProcessOwner(TypedDict):
-    execution_id: Nonblank
-    process_group: Positive
-    platform: Literal["posix", "nt"]
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
-class StageFacts(TypedDict):
-    input_scope: list[str]
-    files: dict[str, str]
-    after_files: dict[str, str]
-    exit_code: int | None
-    error: str | None
-    mode: NotRequired[Literal["full", "filtered", "update"] | None]
-    selection: NotRequired[TestSelection | None]
-    verification: NotRequired[list[verification.Verification]]
-
-
-@with_config(ConfigDict(strict=True, extra="forbid"))
-class ProcessFacts(TypedDict):
-    execution_id: Nonblank
-    process_group: Positive
-    stages: dict[str, StageFacts]
 
 
 PROCESS_OWNER = TypeAdapter[ProcessOwner](ProcessOwner)
@@ -125,30 +94,19 @@ def own(ledger: RunJournal, execution_id: str) -> ExecutionReceipt:
                 check_config(state)
                 node = next(n for n in state["graph"]["nodes"] if n["id"] == record["node_id"])
                 ledger.check_sources(state, state["graph"]["tasks"][node["task"]])
-                path = artifact(ledger.root, record, ".owner.json")
-                require(not path.exists(), "Command already has a launcher")
+                require("owner" not in record, "Command already has a launcher")
                 if os.name == "nt":
                     windows_job.enter(execution_id)
                 else:
                     require(os.getpgrp() == os.getpid(), "Supervisor must lead its process group")
-                atomic_json(
-                    path,
-                    PROCESS_OWNER.validate_python(
-                        {
-                            "execution_id": execution_id,
-                            "process_group": os.getpid(),
-                            "platform": os.name,
-                        }
-                    ),
+                record["owner"] = PROCESS_OWNER.validate_python(
+                    {
+                        "execution_id": execution_id,
+                        "process_group": os.getpid(),
+                        "platform": os.name,
+                    }
                 )
-                event(
-                    "check_process",
-                    run_id=state["run_id"],
-                    task_id=node["task"],
-                    node_id=node["id"],
-                    dispatch_id=record["dispatch_id"],
-                    execution_id=execution_id,
-                )
+                ledger.save(state, "check_process", node=node["id"], execution_id=execution_id)
                 return record
         except Invalid as exc:
             if not str(exc).startswith("Ledger locked") or attempt == 99:
@@ -355,45 +313,42 @@ def supervise(ledger: RunJournal, execution_id: str) -> None:
                 "after_files": snapshot(ledger.root, scope),
                 **final_result,
             }
-        atomic_json(
-            artifact(ledger.root, record, ".result.json"),
-            PROCESS_FACTS.validate_python(
-                {"execution_id": execution_id, "process_group": os.getpid(), "stages": results}
-            ),
+        result_facts = PROCESS_FACTS.validate_python(
+            {"execution_id": execution_id, "process_group": os.getpid(), "stages": results}
         )
+        with ledger.locked(wait=True):
+            state = ledger.read()
+            current = state["executions"][execution_id]
+            require(
+                current["status"] == "RUNNING"
+                and current.get("owner") == record["owner"]
+                and current["dispatch_id"] == record["dispatch_id"],
+                "Command result belongs to a different process or assignment",
+            )
+            current["process_facts"] = result_facts
+            ledger.save(state, "check_returned", node=record["node_id"], execution_id=execution_id)
     finally:
         # Reap surviving descendants before anyone may release the command resource.
         if os.name == "posix":
             os.killpg(os.getpid(), signal.SIGKILL)
 
 
-def facts(root: Path, execution_id: str, record: ExecutionReceipt) -> dict[str, object] | None:
-    owner = artifact(root, record, ".owner.json")
-    if not owner.exists():
+def facts(execution_id: str, record: ExecutionReceipt) -> dict[str, object] | None:
+    owner = record.get("owner")
+    if owner is None:
         return None
-    try:
-        identity = PROCESS_OWNER.validate_python(read_json(owner))
-    except ValidationError as exc:
-        raise Invalid(validation_message("Invalid command owner", exc, PROCESS_OWNER)) from None
-    try:
-        pid = identity["process_group"]
-        require(
-            identity["execution_id"] == execution_id and pid > 1,
-            "Invalid command process identity",
-        )
-        if windows_job.live(execution_id) if identity["platform"] == "nt" else group_live(pid):
-            return None
-        path = artifact(root, record, ".result.json")
-        if not path.exists():
-            return {"stages": {}, "process_group": pid}
-        result = PROCESS_FACTS.validate_python(read_json(path))
-        require(
-            result["execution_id"] == execution_id and result["process_group"] == pid,
-            "Invalid supervisor result identity",
-        )
-        return dict(result)
-    except ValidationError as exc:
-        raise Invalid(validation_message("Invalid command evidence", exc, PROCESS_FACTS)) from None
+    pid = owner["process_group"]
+    require(owner["execution_id"] == execution_id and pid > 1, "Invalid command process identity")
+    if windows_job.live(execution_id) if owner["platform"] == "nt" else group_live(pid):
+        return None
+    result = record.get("process_facts")
+    if result is None:
+        return {"stages": {}, "process_group": pid}
+    require(
+        result["execution_id"] == execution_id and result["process_group"] == pid,
+        "Invalid supervisor result identity",
+    )
+    return dict(result)
 
 
 def main() -> None:

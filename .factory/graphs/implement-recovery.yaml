@@ -1,0 +1,20 @@
+id: implement-recovery
+entry: blocked_attempt
+nodes:
+  blocked_attempt:
+    decision: blocked_attempt
+    routes:
+      - {outcome: approval, priority: 60, target: wait_approval}
+      - {outcome: stopped, priority: 50, target: wait_owner}
+      - {outcome: source_drift, priority: 40, target: reintake}
+      - {outcome: requested_checks, priority: 30, target: add_checks}
+      - {outcome: unknown_cause, priority: 25, target: diagnose}
+      - {outcome: terminal_worker, priority: 20, target: repair}
+      - {outcome: blocked, priority: 10, target: retry}
+  wait_approval: {operation: wait_approval}
+  wait_owner: {operation: wait_owner}
+  reintake: {operation: reintake}
+  add_checks: {operation: request_checks}
+  diagnose: {operation: request_diagnosis}
+  repair: {operation: diagnose_failure}
+  retry: {operation: retry}

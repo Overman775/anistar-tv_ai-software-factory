@@ -78,6 +78,173 @@ class AcceptanceTests(unittest.TestCase):
         with self.assertRaisesRegex(Invalid, "differs from approved plan"):
             lock_source(f.root, src)
 
+    def test_cli_imports_decomposition_and_rejects_lost_source_edges(self) -> None:
+        import json
+        import subprocess
+
+        from factory.database.provider import current_database
+        from factory.processes.engine import start
+        from factory.processes.publication import identity
+        from factory.runtime import graph_inputs
+        from factory.runtime.workflow_core import digest
+        from tests import CLI
+        from tests.factory.decompose.fixture_task_graph import TaskGraphFixture
+        from tests.factory.planning.fixture_plan import PLAN
+
+        f = self.fixture
+        f.batch()
+        config = f.config_file(lambda _: None)
+        plan = PLAN.replace("status: draft", "status: approved").replace(
+            "approved_revision: none", "approved_revision: 1"
+        )
+        (f.root / "plan.md").write_text(plan)
+        tasks = {}
+        published = f.root / "checked-tasks"
+        published.mkdir()
+        for key, dependencies in (("label", []), ("second", ["label"])):
+            path = f"checked-tasks/{key}.md"
+            task = TaskGraphFixture.task(
+                key, filename=path, acceptance_ids=["AC-01"], depends_on=dependencies
+            )
+            blockers = (
+                ["API access, including `sandbox`", "Approved artwork"] if key == "label" else []
+            )
+            task["blocked_by"] = blockers
+            (f.root / path).write_text(
+                f"# {key}\n- **ID:** {key}\n- **Blocked by:** {', '.join(blockers) or '—'}\n- **Depends on:** {', '.join(dependencies) or '—'}\n- **Acceptance criteria:** AC-01\n"
+            )
+            raw = (f.root / path).read_bytes()
+            tasks[key] = {
+                "path": path,
+                "snapshot": raw.decode(),
+                "content_hash": digest(raw),
+                "blocked_by": blockers,
+                "depends_on": dependencies,
+                "acceptance_ids": ["AC-01"],
+                "contributes_to_acceptance_ids": [],
+                "local_acceptance_criteria": [],
+                "outcome": task["outcome"],
+            }
+        # The decomposition process suite separately produces this publication through both review paths.
+        run = start(
+            f.root,
+            "decompose",
+            "verified-steps",
+            {"source_lock": {"plan_content_hash": "sha256:" + digest(plan.encode())}},
+            config.parent / "graphs",
+        )
+        run.state.terminal = "completed"
+        run.state.phase = "published"
+        run.state.facts = {
+            "publication": {"destination": "checked-tasks", "owned": identity(published)},
+            "gate": {"tasks": tasks},
+        }
+        current_database().processes.save(
+            f.root, run, "publish", "verified-test-input", "publish", {}
+        )
+        f.g["tasks"]["second"]["depends_on"] = []
+        next(n for n in f.g["nodes"] if n["id"] == "write-second")["depends_on"] = []
+        plan_only = graph_inputs.propose_plan(f.root, f.g, "request", "plan.md")
+        bounded = graph_inputs.propose_plan(
+            f.root,
+            f.g,
+            "request",
+            "plan.md",
+            scope="label only",
+            selected_acceptance_ids=["AC-01"],
+            directive="Use the approved label",
+        )
+        scoped = graph_inputs.PROPOSAL.validate_python(
+            f.ledger.runs.read_input(f.root, "plan", bounded)
+        )
+        self.assertEqual(scoped["sources"]["request"]["selected_acceptance_ids"], ["AC-01"])
+        self.assertEqual(scoped["sources"]["request"]["directive"], "Use the approved label")
+        command = [*CLI, "workflow", "--workspace", str(f.root), "--config", str(config)]
+        for candidate in (plan_only, bounded):
+            subprocess.run([*command, "validate", candidate], capture_output=True, check=True)
+        proposal = graph_inputs.propose_plan(
+            f.root, f.g, "request", "plan.md", decomposition_run=run.run_id
+        )
+        typed = graph_inputs.PROPOSAL.validate_python(
+            f.ledger.runs.read_input(f.root, "plan", proposal)
+        )
+        self.assertEqual(["label"], typed["tasks"]["second"]["depends_on"])
+        self.assertEqual(
+            "checked-tasks/label.md", typed["sources"]["request"]["upstream_tasks"]["label"]["path"]
+        )
+        broken = deepcopy(typed)
+        broken["tasks"]["second"]["depends_on"] = []
+        lost = graph_inputs.propose(f.root, broken)
+        rejected = subprocess.run(
+            [*command, "init", lost], capture_output=True, text=True, check=False
+        )
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("Lost hard dependency", rejected.stderr)
+        subprocess.run([*command, "init", proposal], capture_output=True, check=True)
+        state = f.ledger.read()
+        self.assertEqual(
+            "payment-webview-trusted-ca", state["graph"]["sources"]["request"]["plan_id"]
+        )
+        self.assertEqual(["label"], state["graph"]["tasks"]["second"]["depends_on"])
+        self.assertNotIn("write-second", f.ledger.next_actions()["runnable"])
+
+        def status() -> dict[str, Any]:
+            result = json.loads(subprocess.check_output([*command, "status"]))["result"]
+            assert isinstance(result, dict)
+            return result
+
+        def resolve(token: str, evidence: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [*command, "resume-task", "label", evidence, "--stop", token],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        waiting = status()
+        self.assertNotIn("write-label", waiting["assignment_tickets"])
+        denied = subprocess.run(
+            [*command, "claim", "write-label", "--ticket", "unissued"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(denied.returncode, 0)
+        self.assertIn("External prerequisite", denied.stderr)
+        self.assertEqual(f.ledger.read()["nodes"]["write-label"]["attempt"], 0)
+        stops = {name: token for token, name in waiting["source_stops"]["label"].items()}
+        self.assertEqual(set(stops), {"API access, including `sandbox`", "Approved artwork"})
+        self.assertNotEqual(0, resolve(stops["API access, including `sandbox`"], "").returncode)
+        self.assertEqual(
+            0,
+            resolve(
+                stops["API access, including `sandbox`"], "API credential provisioned"
+            ).returncode,
+        )
+        partial = status()
+        self.assertNotIn("write-label", partial["runnable"])
+        self.assertEqual(list(partial["source_stops"]["label"].values()), ["Approved artwork"])
+        self.assertNotEqual(
+            0, resolve(stops["API access, including `sandbox`"], "Replayed answer").returncode
+        )
+        self.assertEqual(
+            0, resolve(stops["Approved artwork"], "Owner approved asset v2").returncode
+        )
+        self.assertEqual(f.ledger.read()["counters"], {})
+        self.assertIn("write-label", status()["assignment_tickets"])
+        f.claim("write-label")
+        f.ledger.prepare_packet("write-label")
+        self.assertEqual(set(f.stored_packet("write-label")["source"]["upstream_tasks"]), {"label"})
+        self.assertEqual(
+            f.stored_packet("write-label")["source_resolutions"],
+            {
+                "API access, including `sandbox`": "API credential provisioned",
+                "Approved artwork": "Owner approved asset v2",
+            },
+        )
+        original = f.ledger.read()["nodes"]["write-label"]["assignment"]["source"]["upstream_tasks"]
+        self.assertEqual(set(original), {"label", "second"})
+
     def test_explicit_partial_scope_retains_unselected_criteria_without_claiming_pass(self) -> None:
         f = self.fixture
         src = f.g["sources"]["request"]

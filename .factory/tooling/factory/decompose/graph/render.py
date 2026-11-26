@@ -13,6 +13,7 @@ from typing_extensions import TypedDict
 
 from factory.decompose.contracts import LoadedTask
 from factory.decompose.graph.relations import (
+    TaskRelationGraph,
     build_relation_graph,
 )
 from factory.decompose.graph.task_data import (
@@ -107,6 +108,15 @@ def generate_mermaid_graph(tasks: dict[str, LoadedTask]) -> str:
 
     lines.append("```")
     return "\n".join(lines)
+
+
+def render_view(tasks: dict[str, LoadedTask], view: str) -> str:
+    if view == "scope":
+        return generate_mermaid_graph(tasks)
+    program = TaskRelationGraph.for_relation(tasks, "depends_on").program
+    if program is None:
+        raise ValueError("Dependency cycle")
+    return "```mermaid\n" + program.program.render(direction="LR") + "\n```"
 
 
 def _ensure_directory(path: str | Path) -> None:

@@ -25,11 +25,11 @@ def require(condition: object, message: str) -> None:
 
 
 @contextmanager
-def lock(path: Path, *, create_parents: bool = True, wait: bool = False) -> Iterator[None]:
+def lock(path: Path, *, create: bool = True, wait: bool = False) -> Iterator[None]:
     """The kernel releases ownership when a caller dies. Keep one stable lock inode."""
-    if create_parents:
+    if create:
         path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a+b") as file:
+    with path.open("a+b" if create else "r+b") as file:
         try:
             if sys.platform != "win32":
                 import fcntl
@@ -56,8 +56,30 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def identity(value: object) -> str:
-    return digest(json.dumps(value, sort_keys=True, ensure_ascii=False).encode())
+def graph_identity(value: object) -> str:
+    """Stable identity for a typed graph record, independent of mapping insertion order."""
+    checksum = hashlib.sha256()
+
+    def visit(item: object) -> None:
+        if isinstance(item, dict):
+            checksum.update(b"{")
+            for key in sorted(item):
+                visit(key)
+                visit(item[key])
+            checksum.update(b"}")
+        elif isinstance(item, list):
+            checksum.update(b"[")
+            for element in item:
+                visit(element)
+            checksum.update(b"]")
+        elif item is None or isinstance(item, str | bool | int | float):
+            data = (type(item).__name__ + ":" + str(item)).encode()
+            checksum.update(b"S" + len(data).to_bytes(8) + data)
+        else:
+            raise Invalid("Unsupported graph field type")
+
+    visit(value)
+    return checksum.hexdigest()
 
 
 def read_json(path: str | Path) -> Any:

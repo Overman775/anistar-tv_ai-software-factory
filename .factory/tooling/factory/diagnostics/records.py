@@ -37,8 +37,10 @@ EVENTS = {
     "bound",
     "check_started",
     "check_process",
+    "check_returned",
     "check_finished",
     "finished",
+    "report_submitted",
     "unknown",
     "reconciled",
     "session_replaced",
@@ -46,6 +48,7 @@ EVENTS = {
     "source_reintake",
     "retry",
     "task_resumed",
+    "source_prerequisite_resolved",
     "approval_resumed",
     "paused",
     "resumed",
@@ -91,8 +94,10 @@ OPERATIONS = {
     "lessons.waiting",
     "lessons.route",
     "lessons.wait-owner",
+    "lessons.reply",
     "lessons.teacher-launch",
     "lessons.retro",
+    "lessons.retune",
     "lessons.user",
     "lessons.delete",
     "lessons.packet",
@@ -117,6 +122,9 @@ OPERATIONS = {
     "prepare-packet",
     "read-packet",
     "confirm-packet",
+    "handoff",
+    "note",
+    "authorize-check",
     "bind",
     "run-check",
     "prepare-report",
@@ -194,7 +202,7 @@ TRANSPORT_OPERATIONS = {"create", "show", "status", "prompt", "cancel", "close"}
 JournalId = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.:-]{1,96}$")]
 InvocationId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 # Earlier journals accepted 32 hex digits. Current check executions use SHA-256.
-ExecutionId = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{32}|[0-9a-f]{64})$")]
+ExecutionId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 RunId = Annotated[str, StringConstraints(pattern=r"^run-[0-9a-f]{12}$")]
 
 
@@ -219,16 +227,10 @@ class JournalRecord(TypedDict):
 JOURNAL_RECORD = TypeAdapter[JournalRecord](JournalRecord)
 
 
-def valid_record(raw: object, *, allow_legacy_execution: bool = False) -> TypeGuard[JournalRecord]:
+def valid_record(raw: object) -> TypeGuard[JournalRecord]:
     try:
         record = JOURNAL_RECORD.validate_python(raw)
     except ValidationError:
-        return False
-    if (
-        "execution_id" in record
-        and len(record["execution_id"]) != 64
-        and not allow_legacy_execution
-    ):
         return False
     if record["event"] not in EVENTS or record["operation"] not in OPERATIONS:
         return False
@@ -253,7 +255,7 @@ def decode_record(payload: str) -> JournalRecord | None:
         record = json.loads(payload)
     except ValueError, RecursionError:
         return None
-    return record if valid_record(record, allow_legacy_execution=True) else None
+    return record if valid_record(record) else None
 
 
 def error_code(exc: BaseException) -> str:

@@ -207,19 +207,21 @@ def validate_protocol(args: argparse.Namespace) -> tuple[ProtocolResult, int]:
             }
         ),
         digest(
-            {
-                str(p): file_reader.read_text(Path(p), encoding="utf-8")
+            [
+                p
+                if isinstance(p, dict)
+                else file_reader.read_text(Path(p), encoding="utf-8")
                 if Path(p).is_file()
                 else "MISSING"
                 for p in [args.manifest, args.qa_output, *args.lens_output, *args.tool_result]
-            }
+            ]
         ),
         [
             evidence(
                 "review-protocol",
                 "BLOCKED" if errors else "PASS",
                 "; ".join(errors) or "Review report complete; code verdict is separate",
-                [str(args.manifest)],
+                [str(manifest.get("review_id") or args.manifest)],
             )
         ],
     )

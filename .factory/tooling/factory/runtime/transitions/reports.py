@@ -5,21 +5,30 @@ from __future__ import annotations
 from factory.runtime.commands.evidence import active_commands, check_receipts
 from factory.runtime.contracts import Node, Report, ReportDraft
 from factory.runtime.history import report_history
-from factory.runtime.history.artifact_ref import Artifact, transport_report
+from factory.runtime.history.artifact_ref import Artifact
+from factory.runtime.history.document import render
 from factory.runtime.knowledge import case_search
 from factory.runtime.packets.content import packet_confirmed
 from factory.runtime.reports import (
     acceptance,
-    approval,
     finish_requirements,
     review_findings,
-    transition_gates,
+    role_material,
+    write_handoff,
 )
 from factory.runtime.run_journal import RunJournal
+from factory.runtime.scheduling import report_graph
+from factory.runtime.scheduling.attempt_graph import advance
 from factory.runtime.state_io import parse_report, parse_report_draft
 from factory.runtime.workflow_config import check_config
-from factory.runtime.workflow_core import Invalid, acceptance_guard, relative, require, snapshot
-from factory.runtime.workflow_graph import overlaps, validate_graph
+from factory.runtime.workflow_core import (
+    Invalid,
+    acceptance_guard,
+    graph_identity,
+    require,
+    snapshot,
+)
+from factory.runtime.workflow_graph import overlaps
 from factory.tasks.contracts import Task
 
 
@@ -30,7 +39,7 @@ def report_scope(
     if (
         deferred_writer
         and report.get("outcome") == "PASS"
-        and report.get("stage_result") == "WRITES_READY"
+        and report.get("stage_result") in {"WRITES_READY", "DOCS_UPDATED"}
         and node.get("owns")
         and "handoff_inputs" in node
     ):
@@ -41,10 +50,15 @@ def report_scope(
 
 
 def prepare_report(
-    journal: RunJournal, node_id: str, draft: object, receipt_ids: list[str]
+    journal: RunJournal,
+    node_id: str,
+    draft: object,
+    receipt_ids: list[str],
+    *,
+    submit: bool = False,
 ) -> Report:
     """Capture the author's evidence at handoff for its exact running dispatch."""
-    with journal.locked():
+    with journal.locked(wait=submit):
         state = journal.read()
         node = next((n for n in state["graph"]["nodes"] if n["id"] == node_id), None)
         if node is None or node_id not in state["nodes"]:
@@ -65,6 +79,13 @@ def prepare_report(
         draft_checks = checks
         current = state["nodes"][node_id]
         task = state["graph"]["tasks"][node["task"]]
+        require(len(set(receipt_ids)) == len(receipt_ids), "Duplicate receipt")
+        request_id = graph_identity([report, sorted(receipt_ids)])
+        previous = current.get("submission")
+        if submit and previous is not None and previous["request_id"] == request_id:
+            return parse_report(
+                journal.runs.read_input(journal.root, "submission", previous["report_id"])
+            )
         require(
             state["status"] == "active" and current["status"] == "running",
             "Report needs a bound running node",
@@ -78,7 +99,6 @@ def prepare_report(
             and report.get("slice_id", task["slice"]) == task["slice"],
             "Stale report identity",
         )
-        require(len(set(receipt_ids)) == len(receipt_ids), "Duplicate receipt")
         outcome = report["outcome"]
         require_pass = outcome == "PASS"
         selected_ids = list(receipt_ids)
@@ -131,13 +151,36 @@ def prepare_report(
                 "checks": checks,
                 "files": snapshot(
                     journal.root,
-                    report_scope(node, task, report, obligations["require_writes_ready"]),
+                    report_scope(
+                        node,
+                        task,
+                        report,
+                        obligations["require_writes_ready"] or current.get("role") == "doc-writer",
+                    ),
                 ),
             }
         )
         if require_pass:
             acceptance_guard(finish_requirements.validate_pass, obligations, result)
+            if current.get("role") == "implementer" and node.get("owns"):
+                write_handoff.validate(journal.root, state, node, current, result)
+        role_material.validate(journal.root, state, node, current, result)
         journal.source_drifted(state, task, outcome)
+        if submit:
+            report_id = graph_identity(["submission", result])
+            current["submission"] = {"request_id": request_id, "report_id": report_id}
+            path = f".factory/memory/history/{state['run_id']}/submissions/{report_id}.md"
+            artifact = Artifact(
+                path, "submission", render(result), node_id, current["dispatch_id"], document=result
+            )
+            journal.save_artifacts(
+                state,
+                "report_submitted",
+                (artifact,),
+                node=node_id,
+                dispatch_id=current["dispatch_id"],
+                result=report_id,
+            )
         return result
 
 
@@ -154,6 +197,9 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
         s = journal.read()
         n = next(n for n in s["graph"]["nodes"] if n["id"] == node_id)
         v, task = s["nodes"][node_id], s["graph"]["tasks"][n["task"]]
+        submission_key = graph_identity(["terminal", report])
+        if v.get("terminal_input") == submission_key:
+            return
         require(v["status"] == "running", "Cannot finish unbound/unknown work")
         require(
             not any(r["node_id"] == node_id for r in active_commands(s).values()),
@@ -170,6 +216,11 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
             "Stale report identity",
         )
         journal.diagnostic_attempt = (node_id, v["dispatch_id"])
+        if submission := v.get("submission"):
+            require(
+                submission["report_id"] == graph_identity(["submission", report]),
+                "Superseded report submission",
+            )
         outcome = report["outcome"]
         if outcome == "PASS":
             for case in report.get("applied_cases", []):
@@ -183,7 +234,9 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
         if journal.source_drifted(s, task, outcome):
             report["observed_source_drift"] = True
         obligations = finish_requirements.for_node(s, n)
-        scope = report_scope(n, task, report, obligations["require_writes_ready"])
+        scope = report_scope(
+            n, task, report, obligations["require_writes_ready"] or v.get("role") == "doc-writer"
+        )
         # A full handoff may also cover unowned task files, but never omit declared inputs.
         full_scope = set(task["scope"]) | set(scope)
         if set(report["files"]) == full_scope:
@@ -223,21 +276,11 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
         check_receipts(
             journal.root, s, node_id, checks, complete=False, require_pass=outcome == "PASS"
         )
-        if outcome == "PASS":
-            report["gate_results"] = acceptance_guard(
-                transition_gates.evaluate, s["config"]["_project"]["data"], n, task, report
-            )
-        if report.get("stage_result") == "APPROVAL_REQUIRED" or "approval_request" in report:
-            require("approval_request" in report, "Invalid approval request: field required")
-            approval.bind_request(journal.root, s, n, task, report)
-            validate_graph(approval.expanded_graph(s, n, report), s["config"], journal.root)
-        acceptance_guard(review_findings.apply, s, n, report)
-        if "implement." + n["stage"] in transition_gates.CORE_BOUNDARIES:
-            core_gate = transition_gates.stage_result(s, n, report)
-            report = {
-                **report,
-                "gate_results": [core_gate, *report.get("gate_results", [])],
-            }
+        if outcome == "PASS" and v.get("role") == "implementer" and n.get("owns"):
+            write_handoff.validate(journal.root, s, n, v, report)
+        role_material.validate(journal.root, s, n, v, report)
+        acceptance_guard(review_findings.check_assessments, s, n, report)
+        verdict = report_graph.evaluate(report_graph.Handoff(journal.root, s, n, task, report))
         unsuccessful = report.get("unsuccessful_attempt")
         if unsuccessful is not None:
             require(
@@ -249,17 +292,19 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
         s.setdefault("report_index", {})[v["dispatch_id"]] = report_ref
         v.update(
             {
-                "status": "done" if outcome == "PASS" else "blocked",
+                "status": advance(v, verdict.action),
+                "terminal_input": submission_key,
                 "report": report,
                 "report_ref": report_ref,
             }
         )
-        originals = [original]
-        transport = transport_report(s["run_id"], node_id, v["dispatch_id"])
-        if transport in s.get("transport_artifacts", []):
-            source = relative(journal.root, transport)
-            if source.is_file():
-                originals.append(
-                    Artifact(transport, "transport-report", source, node_id, v["dispatch_id"])
-                )
-        journal.save_artifacts(s, "finished", tuple(originals), node=node_id, outcome=outcome)
+        journal.save_artifacts(
+            s,
+            "finished",
+            (original,),
+            node=node_id,
+            dispatch_id=v["dispatch_id"],
+            outcome=outcome,
+            decision=verdict.route,
+            reason=report["summary"],
+        )

@@ -1,0 +1,18 @@
+id: code-review
+entry: next
+nodes:
+  next:
+    decision: review_boundary
+    routes:
+      - {outcome: intake, target: coordinate}
+      - {outcome: architecture, target: reviewer}
+      - {outcome: runtime, target: reviewer}
+      - {outcome: acceptance, target: reviewer}
+      - {outcome: command, target: command}
+      - {outcome: verification, target: verify}
+      - {outcome: archived, target: end}
+  coordinate: {operation: present_review}
+  reviewer: {operation: review_assignment}
+  command: {operation: run_project_check}
+  verify: {operation: verify_results}
+  end: {operation: review_history}

@@ -20,7 +20,7 @@ from factory.decompose.graph.relations import (
 from factory.decompose.graph.relations import (
     check_parent_task_cycles as check_parent_task_cycles,
 )
-from factory.decompose.graph.render import Violations
+from factory.decompose.graph.render import Violations, render_view
 from factory.decompose.graph.render import _aliases as _aliases
 from factory.decompose.graph.render import _ensure_directory as _ensure_directory
 from factory.decompose.graph.render import _escape_mermaid_label as _escape_mermaid_label
@@ -98,6 +98,12 @@ def build_parser(
         "--source-lock",
         default=".factory/memory/staging/decomposition-source.json",
         help="Locked decomposition source.",
+    )
+    parser.add_argument(
+        "--view",
+        choices=("scope", "pydantic"),
+        default="scope",
+        help="Render scoped task relations or the executable Pydantic dependency graph",
     )
     parser.add_argument(
         "--core-only",
@@ -248,7 +254,7 @@ def _write_graph(args: argparse.Namespace) -> GraphResult:
         if os.path.exists(stale_file):
             os.remove(stale_file)
 
-    mermaid_block = generate_mermaid_graph(tasks)
+    mermaid_block = render_view(tasks, args.view)
     _ensure_directory(output_dir)
     atomic_write_text(args.output, mermaid_block)
     print(f"Graph gate: PASS. Graph written to {args.output}.", file=sys.stderr)

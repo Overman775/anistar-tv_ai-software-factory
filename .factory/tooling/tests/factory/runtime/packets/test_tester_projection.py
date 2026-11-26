@@ -101,7 +101,7 @@ class TesterProjectionTests(unittest.TestCase):
         delivered = packet["dependency_results"]["verify-label"]["report"]
         self.assertIn("unavailable", delivered["verification"][0]["diagnostics"][0])
 
-    def test_legacy_blocker_keeps_human_observation_without_structured_receipt(self) -> None:
+    def test_pre_execution_blocker_keeps_observation_without_structured_receipt(self) -> None:
         report = self.state["nodes"]["verify-label"]["report"]
         report["outcome"] = "BLOCKED"
         report["summary"] = "Device unavailable before execution"

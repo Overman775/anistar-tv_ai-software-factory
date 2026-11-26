@@ -161,6 +161,7 @@ class YamlTests(unittest.TestCase):
             "roles",
             "contracts",
             "gates",
+            "graphs",
             "workflow",
             "adapters",
             "tooling",

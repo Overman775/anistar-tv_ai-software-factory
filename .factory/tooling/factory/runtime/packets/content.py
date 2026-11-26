@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from pydantic import TypeAdapter, ValidationError
 from factory import file_reader
 from factory.context.context import WORKER_PROFILE_FIELDS
 from factory.database.provider import current_database
+from factory.runtime import upstream
 from factory.runtime.agent_commands import command_shell, factory_command
 from factory.runtime.contracts import (
     Dispatch,
@@ -20,14 +22,16 @@ from factory.runtime.contracts import (
     agent_key,
 )
 from factory.runtime.history import report_history
+from factory.runtime.history.document import render
 from factory.runtime.history.history_repository import HistoryRepository
 from factory.runtime.packets.delivery import PacketDelivery
-from factory.runtime.packets.repository import DeliveryReceipt as DeliveryReceipt
 from factory.runtime.packets.repository import PacketRepository
 from factory.runtime.reports import finish_requirements
 from factory.runtime.scheduling.assignment import (
+    ImplementPacket,
     dependency_results,
     implement_packet,
+    projected_source,
     projected_task,
     validate_packet,
     worker_node,
@@ -36,19 +40,15 @@ from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
     digest,
+    graph_identity,
     relative,
     require,
 )
 from factory.validation import validation_message
 
 PACKET_REFERENCE = TypeAdapter[PacketRef](PacketRef)
-DELIVERY_RECEIPT = TypeAdapter[DeliveryReceipt](DeliveryReceipt)
 PACKET_CONTENT_LIMIT = 5500
 PACKET_RESPONSE_LIMIT = 12000
-
-
-def save_receipt(root: Path, receipt: DeliveryReceipt) -> None:
-    current_database().packets.save_receipt(root, receipt)
 
 
 def delivery_state(
@@ -57,9 +57,15 @@ def delivery_state(
     return current_database().packets.delivery_state(root, meta, total, recipient)
 
 
-def encode_packet(packet: dict[str, Any]) -> bytes:
-    # acpx trims surrounding whitespace when reading prompt text from a file.
-    return json.dumps(packet, ensure_ascii=False, indent=2).encode("utf-8")
+@dataclass(frozen=True)
+class PacketDocument:
+    packet: ImplementPacket
+    content: bytes
+
+    @classmethod
+    def from_value(cls, raw: object) -> PacketDocument:
+        packet = acceptance_guard(validate_packet, raw)
+        return cls(packet, render(packet))
 
 
 def freeze_packet(
@@ -70,24 +76,24 @@ def freeze_packet(
     *,
     packets: PacketRepository | None = None,
     history: HistoryRepository | None = None,
-) -> tuple[PacketRef, bytes]:
+) -> tuple[PacketRef, PacketDocument]:
     """Freeze a validated dispatch under the caller's ledger lock."""
     node_id = n["id"]
     task = s["graph"]["tasks"][n["task"]]
-    rel = f".factory/memory/state/{s['run_id']}-{node_id}-{v['dispatch_id']}.packet.json"
+    rel = f".factory/memory/state/{s['run_id']}-{node_id}-{v['dispatch_id']}.packet.md"
     p = relative(root, rel)
     existing = v.get("packet_file")
     if existing is not None:
-        return existing, read_packet_bytes(
+        return existing, read_packet_document(
             root, s, n, existing, existing, packets=packets, history=history
         )
     require(not p.exists(), "Packet path already exists; reconcile artifact")
     packet = acceptance_guard(implement_packet, s, node_id)
-    data = encode_packet(packet)
+    document = PacketDocument.from_value(packet)
     meta = PACKET_REFERENCE.validate_python(
         {
             "path": rel,
-            "sha256": digest(data),
+            "sha256": digest(document.content),
             "run_id": s["run_id"],
             "node_id": node_id,
             "dispatch_id": v["dispatch_id"],
@@ -98,7 +104,7 @@ def freeze_packet(
     v["packet_file"] = meta
     s.setdefault("transport_artifacts", []).append(rel)
     s.setdefault("packet_hashes", {})[rel] = meta["sha256"]
-    return meta, data
+    return meta, document
 
 
 def materialize_packet(root: Path, meta: PacketRef, data: bytes) -> None:
@@ -139,14 +145,10 @@ def packet_response(result: object) -> bytes:
     return encoded
 
 
-def packet_diagnostics(data: bytes) -> dict[str, object]:
-    packet = acceptance_guard(validate_packet, json.loads(data))
-
-    def size(value: object) -> int:
-        return len(json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8"))
-
-    sections = {key: size(value) for key, value in packet.items()}
-    instructions = {entry["path"]: size(entry) for entry in packet["instructions"]}
+def packet_diagnostics(document: PacketDocument) -> dict[str, object]:
+    packet, data = document.packet, document.content
+    sections = {key: len(render({key: value})) for key, value in packet.items()}
+    instructions = {entry["path"]: len(render(entry)) for entry in packet["instructions"]}
     return {
         "bytes": len(data),
         "chunks": len(packet_chunks(data)),
@@ -155,7 +157,7 @@ def packet_diagnostics(data: bytes) -> dict[str, object]:
     }
 
 
-def read_packet_bytes(
+def read_packet_document(
     root: Path,
     s: State,
     n: Node,
@@ -164,7 +166,7 @@ def read_packet_bytes(
     *,
     packets: PacketRepository | None = None,
     history: HistoryRepository | None = None,
-) -> bytes:
+) -> PacketDocument:
     packets = current_database().packets if packets is None else packets
     v = s["nodes"][n["id"]]
     try:
@@ -186,7 +188,7 @@ def read_packet_bytes(
         expected["source_hash"] == s["graph"]["sources"][task["source"]]["hash"],
         "Packet source mismatch",
     )
-    rel = f".factory/memory/state/{s['run_id']}-{n['id']}-{v['dispatch_id']}.packet.json"
+    rel = f".factory/memory/state/{s['run_id']}-{n['id']}-{v['dispatch_id']}.packet.md"
     require(
         expected["path"] == rel and rel in s.get("transport_artifacts", []),
         "Packet ownership mismatch",
@@ -195,7 +197,12 @@ def read_packet_bytes(
     data = packets.read_packet(root, expected)
     if p.exists():
         require(digest(file_reader.read_bytes(p)) == expected["sha256"], "Packet digest mismatch")
-    packet = acceptance_guard(validate_packet, json.loads(data))
+    history = current_database().history if history is None else history
+    document = PacketDocument.from_value(
+        history.document(root, s["run_id"], rel, expected["sha256"], "packet")
+    )
+    require(document.content == data, "Packet content identity mismatch")
+    packet = document.packet
     agent = s["graph"]["agents"][agent_key(n)]
     profile = s["config"]["profiles"][agent["profile"]]
     worker_profile = {k: value for k, value in profile.items() if k in WORKER_PROFILE_FIELDS}
@@ -211,26 +218,28 @@ def read_packet_bytes(
         and packet.get("role") == v["role"]
         and packet.get("profile") == worker_profile
         and packet.get("model") == s["config"]["models"][profile["model"]]
-        and packet.get("source") == s["graph"]["sources"][task["source"]]
+        and packet.get("source") == projected_source(s["graph"]["sources"][task["source"]], task, n)
+        and packet.get("source_resolutions", {}) == upstream.resolution_evidence(s, n["task"])
         and packet.get("node") == worker_node(n)
         and packet.get("task") == projected_task(task, n, obligations)
         and packet.get("finish_requirements") == obligations
-        and packet.get("assignment_sha256") == report_history.identity(v["assignment"])
+        and packet.get("assignment_sha256") == graph_identity(v["assignment"])
         and packet.get("dependency_results") == dependency_results(s, n),
         "Packet content identity mismatch",
     )
     for item in packet["dependency_results"].values():
         if "report_ref" in item:
             report_history.read(root, item["report_ref"], history=history)
-    return data
+    return document
 
 
 def packet_confirmed(dispatch: Dispatch) -> bool:
-    return dispatch.get("packet_delivery_version") == 2 and bool(dispatch.get("packet_confirmed"))
+    packet = dispatch.get("packet_file")
+    return packet is not None and dispatch.get("confirmed_packet_sha256") == packet["sha256"]
 
 
 def acknowledgement(chunks: list[str], ordinal: int) -> str:
-    return f"v2:{ordinal}:{digest(chunks[ordinal - 1].encode('utf-8'))}"
+    return f"chunk:{ordinal}:{digest(chunks[ordinal - 1].encode('utf-8'))}"
 
 
 def _save_delivery(
@@ -242,18 +251,7 @@ def _save_delivery(
     after: PacketDelivery,
 ) -> None:
     if before != after:
-        packets.save_receipt(
-            root,
-            DELIVERY_RECEIPT.validate_python(
-                {
-                    "packet": meta,
-                    "recipient": recipient,
-                    "version": 2,
-                    "served": after.served,
-                    "acknowledged": after.acknowledged,
-                }
-            ),
-        )
+        packets.save_receipt(root, meta, recipient, after)
 
 
 def serve_chunk(
@@ -275,11 +273,10 @@ def serve_chunk(
     _save_delivery(root, packets, meta, recipient, current, updated)
 
 
-def material_digest(data: bytes) -> str:
-    packet = acceptance_guard(validate_packet, json.loads(data))
-    return report_history.identity(
+def material_digest(packet: ImplementPacket) -> str:
+    return graph_identity(
         {
-            "instructions": [(entry["path"], entry["sha256"]) for entry in packet["instructions"]],
+            "instructions": [[entry["path"], entry["sha256"]] for entry in packet["instructions"]],
             "report_references": [
                 item["report_ref"]
                 for item in packet["dependency_results"].values()
@@ -292,7 +289,7 @@ def material_digest(data: bytes) -> str:
 def confirm_delivery(
     root: Path,
     meta: PacketRef,
-    data: bytes,
+    document: PacketDocument,
     received: str,
     materials: str,
     recipient: str,
@@ -300,10 +297,11 @@ def confirm_delivery(
     packets: PacketRepository | None = None,
 ) -> None:
     packets = current_database().packets if packets is None else packets
-    chunks = packet_chunks(data)
+    chunks = packet_chunks(document.content)
     final = len(chunks)
     require(
-        received == acknowledgement(chunks, final) and materials == material_digest(data),
+        received == acknowledgement(chunks, final)
+        and materials == material_digest(document.packet),
         "Confirm final chunk ordinal/digest and mandatory material set",
     )
     progress = packets.delivery_state(root, meta, final, recipient)

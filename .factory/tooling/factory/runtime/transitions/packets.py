@@ -7,9 +7,9 @@ from typing import Any
 from factory.runtime.contracts import Dispatch, Node, State, agent_key
 from factory.runtime.history.artifact_ref import Artifact
 from factory.runtime.packets.content import (
+    PacketDocument,
     acknowledgement,
     confirm_delivery,
-    encode_packet,
     freeze_packet,
     material_digest,
     packet_bootstrap,
@@ -17,7 +17,7 @@ from factory.runtime.packets.content import (
     packet_confirmed,
     packet_diagnostics,
     packet_response,
-    read_packet_bytes,
+    read_packet_document,
     serve_chunk,
 )
 from factory.runtime.run_journal import RunJournal
@@ -41,14 +41,19 @@ def packet(journal: RunJournal, node_id: str) -> dict[str, Any]:
         task = s["graph"]["tasks"][n["task"]]
         journal.check_sources(s, task)
         packet = acceptance_guard(implement_packet, s, node_id)
-        data = encode_packet(packet)
-        name = (
-            f".factory/memory/history/{s['run_id']}/packets/{v['dispatch_id']}-{digest(data)}.json"
-        )
+        document = PacketDocument.from_value(packet)
+        name = f".factory/memory/history/{s['run_id']}/packets/{v['dispatch_id']}-{digest(document.content)}.md"
         journal.runs.store_artifact(
             journal.root,
             s["run_id"],
-            Artifact(name, "inline-packet", data, node_id, v["dispatch_id"]),
+            Artifact(
+                name,
+                "inline-packet",
+                document.content,
+                node_id,
+                v["dispatch_id"],
+                document=document.packet,
+            ),
         )
         return packet
 
@@ -61,7 +66,7 @@ def prepare_packet(
         s = journal.read()
         n, v = packet_dispatch(journal, s, node_id)
         already_prepared = "packet_file" in v
-        meta, data = freeze_packet(
+        meta, document = freeze_packet(
             journal.root, s, n, v, packets=journal.packets, history=journal.history
         )
         if not already_prepared:
@@ -69,16 +74,25 @@ def prepare_packet(
             journal.save_artifacts(
                 s,
                 "packet_prepared",
-                (Artifact(meta["path"], "packet", data, node_id, v["dispatch_id"]),),
+                (
+                    Artifact(
+                        meta["path"],
+                        "packet",
+                        document.content,
+                        node_id,
+                        v["dispatch_id"],
+                        document=document.packet,
+                    ),
+                ),
                 node=node_id,
                 dispatch_id=v["dispatch_id"],
             )
         bootstrap = packet_bootstrap(journal.root, s, n, meta)
         if with_diagnostics:
-            data = read_packet_bytes(
+            document = read_packet_document(
                 journal.root, s, n, meta, meta, packets=journal.packets, history=journal.history
             )
-            return {"bootstrap": bootstrap, "diagnostics": packet_diagnostics(data)}
+            return {"bootstrap": bootstrap, "diagnostics": packet_diagnostics(document)}
         return bootstrap
 
 
@@ -122,7 +136,7 @@ def read_packet(
         expected = v.get("packet_file")
         if expected is None:
             raise Invalid("Prepare packet first")
-        data = read_packet_bytes(
+        document = read_packet_document(
             journal.root,
             s,
             n,
@@ -132,7 +146,7 @@ def read_packet(
             history=journal.history,
         )
         journal.diagnostic_attempt = (node_id, expected["dispatch_id"])
-        chunks = packet_chunks(data)
+        chunks = packet_chunks(document.content)
         total = len(chunks)
         require(type(chunk) is int and 1 <= chunk <= total, "Invalid packet chunk")
         content = chunks[chunk - 1]
@@ -143,7 +157,7 @@ def read_packet(
             "content": content,
             "content_bytes": len(content.encode("utf-8")),
             "acknowledgement": acknowledgement(chunks, chunk),
-            "materials": material_digest(data) if chunk == total else None,
+            "materials": material_digest(document.packet) if chunk == total else None,
             "binding": v["status"],
             "ready_for_work": packet_confirmed(v),
         }
@@ -178,7 +192,7 @@ def confirm_packet(
         if expected is None:
             raise Invalid("Prepare packet first")
         handle = packet_recipient(dispatch, recipient)
-        data = read_packet_bytes(
+        document = read_packet_document(
             journal.root,
             s,
             n,
@@ -189,12 +203,11 @@ def confirm_packet(
         )
         journal.diagnostic_attempt = (node_id, expected["dispatch_id"])
         confirm_delivery(
-            journal.root, expected, data, received, materials, handle, packets=journal.packets
+            journal.root, expected, document, received, materials, handle, packets=journal.packets
         )
         if packet_confirmed(dispatch):
             return
-        dispatch["packet_confirmed"] = True
-        dispatch["packet_delivery_version"] = 2
+        dispatch["confirmed_packet_sha256"] = expected["sha256"]
         journal.save(
             s,
             "packet_confirmed",

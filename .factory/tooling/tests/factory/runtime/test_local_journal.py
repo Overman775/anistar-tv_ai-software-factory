@@ -19,8 +19,10 @@ from factory.diagnostics.events import event
 from factory.diagnostics.records import OPERATIONS, decode_record, valid_record
 from factory.logging_config import diagnostic_operation
 from factory.paths import TOOLING_ROOT
-from factory.runtime import command_worker
+from factory.runtime import command_worker, graph_inputs
 from factory.runtime.knowledge.cli import command_parser
+from factory.runtime.scheduling.orchestrator_graph import assignment_ticket
+from factory.runtime.state_io import parse_report, parse_report_draft
 from factory.runtime.workflow_cli import build_parser
 from factory.runtime.workflow_core import Invalid
 from tests import CLI
@@ -37,6 +39,8 @@ class JournalCliTests(unittest.TestCase):
 
     def cli(self, *args: str, workspace: Path | None = None) -> subprocess.CompletedProcess[str]:
         group = "checks" if args[0] == "run" else "workflow"
+        if args[:2] == ("claim", "write-label"):
+            args = (*args, "--ticket", assignment_ticket(self.run_id, 1, "write-label", 1))
         return subprocess.run(
             [*CLI, group, "--workspace", str(workspace or self.root), *args],
             capture_output=True,
@@ -153,7 +157,13 @@ class JournalCliTests(unittest.TestCase):
         self.assertNotIn("diagnostic", result.stdout)
         dispatch = json.loads(result.stdout)["result"]["dispatch"]["dispatch_id"]
         failure = self.cli(
-            "retry", "write-label", "secret-canary", "secret-canary", "secret-canary"
+            "retry",
+            "write-label",
+            "secret-canary",
+            "secret-canary",
+            "secret-canary",
+            "--dispatch",
+            dispatch,
         )
         self.assertEqual(failure.returncode, 1)
         invocation = re.search(r"Factory diagnostic invocation: ([a-f0-9]+)", failure.stderr)
@@ -170,25 +180,30 @@ class JournalCliTests(unittest.TestCase):
         by_dispatch = self.cli("diagnostics", "--dispatch", dispatch)
         self.assertEqual(len(json.loads(by_dispatch.stdout)["records"]), 1)
 
-    def test_journal_baseline_preserves_existing_records(self) -> None:
+    def test_old_journals_are_rejected_without_writes(self) -> None:
         for version in (0, 1):
             with self.subTest(version=version):
                 workspace = self.root / f"legacy-{version}"
                 path = journal.database_path(workspace)
                 path.parent.mkdir(parents=True)
                 with closing(sqlite3.connect(path)) as db, db:
-                    db.execute(journal.JOURNAL_TABLE)
+                    db.execute(
+                        "CREATE TABLE records (id INTEGER PRIMARY KEY, invocation_id TEXT, run_id TEXT, dispatch_id TEXT, payload TEXT NOT NULL)"
+                    )
                     db.execute("INSERT INTO records VALUES (17,'old',NULL,NULL,'{}')")
                     db.execute(f"PRAGMA user_version={version}")
-                self.assertEqual(journal.snapshot(workspace), ["{}"])
-                journal.prepare(workspace)
-                with closing(sqlite3.connect(path)) as db:
-                    self.assertEqual(db.execute("PRAGMA user_version").fetchone(), (2,))
-                    self.assertEqual(
-                        db.execute("SELECT * FROM records").fetchone(),
-                        (17, "old", None, None, "{}", None),
-                    )
-                self.assertEqual(journal.delivery_window(workspace, "test"), (0, 0))
+                original = path.read_bytes()
+                with self.assertRaises(ValueError):
+                    journal.snapshot(workspace)
+                with self.assertRaises(OSError):
+                    journal.prepare(workspace)
+                with self.assertRaises(OSError):
+                    journal.append(workspace, "attempt", [], 1)
+                with self.assertRaises(OSError):
+                    journal.acknowledge(workspace, "test", 1)
+                with self.assertRaises(ValueError):
+                    journal.delivery_window(workspace, "test")
+                self.assertEqual(path.read_bytes(), original)
 
     def test_real_check_lifecycle_uses_one_execution_and_dispatch(self) -> None:
         f = self.fixture
@@ -204,7 +219,8 @@ class JournalCliTests(unittest.TestCase):
         page = self.cli("diagnostics", "--dispatch", dispatch)
         records = json.loads(page.stdout)["records"]
         self.assertEqual(
-            [r["event"] for r in records], ["check_finished", "check_process", "check_started"]
+            [r["event"] for r in records],
+            ["check_finished", "check_returned", "check_process", "check_started"],
         )
         self.assertTrue(
             all(r["execution_id"] == execution and r["run_id"] == self.run_id for r in records)
@@ -214,13 +230,12 @@ class JournalCliTests(unittest.TestCase):
         for candidate in (execution[:32], "x" * 64):
             legacy = dict(records[0], execution_id=candidate)
             self.assertFalse(valid_record(legacy))
-            self.assertEqual(decode_record(json.dumps(legacy)) is not None, len(candidate) == 32)
+            self.assertIsNone(decode_record(json.dumps(legacy)))
 
     def test_rejections_attribute_only_verified_attempts(self) -> None:
         node = "write-label"
         self.fixture.start(node)
         dispatch = self.fixture.ledger.read()["nodes"][node]["dispatch_id"]
-        path = self.root / "draft.json"
         for supplied, confirmed in ((dispatch, True), ("0" * 32, False)):
             check = self.cli(
                 "run", node, "private-check", "--request", "fixture", "--dispatch", supplied
@@ -228,8 +243,8 @@ class JournalCliTests(unittest.TestCase):
             draft = self.fixture.report(node)
             draft.pop("files")
             draft["dispatch_id"] = supplied
-            path.write_text(json.dumps(draft))
-            report = self.cli("prepare-report", node, str(path), "private-unknown-receipt")
+            draft_id = graph_inputs.draft_report(self.root, parse_report_draft(draft))
+            report = self.cli("prepare-report", node, draft_id, "private-unknown-receipt")
             for failure, code in (
                 (check, "check_resource_missing" if confirmed else "stale_dispatch"),
                 (report, "receipt_unavailable" if confirmed else "stale_report"),
@@ -322,7 +337,10 @@ class JournalCliTests(unittest.TestCase):
         self.fixture.start("write-label")
         dispatch = self.fixture.ledger.read()["nodes"]["write-label"]["dispatch_id"]
         self.fixture.ledger.unknown("write-label", "fixture interrupted")
-        result = self.cli("retry", "write-label", "recovery", "retry", "terminal")
+        self.fixture.ledger.resolve("write-label", "blocked", "fixture stopped")
+        result = self.cli(
+            "retry", "write-label", "recovery", "retry", "terminal", "--dispatch", dispatch
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         page = self.cli("diagnostics", "--dispatch", dispatch)
         records = json.loads(page.stdout)["records"]
@@ -340,7 +358,16 @@ class JournalCliTests(unittest.TestCase):
         state["graph"]["sources"]["request"]["snapshot"] = "changed secret-canary"
         overwrite(fixture.ledger, state)
         result = subprocess.run(
-            [*CLI, "workflow", "--workspace", str(fixture.root), "claim", "write-label"],
+            [
+                *CLI,
+                "workflow",
+                "--workspace",
+                str(fixture.root),
+                "claim",
+                "write-label",
+                "--ticket",
+                assignment_ticket(state["run_id"], 1, "write-label", 1),
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -377,13 +404,14 @@ class JournalCliTests(unittest.TestCase):
         node = "write-label"
         fixture.start(node)
         report = fixture.report(node)
-        report_path = fixture.root / "report.json"
         state = fixture.ledger.read()
         state["graph"]["sources"]["request"]["snapshot"] = "corrupt"
         overwrite(fixture.ledger, state)
 
-        report_path.write_text(json.dumps({**report, "dispatch_id": "0" * 32}))
-        stale = self.cli("finish", node, str(report_path), workspace=fixture.root)
+        report_id = graph_inputs.publish_report(
+            fixture.root, parse_report({**report, "dispatch_id": "0" * 32})
+        )
+        stale = self.cli("finish", node, report_id, workspace=fixture.root)
         self.assertEqual(stale.returncode, 1)
         self.assertIn("Stale report identity", stale.stderr)
         invocation = re.search(r"invocation: ([a-f0-9]+)", stale.stderr)
@@ -394,8 +422,8 @@ class JournalCliTests(unittest.TestCase):
         self.assertEqual(stale_page.returncode, 0, stale_page.stderr)
         self.assertNotIn("dispatch_id", json.loads(stale_page.stdout)["records"][0])
 
-        report_path.write_text(json.dumps(report))
-        drift = self.cli("finish", node, str(report_path), workspace=fixture.root)
+        report_id = graph_inputs.publish_report(fixture.root, parse_report(report))
+        drift = self.cli("finish", node, report_id, workspace=fixture.root)
         self.assertEqual(drift.returncode, 1)
         self.assertIn("SOURCE_DRIFT", drift.stderr)
 
@@ -412,7 +440,9 @@ class JournalCliTests(unittest.TestCase):
     def test_bind_rejection_identifies_selected_dispatch(self) -> None:
         claim = self.cli("claim", "write-label")
         dispatch = json.loads(claim.stdout)["result"]["dispatch"]["dispatch_id"]
-        failure = self.cli("bind", "write-label", "fixture-handle", "wrong-model")
+        failure = self.cli(
+            "bind", "write-label", "fixture-handle", "wrong-model", "--dispatch", dispatch
+        )
         self.assertEqual(failure.returncode, 1, failure.stdout)
         match = re.search(r"invocation: ([a-f0-9]+)", failure.stderr)
         assert match is not None
@@ -506,12 +536,19 @@ class JournalCliTests(unittest.TestCase):
                 "    sys.stdin.readline()",
                 "    return handler",
                 "workflow_cli.initialize = initialize",
-                "sys.argv = ['workflow.py', '--workspace', sys.argv[2], 'claim', 'write-label']",
+                "sys.argv = ['workflow.py', '--workspace', sys.argv[2], 'claim', 'write-label', '--ticket', sys.argv[3]]",
                 "workflow_cli.main()",
             ]
         )
         with subprocess.Popen(
-            [sys.executable, "-c", code, str(TOOLING_ROOT), str(self.root)],
+            [
+                sys.executable,
+                "-c",
+                code,
+                str(TOOLING_ROOT),
+                str(self.root),
+                assignment_ticket(self.run_id, 1, "write-label", 1),
+            ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

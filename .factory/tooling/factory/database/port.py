@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from factory.diagnostics.diagnostic_journal import DiagnosticJournal
+    from factory.processes.records import ProcessRepository
     from factory.runtime.history.history_repository import HistoryRepository
     from factory.runtime.knowledge.case_index import CaseIndex
     from factory.runtime.knowledge.lesson_index import LessonIndex
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
 
 class DatabaseBackend(Protocol):
     """A backend supplies all sections together, including the pre-installation guard."""
+
+    @property
+    def processes(self) -> ProcessRepository: ...
 
     @property
     def runs(self) -> RunRepository: ...

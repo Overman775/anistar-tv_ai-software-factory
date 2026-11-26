@@ -1,0 +1,13 @@
+id: implement-source
+entry: intake
+nodes:
+  intake:
+    decision: source_readiness
+    routes:
+      - {outcome: forbidden, requires: [gap], priority: 40, target: hold}
+      - {outcome: delegated, requires: [gap], priority: 30, target: planning}
+      - {outcome: gap, priority: 20, target: hold}
+      - {outcome: approved_or_ready, priority: 10, target: admit}
+  hold: {operation: needs_planning}
+  planning: {operation: delegated_planning}
+  admit: {operation: admit_source}

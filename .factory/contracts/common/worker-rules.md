@@ -86,8 +86,7 @@ Treat the returned 0–3 lessons as guidance scoped by their conditions.
 
 If you also need a previous task’s evidence, add `--include-history` to a lookup. History is optional. Results label the source as
 `lesson` or `case`. A case links an accepted past report with its exact attempt.
-Copy the case's `report_ref` object to a temporary JSON file and run
-`cli workflow read-report REF.json`. Check the report's
+Run `cli workflow read-report RUN NODE DISPATCH` with the IDs in the case's `report_ref`. Check the report's
 conditions against the current assignment and verify any reused approach here.
 A case supplies historical context. Current requirements and evidence still govern.
 

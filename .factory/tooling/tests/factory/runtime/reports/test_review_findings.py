@@ -180,7 +180,7 @@ class ReviewFindingTests(unittest.TestCase):
             "review-findings.md", {Path(item["path"]).name for item in verification["instructions"]}
         )
         f.ledger.finish("verify-label", f.report("verify-label"))
-        f.ledger.claim("review-label")
+        f.claim("review-label")
         packet = f.ledger.packet("review-label")
         self.assertEqual("ready", packet["review_findings"]["REV-1"]["status"])
         self.assertNotIn("history", packet["review_findings"]["REV-1"])
@@ -269,11 +269,12 @@ class ReviewFindingTests(unittest.TestCase):
             "REV-99": deepcopy(state["review_findings"]["label"]["REV-1"])
         }
         overwrite(other.ledger, state)
-        other.ledger.claim("write-label")
-        prompt = Path(prepare_prompt(other.ledger, "write-label")["prompt"]).read_text(
-            encoding="utf-8"
-        )
-        envelope = json.loads(prompt)
+        other.claim("write-label")
+        from factory.runtime.history.document import render
+
+        prompt = Path(prepare_prompt(other.ledger, "write-label")["prompt"])
+        envelope = other.stored_packet("write-label")
+        self.assertEqual(render(envelope), prompt.read_bytes())
         self.assertEqual(["REV-1"], list(envelope["review_findings"]))
         self.assertNotIn("history", envelope["review_findings"]["REV-1"])
         self.assertTrue(
@@ -364,6 +365,12 @@ class ReviewFindingTests(unittest.TestCase):
 
         self.f = f = workflow_fixture.WorkflowFixture(self.addCleanup)
         f.require_fixture_review()
+        source = f.g["sources"]["request"]
+        task = f.g["tasks"]["label"]
+        for criterion in ("AC-02", "AC-03"):
+            source["acceptance"].append({**source["acceptance"][0], "id": criterion})
+            task["acceptance_ids"].append(criterion)
+            task["required_checks"][0]["criteria"].append(criterion)
         f.fixture_policy = """id: unit-fixture
 decisions:
   - id: extra-needed
@@ -410,17 +417,28 @@ gates:
         with self.assertRaisesRegex(Invalid, "Unknown assigned command"):
             f.ledger.run_check("review-label", "behavior")
         self.assertEqual(before_check, f.ledger.read())
-        f.ledger.finish(
+        [receipt] = before_check["executions"]
+        assessments = {
+            "AC-01": {"conclusion": "Specified label verified", "receipts": [receipt]},
+            "AC-02": {"conclusion": "Existing action verified", "receipts": [receipt]},
+            "AC-03": {
+                "conclusion": "Need focused coverage",
+                "receipts": [],
+                "requested_checks": ["focused-extra"],
+            },
+        }
+        draft = f.report(
             "review-label",
-            f.report(
-                "review-label",
-                "BLOCKED",
-                verdict="NEEDS_WORK" if known_defect else "RETHINK",
-                findings=[self.finding] if known_defect else [],
-                stage_result="CHECKS_REQUESTED",
-                summary="Coordinator: request the existing optional focused-extra command on this candidate",
-            ),
+            "BLOCKED",
+            verdict="NEEDS_WORK" if known_defect else "RETHINK",
+            findings=[self.finding] if known_defect else [],
+            stage_result="CHECKS_REQUESTED",
+            summary="Coordinator: request the existing optional focused-extra command on this candidate",
         )
+        draft["criterion_assessments"] = assessments
+        f.ledger.finish("review-label", draft)
+        handoff = f.ledger.next_actions()["handoffs"]["review-label"][0]
+        self.assertEqual(assessments, handoff["criteria"])
         before = f.ledger.read()
         self.assertEqual(["revise"], f.ledger.next_actions()["corrections"]["review-label"])
         self.assertEqual(
@@ -467,13 +485,23 @@ gates:
             f.ledger.finish("requested-behavior", forged)
         self.assertEqual(before_forged, f.ledger.read())
         f.ledger.finish("requested-behavior", focused)
+        old_dispatch = draft["dispatch_id"]
         if known_defect:
             finding = f.ledger.read()["review_findings"]["label"]["REV-1"]
             self.assertEqual("review-label", finding["history"][0]["node_id"])
+            f.start("review-label", "reviewer-session")
+            self.assertNotEqual(
+                old_dispatch, f.ledger.read()["nodes"]["review-label"]["dispatch_id"]
+            )
+            with self.assertRaisesRegex(Invalid, "Stale report identity"):
+                f.ledger.finish("review-label", draft)
+            self.assertEqual("running", f.ledger.read()["nodes"]["review-label"]["status"])
             self.assertEqual("open", finding["status"])
             self.assertEqual(1, f.ledger.read()["nodes"]["write-label"]["attempt"])
             with self.assertRaisesRegex(Invalid, "Unresolved or omitted blocking"):
-                self.review([], "PASS", "APPROVE")
+                f.ledger.finish(
+                    "review-label", f.report("review-label", "PASS", verdict="APPROVE", findings=[])
+                )
             f.ledger.finish(
                 "review-label",
                 f.report("review-label", "FAIL", verdict="NEEDS_WORK", findings=[self.finding]),
@@ -490,7 +518,21 @@ gates:
             history = f.ledger.read()["review_findings"]["label"]["REV-1"]["history"]
             self.assertEqual(["open", "open", "ready", "fixed"], [e["status"] for e in history])
             return
-        self.review([], "PASS", "APPROVE")
+        f.start("review-label", "reviewer-session")
+        final_assessments = deepcopy(assessments)
+        final_assessments["AC-03"] = {
+            "conclusion": "Focused verification passed",
+            "receipts": [focused["checks"][0]["execution_id"]],
+        }
+        f.ledger.finish(
+            "review-label",
+            f.report(
+                "review-label",
+                verdict="APPROVE",
+                findings=[],
+                criterion_assessments=final_assessments,
+            ),
+        )
         (f.root / "extra-input.txt").write_text("changed after focused receipt")
         with self.assertRaisesRegex(Invalid, "Runner evidence invalidated by later write"):
             f.ledger.accept("accept-label")
@@ -669,7 +711,7 @@ class IntegrationFindingTests(unittest.TestCase):
                 snapshot(f.root, state["graph"]["tasks"]["label"]["scope"]),
                 state["graph"]["sources"]["request"]["hash"],
             )
-        f.ledger.claim("review-all")
+        f.claim("review-all")
         packet = f.ledger.packet("review-all")
         self.assertEqual("label", packet["review_findings"]["label:REV-1"]["task_id"])
         self.assertEqual("REV-1", packet["review_findings"]["label:REV-1"]["id"])
@@ -717,7 +759,7 @@ class IntegrationFindingTests(unittest.TestCase):
         self.first()
         self.second()
         self.verify_all()
-        f.ledger.claim("review-all")
+        f.claim("review-all")
         f.ledger.bind("review-all", "independent-reviewer", "gpt-6.1-sol")
         bad = self.finding()
         bad.pop("owner_node_id")
@@ -851,7 +893,7 @@ class IntegrationFindingTests(unittest.TestCase):
         f.init()
         self.first()
         self.second()
-        f.ledger.claim("verify-all")
+        f.claim("verify-all")
         with self.assertRaisesRegex(Invalid, "different logical agent"):
             f.ledger.bind("verify-all", self.author_handle(), "gpt-6.1-sol")
         f.ledger.bind("verify-all", "handle-tester", "gpt-6-luna")

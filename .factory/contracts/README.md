@@ -30,7 +30,7 @@ Implementer writes the change and its tests. Tester runs verification. Judge
 reviews the final diff and fresh evidence when independent review is required. Each delegated role may write its exact assigned
 report under the current run state, in addition to role-specific product paths.
 Never share a singleton report across agents. The dynamic assignment envelope
-and final JSON evidence schema are defined by `common/implement-handoff.md`, `common/implement-result.md` and `common/check-execution.md`.
+and typed terminal report are defined by `common/implement-handoff.md`, `common/implement-result.md` and `common/check-execution.md`.
 
 Cross-cutting criteria, mandatory project gates and additional checks —
 [Verification Rules](../gates/common/verification-rules.md). Contract shared by

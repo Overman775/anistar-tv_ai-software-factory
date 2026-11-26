@@ -73,6 +73,7 @@ class CLIHelpTests(unittest.TestCase):
                 ("acpx", "setup"),
                 ("checks", "run"),
                 ("workflow", "claim"),
+                ("workflow", "handoff"),
                 ("workflow", "prepare-workspace"),
                 ("workflow", "retry"),
             },
@@ -113,7 +114,7 @@ class CLIHelpTests(unittest.TestCase):
             self.assertIn(f"{LAUNCHER} workflow status --json", text)
             self.assertIn(f"{LAUNCHER} checks results EXECUTION_ID --json", text)
             self.assertIn(
-                f"{LAUNCHER} workflow prepare-report NODE DRAFT_JSON RECEIPT_ID --json", text
+                f"{LAUNCHER} workflow prepare-report NODE DRAFT_ID RECEIPT_ID --json", text
             )
             for line in text.splitlines():
                 if line.startswith(f"  {LAUNCHER} "):
@@ -193,13 +194,13 @@ class CLIHelpTests(unittest.TestCase):
                 with patch("factory.cli.workflow_cli.run", side_effect=failure):
                     output = StringIO()
                     with redirect_stdout(output):
-                        self.assertEqual(main(["workflow", "show", "--json"]), 1)
+                        self.assertEqual(main(["workflow", "status", "--json"]), 1)
                     error = json.loads(output.getvalue())["error"]
                     self.assertEqual(error["code"], code)
                     self.assertEqual(error["next_action"], ERROR_GUIDANCE[code])
                     self.assertNotIn("private", error["message"])
                     with self.assertRaises(type(failure)):
-                        main(["workflow", "show"])
+                        main(["workflow", "status"])
 
     def test_json_invalid_pin_omits_raw_validation_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -229,7 +230,8 @@ class CLIHelpTests(unittest.TestCase):
             config_example = json.loads(config_help.stdout)["commands"][0]["examples"][0]
             config = self.launch(root, *self.example_args(config_example))
             self.assertEqual(config.returncode, 0, config.stderr)
-            (root / "config.json").write_text(config.stdout, encoding="utf-8")
+            pin = config.stdout.strip()
+            self.assertRegex(pin, r"^[a-f0-9]{64}$")
             instruction_help = self.launch(root, "workflow", "read-instructions", "--help")
             self.assertEqual(instruction_help.returncode, 0, instruction_help.stderr)
             example = next(
@@ -237,7 +239,9 @@ class CLIHelpTests(unittest.TestCase):
                 for line in instruction_help.stdout.splitlines()
                 if line.strip().startswith(LAUNCHER)
             )
-            instructions = self.launch(root, *self.example_args(example))
+            instructions = self.launch(
+                root, *(pin if arg == "PIN" else arg for arg in self.example_args(example))
+            )
             self.assertEqual(instructions.returncode, 0, instructions.stderr)
             document = json.loads(instructions.stdout)["result"][0]
             self.assertTrue(document["path"].endswith("orchestration.md"))

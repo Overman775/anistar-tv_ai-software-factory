@@ -55,14 +55,14 @@ own dispatch/staging; a context packet alone does not provide an ACP session dri
    project documents to a unique prompt file. Coordinator policies stay with the parent.
    It returns the session name and command argv. Passing a filename without
    reading its content would not load instructions; the helper sends the content.
-3. For a new logical agent epoch run `cli acpx run NODE create`, then
-   `cli acpx run NODE show`. Creation is journalled first and cannot be blindly
+3. For a new logical agent epoch run `cli acpx run NODE create --dispatch DISPATCH_ID`, then
+   `cli acpx run NODE show --dispatch DISPATCH_ID`. Creation is journalled first and cannot be blindly
    repeated. Inspect session/model/permission evidence. For continuation reuse
    the existing epoch/session; do not run create again.
-4. `cli workflow bind NODE SESSION_NAME ACTUAL_MODEL` persists verified identity.
+4. `cli workflow bind NODE SESSION_NAME ACTUAL_MODEL --dispatch DISPATCH_ID` persists verified identity.
    For native this handle is a host ID; for this adapter it is the prepared
    unique `(connection, absolute cwd, session name)` identity.
-5. `cli acpx run NODE prompt` launches the argv with `subprocess`, no shell.
+5. `cli acpx run NODE prompt --dispatch DISPATCH_ID` launches the argv with `subprocess`, no shell.
    It journals dispatch before sending, stores stdout/stderr and never marks
    the node complete. Parent waits responsively, examines the actual response,
    validates role evidence and calls workflow finish.
@@ -84,7 +84,7 @@ process/session. Completion of one does not establish the others' completion.
 Use the exposed command wait mechanism; inspect backend status when reconciliation
 requires it. Do not resend a prompt merely to request a progress update.
 
-Use `cli acpx run NODE status` or `cli acpx run NODE show` to inspect.
+Use `cli acpx run NODE status --dispatch DISPATCH_ID` or `cli acpx run NODE show --dispatch DISPATCH_ID` to inspect.
 The `cancel` action requests cancellation, and `close` soft-closes the saved session. Parent uses cancel/close only when authorized by
 checkpoint contract. These commands never release workflow ownership by
 themselves. Local PID/session status is not definitive proof of backend
@@ -110,7 +110,7 @@ call. Raw output and frozen assignments can contain sensitive source. The separa
 snapshot includes only session IDs, attempt metadata and provider counters. While a transport
 call or a child still holds an output stream open, archive reports a lock error. Retry after the last writer closes both streams, including when the adapter has exited.
 
-ACP sends the frozen JSON assignment with `acpx prompt --file` after binding.
+ACP sends the frozen Markdown rendering of the typed assignment with `acpx prompt --file` after binding.
 The helper validates the recorded hash and dispatch identity before submission.
 
 ## MCP configuration and backend differences

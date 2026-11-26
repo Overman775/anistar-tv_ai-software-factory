@@ -1,6 +1,6 @@
 # Factory Planning Plan Contract
 
-Canonical contract for `.factory/memory/staging/planning-plan.md` and
+Canonical contract for the delivered Planning candidate and
 `docs/plans/{plan_id}.md`. Plan is developer map, not evidence warehouse and not
 ticket backlog.
 
@@ -48,7 +48,7 @@ No question budgets, counters, publication metadata, task counts, or estimates.
 
 Only a complete preflight-clean plan becomes a user-reviewable revision.
 Unresolved decisions, blockers, and recursive questions remain in
-`.factory/memory/staging/planning-session.md` and must not replace the last
+the working evidence in the Planning run and must not replace the last
 presented revision.
 
 Approval invariants:

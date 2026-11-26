@@ -98,7 +98,7 @@ class DecisionContractTests(unittest.TestCase):
                 file = f.config_file(lambda c: None)
                 f.config = load_config(file)
                 f.init()
-                f.ledger.claim("write-label")
+                f.claim("write-label")
                 (file.parent / rel).write_text("changed")
                 if rel.endswith(".py"):
                     with self.assertRaisesRegex(Invalid, "Executable configuration/tooling drift"):

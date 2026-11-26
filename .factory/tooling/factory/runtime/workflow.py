@@ -3,17 +3,18 @@
 
 from __future__ import annotations
 
-import time
 import uuid
 from contextlib import nullcontext
-from typing import Any, Literal, cast, overload
+from pathlib import Path
+from typing import Any, Literal, overload
 
 from pydantic import ConfigDict, TypeAdapter, ValidationError
 
 from factory.decisions.decision_contract import (
     preserve_obligations as preserve_obligations,
 )
-from factory.diagnostics.events import event as log_event
+from factory.graphs.definition import load as load_definitions
+from factory.graphs.definition import parse
 from factory.paths import FACTORY_ROOT as FACTORY_ROOT
 from factory.project.profile_io import check_frozen
 from factory.project.profile_rules import boundary_gates as boundary_gates
@@ -42,16 +43,23 @@ from factory.runtime.contracts import agent_key as agent_key
 from factory.runtime.history import report_history
 from factory.runtime.observability import acpx_usage as telemetry
 from factory.runtime.reports import acceptance as acceptance
-from factory.runtime.reports import approval, finish_requirements
+from factory.runtime.reports import finish_requirements, write_handoff
 from factory.runtime.reports import review_findings as review_findings
 from factory.runtime.reports import transition_gates as transition_gates
 from factory.runtime.run_journal import LEDGER_EVENT as LEDGER_EVENT
 from factory.runtime.run_journal import RunJournal
-from factory.runtime.scheduling import dispatch
+from factory.runtime.scheduling import dispatch, intake, lifecycle_graph, recovery_graph
 from factory.runtime.scheduling import escalation as escalation
 from factory.runtime.scheduling.assignment import implement_packet as implement_packet
-from factory.runtime.scheduling.claim_policy import check_contention
-from factory.runtime.scheduling.escalation_policy import RetryBudget
+from factory.runtime.scheduling.attempt_graph import advance
+from factory.runtime.scheduling.orchestrator_graph import (
+    Accept,
+    Assign,
+    Checkpoint,
+    Hold,
+    assignment_ticket,
+    orchestrator_graph,
+)
 from factory.runtime.scheduling.run_sessions import RunSessions
 from factory.runtime.transitions import checks, packets, reports, revisions
 from factory.runtime.transitions.revisions import (
@@ -63,7 +71,7 @@ from factory.runtime.transitions.revisions import (
 from factory.runtime.transitions.revisions import (
     validate_assignment_change as validate_assignment_change,
 )
-from factory.runtime.transport import evidence as transport_evidence
+from factory.runtime.transport.evidence import pending_transports
 from factory.runtime.workflow_config import (
     check_capabilities as check_capabilities,
 )
@@ -71,12 +79,10 @@ from factory.runtime.workflow_config import check_config as check_config
 from factory.runtime.workflow_config import freeze_project as freeze_project
 from factory.runtime.workflow_config import load_config as load_config
 from factory.runtime.workflow_config import pool as pool
-from factory.runtime.workflow_config import reconcile_source_documents
+from factory.runtime.workflow_config import reconcile_source_documents, verify_instruction_pin
 from factory.runtime.workflow_core import Invalid as Invalid
 from factory.runtime.workflow_core import acceptance_guard as acceptance_guard
-from factory.runtime.workflow_core import atomic_json as atomic_json
 from factory.runtime.workflow_core import digest as digest
-from factory.runtime.workflow_core import read_json as read_json
 from factory.runtime.workflow_core import relative as relative
 from factory.runtime.workflow_core import require as require
 from factory.runtime.workflow_core import snapshot as snapshot
@@ -94,8 +100,6 @@ from factory.runtime.workspace import check_workspace, checkout_ref
 from factory.tasks.contracts import Task as Task
 from factory.validation import validation_message
 
-_NO_CONFIG_PIN = object()
-
 TASK_HANDOFFS = TypeAdapter[dict[str, str]](dict[str, Nonblank], config=ConfigDict(strict=True))
 
 
@@ -107,20 +111,21 @@ class Ledger(RunJournal):
         graph: Graph,
         config: Config,
         *,
-        config_pin: object = _NO_CONFIG_PIN,
+        config_pin: str | None = None,
     ) -> State:
-        if config_pin is not _NO_CONFIG_PIN:
-            require(
-                isinstance(config_pin, dict)
-                and config_pin.get("ok") is True
-                and isinstance(config_pin.get("result"), dict)
-                and config_pin["result"].get("_path") == config["_path"]
-                and config_pin["result"].get("_files") == config["_files"],
-                "Config/instructions changed since snapshot; reload instructions",
-            )
+        if config_pin is not None:
+            verify_instruction_pin(config, config_pin)
         check_workspace(self.root, config)
+        definitions = load_definitions(Path(config["_path"]).parent / "graphs", "implement")
+        orchestrator_graph(definitions)
+        write_handoff.assignment_program(tuple(sorted(definitions.items())))
+        role = parse("implement", definitions["implement"]).assignments.get("teacher")
+        require(role is not None, "Implement needs a Teacher assignment binding")
+        assert role is not None
+        teacher.validate_delivery(role, teacher.teacher_definitions(definitions, role))
         input_graph = graph
         graph = expand_intake_checks(graph, config)
+        intake.configure(graph, config, definitions)
         validate_graph(graph, config, self.root)
         validate_assignment_lineage(graph, config)
         acceptance_guard(check_frozen, config["_files"])
@@ -141,7 +146,25 @@ class Ledger(RunJournal):
                 "sources": {k: lock_source(self.root, src) for k, src in graph["sources"].items()},
             }
             reconcile_source_documents(config, self.root, locked_graph["sources"])
+            if any(
+                "decomposition_run" in source or source["kind"] == "factory_decompose_task"
+                for source in locked_graph["sources"].values()
+            ):
+                validate_graph(locked_graph, config, self.root)
             state: State = {
+                "definitions": definitions,
+                "contract_baseline": snapshot(
+                    self.root,
+                    sorted(
+                        {
+                            path
+                            for interface, docs in config["_project"]["data"]
+                            .get("public_contracts", {})
+                            .items()
+                            for path in (interface, *docs)
+                        }
+                    ),
+                ),
                 "lesson_run_checkout": checkout_ref(self.root),
                 "run_id": "run-" + uuid.uuid4().hex[:12],
                 "revision": 1,
@@ -152,6 +175,7 @@ class Ledger(RunJournal):
                 "events": [],
                 "counters": {},
                 "sessions": {},
+                "handle_owners": {},
                 "nodes": {n["id"]: {"status": "pending", "attempt": 0} for n in graph["nodes"]},
             }
             check_config(state)
@@ -197,17 +221,7 @@ class Ledger(RunJournal):
         packets.confirm_packet(self, node_id, bootstrap, received, materials, recipient=recipient)
 
     def set_paused(self, reason: str | None) -> None:
-        with self.locked():
-            state = self.read()
-            require(state["status"] == "active", "Run is not active")
-            if reason is None:
-                require(state.get("pause_reason"), "Run is not paused")
-                del state["pause_reason"]
-                self.save(state, "resumed")
-            else:
-                require(reason.strip(), "User pause/stop reason required")
-                state["pause_reason"] = reason
-                self.save(state, "paused", reason=reason)
+        lifecycle_graph.set_paused(self, reason)
 
     def acknowledge_result(self, node_id: str, dispatch_id: str) -> None:
         with self.locked():
@@ -226,41 +240,42 @@ class Ledger(RunJournal):
         with self.locked():
             return workflow_query.next_actions(self, self.read(), after, jobs=self.jobs)
 
-    def claim_pool(self, s: State, nodes: dict[str, Node], node_id: str) -> str:
-        """Authoritative claim eligibility shared by planning and reservation."""
-        require(s["status"] == "active", "Run is not active")
-        require(not s.get("pause_reason"), "Run is paused by user")
-        n, current = nodes[node_id], s["nodes"][node_id]
-        for path in n.get("owns", []):
-            relative(self.root, path)
-        require(n["stage"] != "accept", "Use accept for orchestrator node")
-        profile = s["config"]["profiles"][s["graph"]["agents"][agent_key(n)]["profile"]]
-        check_capabilities(profile, n)
-        require(
-            current["status"] == "pending",
-            "Already dispatched or unresolved; never redispatch blindly",
-        )
-        require(
-            all(s["nodes"][d]["status"] == "done" for d in n["depends_on"]),
-            "Dependencies not complete",
-        )
-        self.check_sources(s, s["graph"]["tasks"][n["task"]])
-        profile_id = s["graph"]["agents"][agent_key(n)]["profile"]
-        acceptance_guard(escalation.guard, s, n["task"], profile_id, node_id)
-        p = pool(s["config"], profile_id)
-        check_contention(s, nodes, n, p, has_active_commands=bool(self.active_commands(s)))
-        return p
-
-    def claim(self, node_id: str, *, dry_run: bool = False) -> dict[str, object]:
-        with nullcontext() if dry_run else self.locked():
+    def claim(
+        self, node_id: str, *, ticket: str | None = None, dry_run: bool = False
+    ) -> dict[str, object]:
+        with nullcontext() if dry_run else self.locked(wait=True):
             s = self.read()
             require(s["status"] == "active", "Run is not active")
             check_config(s)
             nodes = validate_graph(s["graph"], s["config"], self.root)
             validate_assignment_lineage(s["graph"], s["config"], s.get("corrections", []))
             n, current = nodes[node_id], s["nodes"][node_id]
-            p = self.claim_pool(s, nodes, node_id)
-            profile_id = s["graph"]["agents"][agent_key(n)]["profile"]
+            if ticket and ticket == current.get("dispatch_id"):
+                return {
+                    "run_id": s["run_id"],
+                    "node_id": node_id,
+                    "dispatch_id": ticket,
+                    "status": current["status"],
+                    "replayed": True,
+                    "action": "reconcile",
+                }
+            checkpoint = Checkpoint(s, nodes, self)
+            permit = checkpoint.evaluate([node_id])[node_id]
+            if isinstance(permit, Hold):
+                if current["status"] != "pending":
+                    raise Invalid(f"Already dispatched or unresolved: {permit.reason}")
+                raise Invalid(permit.reason)
+            require(n["stage"] != "accept", "Use accept for orchestrator node")
+            if not isinstance(permit, Assign):
+                raise Invalid("Already dispatched or unresolved; never redispatch blindly")
+            p, profile_id = permit.pool, permit.profile
+            expected = assignment_ticket(
+                s["run_id"], s["revision"], node_id, current["attempt"] + 1
+            )
+            require(
+                (dry_run and ticket is None) or expected == ticket,
+                "Missing or stale assignment ticket; read workflow status",
+            )
             assignment = report_history.assignment(s, n, self.finish_requirements(s, n))
             if dry_run:
                 return {
@@ -272,11 +287,12 @@ class Ledger(RunJournal):
                     "attempt": current["attempt"] + 1,
                     "current_status": current["status"],
                     "planned_status": "reserved",
+                    "ticket": expected,
                 }
             current.update(
                 {
-                    "status": "reserved",
-                    "dispatch_id": uuid.uuid4().hex,
+                    "status": advance(current, "claim"),
+                    "dispatch_id": expected,
                     "pool": p,
                     "profile": profile_id,
                     "role": s["graph"]["agents"][agent_key(n)]["role"],
@@ -284,9 +300,12 @@ class Ledger(RunJournal):
                 }
             )
             current["assignment"] = assignment
+            if current["role"] == "doc-writer" and n.get("owns"):
+                current["document_baseline"] = snapshot(self.root, n["owns"])
             self.save(
                 s,
                 "reserved",
+                route=checkpoint.paths[node_id],
                 node=node_id,
                 dispatch_id=current["dispatch_id"],
                 role=current["role"],
@@ -296,14 +315,26 @@ class Ledger(RunJournal):
                 "run_id": s["run_id"],
                 "node": n,
                 "dispatch": current,
+                "delivery": {
+                    "action": permit.action,
+                    "runner": permit.runner,
+                    "handle": permit.handle,
+                    "dispatch_id": expected,
+                },
                 "profile": s["config"]["profiles"][profile_id],
             }
 
-    def bind(self, node_id: str, handle: str, model: str) -> None:
+    def bind(
+        self, node_id: str, handle: str, model: str, *, expected_dispatch: str | None = None
+    ) -> None:
         with self.locked():
             s = self.read()
             n = next(n for n in s["graph"]["nodes"] if n["id"] == node_id)
             v = s["nodes"][node_id]
+            require(
+                expected_dispatch is None or expected_dispatch == v.get("dispatch_id"),
+                "Stale session binding",
+            )
             require(v["status"] == "reserved", "Bind only a reserved dispatch")
             dispatch = v.get("dispatch_id")
             if dispatch is not None:
@@ -312,7 +343,7 @@ class Ledger(RunJournal):
             profile = s["config"]["profiles"][s["graph"]["agents"][aid]["profile"]]
             expected_model = s["config"]["models"][profile["model"]].get("id")
             RunSessions(s).bind(aid, handle, model, expected_model=expected_model)
-            v.update({"status": "running", "handle": handle})
+            v.update({"status": advance(v, "bind"), "handle": handle})
             self.save(
                 s, "bound", node=node_id, dispatch_id=v["dispatch_id"], handle=handle, model=model
             )
@@ -380,28 +411,36 @@ class Ledger(RunJournal):
     ) -> list[str]:
         return reports.report_scope(node, task, report, deferred_writer)
 
-    def prepare_report(self, node_id: str, draft: object, receipt_ids: list[str]) -> Report:
-        return reports.prepare_report(self, node_id, draft, receipt_ids)
+    def prepare_report(
+        self, node_id: str, draft: object, receipt_ids: list[str], *, submit: bool = False
+    ) -> Report:
+        return reports.prepare_report(self, node_id, draft, receipt_ids, submit=submit)
 
     def finish(self, node_id: str, raw: object) -> None:
         # Runtime facts are derived from current evidence.
         reports.finish(self, node_id, raw)
 
-    def unknown(self, node_id: str, reason: str) -> None:
+    def unknown(self, node_id: str, reason: str, *, expected_dispatch: str | None = None) -> None:
         with self.locked():
             s = self.read()
+            dispatch.check_identity(s["nodes"][node_id], expected_dispatch)
             dispatch.mark_unknown(s["nodes"][node_id], reason)
             self.save(s, "unknown", node=node_id, reason=reason)
 
-    def resolve(self, node_id: str, status: str, evidence: str) -> None:
+    def resolve(
+        self, node_id: str, status: str, evidence: str, *, expected_dispatch: str | None = None
+    ) -> None:
         with self.locked():
             s = self.read()
             v = s["nodes"][node_id]
+            dispatch.check_identity(v, expected_dispatch)
+            if status in {"blocked", "reserved"} and "dispatch_id" in v:
+                pending_transports(self.root, s, dispatch_id=v["dispatch_id"], mutating_only=True)
             dispatch.reconcile(v, status, evidence)
             self.save(s, "reconciled", node=node_id, status=status, evidence=evidence)
 
     def replace_session(
-        self, agent_id: str, reason: str, terminal_evidence: str, handoff: str
+        self, agent_id: str, reason: str, terminal_evidence: str, handoff: str | dict[str, str]
     ) -> None:
         with self.locked():
             s = self.read()
@@ -417,23 +456,18 @@ class Ledger(RunJournal):
                 "Resolve active/unknown assignments before session replacement",
             )
             tasks = {n["task"] for n in s["graph"]["nodes"] if n.get("agent") == agent_id}
-            if len(tasks) == 1:
-                handoffs = {next(iter(tasks)): handoff}
-            else:
-                try:
-                    handoffs = TASK_HANDOFFS.validate_json(handoff)
-                except ValidationError as exc:
-                    raise Invalid(
-                        validation_message(
-                            "Multi-task replacement needs a JSON task-to-handoff mapping",
-                            exc,
-                            TASK_HANDOFFS,
-                        )
-                    ) from None
+            if isinstance(handoff, str):
                 require(
-                    set(handoffs) == tasks,
-                    "Multi-task replacement needs one handoff per assigned task",
+                    len(tasks) == 1, "Multi-task replacement needs one handoff per assigned task"
                 )
+                handoff = {next(iter(tasks)): handoff}
+            try:
+                handoffs = TASK_HANDOFFS.validate_python(handoff)
+            except ValidationError as exc:
+                raise Invalid(
+                    validation_message("Invalid task handoff", exc, TASK_HANDOFFS)
+                ) from None
+            require(set(handoffs) == tasks, "Replacement needs one handoff per assigned task")
             previous = RunSessions(s).replace(agent_id)
             self.save(
                 s,
@@ -442,7 +476,6 @@ class Ledger(RunJournal):
                 previous=previous,
                 reason=reason,
                 terminal_evidence=terminal_evidence,
-                handoff=handoff,
                 task_handoffs=handoffs,
             )
 
@@ -476,91 +509,23 @@ class Ledger(RunJournal):
         terminal_evidence: str,
         *,
         dry_run: bool = False,
+        expected_dispatch: str | None = None,
+        evidence_dispatch: str | None = None,
     ) -> dict[str, object] | None:
         with nullcontext() if dry_run else self.locked():
-            s = self.read()
-            require(
-                s["status"] == "active", "Terminal run is immutable; start a new authorized run"
-            )
-            require(not s.get("pause_reason"), "Run is paused by user")
-            nodes = {n["id"]: n for n in s["graph"]["nodes"]}
-            n, v = nodes[node_id], s["nodes"][node_id]
-            require(terminal_evidence and reason, "Reconcile old writer and explain retry")
-            require(not self.active_commands(s), "Unresolved project commands")
-            require(
-                v["status"] in {"blocked", "unknown", "done"},
-                "Cannot retry a live writer",
-            )
-            profile = s["config"]["profiles"][s["graph"]["agents"][agent_key(n)]["profile"]]
-            acceptance_guard(escalation.guard, s, n["task"])
-            require(
-                stage == "recovery" or not profile.get("escalation"),
-                "Use correct for an escalating profile's quality decision",
-            )
-            budget = RetryBudget.for_task(s, n["task"], stage)
-            budget.require_available()
-            affected = {node_id} | {k for k in nodes if node_id in ancestors(nodes, k)}
-            if profile.get("escalation") or (
-                stage == "recovery" and s["graph"]["agents"][agent_key(n)]["role"] == "tester"
-            ):
-                require(
-                    not any(
-                        s["nodes"][k].get("report", {}).get("outcome") in {"FAIL", "BLOCKED"}
-                        for k in affected
-                    ),
-                    "Use correct for a reported failure or blocker; recovery is transport-only",
-                )
-            require(
-                not any(
-                    s["nodes"][k]["status"] in {"reserved", "running", "unknown"}
-                    for k in affected - {node_id}
+            return recovery_graph.execute(
+                self,
+                self.read(),
+                recovery_graph.Retry(
+                    node_id,
+                    stage,
+                    reason,
+                    terminal_evidence,
+                    dry_run,
+                    expected_dispatch,
+                    evidence_dispatch,
                 ),
-                "Reconcile dependent workers first",
             )
-            if dry_run:
-                return {
-                    "dry_run": True,
-                    "run_id": s["run_id"],
-                    "node_id": node_id,
-                    "stage": stage,
-                    "reason": reason,
-                    "terminal_evidence": terminal_evidence,
-                    "budget": {
-                        "key": budget.key,
-                        "used": budget.used,
-                        "limit": budget.limit,
-                        "planned_used": budget.used + 1,
-                    },
-                    "affected": {
-                        key: {
-                            "dispatch_id": s["nodes"][key].get("dispatch_id"),
-                            "current_status": s["nodes"][key]["status"],
-                            "planned_status": "pending",
-                        }
-                        for key in sorted(affected)
-                    },
-                }
-            budget.spend()
-            for k in sorted(affected):
-                old = s["nodes"][k]
-                s["events"].append(
-                    {
-                        "at": time.time(),
-                        "event": "invalidated",
-                        "node": k,
-                        "previous": old,
-                    }
-                )
-                s["nodes"][k] = {"status": "pending", "attempt": old["attempt"]}
-            self.save(
-                s,
-                "retry",
-                node=node_id,
-                stage=stage,
-                reason=reason,
-                terminal_evidence=terminal_evidence,
-            )
-        return None
 
     def correct(self, node_id: str, request: object) -> CorrectionRecord:
         with self.locked():
@@ -571,134 +536,17 @@ class Ledger(RunJournal):
             check_config(state)
             return acceptance_guard(escalation.correct, self, state, node_id, request)
 
-    def resume_task(self, task_id: str, evidence: str) -> None:
+    def resume_task(self, task_id: str, evidence: str, *, stop_id: str | None = None) -> None:
         with self.locked():
-            state = self.read()
-            require(
-                state["status"] == "active" and evidence.strip(),
-                "Need active run and resolved blocker/human decision",
+            recovery_graph.execute(
+                self, self.read(), recovery_graph.ResumeTask(task_id, evidence, stop_id)
             )
-            require(not state.get("pause_reason"), "Run is paused by user")
-            require(not self.active_commands(state), "Unresolved project commands")
-            check_config(state)
-            require(
-                task_id in state.get("escalation_stops", {}),
-                "Task has no escalation stop",
-            )
-            require(
-                not any(v["status"] in escalation.ACTIVE for v in state["nodes"].values()),
-                "Quiesce runtime before resume",
-            )
-            stop = state["escalation_stops"][task_id]
-            self.check_sources(state, state["graph"]["tasks"][task_id])
-            stage = "recovery" if stop["kind"] == "environment" else stop["cause"]
-            budget = RetryBudget.for_task(state, task_id, stage)
-            budget.require_available("Budget exhausted; resume cannot reset limits")
-            nodes = validate_graph(state["graph"], state["config"], self.root)
-            node_id = stop["node_id"]
-            roots = set(stop.get("node_ids", [node_id]))
-            affected = roots | {k for k in nodes if ancestors(nodes, k) & roots}
-            for k in affected:
-                old = state["nodes"][k]
-                state["events"].append(
-                    dict(at=time.time(), event="invalidated", node=k, previous=old)
-                )
-                state["nodes"][k] = dict(status="pending", attempt=old["attempt"])
-            budget.spend()
-            del state["escalation_stops"][task_id]
-            self.save(
-                state,
-                "task_resumed",
-                task=task_id,
-                evidence=evidence,
-                previous=stop,
-                retry_cause=stage,
-            )
-            # Work is pending; dispatch still requires a separate claim and bind.
 
     def resume_approved(self, node_id: str, request_id: str, evidence: str) -> None:
         with self.locked():
-            state = self.read()
-            require(not state.get("pause_reason"), "Run is paused by user")
-            require(not self.active_commands(state), "Unresolved project commands")
-            require(state["status"] == "active", "Run is not active")
-            check_config(state)
-            require(
-                not any(v["status"] in escalation.ACTIVE for v in state["nodes"].values()),
-                "Quiesce runtime before resuming approval",
+            recovery_graph.execute(
+                self, self.read(), recovery_graph.ResumeApproval(node_id, request_id, evidence)
             )
-            nodes = validate_graph(state["graph"], state["config"], self.root)
-            node = nodes[node_id]
-            task = state["graph"]["tasks"][node["task"]]
-            self.check_sources(state, task)
-            acceptance_guard(escalation.guard, state, node["task"])
-            approval.validate_resume(self.root, state, node, task, request_id, evidence)
-            graph = approval.expanded_graph(state, node, state["nodes"][node_id]["report"])
-            added = sorted(set(graph["tasks"][node["task"]]["scope"]) - set(task["scope"]))
-            if added:
-                validate_graph(graph, state["config"], self.root)
-                state["config"] = freeze_project(state["config"], graph, self.root)
-                state["graph"] = graph
-                state["revision"] += 1
-            roots = {node_id} | {
-                key
-                for key, candidate in nodes.items()
-                if candidate["task"] == node["task"]
-                and candidate["stage"] in {"verify", "review"}
-                and state["nodes"][key]["status"] == "done"
-            }
-            affected = roots | {key for key in nodes if ancestors(nodes, key) & roots}
-            for key in sorted(affected):
-                old = state["nodes"][key]
-                if key != node_id and old["status"] == "blocked":
-                    continue  # This approval resolves only its own blocker.
-                state["events"].append(
-                    dict(at=time.time(), event="invalidated", node=key, previous=old)
-                )
-                state["nodes"][key] = dict(status="pending", attempt=old["attempt"])
-            self.save(
-                state,
-                "approval_resumed",
-                node=node_id,
-                request_id=request_id,
-                evidence=evidence,
-                added_scope=added,
-            )
-
-    def acceptance_task(self, s: State, nodes: dict[str, Node], node_id: str) -> Task:
-        require(s["status"] == "active", "Run is not active")
-        require(not s.get("pause_reason"), "Run is paused by user")
-        n = nodes[node_id]
-        require(n["stage"] == "accept", "Not an acceptance node")
-        acceptance_guard(escalation.guard, s, n["task"])
-        require(not self.active_commands(s), "Unresolved project commands")
-        require(s["nodes"][node_id]["status"] == "pending", "Already accepted")
-        require(
-            all(s["nodes"][k]["status"] == "done" for k in ancestors(nodes, node_id)),
-            "Required work not done",
-        )
-        task = s["graph"]["tasks"][n["task"]]
-        self.check_sources(s, task)
-        for key in ancestors(nodes, node_id):
-            predecessor = nodes[key]
-            if predecessor["task"] != n["task"]:
-                continue
-            report = s["nodes"][key].get("report")
-            if predecessor["stage"] in {"verify", "review"}:
-                if report is None:
-                    raise Invalid(f"Missing verification report: {key}")
-                self.check_current_verification(
-                    s, predecessor, report, "Evidence invalidated by later write"
-                )
-            check_generated(self.root, s, key, report["checks"] if report else [])
-        acceptance_guard(
-            review_findings.gate,
-            s,
-            n["task"],
-            snapshot(self.root, task["scope"]),
-            s["graph"]["sources"][task["source"]]["hash"],
-        )
-        return task
 
     def accept(self, node_id: str) -> None:
         with self.locked():
@@ -706,7 +554,15 @@ class Ledger(RunJournal):
             check_config(s)
             nodes = validate_graph(s["graph"], s["config"], self.root)
             n = nodes[node_id]
-            task = self.acceptance_task(s, nodes, node_id)
+            require(n["stage"] == "accept", "Not an acceptance node")
+            validate_assignment_lineage(s["graph"], s["config"], s.get("corrections", []))
+            checkpoint = Checkpoint(s, nodes, self)
+            permit = checkpoint.evaluate([node_id])[node_id]
+            if isinstance(permit, Hold):
+                raise Invalid(permit.reason)
+            if not isinstance(permit, Accept):
+                raise Invalid("Already accepted")
+            task = permit.task
             s["nodes"][node_id]["gate_result"] = transition_gates.stage_result(
                 s,
                 n,
@@ -716,8 +572,14 @@ class Ledger(RunJournal):
                     "files": snapshot(self.root, task["scope"]),
                 },
             )
-            s["nodes"][node_id]["status"] = "done"
-            self.save(s, "accepted", node=node_id, **teacher.acceptance_details(self.root, s, n))
+            s["nodes"][node_id]["status"] = advance(s["nodes"][node_id], "accept")
+            self.save(
+                s,
+                "accepted",
+                node=node_id,
+                route=checkpoint.paths[node_id],
+                **teacher.acceptance_details(self.root, s, n),
+            )
 
     def check_current_verification(
         self, state: State, node: Node, report: Report, stale_message: str
@@ -788,44 +650,7 @@ class Ledger(RunJournal):
         *,
         probe: telemetry.SessionProbe | None = None,
     ) -> str:
-        with self.locked():
-            s = self.read()
-            if outcome not in ("completed", "cancelled"):
-                raise Invalid("Only terminal runs can be archived")
-            require(summary, "Final summary required")
-            require(not self.active_commands(s), "Unresolved project commands")
-            if s["status"] in {"completed", "cancelled"}:
-                require(
-                    s["status"] == outcome and s["summary"] == summary,
-                    "Terminal history is immutable",
-                )
-                self.runs.cleanup_paths(self.root, s)
-                return self.runs.reference(
-                    self.root, s["run_id"], stored_source=s["archive_path"]
-                ).location
-            require(
-                not any(
-                    v["status"] in {"reserved", "running", "unknown"} for v in s["nodes"].values()
-                ),
-                "Outstanding runtime work",
-            )
-            if outcome == "completed":
-                self.check_completion(s)
-            s["status"], s["summary"] = cast(Literal["completed", "cancelled"], outcome), summary
-            return self._save_terminal_archive(s, probe)
-
-    def _save_terminal_archive(self, state: State, probe: telemetry.SessionProbe | None) -> str:
-        archive = self.runs.reference(self.root, state["run_id"])
-        state["archive_path"] = archive.source
-        pending = transport_evidence.pending_transports(self.root, state)
-        review = teacher.run_review_event(state)
-        if review is not None:
-            state["final_teacher_event"] = review.key()
-        usage = telemetry.collect(state, probe=probe)
-        state["events"].append({"event": "archived", "at": time.time()})
-        self.runs.commit_archive(self.root, state, usage, pending, review)
-        log_event("archived", run_id=state["run_id"], outcome=state["status"])
-        return archive.location
+        return lifecycle_graph.archive(self, outcome, summary, probe)
 
     def clean(self) -> None:
         with self.locked():

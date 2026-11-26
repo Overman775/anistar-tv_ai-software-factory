@@ -4,9 +4,13 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from factory.database.sqlite import artifacts, workflow_db
+from factory.database.sqlite import artifacts, graph_records, workflow_db
+from factory.database.sqlite.layout import check_layout
+from factory.database.sqlite.lesson_hits import read_hits
+from factory.database.sqlite.sqlite_teacher_job_repository import load_job
+from factory.database.sqlite.workflow_schema import SCHEMA
+from factory.runtime.contracts import ExecutionReceipt, LedgerEvent
 from factory.runtime.knowledge.lesson_trace_repository import SearchRow
-from factory.runtime.knowledge.teacher_models import decode_event
 from factory.runtime.observability.acp_tools import summarize_tools
 from factory.runtime.observability.acpx_usage import ArchiveUsage
 from factory.runtime.observability.export_feed import (
@@ -40,18 +44,15 @@ def checkpoint(root: Path, key: str) -> tuple[int, int, int]:
     return after, offset, until
 
 
-def _transports(db: sqlite3.Connection, run: str, event_path: str) -> list[TransportCall]:
-    events = db.execute(
-        """SELECT e.key, e.value ->> '$.event', e.value ->> '$.at', e.value ->> '$.node',
-                  e.value ->> '$.dispatch_id', e.value ->> '$.operation', e.value ->> '$.stdout',
-                  e.value ->> '$.exit_code', e.value ->> '$.status'
-           FROM runs, json_each(record,?) e WHERE run_id=?
-           AND e.value ->> '$.event' IN ('transport_requested','transport_interrupted','transport_returned')
-           ORDER BY CAST(e.key AS INTEGER)""",
-        (event_path, run),
-    )
+def _transports(db: sqlite3.Connection, run: str, events: list[LedgerEvent]) -> list[TransportCall]:
     calls: dict[tuple[str, str], TransportCall] = {}
-    for ordinal, event, at, node, dispatch, op, output, code, status in events:
+    for ordinal, record in enumerate(events):
+        event, at = record["event"], record["at"]
+        if event not in {"transport_requested", "transport_interrupted", "transport_returned"}:
+            continue
+        node, dispatch = record.get("node"), record.get("dispatch_id")
+        op, output = record.get("operation"), record.get("stdout")
+        code, status = record.get("exit_code"), record.get("status")
         if (
             not output
             or not dispatch
@@ -89,16 +90,22 @@ def _run(
         raise LookupError("Unknown workflow run")
     status, archived = row
     require(local or archived, "Expected archived workflow run")
-    base = "$.state" if archived else "$"
-    event_path = base + ".events"
-    events = db.execute(
-        """SELECT value ->> '$.event',value ->> '$.at',value ->> '$.node',
-          value ->> '$.dispatch_id',value ->> '$.outcome',value ->> '$.status',
-          value ->> '$.role',value ->> '$.harness',value ->> '$.stage',
-          value ->> '$.decision',value ->> '$.target'
-          FROM runs,json_each(record,?) WHERE run_id=?
-          AND value ->> '$.event' IN ('created','reserved','finished','reconciled','archived','retry','revised','accepted','correction_decided') ORDER BY CAST(key AS INTEGER)""",
-        (event_path, run),
+    events: list[LedgerEvent] = graph_records.read(db, run, domain="run", name="events")[
+        "run", "events"
+    ]
+    published = {
+        "created",
+        "reserved",
+        "finished",
+        "reconciled",
+        "archived",
+        "retry",
+        "revised",
+        "accepted",
+        "correction_decided",
+    }
+    corrections = graph_records.read(db, run, domain="run", name="corrections").get(
+        ("run", "corrections"), []
     )
     eligible_search = "" if local else "AND f.eligible=1"
     applications = db.execute(
@@ -107,14 +114,9 @@ def _run(
            AND f.ref=CAST(search_id AS TEXT) {eligible_search} WHERE run_id=? ORDER BY dispatch_id,lesson_id,revision""",
         (run,),
     )
-    checks = db.execute(
-        """SELECT e.key, e.value ->> '$.dispatch_id', e.value ->> '$.node_id', e.value ->> '$.spec.id',
-                  e.value ->> '$.started_at', e.value ->> '$.ended_at', e.value ->> '$.status',
-                  e.value ->> '$.result.exit_code'
-           FROM runs, json_each(record,?) e WHERE run_id=?
-           AND e.value ->> '$.composite_parent' IS NULL ORDER BY e.key""",
-        (base + ".executions", run),
-    )
+    checks: dict[str, ExecutionReceipt] = graph_records.read(
+        db, run, domain="run", name="executions"
+    ).get(("run", "executions"), {})
     # Existing offsets count spans in the order of the original usage archive.
     name = f".factory/memory/history/{run}/usage.acpx.json"
     blob = db.execute(
@@ -130,27 +132,42 @@ def _run(
         _project_id(db, run),
         status,
         at,
-        [RunEvent(*row) for row in events],
         [
-            Correction(*row)
-            for row in db.execute(
-                """SELECT c.value ->> '$.node_id',c.value ->> '$.decision',
-                       c.value ->> '$.from_profile',c.value ->> '$.to_profile',c.value ->> '$.cause',
-                       c.value ->> '$.identity[1]',c.value ->> '$.identity[2]',c.value ->> '$.identity[3]'
-                   FROM runs,json_each(record,?) c WHERE run_id=?
-                   AND c.value ->> '$.cause' IN ('static','tests','docs','review')
-                   AND json_type(c.value,'$.from_profile')='text'
-                   AND json_array_length(c.value,'$.identity')=4
-                   ORDER BY CAST(c.key AS INTEGER)""",
-                (base + ".corrections", run),
+            RunEvent(
+                e["event"],
+                e["at"],
+                e.get("node"),
+                e.get("dispatch_id"),
+                e.get("outcome"),
+                e.get("status"),
+                e.get("role"),
+                e.get("harness"),
+                e.get("stage"),
+                e.get("decision"),
+                e.get("target"),
             )
+            for e in events
+            if e["event"] in published
+        ],
+        [
+            Correction(
+                c["node_id"],
+                c["decision"],
+                c["from_profile"],
+                c["to_profile"],
+                c["cause"],
+                *c["identity"][1:],
+            )
+            for c in corrections
+            if c.get("cause") in {"static", "tests", "docs", "review"}
+            and isinstance(c.get("from_profile"), str)
+            and len(c.get("identity", [])) == 4
         ],
         {
-            dispatch
-            for (dispatch,) in db.execute(
-                """SELECT n.value ->> '$.dispatch_id' FROM runs,json_each(record,?) n
-                   WHERE run_id=? AND n.value ->> '$.dispatch_id' IS NOT NULL""",
-                (base + ".nodes", run),
+            row[0]
+            for row in db.execute(
+                "SELECT dispatch_id FROM graph_attempts WHERE run_id=? AND dispatch_id IS NOT NULL",
+                (run,),
             )
         },
         [
@@ -165,8 +182,21 @@ def _run(
             for dispatch, lesson, revision, outcome, search, uid in applications
         ],
         sessions,
-        _transports(db, run, event_path),
-        [CheckObservation(*row) for row in checks],
+        _transports(db, run, events),
+        [
+            CheckObservation(
+                key,
+                receipt["dispatch_id"],
+                receipt["node_id"],
+                receipt["spec"]["id"],
+                receipt["started_at"],
+                receipt.get("ended_at"),
+                receipt["status"],
+                receipt["result"].get("exit_code") if "result" in receipt else None,
+            )
+            for key, receipt in sorted(checks.items())
+            if "composite_parent" not in receipt
+        ],
         {
             dispatch: ReportReference(dispatch, path, sha)
             for dispatch, path, sha in db.execute(
@@ -179,8 +209,7 @@ def _run(
 
 def _project_id(db: sqlite3.Connection, run: str | None) -> str | None:
     row = db.execute(
-        """SELECT coalesce(record ->> '$.config._project.data.id',
-                       record ->> '$.state.config._project.data.id') FROM runs WHERE run_id=?""",
+        "SELECT project_id FROM runs WHERE run_id=?",
         (run,),
     ).fetchone()
     return row[0] if row else None
@@ -193,13 +222,11 @@ def _observation(
         return _run(db, ref, at)
     if kind == "search":
         row = db.execute("SELECT * FROM lesson_searches WHERE id=?", (ref,)).fetchone()
-        search = SearchRow.model_validate(dict(row))
+        search = SearchRow.model_validate({**dict(row), "matches": read_hits(db, row["id"])})
         return SearchObservation(uid, at, _project_id(db, search.run_id), search)
     if kind == "teacher":
-        raw, created = db.execute(
-            "SELECT record,created_at FROM teacher_jobs WHERE id=?", (ref,)
-        ).fetchone()
-        job = decode_event(ref, raw)
+        (created,) = db.execute("SELECT created_at FROM teacher_jobs WHERE id=?", (ref,)).fetchone()
+        job = load_job(db, ref)
         project = _project_id(db, job.incident) if job.kind == "accept" else None
         return TeacherObservation(uid, at, project, ref, created, job)
     raise ValueError("Unknown telemetry feed kind")
@@ -222,11 +249,7 @@ def read_run(root: Path, run: str) -> list[ObservationSource]:
 def _read_snapshot(db: sqlite3.Connection, run: str) -> list[ObservationSource]:
     db.row_factory = sqlite3.Row
     db.execute("BEGIN")
-    require(
-        db.execute("PRAGMA user_version").fetchone()[0] in (1, workflow_db.SCHEMA_VERSION),
-        "Unsupported workflow database",
-    )
-    # Older archives may have a timestamp recorded only in the delivery feed.
+    check_layout(db, SCHEMA, "workflow database")
     closed = db.execute(
         "SELECT at FROM telemetry_feed WHERE kind='run' AND ref=?", (run,)
     ).fetchone()
@@ -240,12 +263,17 @@ def _read_snapshot(db: sqlite3.Connection, run: str) -> list[ObservationSource]:
         data = dict(row)
         uid = data.pop("event_id") or f"search:{run}:{row['id']}"
         records.append(
-            SearchObservation(uid, row["at"], source.project, SearchRow.model_validate(data))
+            SearchObservation(
+                uid,
+                row["at"],
+                source.project,
+                SearchRow.model_validate({**data, "matches": read_hits(db, row["id"])}),
+            )
         )
-    for key, raw, created, updated, uid in db.execute(
-        """SELECT j.id,j.record,j.created_at,coalesce(f.at,j.updated_at),f.event_id
+    for key, created, updated, uid in db.execute(
+        """SELECT j.id,j.created_at,coalesce(f.at,j.updated_at),f.event_id
            FROM teacher_jobs j LEFT JOIN telemetry_feed f ON f.kind='teacher' AND f.ref=j.id
-           WHERE j.record ->> '$.kind'='accept' AND j.record ->> '$.incident'=? ORDER BY j.id""",
+           WHERE j.kind='accept' AND j.incident=? ORDER BY j.id""",
         (run,),
     ):
         records.append(
@@ -255,7 +283,7 @@ def _read_snapshot(db: sqlite3.Connection, run: str) -> list[ObservationSource]:
                 source.project,
                 key,
                 created,
-                decode_event(key, raw),
+                load_job(db, key),
             )
         )
     return records

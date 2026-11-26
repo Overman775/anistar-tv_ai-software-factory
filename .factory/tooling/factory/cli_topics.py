@@ -16,8 +16,8 @@ GUIDES = {
 Run from the project root. Start at the step that matches your role and evidence.
 
 New coordinator
-  {cli} workflow config --json
-  Save the exact configuration pin from that output for workflow read-instructions.
+  {cli} workflow config
+  Use the returned pin for workflow read-instructions.
   Follow the intake sequence in `{cli} help start`.
 
 Resuming coordinator
@@ -33,7 +33,7 @@ Worker with an assignment
   Follow the packet's roles and scope. Run assigned check commands with the
   provided node, dispatch, check and request IDs. Review result.result before
   preparing a report. Use the exact receipt IDs from checks results:
-  {cli} workflow prepare-report NODE DRAFT_JSON RECEIPT_ID --json
+  {cli} workflow prepare-report NODE DRAFT_ID RECEIPT_ID --json
   Supply the receipt IDs required by the assignment. Save the result object as
   the report JSON for the coordinator.
 
@@ -66,15 +66,15 @@ work. Use {cli} help COMMAND SUBCOMMAND for exact arguments or
    {cli} workflow prepare-workspace --dry-run
    Apply workspace selection when authorized. If the command selects another
    checkout, use its workspace and config as explicit family options.
-4. Save the resolved configuration pin outside accepted source inputs:
-   {cli} workflow config > CONFIG_PIN
+4. Obtain the configuration pin before reading instructions:
+   {cli} workflow config
    {cli} workflow read-instructions CONFIG_PIN workflow/orchestration.md
-   Replace CONFIG_PIN with a writable path. Read and follow the pinned workflow
+   Replace CONFIG_PIN with the returned digest. Read and follow the pinned workflow
    instructions to prepare the graph and required source evidence.
 5. Validate and initialize the approved graph:
-   {cli} workflow validate GRAPH_JSON
-   {cli} workflow init GRAPH_JSON --config-pin CONFIG_PIN
-   Replace GRAPH_JSON with the approved graph path. Read workflow status for
+   {cli} workflow validate PROPOSAL_ID
+   {cli} workflow init PROPOSAL_ID --config-pin CONFIG_PIN
+   Replace PROPOSAL_ID with the published graph proposal ID. Read workflow status for
    runnable nodes, results, acceptance work and blockers.
 
 Put shared options between the family and the operation, for example
@@ -197,7 +197,7 @@ ERROR_GUIDANCE = {
     "database_constraint": "Read the rejection message and current workflow state before retrying.",
     "database_corrupt": "Preserve the affected database and restore from a verified backup before resuming.",
     "database_error": "Inspect workflow diagnostics and SQLite availability before retrying.",
-    "database_schema": "Run the factory version that owns the database schema or use its supported migration.",
+    "database_schema": "Start in a clean workspace with a fresh factory database.",
     "receiver_auth": "Check the configured receiver credential source and authentication before retrying export.",
     "receiver_http": "Check the configured receiver endpoint and inspect its HTTP response.",
     "receiver_protocol": "Check the configured receiver's OTLP protocol and URL.",

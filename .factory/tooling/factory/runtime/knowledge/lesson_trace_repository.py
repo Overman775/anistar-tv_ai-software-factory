@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, Json
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import TypedDict
 
 from factory.runtime.contracts import CardChange, LessonId, LessonScope
@@ -28,7 +28,7 @@ class SearchRow(TraceRow):
     elapsed_ms: int
     status: Literal["hit", "miss", "error"]
     query_sha256: str
-    matches: Json[list[SearchHit]] | list[SearchHit]
+    matches: list[SearchHit]
     error_type: str | None
 
 
@@ -53,7 +53,7 @@ class TeacherRow(TraceRow):
     kind: Literal["accept", "retro", "user"]
     operation: Literal["capture", "edit", "audit", "delete"]
     run_id: str | None
-    changes: Json[list[CardChange]] | list[CardChange]
+    changes: list[CardChange]
     reason: str | None
 
 

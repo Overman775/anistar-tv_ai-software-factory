@@ -1,65 +1,18 @@
 # Router
 
-The parent uses this policy to select roles, team composition and profiles;
-it is not a separate agent. Load the `router` path from `factory.yaml`, the sole
-catalog of models, profiles, eligible roles, adapters and limits.
-[Orchestration](orchestration.md) governs execution, acceptance, sessions and
-history. Scripts validate and record decisions; the parent makes them.
+Use the configured profiles and owner constraints when assigning a host to the role returned by the graph. The project profile supplies commands, protected surfaces and review obligations. A missing eligible capability or explicitly requested model is an actionable blocker.
 
 ## Select the team
 
-Start with vertical slices of observable behavior, then tasks and agent steps.
-Preserve Decompose IDs; direct tasks get run-local IDs, not product tickets.
-Backend/frontend layers may share one slice, not separate product acceptance.
-
-Assess error consequences, uncertainty, independent verification, coupling,
-context size and capabilities. Choose the smallest sufficient team, never by
-line count or by asking the user to select a workflow mode.
-
-| Conditions | Composition |
-| --- | --- |
-| Low consequence, local/reversible, explicit behavior, reliable oracle; no auth/data loss/public contract/lifecycle/concurrency impact | Implementer authors the change and tests. Tester verifies. Coordinator accepts without independent approval when allowed. |
-| Bounded moderate change with a clear oracle | Implementer, Tester and independent Judge. |
-| Security, authorization, storage/migration, public API, playback/network trust, lifecycle/concurrency, weak oracle or required separation | Implementer, Tester and independent Judge. |
-| Independent scopes benefit from specialization/context separation | One Implementer per assigned change, a Tester for affected behavior and final integration, and the required Judge. |
-
-When eligibility is uncertain, choose the stronger composition. The coordinator records independent_review=true whenever the user or project requires independent review; the graph validator cannot infer risk or those instructions. Risk labels never waive user/project gates.
-Add CodeExplorer for missing facts, BugHunter for unknown failure causes;
-assign location search or investigation explicitly, with the needed result depth.
-Skip a separate search when verified locations already answer the question;
-read the cited current code before dependent edits. Semantic design belongs to
-Planning's Architect. Use DocWriter for large or
-multi-author documentation; authors handle small related edits. Add advisory
-Judges only for uncovered risks; where independent review is required, one final Judge owns the integrated verdict. Advisory approval replaces neither required review nor test evidence.
+Describe the observable outcome, write scope, inquiry and risk. Preserve the source IDs and mandatory checks. `workflow init` resolves ordinary roles from the pinned intake graph. Supply independent-review obligations and owner directives explicitly. Distinct slices can share a layer. Judge assesses uncovered risks from evidence; the coordinator owns assignments.
 
 ## Assign and revise
 
-Choose only profiles allowed for the role in YAML. Resolve the adapter, load its
-instructions and apply capabilities/MCP policy; no persistent native wrappers.
-Verify actual model, permissions, tools and runtime. Honor explicit model/harness
-requirements; if no eligible profile satisfies them, report a blocker.
-
-Record outcome, risk, required checks and composition reason per task/slice in
-the graph; bind each logical agent to role and profile. Reassess when facts change
-risk, capabilities or context, or a profile becomes unavailable. Diagnose repeated
-failures before adding roles. A fallback must be an eligible configured profile;
-record its reason and effective assignment under orchestration's revision rules.
-Busy slots require waiting, not model substitution. Reassignment changes neither
-approval boundaries nor retry budgets.
-
-Calibration: a specified UI label may qualify for focused Tester verification without a Judge; localization or
-accessibility logic needs reassessment. Even a one-line auth fix requires negative access tests, verification by Tester and independent review. A playback preference is one
-UI→storage→playback slice with end-to-end tests, not only layer mocks; split
-Implementers only when scope/competence warrants it. Large features may combine
-exploration, planning, slices and advisory review; this is no mandatory template.
+Read `workflow status` for an eligible assignment, correction or hold. For a changed source or increased risk, record the new evidence before issuing work. An unavailable host requires a recorded eligible replacement; the attempt budget belongs to the run.
 
 ## Initial profiles
 
-Choose the team first. Start Implementer and Tester at their configured defaults. The supplied
-defaults are `middle-implementer` and `tester`. Confirm model, harness, permissions and tools before
-dispatch. Wait for a busy slot. An incompatible default blocks assignment.
-Started task, node, logical agent and profile identities survive revise,
-re-intake and physical replacement. Only a recorded correction changes profile.
+Use the configured default for the graph-selected role and the required adapter capabilities.
 
 ## Named profiles and escalation
 

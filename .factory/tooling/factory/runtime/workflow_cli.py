@@ -9,31 +9,42 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from factory import file_reader
 from factory.context.context import accepted_bytes, accepted_path
 from factory.database.provider import current_database
 from factory.database.sqlite.workflow_db import read_only
 from factory.diagnostics.events import event
 from factory.diagnostics.query import read_journal
 from factory.diagnostics.records import error_code
+from factory.graphs.definition import load as load_definitions
 from factory.logging_config import diagnostic_operation, finish, initialize
 from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import material_entries
 from factory.runtime import workflow_query
-from factory.runtime.history import report_history
+from factory.runtime.contracts import RoleMaterial, WriteOffer
 from factory.runtime.knowledge.case_search import CaseIndex
 from factory.runtime.packets.content import packet_response
+from factory.runtime.reports import role_material, write_handoff
+from factory.runtime.scheduling import intake
+from factory.runtime.scheduling.orchestrator_graph import orchestrator_graph
+from factory.runtime.state_io import parse_report
 from factory.runtime.transitions.revisions import TestRetryRequest
 from factory.runtime.workflow import Ledger
-from factory.runtime.workflow_config import RUNTIME_CONFIG, check_config, load_config
-from factory.runtime.workflow_core import Invalid, digest, read_json, require
+from factory.runtime.workflow_config import (
+    check_config,
+    instruction_pin,
+    load_config,
+    verify_instruction_pin,
+)
+from factory.runtime.workflow_core import Invalid, digest, graph_identity, require
 from factory.runtime.workflow_graph import (
     diagram,
+    execution_graph,
     expand_intake_checks,
     validate_assignment_lineage,
     validate_graph,
 )
-from factory.runtime.workspace import prepare_workspace
+from factory.runtime.workflow_sources import SOURCE, lock_source
+from factory.runtime.workspace import check_workspace, prepare_workspace
 
 
 def build_parser(
@@ -90,15 +101,19 @@ def build_parser(
     workspace = sub.add_parser("prepare-workspace")
     workspace.add_argument("--dry-run", action="store_true", help="Preview workspace selection")
     instructions = command("read-instructions", _dispatch_setup)
-    instructions.add_argument("pin", help="Config JSON or - for the active run")
+    instructions.add_argument(
+        "pin", help="Instruction pin from workflow config, or - for the active run"
+    )
     instructions.add_argument("paths", nargs="+")
     command("read-project", _dispatch_setup)
     for name in ("validate", "init"):
         parser = command(name, _dispatch_setup)
-        parser.add_argument("graph")
+        parser.add_argument(
+            "graph", help="Content ID returned by graph_inputs.propose in this workspace"
+        )
         if name == "init":
             parser.add_argument(
-                "--config-pin", help="JSON output from config before instruction reading"
+                "--config-pin", help="Instruction pin obtained before reading factory instructions"
             )
     corr = command("correct", _dispatch_workflow)
     corr.add_argument("node")
@@ -106,11 +121,11 @@ def build_parser(
     resume = command("resume-task", _dispatch_workflow)
     resume.add_argument("task")
     resume.add_argument("evidence")
+    resume.add_argument("--stop", required=True, help="Current stop ID from workflow status")
     approved = command("resume-approved", _dispatch_workflow)
     approved.add_argument("node")
     approved.add_argument("request_id")
     approved.add_argument("evidence")
-    command("show", _dispatch_workflow)
     explain = command("explain", _dispatch_workflow, help="Read evidence for one dispatch")
     explain.add_argument("node")
     explain.add_argument("--dispatch", required=True)
@@ -123,7 +138,14 @@ def build_parser(
     acknowledged = command("ack-result", _dispatch_workflow)
     acknowledged.add_argument("node")
     acknowledged.add_argument("dispatch_id")
-    command("diagram", _dispatch_workflow)
+    diagram_command = command("diagram", _dispatch_workflow)
+    diagram_command.add_argument("--run", help="Read a named run, including its sealed archive")
+    diagram_command.add_argument(
+        "--view",
+        choices=("sequence", "pydantic", "orchestrator"),
+        default="sequence",
+        help="Show agent lifelines, task dependencies or the orchestrator routing graph",
+    )
     expand = command("expand-scope", _dispatch_workflow)
     expand.add_argument("task")
     expand.add_argument("--reason", required=True)
@@ -152,10 +174,54 @@ def build_parser(
     rep.add_argument("agent")
     rep.add_argument("reason")
     rep.add_argument("terminal_evidence")
-    rep.add_argument("handoff")
+    handoff = rep.add_mutually_exclusive_group(required=True)
+    handoff.add_argument("handoff", nargs="?", help="Summary for a single assigned task")
+    handoff.add_argument("--task-handoff", action="append", nargs=2, metavar=("TASK", "SUMMARY"))
     claim = command("claim", _dispatch_workflow)
     claim.add_argument("node")
+    claim.add_argument(
+        "--ticket", help="Assignment ticket issued by workflow status. Required to reserve a node."
+    )
     claim.add_argument("--dry-run", action="store_true", help="Check claim eligibility")
+    note = command(
+        "note", _dispatch_packets_checks, help="Read or record scoped specialist evidence"
+    )
+    note.add_argument("node")
+    note.add_argument("--dispatch", required=True)
+    note.add_argument("--request", help="Stable material delivery ID")
+    note.add_argument("--kind", choices=sorted(set.union(*role_material.MATERIAL.values())))
+    note.add_argument("--observation", help="What was observed or checked")
+    note.add_argument("--path", action="append", help="Scoped source or document")
+    note.add_argument("--check", action="append", help="Requested registered command")
+    note.add_argument("--receipt", action="append", help="Returned execution ID")
+    authorize = command(
+        "authorize-check",
+        _dispatch_packets_checks,
+        help="Grant a focused Tester assignment for a recorded investigation request",
+    )
+    authorize.add_argument("node")
+    authorize.add_argument("--dispatch", required=True)
+    authorize.add_argument("--request", required=True)
+    material = command(
+        "handoff",
+        _dispatch_packets_checks,
+        help="Read or supplement a running Implementer assignment",
+    )
+    material.add_argument("node", help="Implementer node ID")
+    material.add_argument("--dispatch", required=True, help="Active assignment ticket")
+    material.add_argument("--request", help="Stable delivery ID; repeat with identical evidence")
+    material.add_argument("--code", action="append", help="Owned changed path, repeatable")
+    material.add_argument(
+        "--test", action="append", help="Scoped regression file or registered check ID, repeatable"
+    )
+    docs = material.add_mutually_exclusive_group()
+    docs.add_argument(
+        "--docs", action="append", help="Updated scoped documentation path, repeatable"
+    )
+    docs.add_argument("--docs-current", help="Why the current documentation still applies")
+    material.add_argument(
+        "--dry-run", action="store_true", help="Validate evidence without recording delivery"
+    )
     for name in ("accept", "packet"):
         command(name, _dispatch_workflow).add_argument("node")
     prepare = command("prepare-packet", _dispatch_packets_checks)
@@ -183,6 +249,7 @@ def build_parser(
     b.add_argument("node")
     b.add_argument("handle")
     b.add_argument("model")
+    b.add_argument("--dispatch", required=True)
     command(
         "reset-history-index",
         _dispatch_workflow,
@@ -196,7 +263,10 @@ def build_parser(
     export.add_argument("output", type=Path)
     for cmd in ("verify-history", "rebind-history", "list-artifacts"):
         command(cmd, _dispatch_history).add_argument("run_id")
-    command("read-report", _dispatch_packets_checks).add_argument("reference")
+    reference = command("read-report", _dispatch_packets_checks)
+    reference.add_argument("run_id")
+    reference.add_argument("node")
+    reference.add_argument("dispatch_id")
     report = command("prepare-report", _dispatch_packets_checks)
     report.add_argument("node")
     report.add_argument("report")
@@ -216,6 +286,11 @@ def build_parser(
     r.add_argument("stage")
     r.add_argument("reason")
     r.add_argument("terminal_evidence")
+    r.add_argument("--evidence-dispatch", help="Failed attempt ID from the active repair route")
+    for command_parser in (u, rec, r):
+        command_parser.add_argument(
+            "--dispatch", required=True, help="Exact assignment ID being reconciled or retried"
+        )
     r.add_argument("--dry-run", action="store_true", help="Preview budget and affected nodes")
     retro = command(
         "record-retro",
@@ -234,7 +309,12 @@ def build_parser(
 def _dispatch_setup(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
     result: object = None
     if args.action == "config":
-        result = load_config(args.config)
+        config = load_config(args.config)
+        pin = instruction_pin(config)
+        if not getattr(args, "json", False):
+            print(pin)
+            return True, None
+        result = {"pin": pin, "profiles": config["profiles"], "limits": config["_limits"]}
     elif args.action == "read-instructions":
         if args.pin == "-":
             state = ledger.read()
@@ -242,24 +322,12 @@ def _dispatch_setup(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, obj
             check_config(state)
             c = state["config"]
         else:
-            pin = read_json(args.pin)
-            if not (
-                isinstance(pin, dict)
-                and pin.get("ok") is True
-                and isinstance(pin.get("result"), dict)
-            ):
-                raise Invalid("Invalid instruction snapshot")
-            c = RUNTIME_CONFIG.validate_python(pin["result"])
-            require(c["_path"] == str(Path(args.config).resolve()), "Invalid instruction snapshot")
+            c = load_config(args.config)
+            verify_instruction_pin(c, args.pin)
         instruction_entries: list[dict[str, str]] = []
         for name in args.paths:
             file = accepted_path(c, Path(c["_path"]).parent, name)
             require(str(file) in c["_files"], "Document is outside the accepted configuration")
-            if args.pin != "-":
-                require(
-                    c["_files"][str(file)] == digest(file_reader.read_bytes(file)),
-                    "Instruction changed since snapshot; reload instructions",
-                )
             raw = accepted_bytes(c, file)
             instruction_entries.append({"path": str(file), "content": raw.decode("utf-8")})
         result = instruction_entries
@@ -294,14 +362,26 @@ def _dispatch_setup(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, obj
             )
         result = {"policy": c["_project"]["data"], "instructions": instructions}
     elif args.action in {"init", "validate"}:
-        c, g = load_config(args.config), read_json(args.graph)
+        c = load_config(args.config)
         if args.action == "init":
-            if args.config_pin is None:
-                result = ledger.init(g, c)
-            else:
-                result = ledger.init(g, c, config_pin=read_json(args.config_pin))
+            check_workspace(ledger.root, c)
+        proposal = ledger.runs.read_input(ledger.root, "plan", args.graph)
+        g = expand_intake_checks(proposal, c)
+        if args.action == "init":
+            state = ledger.init(g, c, config_pin=args.config_pin)
+            result = {
+                "run_id": state["run_id"],
+                "revision": state["revision"],
+                "status": state["status"],
+            }
         else:
-            g = expand_intake_checks(g, c)
+            intake.configure(
+                g, c, load_definitions(Path(c["_path"]).parent / "graphs", "implement")
+            )
+            g["sources"] = {
+                key: SOURCE.validate_python(lock_source(ledger.root, source))
+                for key, source in g["sources"].items()
+            }
             result = list(validate_graph(g, c, ledger.root))
             validate_assignment_lineage(g, c)
     return False, result
@@ -330,9 +410,11 @@ def _dispatch_workflow(
         (current_database().cases if cases is None else cases).reset(ledger.root)
         result = {"index": "cleared"}
     elif args.action == "correct":
-        result = ledger.correct(args.node, read_json(args.decision))
+        result = ledger.correct(
+            args.node, ledger.runs.read_input(ledger.root, "correction", args.decision)
+        )
     elif args.action == "resume-task":
-        ledger.resume_task(args.task, args.evidence)
+        ledger.resume_task(args.task, args.evidence, stop_id=args.stop)
         result = None
     elif args.action in {"next", "status"}:
         result = ledger.next_actions(args.after)
@@ -342,22 +424,24 @@ def _dispatch_workflow(
     elif args.action == "ack-result":
         ledger.acknowledge_result(args.node, args.dispatch_id)
         result = None
-    elif args.action == "show":
-        result = ledger.read()
     elif args.action == "explain":
         result = workflow_query.explain(ledger, args.node, args.dispatch, args.run)
     elif args.action == "diagram":
-        state = ledger.read()
+        state = workflow_query.lookup_state(ledger, args.run)
+        if args.view == "pydantic":
+            nodes = {node["id"]: node for node in state["graph"]["nodes"]}
+            rendered = execution_graph(nodes).program.render(direction="LR")
+        elif args.view == "orchestrator":
+            rendered = orchestrator_graph(state["definitions"]).render(direction="LR")
+        else:
+            rendered = diagram(state)
         if not getattr(args, "json", False):
-            print(diagram(state))
+            print(rendered)
             return True, None
         result = {
             "run_id": state["run_id"],
-            "status": state["status"],
-            "graph": state["graph"],
-            "node_statuses": {
-                node_id: dispatch["status"] for node_id, dispatch in state["nodes"].items()
-            },
+            "mermaid": rendered,
+            **({"route_holds": state["route_holds"]} if state.get("route_holds") else {}),
         }
     elif args.action == "resume-approved":
         ledger.resume_approved(args.node, args.request_id, args.evidence)
@@ -367,18 +451,33 @@ def _dispatch_workflow(
         result = None
     elif args.action == "revise":
         retry_tests = TestRetryRequest(*args.retry_tests) if args.retry_tests is not None else None
-        ledger.revise(read_json(args.graph), args.reason, retry_tests=retry_tests)
+        ledger.revise(
+            expand_intake_checks(
+                ledger.runs.read_input(ledger.root, "plan", args.graph), ledger.read()["config"]
+            ),
+            args.reason,
+            retry_tests=retry_tests,
+        )
         result = None
     elif args.action == "reintake":
         ledger.reintake(
-            read_json(args.graph), args.reason, args.authorization, documents=args.document
+            expand_intake_checks(
+                ledger.runs.read_input(ledger.root, "plan", args.graph), ledger.read()["config"]
+            ),
+            args.reason,
+            args.authorization,
+            documents=args.document,
         )
         result = None
     elif args.action == "replace-session":
-        ledger.replace_session(args.agent, args.reason, args.terminal_evidence, args.handoff)
+        handoffs = dict(args.task_handoff or [])
+        require(len(handoffs) == len(args.task_handoff or []), "Duplicate task handoff")
+        ledger.replace_session(
+            args.agent, args.reason, args.terminal_evidence, handoffs or args.handoff
+        )
         result = None
     elif args.action == "claim":
-        result = ledger.claim(args.node, dry_run=args.dry_run)
+        result = ledger.claim(args.node, ticket=args.ticket, dry_run=args.dry_run)
     elif args.action in {"accept", "packet"}:
         result = getattr(ledger, args.action)(args.node)
     return False, result
@@ -408,7 +507,7 @@ def _dispatch_packets_checks(args: argparse.Namespace, ledger: Ledger) -> tuple[
             )
             result = None
     elif args.action == "bind":
-        ledger.bind(args.node, args.handle, args.model)
+        ledger.bind(args.node, args.handle, args.model, expected_dispatch=args.dispatch)
         result = None
     elif args.action == "run-check":
         result = ledger.run_check(
@@ -423,27 +522,78 @@ def _dispatch_packets_checks(args: argparse.Namespace, ledger: Ledger) -> tuple[
     elif args.action == "check-results":
         result = ledger.check_results(args.execution_id)
     elif args.action == "read-report":
-        result = report_history.read(ledger.root, read_json(args.reference), history=ledger.history)
+        attempt = workflow_query.explain(ledger, args.node, args.dispatch_id, args.run_id)
+        require(attempt["report"] is not None, "Attempt has no terminal report")
+        result = attempt["report"]
+    elif args.action == "note":
+        material: RoleMaterial | None = None
+        if args.kind:
+            require(
+                args.observation and args.observation.strip(), "Provide the observation or question"
+            )
+            material = {
+                "kind": args.kind,
+                "observation": args.observation,
+                "paths": args.path or [],
+            }
+            if args.check:
+                material["checks"] = args.check
+            if args.receipt:
+                material["receipts"] = args.receipt
+        else:
+            require(
+                not (args.observation or args.path or args.check or args.receipt),
+                "Choose the evidence kind",
+            )
+        result = role_material.note(ledger, args.node, args.dispatch, args.request, material)
+    elif args.action == "authorize-check":
+        result = role_material.authorize_check(ledger, args.node, args.dispatch, args.request)
+    elif args.action == "handoff":
+        offer: WriteOffer = {}
+        if args.code:
+            offer["code"] = args.code
+        if args.test:
+            offer["tests"] = args.test
+        if args.docs:
+            offer["docs"] = args.docs
+        if args.docs_current is not None:
+            require(args.docs_current.strip(), "Need a documentation applicability reason")
+            offer["docs_current"] = args.docs_current
+        result = write_handoff.exchange(
+            ledger, args.node, args.dispatch, args.request, offer, dry_run=args.dry_run
+        )
     elif args.action == "prepare-report":
-        draft = json.load(sys.stdin) if args.report == "-" else read_json(args.report)
-        result = ledger.prepare_report(args.node, draft, args.receipt_ids)
+        draft = ledger.runs.read_input(ledger.root, "draft", args.report)
+        report = ledger.prepare_report(args.node, draft, args.receipt_ids, submit=True)
+        result = {
+            "report_id": graph_identity(["submission", report]),
+            "dispatch_id": report["dispatch_id"],
+        }
     return False, result
 
 
 def _dispatch_completion(args: argparse.Namespace, ledger: Ledger) -> tuple[bool, object]:
     result: object = None
     if args.action == "finish":
-        ledger.finish(args.node, read_json(args.report))
+        ledger.finish(
+            args.node, parse_report(ledger.runs.read_input(ledger.root, "submission", args.report))
+        )
         result = None
     elif args.action == "unknown":
-        ledger.unknown(args.node, args.reason)
+        ledger.unknown(args.node, args.reason, expected_dispatch=args.dispatch)
         result = None
     elif args.action == "resolve":
-        ledger.resolve(args.node, args.status, args.evidence)
+        ledger.resolve(args.node, args.status, args.evidence, expected_dispatch=args.dispatch)
         result = None
     elif args.action == "retry":
         result = ledger.retry(
-            args.node, args.stage, args.reason, args.terminal_evidence, dry_run=args.dry_run
+            args.node,
+            args.stage,
+            args.reason,
+            args.terminal_evidence,
+            dry_run=args.dry_run,
+            expected_dispatch=args.dispatch,
+            evidence_dispatch=args.evidence_dispatch,
         )
     elif args.action == "record-retro":
         ledger.record_retro(args.run_id, args.incident, args.source, args.observation)

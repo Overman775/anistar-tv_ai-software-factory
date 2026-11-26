@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import TypeAdapter, ValidationError
 
 from factory import file_reader
-from factory.review.protocol.artifact_io import load_object
+from factory.review.protocol.artifact_io import Document, load_object
 from factory.review.protocol.contracts import (
     identity_errors,
 )
@@ -115,7 +116,7 @@ def validate_evidence(
 
 
 def validate_tool_results(
-    paths: list[Path],
+    paths: Sequence[Document],
     manifest: dict[str, Any],
 ) -> tuple[dict[str, ToolResult], dict[str, int], list[str], list[str]]:
     planned = {c["id"]: c for c in manifest.get("checks", [])}

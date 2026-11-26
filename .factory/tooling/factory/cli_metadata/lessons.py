@@ -7,6 +7,8 @@ TEACHER = (
     f"A current Teacher job in this checkout. Use the event ID from `{LAUNCHER} lessons pending`."
 )
 
+TEACHER_WRITE = TEACHER + " For a run event, use the bound Teacher assignment dispatch."
+
 LESSONS_HELP = (
     details(
         "lessons",
@@ -15,6 +17,14 @@ LESSONS_HELP = (
         "Depends on the selected command.",
         "search 'retry project checks'",
         summary="Find lessons and coordinate Teacher jobs",
+    ),
+    details(
+        "lessons retune",
+        "Recover a direct Teacher assignment for the selected cases.",
+        "Case, counterexample and procedure bytes together with the owner instructions.",
+        "Stores independently observed paired trials and the Teacher comparison in SQLite.",
+        "status --run ASSIGNMENT_ID",
+        writes=("workflow-state",),
     ),
     details(
         "lessons search",
@@ -37,7 +47,7 @@ LESSONS_HELP = (
         "Send demonstrated reuse to Teacher.",
         "An accepted result reference and the observed evidence of reuse.",
         "Enqueues a Teacher job.",
-        "report-ref.json 'The approved check resolved repeated failure'",
+        "RUN NODE DISPATCH 'The approved check resolved repeated failure'",
         writes=("teacher-queue", "diagnostics"),
     ),
     details(
@@ -73,20 +83,28 @@ LESSONS_HELP = (
         writes=("diagnostics",),
     ),
     details(
+        "lessons reply",
+        "Answer the open question on a Teacher event.",
+        "Waiting event and owner reply reference.",
+        "Resumes the same event. An identical redelivery preserves the original answer.",
+        "EVENT MESSAGE 'Use the observed case'",
+        writes=("teacher-queue", "diagnostics"),
+    ),
+    details(
         "lessons wait-owner",
         "Park a Teacher job for an owner decision.",
-        TEACHER + " The exact question to resolve.",
+        TEACHER_WRITE + " The exact question to resolve.",
         "Moves the job to the owner queue.",
-        "EVENT 'Which repeated failure should become a lesson?'",
+        "EVENT 'Which repeated failure should become a lesson?' --dispatch DISPATCH",
         writes=("teacher-queue", "diagnostics"),
     ),
     details(
         "lessons teacher-launch",
-        "Resolve the configured Teacher profile and adapter.",
+        "Reserve or reconcile a Teacher event assignment.",
         CONFIG,
-        "Prints the model, effort and adapter for Teacher.",
-        "",
-        writes=("diagnostics",),
+        "Grants one launch per event attempt. Repeats return the existing dispatch. With no event, inspect the configured profile.",
+        "EVENT",
+        writes=("teacher-queue", "diagnostics"),
     ),
     details(
         "lessons retro",
@@ -115,25 +133,26 @@ LESSONS_HELP = (
     details(
         "lessons complete",
         "Complete a Teacher job.",
-        TEACHER,
+        TEACHER_WRITE,
         "Records the outcome and closes the job.",
-        "EVENT --reason 'No reusable lesson found'",
+        "EVENT --reason 'No reusable lesson found' --dispatch DISPATCH",
         writes=("teacher-queue", "diagnostics"),
     ),
     details(
         "lessons publish",
         "Publish or update a validated lesson card.",
-        TEACHER + " Lesson JSON. Updates require the expected revision hash.",
+        TEACHER_WRITE
+        + " A lesson proposal ID from graph_inputs.propose_lesson. Updates require the expected revision hash.",
         "Writes the lesson card and records its publication.",
-        "EVENT lesson.json",
+        "EVENT LESSON_ID --dispatch DISPATCH",
         writes=("teacher-queue", "lesson-files", "diagnostics"),
     ),
     details(
         "lessons delete",
         "Delete the exact lesson revision authorized by the owner.",
-        TEACHER + " The owner-authorized target and current revision hash.",
+        TEACHER_WRITE + " The owner-authorized target and current revision hash.",
         "Removes the target lesson through the Teacher job.",
-        "EVENT --revision SHA256",
+        "EVENT --revision SHA256 --dispatch DISPATCH",
         writes=("teacher-queue", "lesson-files", "diagnostics"),
     ),
 )

@@ -11,34 +11,33 @@ from factory.database.provider import current_database
 from factory.diagnostics.events import event
 from factory.logging_config import diagnostic_operation
 from factory.runtime import teacher
+from factory.runtime.knowledge.case_reports import archived_reference
 from factory.runtime.knowledge.case_search import search_cases
 from factory.runtime.lessons import Lesson, search_lessons
 from factory.runtime.observability import lesson_telemetry
+from factory.runtime.scheduling.teacher_dispatch import deliver
 from factory.runtime.teacher import owner_instructions as owner_instructions
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import read_json, require
 from factory.runtime.workspace import checkout_ref
 
 
-def teacher_launch(root: Path) -> dict[str, object]:
-    config = load_config(root / ".factory/factory.yaml")
-    name = config["_defaults"].get("teacher")
-    if name is None:
-        raise ValueError("Configure profiles.teacher in .factory/factory.yaml")
-    profile = config["profiles"][name]
-    model = config["models"][profile["model"]]
-    require(model["id"] and model.get("effort"), "Teacher requires an explicit model ID and effort")
-    adapter = config["adapters"][profile["adapter"]]
-    return {"profile_name": name, "profile": profile, "model": model, "adapter": adapter}
-
-
 def capture_case(
-    root: Path, reference: str, observation: str, *, database: DatabaseBackend | None = None
+    root: Path,
+    run: str,
+    node: str,
+    dispatch: str,
+    observation: str,
+    *,
+    database: DatabaseBackend | None = None,
 ) -> str:
-    """Read the CLI reference file and dispatch the Teacher use case."""
+    """Queue the accepted version selected by its archived assignment."""
     database = current_database() if database is None else database
     return teacher.capture_case(
-        root, read_json(reference), observation, history=database.history, jobs=database.teacher
+        root,
+        archived_reference(root, run, node, dispatch, history=database.history),
+        observation,
+        history=database.history,
+        jobs=database.teacher,
     )
 
 
@@ -48,6 +47,13 @@ def command_parser(
     parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     sub = parser.add_subparsers(dest="command", required=True)
+    from factory.runtime.knowledge import retune
+
+    retune.options(
+        sub.add_parser(
+            "retune", help="Recover a direct Teacher assignment and matched trial results"
+        )
+    )
     search = sub.add_parser("search", help="Search active lessons and optionally history")
     search.add_argument("query")
     search.add_argument("--run", help="Run ID from the assignment packet")
@@ -65,7 +71,9 @@ def command_parser(
         help="Also search accepted archived task reports from this checkout",
     )
     capture = sub.add_parser("capture-case", help="Send demonstrated reuse to Teacher")
-    capture.add_argument("reference", help="File containing the result's exact report_ref object")
+    capture.add_argument("run_id")
+    capture.add_argument("node")
+    capture.add_argument("dispatch_id")
     capture.add_argument(
         "observation", help="Current occurrence, evidence and what proved reusable"
     )
@@ -80,7 +88,26 @@ def command_parser(
     park = sub.add_parser("wait-owner")
     park.add_argument("event")
     park.add_argument("question")
-    sub.add_parser("teacher-launch")
+    park.add_argument("--dispatch", help="Bound Teacher dispatch ID")
+    reply = sub.add_parser("reply", help="Return an owner answer to the same Teacher event")
+    reply.add_argument("event", help="Waiting Teacher event ID")
+    reply.add_argument("reference", help="Stable owner reply reference")
+    reply.add_argument("answer", help="Owner answer to the recorded question")
+    launch = sub.add_parser("teacher-launch")
+    launch.add_argument(
+        "event", nargs="?", help="Teacher event to reserve; omit for profile inspection"
+    )
+    mode = launch.add_mutually_exclusive_group()
+    mode.add_argument("--ticket", help="Ticket for a renewed assignment after verified termination")
+    mode.add_argument(
+        "--bind", nargs=2, metavar=("DISPATCH", "HANDLE"), help="Record verified worker handle"
+    )
+    mode.add_argument(
+        "--stopped",
+        nargs=2,
+        metavar=("DISPATCH", "EVIDENCE"),
+        help="Release an assignment after confirming termination",
+    )
     for kind in ("retro", "user"):
         intake = sub.add_parser(kind)
         intake.add_argument("incident")
@@ -102,6 +129,7 @@ def command_parser(
             mode.add_argument("--delete", metavar="LESSON_ID", help="Explicit deletion target")
     delete = sub.add_parser("delete")
     delete.add_argument("event")
+    delete.add_argument("--dispatch", help="Bound Teacher dispatch ID")
     delete.add_argument("--revision", required=True)
     for command in ("packet", "complete", "publish"):
         child = sub.add_parser(command)
@@ -115,8 +143,10 @@ def command_parser(
             )
         if command == "publish":
             child.add_argument("--incident", help="Incident ID from a completed run packet")
-            child.add_argument("lesson", help="JSON path or - for stdin")
+            child.add_argument("lesson", help="Lesson proposal ID from graph_inputs.propose_lesson")
             child.add_argument("--revision", help="Expected current lesson hash for updates")
+        if command in {"complete", "publish"}:
+            child.add_argument("--dispatch", help="Bound Teacher dispatch ID")
     return parser
 
 
@@ -126,6 +156,16 @@ def main() -> None:
 
 
 def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    if args.command == "retune":
+        from factory.runtime.knowledge import retune
+
+        with diagnostic_operation(args.workspace, "lessons.retune"):
+            print(json.dumps(retune.operate(args.workspace.resolve(), args), ensure_ascii=False))
+    else:
+        run_lesson(args, parser)
+
+
+def run_lesson(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     root = args.workspace.resolve()
     database = current_database()
     result: object
@@ -156,17 +196,41 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
             elif args.command == "telemetry":
                 result = lesson_telemetry.report(root, args.run, args.limit, store=database.traces)
             elif args.command == "capture-case":
-                result = capture_case(root, args.reference, args.observation, database=database)
+                result = capture_case(
+                    root,
+                    args.run_id,
+                    args.node,
+                    args.dispatch_id,
+                    args.observation,
+                    database=database,
+                )
             elif args.command == "teacher-launch":
-                result = teacher_launch(root)
+                if args.event is None and any((args.ticket, args.bind, args.stopped)):
+                    raise ValueError("Teacher event required for assignment controls")
+                result = (
+                    deliver(
+                        root, args.event, args.ticket, args.bind, args.stopped, database.teacher
+                    )
+                    if args.event
+                    else teacher.launch_profile(load_config(root / ".factory/factory.yaml"))
+                )
             elif args.command in {"pending", "waiting"}:
                 result = teacher.pending(
                     root, waiting=args.command == "waiting", jobs=database.teacher
                 )
             elif args.command == "route":
                 result = teacher.route(root, args.event, jobs=database.teacher)
+            elif args.command == "reply":
+                teacher.reply(root, args.event, args.reference, args.answer, jobs=database.teacher)
+                result = teacher.route(root, args.event, jobs=database.teacher)
             elif args.command == "wait-owner":
-                teacher.park(root, args.event, args.question, jobs=database.teacher)
+                teacher.park(
+                    root,
+                    args.event,
+                    args.question,
+                    jobs=database.teacher,
+                    dispatch_id=args.dispatch,
+                )
                 result = {"waiting": True}
             elif args.command in {"retro", "user"}:
                 result = teacher.enqueue(
@@ -201,10 +265,16 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
             elif args.command == "packet":
                 result = teacher.packet(root, args.event, jobs=database.teacher)
             elif args.command == "delete":
-                teacher.delete(root, args.event, args.revision, jobs=database.teacher)
+                teacher.delete(
+                    root,
+                    args.event,
+                    args.revision,
+                    jobs=database.teacher,
+                    dispatch_id=args.dispatch,
+                )
                 result = {"deleted": True}
             elif args.command == "publish":
-                raw = json.load(sys.stdin) if args.lesson == "-" else read_json(args.lesson)
+                raw = database.runs.read_input(root, "lesson", args.lesson)
                 result = teacher.apply(
                     root,
                     args.event,
@@ -212,10 +282,16 @@ def run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
                     args.revision,
                     args.incident,
                     jobs=database.teacher,
+                    dispatch_id=args.dispatch,
                 )
             else:
                 teacher.complete(
-                    root, args.event, args.cancelled_by, args.reason, jobs=database.teacher
+                    root,
+                    args.event,
+                    args.cancelled_by,
+                    args.reason,
+                    jobs=database.teacher,
+                    dispatch_id=args.dispatch,
                 )
                 result = {"complete": True}
             print(json.dumps(result, ensure_ascii=False))

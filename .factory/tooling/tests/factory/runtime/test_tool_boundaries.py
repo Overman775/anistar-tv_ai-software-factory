@@ -216,7 +216,9 @@ class ToolBoundaryTests(unittest.TestCase):
                         ledger = Ledger(workspace)
                         config["_defaults"]["implementer"] = route
                         ledger.init(graph(route), config)
-                        ledger.claim("work")
+                        ledger.claim(
+                            "work", ticket=ledger.next_actions()["assignment_tickets"]["work"]
+                        )
                         if route == "native":
                             packet = ledger.packet("work")
                             content = "\n".join(
@@ -281,7 +283,7 @@ class ToolBoundaryTests(unittest.TestCase):
                     self.assertTrue(str(target.resolve()) in fixture.config["_files"], relative)
                     target.write_text(target.read_text() + "\n# changed policy\n")
                     with self.assertRaisesRegex(Invalid, "drift"):
-                        fixture.ledger.claim("write-label")
+                        fixture.claim("write-label")
 
     def test_process_runner_publishes_pid_before_wait_and_preserves_failure(self) -> None:
         events: list[tuple[str, object]] = []
@@ -322,7 +324,7 @@ class ToolBoundaryTests(unittest.TestCase):
         overwrite(fixture.ledger, state)
         before = record_bytes(fixture.ledger)
         with self.assertRaisesRegex(Invalid, "Invalid persisted state.*counters"):
-            fixture.ledger.claim("write-label")
+            fixture.claim("write-label")
         self.assertEqual(before, record_bytes(fixture.ledger))
 
     def test_disabled_escalation_survives_state_roundtrip(self) -> None:
@@ -335,7 +337,7 @@ class ToolBoundaryTests(unittest.TestCase):
         fixture.config = load_config(config_file)
         fixture.init()
         self.assertIsNone(fixture.ledger.read()["config"]["profiles"]["implementer"]["escalation"])
-        fixture.ledger.claim("write-label")
+        fixture.claim("write-label")
 
     def test_invalid_state_is_rejected_before_initial_write_or_save(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
@@ -363,6 +365,11 @@ class ToolBoundaryTests(unittest.TestCase):
             with self.subTest(path=path):
                 raw = json.loads(json.dumps(state))
                 raw["nodes"]["write-label"][path] = value
+                if path == "attempt":
+                    # SQLite stores booleans as integers. Reject this at the typed repository boundary.
+                    with self.assertRaisesRegex(Invalid, rf"nodes\.\*.*{location}"):
+                        fixture.ledger.runs.save_progress(fixture.root, raw, ())
+                    continue
                 overwrite(fixture.ledger, raw)
                 with self.assertRaisesRegex(Invalid, rf"nodes\.\*.*{location}") as caught:
                     fixture.ledger.read()
@@ -458,7 +465,7 @@ class ToolBoundaryTests(unittest.TestCase):
     def test_packet_rejects_invalid_owned_projections_before_publishing(self) -> None:
         f = workflow_fixture.WorkflowFixture(self.addCleanup)
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         state = f.ledger.read()
         for producer, payload, reason in (
             (

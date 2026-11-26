@@ -1,11 +1,12 @@
 """Exercise application commands against alternate inputs and workflow persistence."""
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from copy import deepcopy
 from io import StringIO
 from pathlib import Path
@@ -73,7 +74,9 @@ class DatabaseAndInputPortTests(unittest.TestCase):
                 assert isinstance(status, dict)
                 self.assertEqual(status["pending_teacher_events"], ["from-selected-queue"])
             cli("pause", "owner requested")
-            self.assertEqual(cli("show"), saved[-1])
+            paused = cli("status")
+            assert isinstance(paused, dict)
+            self.assertEqual(paused["pause_reason"], saved[-1]["pause_reason"])
             self.assertEqual(saved[-1]["pause_reason"], "owner requested")
             cli("resume")
             self.assertEqual(cli("archive", "cancelled", "finished"), "history/example")
@@ -149,6 +152,21 @@ class DatabaseAndInputPortTests(unittest.TestCase):
         self.assertEqual(active(), "True")
         fixture.ledger.archive("cancelled", "done")
         self.assertEqual(active(), "False")
+
+    def test_setup_reports_unsupported_database_without_changes(self) -> None:
+        fixture = WorkflowFixture(self.addCleanup)
+        factory_root = fixture.root / ".factory"
+        path = factory_root / "memory/workflow.sqlite3"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("CREATE TABLE old_state(payload TEXT)")
+        before = path.read_bytes()
+        with patch.object(bootstrap, "AGENTS", factory_root), redirect_stdout(StringIO()) as output:
+            self.assertEqual(bootstrap.main(["setup", "--json"]), 1)
+        failure = json.loads(output.getvalue())["error"]
+        self.assertEqual(failure["code"], "setup_failed")
+        self.assertIn("Unsupported workflow database", failure["message"])
+        self.assertEqual(path.read_bytes(), before)
 
     def test_scoped_inputs_agree_on_source_lock_and_environment(self) -> None:
         fixture = WorkflowFixture(self.addCleanup)

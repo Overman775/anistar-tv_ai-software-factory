@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from examples import example_workflow, reviewed_slice
 
 from factory.context import context
 from factory.project.contracts import AcceptedDocument, Policy, ProjectData, Selection
@@ -379,7 +380,7 @@ class ProjectTests(unittest.TestCase):
             required_checks(profile, task)
 
     def test_compact_examples_expand_and_persist_checks(self) -> None:
-        for name in ("example.workflow.json", "reviewed-slice.workflow.json"):
+        for example in (example_workflow, reviewed_slice):
             fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
             fixture.config["_project"] = load_profile(ROOT / "project/project.yaml")
             fixture.config["_files"].update(fixture.config["_project"]["files"])
@@ -387,7 +388,7 @@ class ProjectTests(unittest.TestCase):
                 path = fixture.root / document["path"]
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("Fixture document", encoding="utf-8")
-            graph = json.loads((ROOT / "tooling/examples" / name).read_text(encoding="utf-8"))
+            graph = example.proposal()
             fixture.config["_defaults"]["implementer"] = "middle-implementer"
             full = expand_intake_checks(graph, fixture.config)
             task_id = next(iter(full["tasks"]))
@@ -417,7 +418,7 @@ class ProjectTests(unittest.TestCase):
     def test_compact_checks_keep_additional_inputs(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
         fixture.config["_project"] = load_profile(ROOT / "project/project.yaml")
-        graph = json.loads((ROOT / "tooling/examples/example.workflow.json").read_text())
+        graph = example_workflow.proposal()
         graph["tasks"]["label"]["project_check_inputs"] = {"anistar-check": ["extra.txt"]}
         task = expand_intake_checks(graph, fixture.config)["tasks"]["label"]
         check_task(fixture.config["_project"]["data"], task, final=True)
@@ -1091,9 +1092,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         (f.root / "norm.md").write_text("Weakened normative input")
         self.assertEqual(packet, f.ledger.packet("write-label"))
 
-    def test_legacy_document_hash_resumes_with_matching_bytes_or_authorized_replacement(
-        self,
-    ) -> None:
+    def test_hash_only_document_snapshot_is_rejected(self) -> None:
         f = self.f
         norm = f.root / "norm.md"
         norm.write_text("Accepted rules")
@@ -1101,26 +1100,11 @@ class ProjectIntegrationTests(unittest.TestCase):
             {"id": "fixture", "rules": {"worker": [{"id": "norm", "project_file": "norm.md"}]}}
         )
         f.init()
-        state = f.ledger.read()
+        state: dict[str, Any] = dict(f.ledger.read())
         state["config"].pop("_documents")
         overwrite(f.ledger, state)
-        f.ledger.claim("write-label")
-        self.assertIn(
-            "Accepted rules",
-            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
-        )
-        overwrite(f.ledger, state)
-        norm.write_text("Candidate rules")
-        with self.assertRaisesRegex(Invalid, "Accepted document bytes unavailable"):
-            f.ledger.claim("write-label")
-        f.ledger.reintake(
-            state["graph"], "Adopt specific replacement", "user evidence", documents=["norm.md"]
-        )
-        f.ledger.claim("write-label")
-        self.assertIn(
-            "Candidate rules",
-            [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
-        )
+        with self.assertRaisesRegex(Invalid, "Invalid persisted state"):
+            f.claim("write-label")
 
     def test_reintake_selects_new_scoped_document_and_refreshes_only_authorized_documents(
         self,
@@ -1165,7 +1149,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         f.ledger.reintake(
             graph, "scope extension", "user authorization", documents=["base.md", "background.md"]
         )
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         (f.root / "additional.md").write_text("Changed scoped policy")
         (f.root / "background.md").write_text("Another candidate edit")
         packet = f.ledger.packet("write-label")
@@ -1213,7 +1197,7 @@ class ProjectIntegrationTests(unittest.TestCase):
             f.ledger.reintake(state["graph"], "Change gate", "user evidence", documents=[script])
         self.assertNotIn(str(f.root / binary), state["config"]["_documents"])
         (f.root / guide).write_text("Candidate guide")
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         self.assertIn(
             "Accepted guide",
             [x["content"] for x in f.ledger.packet("write-label")["instructions"]],
@@ -1379,7 +1363,7 @@ class ProjectIntegrationTests(unittest.TestCase):
         f.ledger.archive("completed", "accepted documentation change")
         f.ledger.clean()
         f.init()
-        f.ledger.claim("write-label")
+        f.claim("write-label")
         packet = f.ledger.packet("write-label")
         self.assertTrue(
             {updated for _, updated in documents.values()}
@@ -1419,10 +1403,14 @@ class ProjectIntegrationTests(unittest.TestCase):
                 "node": {"stage": "work", "resources": []},
             },
         )
-        f.ledger.claim("write-label")
-        text = Path(prepare_prompt(f.ledger, "write-label")["prompt"]).read_text(encoding="utf-8")
+        f.claim("write-label")
+        from factory.runtime.history.document import render
+
+        prompt = Path(prepare_prompt(f.ledger, "write-label")["prompt"])
+        packet = f.stored_packet("write-label")
+        self.assertEqual(render(packet), prompt.read_bytes())
         entry = next(i for i in native["instructions"] if i["path"].endswith("/norm.md"))
-        self.assertIn(entry, json.loads(text)["instructions"])
+        self.assertIn(entry, packet["instructions"])
 
     def test_shared_command_dependency_enforced_by_real_ledger(self) -> None:
         f = self.f
@@ -1507,8 +1495,7 @@ class ProjectIntegrationTests(unittest.TestCase):
 
         f = self.f
         config = load_config(ROOT / "factory.yaml")
-        graph = json.loads((ROOT / "tooling/examples/reviewed-slice.workflow.json").read_text())
-        graph = expand_intake_checks(graph, config)
+        graph = expand_intake_checks(reviewed_slice.proposal(), config)
         validate_graph(graph, config, f.root)
         next(n for n in graph["nodes"] if n["id"] == "verify")["agent"] = "implementer"
         with self.assertRaisesRegex(Invalid, "Verification needs Tester|Required checks need"):

@@ -6,11 +6,14 @@ import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from graphlib import CycleError
 from pathlib import Path
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
+from factory.context.context import PROCESS_ROLES
+from factory.dependency_graph import DependencyGraph, compile_dependencies
 from factory.project.profile_rules import (
     check_task,
     required_checks,
@@ -25,6 +28,8 @@ from factory.runtime.contracts import (
     agent_key,
 )
 from factory.runtime.reports import acceptance, finish_requirements
+from factory.runtime.scheduling.intake import needs_judge
+from factory.runtime.upstream import check_tasks
 from factory.runtime.workflow_core import (
     Invalid,
     acceptance_guard,
@@ -82,17 +87,19 @@ def parse_graph(raw: object) -> Graph:
         raise Invalid(validation_message("Invalid workflow graph", exc, GRAPH)) from None
 
 
+def execution_graph(nodes: Mapping[str, Node]) -> DependencyGraph:
+    try:
+        return compile_dependencies({key: node["depends_on"] for key, node in nodes.items()})
+    except CycleError as exc:
+        raise Invalid("Dependency cycle") from exc
+
+
 def ancestors(nodes: dict[str, Node], node_id: str) -> set[str]:
-    seen = set()
+    return set(execution_graph(nodes).ancestors(node_id))
 
-    def visit(n: str) -> None:
-        for dep in nodes[n]["depends_on"]:
-            if dep not in seen:
-                seen.add(dep)
-                visit(dep)
 
-    visit(node_id)
-    return seen
+def completed_nodes(state: State) -> frozenset[str]:
+    return frozenset(key for key, node in state["nodes"].items() if node["status"] == "done")
 
 
 def validate_check_paths(t: Task, workspace: Path) -> None:
@@ -115,20 +122,36 @@ def validate_check_paths(t: Task, workspace: Path) -> None:
 
 def validate_task_topology(g: Graph, config: Config, nodes: dict[str, Node]) -> None:
     """Validate each task’s acceptance path, review, and predecessor ordering."""
+    graph = execution_graph(nodes)
     agents, tasks = g["agents"], g["tasks"]
     for tid, task in tasks.items():
         own = {k: n for k, n in nodes.items() if n["task"] == tid}
+        if inquiry := task.get("inquiry"):
+            role = {"research": "code-explorer", "diagnosis": "bug-hunter"}[inquiry]
+            require(
+                any(
+                    n["stage"] == "explore" and agents[agent_key(n)]["role"] == role
+                    for n in own.values()
+                ),
+                f"{inquiry} requires {role}",
+            )
+        if "write_scope" in task:
+            allowed = set(task["write_scope"])
+            require(
+                all(set(n.get("owns", [])) <= allowed for n in own.values()),
+                "Writer exceeds explicit write scope",
+            )
         accepts = [k for k, n in own.items() if n["stage"] == "accept"]
         require(len(accepts) == 1, "Each task needs exactly one acceptance node")
         accept = accepts[0]
-        upstream = ancestors(nodes, accept)
+        upstream = graph.ancestors(accept)
         require(set(own) - {accept} <= upstream, "Task has work outside acceptance path")
         verify = [k for k, n in own.items() if n["stage"] == "verify"]
         full_verify = [k for k in verify if "required_check_ids" not in nodes[k]]
         require(full_verify, "Missing full final verification")
         writers = {k for k, n in own.items() if n.get("owns")}
         require(
-            any(writers <= ancestors(nodes, v) for v in full_verify),
+            any(writers <= graph.ancestors(v) for v in full_verify),
             "Verification must follow all writers",
         )
         for check in task["required_checks"]:
@@ -166,9 +189,14 @@ def validate_task_topology(g: Graph, config: Config, nodes: dict[str, Node]) -> 
                 "Generated outputs need a read-only full verification check declaring each output input",
             )
         reviews = [k for k, n in own.items() if n["stage"] == "review"]
-        if task["independent_review"]:
+        require(
+            not task.get("owner_review_ref") or task["independent_review"],
+            "Owner requires independent Judge review: " + task.get("owner_review_ref", ""),
+        )
+        writer_paths = (path for node in own.values() for path in node.get("owns", []))
+        if needs_judge(task, config, writer_paths):
             require(
-                reviews and any(set(verify) <= ancestors(nodes, r) for r in reviews),
+                reviews and any(set(verify) <= graph.ancestors(r) for r in reviews),
                 "Missing final review after verification",
             )
         authors = {agent_key(n) for n in own.values() if n.get("owns")}
@@ -193,7 +221,7 @@ def validate_task_topology(g: Graph, config: Config, nodes: dict[str, Node]) -> 
                 )
             da = [k for k, n in nodes.items() if n["task"] == dep and n["stage"] == "accept"]
             require(
-                len(da) == 1 and all(da[0] in ancestors(nodes, k) for k in own),
+                len(da) == 1 and all(da[0] in graph.ancestors(k) for k in own),
                 "Dependent task must follow accepted predecessor",
             )
 
@@ -214,6 +242,8 @@ def _validate_nodes(
                 raise Invalid("Acceptance belongs to orchestrator")
         else:
             require(n.get("agent") in agents, "Unknown agent")
+            role = agents[agent_key(n)]["role"]
+            require(role in PROCESS_ROLES["implement"], f"Role outside Implement workflow: {role}")
         for p in n.get("owns", []):
             relative(workspace, p)
         for p in n.get("handoff_inputs", []):
@@ -266,6 +296,7 @@ def validate_graph(
     g = parse_graph(raw)
     require(g.get("tasks") and g.get("sources") and g.get("nodes"), "Empty workflow")
     agents, tasks = g["agents"], g["tasks"]
+    check_tasks(g["sources"], tasks, workspace)
     nodes = {n["id"]: n for n in g["nodes"]}
     require(len(nodes) == len(g["nodes"]), "Duplicate node ID")
     for group in (agents, tasks, nodes, g["sources"]):
@@ -342,12 +373,6 @@ def validate_graph(
         }
         require(assigned == set(criteria), "Unassigned source acceptance criteria")
     _validate_nodes(nodes, tasks, agents, config, workspace)
-    # Kahn traversal avoids recursion into cycles.
-    done: set[str] = set()
-    while len(done) < len(nodes):
-        ready = {k for k, n in nodes.items() if k not in done and set(n["depends_on"]) <= done}
-        require(ready, "Dependency cycle")
-        done.update(ready)
     validate_task_topology(g, config, nodes)
     if len(tasks) > 1:
         finals = [k for k, t in tasks.items() if t["kind"] == "integration"]
@@ -463,10 +488,8 @@ def diagram(state: State) -> str:
         )
     lines.append("    participant T as Teacher")
     nodes = {n["id"]: n for n in graph["nodes"]}
-    done: set[str] = set()
-    while len(done) < len(nodes):
-        ready = [n for k, n in nodes.items() if k not in done and set(n["depends_on"]) <= done]
-        require(ready, "Cycle")
+    for layer in execution_graph(nodes).layers:
+        ready = [nodes[key] for key in layer]
         if len(ready) > 1:
             lines.append("    par Ready branches (subject to slots/ownership)")
         for i, n in enumerate(ready):
@@ -480,7 +503,6 @@ def diagram(state: State) -> str:
                 target = ids[agent_key(n)]
                 lines.append(f"        O->>{target}: {label(n['id'])} · {status}")
                 lines.append(f"        {target}-->>O: Result and evidence")
-            done.add(n["id"])
         if len(ready) > 1:
             lines.append("    end")
     for e in state.get("events", []):

@@ -19,7 +19,6 @@ from unittest.mock import patch
 
 import yaml
 
-from factory.paths import FACTORY_ROOT
 from factory.project.profile_io import load_profile, snapshot
 from factory.review.protocol.contracts import validate_manifest
 from factory.review.protocol.plan import prepare, validate_plan
@@ -47,12 +46,18 @@ class ReviewRunTests(unittest.TestCase):
         self.assertFalse((run / ".review.lock").exists())
 
     def test_pr_review_completes_with_sha256_and_broken_candidate_project_yaml(self) -> None:
+        self.git_review("pr")
+
+    def test_branch_review_completes_against_accepted_policy(self) -> None:
+        self.git_review("branch")
+
+    def git_review(self, mode: str) -> None:
         from factory.project.project import review_snapshot
         from tests.fixture_bundle import ROOT as fixture
 
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
-            f = ProtocolFixture(root, mode="pr")
+            f = ProtocolFixture(root, mode=mode)
             bundle = root / ".factory"
             shutil.copytree(fixture, bundle)
             project = bundle / "project/project.yaml"
@@ -82,7 +87,9 @@ rules:
                     "add",
                     "--",
                     ".factory/project/project.yaml",
+                    ".factory/graphs/code-review.yaml",
                     "AGENTS.md",
+                    "review-check.py",
                     "review-guide.md",
                     f.path,
                 )
@@ -104,6 +111,12 @@ rules:
             (root / f.path).write_text("int value = 0;\n", encoding="utf-8")
             guide = root / "review-guide.md"
             guide.write_text("Review reference from baseline.", encoding="utf-8")
+            tool = root / "review-check.py"
+            tool.write_text(
+                "from pathlib import Path\nprint('accepted tool', Path('"
+                + f.path
+                + "').read_text().strip())\n"
+            )
             base = commit("baseline")
             pinned = review_snapshot(root, base)
             self.assertEqual({"AGENTS.md", "review-guide.md"}, pinned["documents"].keys())
@@ -124,8 +137,12 @@ rules:
                 review_snapshot(root, git("rev-parse", "HEAD").decode().strip())
             git("restore", "--source", base, "--", "review-guide.md")
 
+            (bundle / "graphs/code-review.yaml").write_text(
+                "id: code-review\nentry: broken-candidate-graph\n"
+            )
             project.write_text("broken: [", encoding="utf-8")
             (root / f.path).write_text("int value = 1;\n", encoding="utf-8")
+            tool.write_text("print('candidate tool')\n")
             head = commit("change under review")
             diff = git("diff", "--no-ext-diff", "--no-color", base + "..." + head)
             diff_path = Path(f.manifest["diff_file"])
@@ -134,11 +151,27 @@ rules:
                 base_sha=base,
                 head_sha=head,
                 project_policy=pinned,
-                scope_files=[".factory/project/project.yaml", f.path],
+                scope_files=[
+                    ".factory/graphs/code-review.yaml",
+                    ".factory/project/project.yaml",
+                    f.path,
+                    "review-check.py",
+                ],
                 diff_sha256=hashlib.sha256(diff).hexdigest(),
             )
-            f.manifest["context"]["pr"]["head_sha"] = head
-            f.manifest["additional_checks"] = []
+            if mode == "pr":
+                f.manifest["context"]["pr"]["head_sha"] = head
+            f.manifest["additional_checks"] = [
+                {
+                    "id": "accepted-tool",
+                    "method": "Check candidate with accepted script",
+                    "execution": {
+                        "argv": [sys.executable, "-B", "review-check.py"],
+                        "cwd": ".",
+                        "inputs": [f.path],
+                    },
+                }
+            ]
             f.rebind()
             request, run = root / "request.json", root / "run"
             write_json(request, f.manifest)
@@ -158,7 +191,35 @@ rules:
                 return value
 
             runner = ("review", "run")
+            raw = deepcopy(f.manifest)
+            raw["project_policy"]["documents"]["review-guide.md"]["content"] = "Changed input."
+            from factory.project.profile_io import fingerprint
+            from factory.review import subject
+
+            raw["project_policy"]["documents"]["review-guide.md"]["sha256"] = hashlib.sha256(
+                b"Changed input."
+            ).hexdigest()
+            raw["project_policy"]["sha256"] = fingerprint(
+                {k: v for k, v in raw["project_policy"].items() if k != "sha256"}
+            )
+            with chdir(root), self.assertRaisesRegex(ValueError, "differs from accepted"):
+                subject.accepted_revision(raw, bundle)
             cli(runner, "init", "--input", request, "--run", run)
+            outcome = cli(
+                runner,
+                "check",
+                "--id",
+                "accepted-tool",
+                "--run",
+                run,
+                "--request",
+                "accepted-tool-check",
+            )
+            self.assertEqual("PASS", outcome["status"])
+            self.assertIn("accepted tool int value = 1;", outcome["commands"][0]["stdout_excerpt"])
+            view = cli(runner, "diagram", "--run", run)
+            self.assertNotIn("broken-candidate-graph", view["mermaid"])
+            self.assertIn("architecture", view["mermaid"])
             for lens in f.lenses:
                 direction = lens["lens"]
                 assignment = cli(runner, "assignment", "--id", direction, "--run", run)
@@ -180,153 +241,178 @@ rules:
                     [entry["content"] for entry in packet["instructions"]],
                 )
                 write_json(path, lens)
-                cli(runner, "submit", "--id", direction, "--input", path, "--run", run)
+                dispatch = assignment["dispatch"]
+                worker = "worker-" + direction
+                cli(
+                    runner,
+                    "bind",
+                    "--id",
+                    direction,
+                    "--dispatch",
+                    dispatch,
+                    "--handle",
+                    worker,
+                    "--run",
+                    run,
+                )
+                mid = cli(
+                    runner,
+                    "note",
+                    "--id",
+                    direction,
+                    "--dispatch",
+                    dispatch,
+                    "--handle",
+                    worker,
+                    "--run",
+                    run,
+                    "--evidence",
+                    "Inspected the pinned change",
+                )
+                reopened = cli(
+                    runner,
+                    "packet",
+                    "--id",
+                    direction,
+                    "--dispatch",
+                    dispatch,
+                    "--handle",
+                    worker,
+                    "--run",
+                    run,
+                )
+                self.assertEqual(mid["observations"], reopened["observations"])
+                self.assertFalse({"reports", "reviewers", "verdict", "findings"} & reopened.keys())
+                cli(
+                    runner,
+                    "submit",
+                    "--id",
+                    direction,
+                    "--input",
+                    path,
+                    "--run",
+                    run,
+                    "--dispatch",
+                    dispatch,
+                    "--handle",
+                    worker,
+                )
             write_json(path, f.qa)
             result = cli(runner, "finish", "--input", path, "--run", run)
             self.assertEqual("COMPLETE", result["pipeline_status"], result.get("errors"))
 
-    def test_lock_owner_exit_and_legacy_directory(self) -> None:
-        from factory.review.review_run import locked
-
+    def test_legacy_markers_never_authorize_or_replace_an_attempt(self) -> None:
         f = self.fixture()
-        run = f.root / "run"
-        request = f.root / "request.json"
+        request, run = f.root / "request.json", f.root / "previous-run"
+        run.mkdir()
+        (run / "inputs.json").write_text('{"review_id":"OLD-RUN-ID"}')
+        (run / ".busy").mkdir()
+        self.assertNotEqual(0, self.call(f, "status", "--run", run).returncode)
         write_json(request, f.manifest)
         self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        with locked(run):
-            result = self.call(f, "status", "--run", run)
+        history = self.history(f, run)
+        self.assertNotIn("OLD-RUN-ID", str(history))
+        self.assertEqual([], history["events"])
+        self.assertEqual('{"review_id":"OLD-RUN-ID"}', (run / "inputs.json").read_text())
+
+    def test_interrupted_check_retains_its_reservation_and_prevents_second_execution(self) -> None:
+        f = self.fixture()
+        request, run = f.root / "request.json", f.root / "run"
+        write_json(request, f.manifest)
+        created = self.call(f, "init", "--input", request, "--run", run)
+        self.assertEqual(0, created.returncode, created.stderr)
+        check = f.manifest["checks"][0]["id"]
+        script = """import os,sys
+from unittest.mock import patch
+from factory.review.review_run import check
+with patch('factory.review.review_run.collect_results',side_effect=lambda *a,**k: os._exit(32)):
+    check(sys.argv[1],sys.argv[2],'interruption')
+"""
+        exited = subprocess.run(
+            [sys.executable, "-c", script, str(run), check],
+            cwd=f.root,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(32, exited.returncode, exited.stderr)
+        for request_key in ("interruption", "second-request"):
+            result = self.call(f, "check", "--run", run, "--id", check, "--request", request_key)
             self.assertNotEqual(0, result.returncode)
-            self.assertIn("locked", result.stderr)
-        (run / ".busy").mkdir()
-        result = self.call(f, "status", "--run", run)
-        self.assertIn("legacy .busy", result.stderr)
-
-    @unittest.skipIf(os.name == "nt", "SIGKILL is POSIX-specific")
-    def test_killed_owner_releases_lock_and_interrupted_check_blocks(self) -> None:
-        f = self.fixture()
-        request, run = f.root / "request.json", f.root / "run"
-        write_json(request, f.manifest)
-        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        script = (
-            "from pathlib import Path; from factory.review.review_run import locked; "
-            "import sys, time; "
-            "lock = locked(Path(sys.argv[1])); lock.__enter__(); print('ready', flush=True); "
-            "time.sleep(60)"
+            self.assertIn("unknown outcome", result.stderr)
+        status = json.loads(self.call(f, "status", "--run", run).stdout)
+        self.assertEqual("interruption", status["outstanding_checks"][check]["request"])
+        self.assertEqual(1, len(self.history(f, run)["events"]))
+        resume = (
+            "reconcile-check",
+            "--id",
+            check,
+            "--run",
+            run,
+            "--original-request",
+            "interruption",
+            "--evidence",
+            "Observed original child and process stopped",
+            "--request",
+            "observed-stop",
         )
-        owner = subprocess.Popen(
-            [sys.executable, "-c", script, str(run)], cwd=f.root, stdout=subprocess.PIPE, text=True
+        self.assertNotEqual(
+            0, self.call(f, "cancel", "--run", run, "--evidence", "Owner cancelled").returncode
         )
-        try:
-            assert owner.stdout is not None
-            self.assertEqual("ready", owner.stdout.readline().strip())
-        finally:
-            owner.kill()
-            owner.wait()
-            if owner.stdout:
-                owner.stdout.close()
-        self.assertEqual(0, self.call(f, "status", "--run", run).returncode)
-        write_json(run / ".check-in-progress", {"id": "unknown"})
-        result = self.call(f, "status", "--run", run)
-        self.assertIn("interrupted check has unknown outcome", result.stderr)
+        self.assertIn("reconcile-check", str(status["commands"]))
+        recovered = self.call(f, *resume)
+        self.assertEqual(0, recovered.returncode, recovered.stderr)
+        self.assertEqual("BLOCKED", json.loads(recovered.stdout)["status"])
+        self.assertEqual(recovered.stdout, self.call(f, *resume).stdout)
+        collision = self.call(f, "check", "--run", run, "--id", check, "--request", "observed-stop")
+        self.assertNotEqual(0, collision.returncode)
+        self.assertFalse(
+            json.loads(self.call(f, "status", "--run", run).stdout)["outstanding_checks"]
+        )
 
-    @unittest.skipIf(os.name == "nt", "legacy PID verification requires POSIX")
-    def test_legacy_recovery_rejects_live_owner_then_recovers_dead_owner(self) -> None:
-        f = self.fixture()
-        request, run = f.root / "request.json", f.root / "run"
-        write_json(request, f.manifest)
-        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        owner = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-        (run / ".busy").mkdir()
-        try:
-            result = self.call(
-                f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid)
-            )
-            self.assertIn("still active", result.stderr)
-            self.assertTrue((run / ".busy").is_dir())
-        finally:
-            owner.kill()
-            owner.wait()
-        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertFalse((run / ".busy").exists())
+        self.assertEqual(
+            recovered.stdout,
+            self.call(f, "check", "--run", run, "--id", check, "--request", "interruption").stdout,
+        )
+        self.assertEqual(
+            "PASS",
+            json.loads(
+                self.call(f, "check", "--run", run, "--id", check, "--request", "retry-1").stdout
+            )["status"],
+        )
+        self.assertEqual(
+            0, self.call(f, "cancel", "--run", run, "--evidence", "Owner cancelled").returncode
+        )
+        self.assertEqual(0, self.call(f, "clean", "--run", run).returncode)
 
-    def test_interrupted_check_reconciles_only_its_valid_saved_attempt(self) -> None:
-        f = self.fixture()
-        request, run = f.root / "request.json", f.root / "run"
-        write_json(request, f.manifest)
-        self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        check_id = f.manifest["checks"][0]["id"]
-        self.assertEqual(0, self.call(f, "check", "--id", check_id, "--run", run).returncode)
-        path = run / f"check-{check_id}-1.json"
-        saved = path.read_bytes()
-        marker = run / ".check-in-progress"
-        write_json(marker, {"id": check_id, "attempt": path.name})
-        result = self.call(f, "status", "--run", run)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertFalse(marker.exists())
-        self.assertEqual(saved, path.read_bytes())
-        write_json(marker, {"id": check_id})
-        result = self.call(f, "status", "--run", run)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertFalse(marker.exists())
-        write_json(marker, {"id": check_id, "attempt": f"check-{check_id}-2.json"})
-        result = self.call(f, "status", "--run", run)
-        self.assertIn("interrupted check has unknown outcome", result.stderr)
-        path.write_text("{", encoding="utf-8")
-        result = self.call(f, "status", "--run", run)
-        self.assertIn(str(path), result.stderr)
-
-    def test_interrupted_blocked_attempt_can_retry(self) -> None:
+    def test_interrupted_blocked_attempt_can_retry_and_completed_receipt_replays(self) -> None:
         f = self.fixture()
         f.manifest["additional_checks"][0]["execution"]["argv"] = ["missing-review-command"]
         f.rebind()
         request, run = f.root / "request.json", f.root / "run"
         write_json(request, f.manifest)
         self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        check_id = f.manifest["checks"][0]["id"]
-        result = self.call(f, "check", "--id", check_id, "--run", run)
-        self.assertEqual("BLOCKED", json.loads(result.stdout)["status"])
-        marker = run / ".check-in-progress"
-        write_json(marker, {"id": check_id, "attempt": f"check-{check_id}-1.json"})
-        result = self.call(f, "status", "--run", run)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("command unavailable", result.stdout)
-        self.assertFalse(marker.exists())
-        result = self.call(f, "check", "--id", check_id, "--run", run)
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertTrue((run / f"check-{check_id}-2.json").exists())
+        check = f.manifest["checks"][0]["id"]
+        for req in ("attempt-a", "attempt-a", "attempt-b"):
+            result = self.call(f, "check", "--run", run, "--id", check, "--request", req)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("BLOCKED", json.loads(result.stdout)["status"])
+        self.assertEqual(2, len(self.history(f, run)["state"]["facts"]["checks"][check]))
 
-    @unittest.skipIf(os.name == "nt", "legacy PID verification requires POSIX")
-    def test_legacy_baseline_lock_upgrade_preserves_reviewed_input_drift(self) -> None:
+    def test_source_drift_requires_new_intake_and_retains_original_history(self) -> None:
         f = self.fixture()
         request, run = f.root / "request.json", f.root / "run"
         write_json(request, f.manifest)
         self.assertEqual(0, self.call(f, "init", "--input", request, "--run", run).returncode)
-        inputs_path = run / "inputs.json"
-        inputs = json.loads(inputs_path.read_text(encoding="utf-8"))
-        inputs["files"][str(FACTORY_ROOT / "tooling/factory/runtime/command_worker.py")] = (
-            "1f3d94ab067ff89e744fc518901a31fb35f9792bc5596599c65cea0adb095e22"
-        )
-        inputs["files"][str(FACTORY_ROOT / "tooling/factory/review/review_run.py")] = (
-            "f8fbac0a730eb92908f0da6fea92fc6097785de4441fe677dff2fcf3b98916ec"
-        )
-        inputs["files"][
-            str(FACTORY_ROOT / "skills/factory-code-review/references/run-contract.md")
-        ] = "5296c319ffd9af0d04f21e2265d4549a522de0dc4d96b1ea76fcd6295fd5afa2"
-        write_json(inputs_path, inputs)
-        (run / ".busy").mkdir()
-        owner = subprocess.Popen([sys.executable, "-c", "pass"])
-        owner.wait()
-        original = (f.root / f.path).read_text(encoding="utf-8")
-        (f.root / f.path).write_text("changed", encoding="utf-8")
-        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
-        self.assertIn("source drift", result.stderr)
-        self.assertTrue((run / ".busy").is_dir())
-        self.assertEqual(inputs, json.loads(inputs_path.read_text(encoding="utf-8")))
-        (f.root / f.path).write_text(original, encoding="utf-8")
-        result = self.call(f, "recover-legacy", "--run", run, "--legacy-owner-pid", str(owner.pid))
+        original = self.history(f, run)["subject"]
+        (f.root / f.path).write_text("changed")
+        self.assertIn("source drift", self.call(f, "status", "--run", run).stderr)
+        self.assertEqual(original, self.history(f, run)["subject"])
+        self.assertNotEqual(0, self.call(f, "recover-legacy", "--run", run).returncode)
+
+    def history(self, f: ProtocolFixture, run: Path) -> dict[str, Any]:
+        result = self.call(f, "history", "--run", run)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(0, self.call(f, "status", "--run", run).returncode)
+        return dict(json.loads(result.stdout))
 
     def fixture(self) -> ProtocolFixture:
         temp = tempfile.TemporaryDirectory()
@@ -334,13 +420,88 @@ rules:
         return ProtocolFixture(Path(temp.name))
 
     def call(self, f: ProtocolFixture, *args: Any) -> subprocess.CompletedProcess[str]:
+        if args[0] == "submit" and "--dispatch" not in args:
+            direction = args[args.index("--id") + 1]
+            name = args[args.index("--run") + 1]
+            issued = self.call(f, "assignment", "--id", direction, "--run", name)
+            if issued.returncode:
+                return issued
+            ticket = json.loads(issued.stdout)["dispatch"]
+            handle = "fixture-" + direction
+            bound = self.call(
+                f,
+                "bind",
+                "--id",
+                direction,
+                "--dispatch",
+                ticket,
+                "--handle",
+                handle,
+                "--run",
+                name,
+            )
+            if bound.returncode:
+                return bound
+            args = (*args, "--dispatch", ticket, "--handle", handle)
         return subprocess.run(
             [*CLI, "review", "run", *args], cwd=f.root, text=True, capture_output=True
         )
 
+    def test_changed_check_input_requires_new_subject_and_three_fresh_tickets(self) -> None:
+        f = self.fixture()
+        request = f.root / "request.json"
+        inp = f.root / "command-input.txt"
+        inp.write_text("before")
+        f.manifest["additional_checks"][0]["execution"]["inputs"] = [inp.name]
+        f.rebind()
+        write_json(request, f.manifest)
+
+        def tickets(run: str) -> dict[str, str]:
+            created = self.call(f, "init", "--run", run, "--input", request)
+            self.assertEqual(0, created.returncode, created.stderr)
+            result = {}
+            for lens in f.lenses:
+                key = lens["lens"]
+                issued = self.call(f, "assignment", "--run", run, "--id", key)
+                self.assertEqual(0, issued.returncode, issued.stderr)
+                result[key] = json.loads(issued.stdout)["dispatch"]
+            return result
+
+        first = tickets("first")
+        inp.write_text("after")
+        self.assertIn("source drift", self.call(f, "status", "--run", "first").stderr)
+        second = tickets("second")
+        self.assertFalse(set(first.values()) & set(second.values()))
+        key = "system-design"
+        handle = "architecture-worker"
+        common = ["--run", "second", "--id", key, "--handle", handle, "--dispatch", second[key]]
+        self.assertEqual(0, self.call(f, "bind", *common).returncode)
+        self.assertEqual(
+            0, self.call(f, "lost", *common, "--evidence", "adapter timeout").returncode
+        )
+        self.assertEqual(
+            second[key],
+            json.loads(self.call(f, "assignment", "--run", "second", "--id", key).stdout)[
+                "dispatch"
+            ],
+        )
+        self.assertNotEqual(0, self.call(f, "history", *common).returncode)
+        self.assertEqual(
+            0,
+            self.call(f, "stopped", *common, "--evidence", "adapter confirmed stopped").returncode,
+        )
+        retry = self.call(f, "assignment", "--run", "second", "--id", key)
+        self.assertNotEqual(second[key], json.loads(retry.stdout)["dispatch"])
+        self.assertEqual(
+            second["runtime-safety"],
+            json.loads(
+                self.call(f, "assignment", "--run", "second", "--id", "runtime-safety").stdout
+            )["dispatch"],
+        )
+
     def test_status_validates_policy_once_and_detects_subsequent_source_drift(self) -> None:
         from factory.project.profile_io import validate_snapshot
-        from factory.review import review_run
+        from factory.review import review_run, subject
         from factory.review.protocol import contracts as review_contracts
 
         f = self.fixture()
@@ -356,12 +517,13 @@ rules:
                     "factory.review.protocol.plan.validate_snapshot", wraps=validate_snapshot
                 ) as plan,
             ):
-                manifest = review_run.fresh(run)
-                review_run.inspect(run, manifest)
+                saved = review_run.record(run)
+                manifest = subject.fresh(saved.subject)
+                review_run.inspect(saved, manifest)
                 self.assertEqual(1, contract.call_count + plan.call_count)
             (f.root / f.path).write_text("changed", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "source drift"):
-                review_run.fresh(run)
+                subject.fresh(saved.subject)
 
     def test_three_specializations_cover_intent_under_acceptance(self) -> None:
         f = self.fixture()
@@ -530,7 +692,7 @@ rules:
                 with patch("factory.review.review_run.FACTORY_ROOT", bundle), chdir(f.root):
                     initialize(request, run)
                 expected = default or variants[0]
-                manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+                manifest = self.history(f, run)["subject"]["manifest"]
                 self.assertEqual([expected] * 3, [a["profile"] for a in manifest["assignments"]])
                 for direction in ("system-design", "runtime-safety", "verification-quality"):
                     response = self.call(f, "assignment", "--id", direction, "--run", run)
@@ -674,7 +836,11 @@ gates:
         self.assertEqual(2, len(result["findings"]))
 
     def test_lifecycle_runs_commands_preserves_results_and_rejects_drift(self) -> None:
-        f = self.fixture()
+        from tests.factory.runtime.workflow_fixture import WorkflowFixture
+
+        execution = WorkflowFixture(self.addCleanup)
+        previous = execution.init()
+        f = ProtocolFixture(execution.root)
         request = f.root / "request.json"
         write_json(request, f.manifest)
         run = f.root / "run"
@@ -699,7 +865,10 @@ gates:
         result = self.call(f, "finish", "--input", str(qa), "--run", str(run))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("COMPLETE", json.loads(result.stdout)["pipeline_status"])
-        self.assertTrue((run / "final-1/report.md").is_file())
+        self.assertEqual(previous, execution.ledger.read())
+        self.assertIn("APPROVE", self.call(f, "report", "--run", run).stdout)
+        self.assertEqual(0, self.call(f, "clean", "--run", run).returncode)
+        self.assertEqual("completed", self.history(f, run)["state"]["terminal"])
         (f.root / f.path).write_text("changed")
         result = self.call(f, "status", "--run", str(run))
         self.assertIn("drift", result.stderr)
@@ -725,7 +894,7 @@ gates:
                 str(f.root / "first"),
             )
             self.assertEqual(result.returncode == 0, attempt < 2, result.stderr)
-        self.assertEqual([], list((f.root / "second").glob("reviewer-*.json")))
+        self.assertNotIn("reports", self.history(f, f.root / "second")["state"]["facts"])
 
     def test_prefix_related_check_ids_have_independent_lifecycle_and_budget(self) -> None:
         f = self.fixture()
@@ -764,8 +933,8 @@ gates:
         self.assertIn("dependency", blocked.stderr)
         self.assertEqual(0, self.call(f, "check", "--id", "lint", "--run", run).returncode)
         self.assertEqual(0, self.call(f, "check", "--id", "dependent", "--run", run).returncode)
-        self.assertTrue((run / "check-lint-1.json").is_file())
-        self.assertTrue((run / "check-lint-1-1.json").is_file())
+        checks = self.history(f, run)["state"]["facts"]["checks"]
+        self.assertEqual((1, 1), (len(checks["lint"]), len(checks["lint-1"])))
 
     def test_command_dependency_and_mutating_command_cannot_complete(self) -> None:
         f = self.fixture()
@@ -806,7 +975,7 @@ gates:
         self.assertEqual(0, self.call(f, "check", "--id", "first", "--run", str(run)).returncode)
         result = self.call(f, "check", "--id", "second", "--run", str(run))
         self.assertIn("drift", result.stderr)
-        self.assertTrue((run / "check-second-1.json").exists())
+        self.assertEqual(1, len(self.history(f, run)["state"]["facts"]["checks"]["second"]))
 
     def test_changed_core_definition_and_unknown_dependency_block(self) -> None:
         f = self.fixture()
@@ -850,5 +1019,5 @@ gates:
             f, "submit", "--id", "runtime-safety", "--input", str(out), "--run", str(run)
         )
         self.assertEqual(0, result.returncode, result.stderr)
-        retained = json.loads((run / "reviewer-runtime-safety-2.json").read_text())
+        retained = self.history(f, run)["state"]["facts"]["reports"]["runtime-safety"][1]
         self.assertEqual("RUN-1", retained["findings"][0]["finding_id"])

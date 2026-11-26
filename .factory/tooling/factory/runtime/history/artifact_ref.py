@@ -12,7 +12,4 @@ class Artifact:
     node: str | None = None
     dispatch: str | None = None
     expected: str | None = None
-
-
-def transport_report(run: str, node: str, dispatch: str) -> str:
-    return f".factory/memory/state/{run}-{node}-{dispatch}.report.json"
+    document: object = None

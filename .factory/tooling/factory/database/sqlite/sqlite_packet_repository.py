@@ -4,7 +4,7 @@ from pathlib import Path
 
 from factory.database.sqlite import artifacts, workflow_db
 from factory.runtime.contracts import PacketRef
-from factory.runtime.packets.repository import DeliveryReceipt
+from factory.runtime.packets.delivery import PacketDelivery
 from factory.runtime.workflow_core import require
 
 
@@ -13,10 +13,8 @@ def read_packet(root: Path, meta: PacketRef) -> bytes:
         return artifacts.read(db, meta["run_id"], meta["path"], meta["sha256"])
 
 
-def save_receipt(root: Path, receipt: DeliveryReceipt) -> None:
-    packet = receipt["packet"]
-    recipient = receipt.get("recipient")
-    require(receipt.get("version") == 2 and recipient, "Invalid packet delivery receipt")
+def save_receipt(root: Path, packet: PacketRef, recipient: str, progress: PacketDelivery) -> None:
+    require(recipient, "Invalid packet delivery recipient")
     with workflow_db.database(root) as db:
         saved = db.execute(
             """INSERT INTO packet_deliveries(artifact_id,recipient,source_hash,revision,served,acknowledged)
@@ -29,8 +27,8 @@ def save_receipt(root: Path, receipt: DeliveryReceipt) -> None:
                 recipient,
                 packet["source_hash"],
                 packet["revision"],
-                receipt["served"],
-                receipt["acknowledged"],
+                progress.served,
+                progress.acknowledged,
                 packet["run_id"],
                 packet["path"],
                 packet["node_id"],

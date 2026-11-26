@@ -89,6 +89,16 @@ def accepted_reports(root: Path, state: State, branch: str | None) -> Iterator[A
         )
 
 
+def archived_reference(
+    root: Path, run: str, node: str, dispatch: str, *, history: HistoryRepository
+) -> ReportRef:
+    state = history.archived_state(root, run)
+    ref = state.get("report_index", {}).get(dispatch)
+    if ref is None or (ref["run_id"], ref["node_id"], ref["dispatch_id"]) != (run, node, dispatch):
+        raise Invalid("Unknown archived report for this assignment")
+    return ref
+
+
 def verified_case(
     root: Path, raw: object, *, history: HistoryRepository | None = None
 ) -> AcceptedReport:

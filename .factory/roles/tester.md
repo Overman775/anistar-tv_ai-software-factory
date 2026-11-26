@@ -18,7 +18,7 @@ Follow the [Tester contract](../contracts/tester.md) for allowed effects and
    validation (`git diff --check`) unless assigned or required by project rules.
    Inspect completion and selected tests. If a response was lost, recover its
    recorded execution.
-3. Return the existing verification JSON and actual receipts. Keep prose short
+3. Publish the typed verification report with the actual execution IDs. Keep prose short
    and failure-only in reports, findings, gate messages and final handoffs. Include
    counts and failed identities/locations/diagnostics; never enumerate passing tests.
    For a failure identify the test or command, reported location, and the relevant

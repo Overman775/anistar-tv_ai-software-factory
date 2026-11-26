@@ -46,4 +46,4 @@ class AssignmentLineageTests(TestCase):
         with self.assertRaisesRegex(Invalid, "requires profile middle"):
             f.ledger.replace_session("author", "replace", "terminal", "details")
         with self.assertRaisesRegex(Invalid, "requires profile middle"):
-            f.ledger.claim("verify-label")
+            f.claim("verify-label")

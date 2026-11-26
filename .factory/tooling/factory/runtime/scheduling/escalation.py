@@ -6,7 +6,6 @@ terminal evidence, diagnosis and real capabilities before submitting a decision.
 
 from __future__ import annotations
 
-import json
 import time
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -19,7 +18,6 @@ from typing_extensions import TypedDict
 from factory.runtime.contracts import (
     Agent,
     CorrectionRecord,
-    Dispatch,
     EscalationStop,
     Node,
     Nonblank,
@@ -34,16 +32,18 @@ from factory.runtime.history import report_history
 from factory.runtime.history.history_repository import HistoryRepository
 from factory.runtime.reports import review_findings as review_findings
 from factory.runtime.reports.acceptance import ensure as ensure
+from factory.runtime.reports.summary import REPORT_SUMMARY, compact_tester_report
+from factory.runtime.scheduling.attempt_graph import invalidate
 from factory.runtime.scheduling.escalation_policy import CAUSES as CAUSES
 from factory.runtime.scheduling.escalation_policy import RetryBudget, correction_decision
 from factory.runtime.scheduling.escalation_policy import configure as configure
 from factory.runtime.scheduling.escalation_policy import guard as guard
 from factory.runtime.scheduling.escalation_policy import limits as limits
 from factory.runtime.scheduling.escalation_policy import routing as routing
-from factory.runtime.workflow_core import digest as digest
+from factory.runtime.workflow_core import graph_identity
 from factory.runtime.workflow_core import snapshot as snapshot
 from factory.runtime.workflow_graph import ancestors as ancestors
-from factory.runtime.workflow_graph import validate_assignment_lineage
+from factory.runtime.workflow_graph import execution_graph, validate_assignment_lineage
 from factory.runtime.workflow_graph import validate_graph as validate_graph
 from factory.tasks.contracts import Task
 from factory.validation import validation_message
@@ -114,8 +114,7 @@ def correct(ledger: CorrectionLedger, state: State, node_id: str, raw: object) -
     existing = next((r for r in state.get("corrections", []) if r["identity"] == identity), None)
     if existing:
         ensure(
-            existing["request_hash"]
-            == digest(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()),
+            existing["request_hash"] == graph_identity(request),
             "Conflicting decision for the same evidence",
         )
         return copy(existing)  # Replay never spends budget or replaces a session.
@@ -205,6 +204,10 @@ def validate_correction(
         "Historical failure was superseded; need a current unresolved obligation",
     )
     evidence_task = state["graph"]["tasks"][evidence_node["task"]]
+    ensure(
+        report["stage_result"] not in {"APPROVAL_REQUIRED", "CHECKS_REQUESTED"},
+        "Use the active approval or revision gate for this evidence",
+    )
     original_scope = original["task"]["scope"]
     ensure(
         set(original_scope) == set(evidence_task["scope"]),
@@ -322,9 +325,13 @@ def apply_correction(
     assignment, profile_id, report = evidence.assignment, evidence.profile_id, evidence.report
     failures, budget_cause, budget = choice.failures, choice.budget_cause, choice.budget
     target, decision = choice.target, choice.decision
+    summary = REPORT_SUMMARY.validate_python({k: v for k, v in report.items() if k != "files"})
+    evidence_node = evidence.nodes[request["evidence_node"]]
+    if evidence_node["stage"] == "verify":
+        summary = compact_tester_report(state, evidence_node["id"], summary)
     record: CorrectionRecord = dict(
         identity=identity,
-        request_hash=digest(json.dumps(request, sort_keys=True, ensure_ascii=False).encode()),
+        request_hash=graph_identity(request),
         task_id=task_id,
         node_id=node_id,
         source_hash=state["graph"]["sources"][state["graph"]["tasks"][task_id]["source"]]["hash"],
@@ -337,7 +344,8 @@ def apply_correction(
         handoff=request["handoff"],
         failure_count=failures,
         decision=decision,
-        evidence=deepcopy(report),
+        evidence=summary,
+        report_ref=state["report_index"][request["evidence_dispatch_id"]],
         at=time.time(),
         budget_cause=budget_cause,
         budget_remaining=budget.remaining,
@@ -352,7 +360,7 @@ def apply_correction(
             budget_exhausted=budget.remaining <= 0,
         )
     else:
-        affected = {node_id} | {k for k in nodes if node_id in ancestors(nodes, k)}
+        affected = execution_graph(nodes).affected_by({node_id})
         if target != profile_id:
             # Only the diagnosed author's affected assignments move. Independent
             # siblings keep their dispatch identity until diagnosed themselves.
@@ -389,7 +397,7 @@ def apply_correction(
             state["events"].append(
                 dict(at=time.time(), event="invalidated", node=key, previous=old)
             )
-            state["nodes"][key] = dict(status="pending", attempt=old["attempt"])
+            state["nodes"][key] = invalidate(old)
         if request["kind"] == "quality":
             budget.spend()
     record["budget_remaining"] = budget.remaining
@@ -397,28 +405,6 @@ def apply_correction(
     state.setdefault("corrections", []).append(validated)
     ledger.save(state, "correction_decided", node=node_id, decision=decision, target=target)
     return record
-
-
-def possible_actions(state: State, node: Node, dispatch: Dispatch) -> list[str]:
-    """Show coordinator operations whose diagnosis still needs evidence."""
-    report = dispatch.get("report", {})
-    if report.get("stage_result") == "APPROVAL_REQUIRED":
-        return ["resume-approved"]
-    if node["task"] in state.get("escalation_stops", {}):
-        return ["resume-task"]
-    if report.get("observed_source_drift"):
-        return ["reintake"]
-    if (
-        report.get("terminal")
-        and report.get("outcome") == "BLOCKED"
-        and report.get("stage_result") == "CHECKS_REQUESTED"
-        and dispatch.get("role") == "judge"
-        and node["stage"] == "review"
-    ):
-        return ["revise"]
-    if report.get("terminal") and dispatch.get("role") in {"implementer", "tester", "judge"}:
-        return ["correct"]
-    return ["retry"]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -451,8 +437,8 @@ class WorkerCorrectionSummary(TypedDict):
     cause: Literal["static", "tests", "docs", "review"]
     reason: str
     handoff: str
-    evidence: Report | ReportSummary
-    report_ref: NotRequired[ReportRef]
+    evidence: ReportSummary
+    report_ref: ReportRef
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
@@ -484,6 +470,7 @@ def worker_context(state: State, task_id: str) -> WorkerCorrection:
             "reason": record["reason"],
             "handoff": record["handoff"],
             "evidence": deepcopy(record["evidence"]),
+            "report_ref": record["report_ref"],
         }
         for record in state.get("corrections", [])
         if record["task_id"] == task_id

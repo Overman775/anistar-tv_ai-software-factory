@@ -2,13 +2,13 @@
 
 Use `.factory/tooling/bin/cli lessons`
 from the project root. Run `packet EVENT` for the incident, sources and full
-catalog. For a completed run, review all entries in `event.incidents` together.
+catalog. For a completed run, review all entries in `event.incidents` together. Each incident’s `accepted_reports` identifies the accepted version of each step. Use `reports` for the history of superseded and current attempts.
 Each entry contains its task reports, confirmed reuse and linked retrospective notes.
-Publish each supported observation with `publish EVENT - --incident INCIDENT_ID`
+Publish each supported observation with `publish EVENT LESSON_ID --dispatch DISPATCH --incident INCIDENT_ID`
 using the relevant packet key. If multiple independent incidents support the same
 card, update its current revision for each additional incident. Complete the event
 once after reviewing all entries. For every relevant report reference, use the existing workflow
-`read-report REF.json` command with a temporary file containing that exact reference.
+`read-report RUN NODE DISPATCH` command with the IDs from that exact reference.
 Compare failed attempts with the corrected, accepted result for the same incident. Check the source before
 generalizing. Missing evidence: retain the event for retry or skip a claim
 that the available evidence fails to support.
@@ -62,16 +62,16 @@ that it supplies the step that resolved that specific problem in the source
 and still permits the nearest allowed case. Check any implementation link
 from the card’s directory.
 
-Publish a JSON decision through `publish EVENT -` (stdin), adding
-`--revision HASH` from the packet for an update. Example input:
+Register the typed card using `factory.runtime.graph_inputs.propose_lesson(workspace, Lesson(...))`. Pass its ID to `publish EVENT LESSON_ID --dispatch DISPATCH`, adding
+`--revision HASH` from the packet for an update. The card fields below illustrate the proposed action:
 
-```json
-{"id":"confirm-current-packet","scope":"factory","title":"Confirm the current packet","applies_when":"Coordinator receives READY after a multipart handoff","observed":"A stale receipt named the previous assignment","action":"Check the current assignment, digest and coverage of all part numbers.","allowed_case":"A repeated read is valid when all parts were read.","roles":["orchestrator"],"tags":["packet","handoff","квитанция","пакет","передача"]}
+```python
+Lesson.model_validate({"id":"confirm-current-packet","scope":"factory","title":"Confirm the current packet","applies_when":"Coordinator receives READY after a multipart handoff","observed":"A stale receipt named the previous assignment","action":"Check the current assignment, digest and coverage of all part numbers.","allowed_case":"A repeated read is valid when all parts were read.","roles":["orchestrator"],"tags":["packet","handoff","квитанция","пакет","передача"]})
 ```
 
 The host assigns provenance. A conflict requires a fresh packet and comparison.
 After publishing this event’s cards, repeat each saved query. Report whether
 the intended ID appears in the ordinary top three. For a needed repair,
 return its ID, symptom query and expected action; leave Capture pending until
-the coordinator queues the targeted Edit. Otherwise call `complete EVENT --reason "SHORT OUTCOME"`. When no card changed, give the reason for that decision.
+the coordinator queues the targeted Edit. Otherwise call `complete EVENT --dispatch DISPATCH --reason "SHORT OUTCOME"`. When no card changed, give the reason for that decision.
 Complete a duplicate or unsupported case without adding a card.

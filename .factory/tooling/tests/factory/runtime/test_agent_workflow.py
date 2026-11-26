@@ -49,6 +49,25 @@ class WorkflowAgentTests(unittest.TestCase):
             for path in (self.f.root / ".factory/memory").rglob("*")
         }
 
+    def test_replayed_assignment_is_reconciled_across_processes(self) -> None:
+        node = "write-label"
+        schedule = self.result("workflow", "status")
+        ticket = schedule["assignment_tickets"][node]
+        command = ("workflow", "claim", node, "--ticket", ticket)
+        missing = self.invoke("workflow", "claim", node)
+        self.assertNotEqual(missing.returncode, 0)
+        first = self.result(*command)
+        self.assertEqual(first["dispatch"]["dispatch_id"], ticket)
+        replay = self.result(*command)
+        self.assertEqual(
+            (replay["dispatch_id"], replay["status"], replay["action"]),
+            (ticket, "reserved", "reconcile"),
+        )
+        self.assertEqual(self.f.ledger.read()["nodes"][node]["attempt"], 1)
+        self.assertEqual(
+            len([e for e in self.f.ledger.read()["events"] if e["event"] == "reserved"]), 1
+        )
+
     def test_claim_and_retry_plan_without_writes(self) -> None:
         before = self.memory()
         claim = self.result("workflow", "claim", "write-label", "--dry-run")
@@ -63,7 +82,15 @@ class WorkflowAgentTests(unittest.TestCase):
         self.assertEqual(self.memory(), before)
         self.f.start("write-label")
         before = self.memory()
-        retry = ("retry", "write-label", "tests", "fix test failure", "writer terminal")
+        retry = (
+            "retry",
+            "write-label",
+            "tests",
+            "fix test failure",
+            "writer terminal",
+            "--dispatch",
+            self.f.ledger.read()["nodes"]["write-label"]["dispatch_id"],
+        )
         rejected = self.invoke("workflow", *retry, "--dry-run")
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("Cannot retry a live writer", rejected.stderr)

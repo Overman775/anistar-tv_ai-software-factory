@@ -121,7 +121,8 @@ def requirements(
         ],
         "require_test_receipt": test_receipt,
         "require_approval": stage == "review",
-        "require_writes_ready": bool(node.get("owns"))
+        "require_writes_ready": role == "implementer"
+        and bool(node.get("owns"))
         and not any(check["kind"] == "codegen" for check in allowed),
         "require_evidence": stage == "verify",
     }

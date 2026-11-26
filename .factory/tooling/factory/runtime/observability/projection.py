@@ -167,16 +167,12 @@ def session_spans(
 
 
 def workflow_milestones(record: RunObservation) -> Iterator[ObservationEvent]:
-    # Both ordered lists are appended in the same correction transaction. Older
-    # incomplete histories can still expose the markers without inferring identities.
     markers = [
         (e.node, e.decision, e.target) for e in record.events if e.kind == "correction_decided"
     ]
-    details = (
-        iter(record.corrections)
-        if markers == [(c.node, c.decision, c.to_profile) for c in record.corrections]
-        else iter(())
-    )
+    if markers != [(c.node, c.decision, c.to_profile) for c in record.corrections]:
+        raise ValueError("Correction event differs from its graph decision")
+    details = iter(record.corrections)
     for event in record.events:
         if event.kind not in {"retry", "revised", "accepted", "correction_decided"}:
             continue
@@ -196,16 +192,16 @@ def workflow_milestones(record: RunObservation) -> Iterator[ObservationEvent]:
                 fields["factory.correction.decision"] = event.decision
             if event.target:
                 fields["factory.correction.to_profile"] = event.target
-            if correction := next(details, None):
-                fields.update(
-                    {
-                        "factory.correction.from_profile": correction.from_profile,
-                        "factory.correction.cause": correction.cause,
-                        "factory.dispatch.id": correction.author_dispatch,
-                        "factory.correction.evidence_node": correction.evidence_node,
-                        "factory.correction.evidence_dispatch": correction.evidence_dispatch,
-                    }
-                )
+            correction = next(details)
+            fields.update(
+                {
+                    "factory.correction.from_profile": correction.from_profile,
+                    "factory.correction.cause": correction.cause,
+                    "factory.dispatch.id": correction.author_dispatch,
+                    "factory.correction.evidence_node": correction.evidence_node,
+                    "factory.correction.evidence_dispatch": correction.evidence_dispatch,
+                }
+            )
         yield ObservationEvent(f"factory.run.{event.kind}", int(event.at * 1_000_000_000), fields)
 
 
@@ -214,9 +210,6 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
     end = nanos(record.at) if record.at is not None else None
     common = {"factory.run.id": run, "factory.project.id": record.project}
     root = ident(run)
-    assignments = {
-        attempt.dispatch_id: attempt for session in record.sessions for attempt in session.attempts
-    }
     started = end
     starts: dict[str, tuple[str, int, str | None, str | None]] = {}
     current: dict[str, str] = {}
@@ -249,7 +242,6 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
     run_span.events.extend(workflow_milestones(record))
     yield run_span
     for dispatch, (node, begin, role, harness) in starts.items():
-        assignment = assignments.get(dispatch)
         # A missing terminal event gives only a reservation instant.
         stop, result = finishes.get(dispatch, (None, None))
         yield span(
@@ -265,8 +257,8 @@ def run_spans(record: RunObservation) -> Iterator[Observation]:
                 "factory.dispatch.id": dispatch,
                 "factory.outcome": result,
                 "factory.attempt.current": dispatch in record.current_dispatches,
-                "factory.role": role or (assignment.role if assignment else None),
-                "factory.harness": harness or (assignment.harness if assignment else None),
+                "factory.role": role,
+                "factory.harness": harness,
             },
             failed=result in {"FAIL", "BLOCKED", "blocked"},
             reports=(record.reports[dispatch],) if dispatch in record.reports else (),

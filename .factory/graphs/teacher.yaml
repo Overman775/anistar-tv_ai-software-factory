@@ -1,0 +1,16 @@
+id: teacher
+entry: event
+nodes:
+  event:
+    decision: teacher_event
+    routes:
+      - {outcome: observation, priority: 50, target: reconcile}
+      - {outcome: prior_assignment, priority: 15, target: inspect}
+      - {outcome: waiting, priority: 30, target: wait_owner}
+      - {outcome: completed, priority: 40, target: complete}
+      - {outcome: claim, priority: 10, target: reserve}
+  reserve: {operation: reserve_teacher}
+  reconcile: {operation: reconcile_teacher}
+  inspect: {operation: inspect_teacher}
+  wait_owner: {operation: wait_for_owner}
+  complete: {operation: completed_event}

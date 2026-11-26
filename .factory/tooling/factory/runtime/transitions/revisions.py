@@ -26,6 +26,7 @@ from factory.runtime.history import report_history
 from factory.runtime.run_journal import RunJournal
 from factory.runtime.scheduling import escalation
 from factory.runtime.scheduling.assignment import worker_node
+from factory.runtime.scheduling.attempt_graph import invalidate as invalidate_attempt
 from factory.runtime.scheduling.escalation_policy import RetryBudget
 from factory.runtime.workflow_config import (
     check_config,
@@ -36,12 +37,13 @@ from factory.runtime.workflow_config import (
 from factory.runtime.workflow_core import acceptance_guard, digest, relative, require, snapshot
 from factory.runtime.workflow_graph import (
     ancestors,
+    execution_graph,
     overlaps,
     parse_graph,
     validate_assignment_lineage,
     validate_graph,
 )
-from factory.runtime.workflow_sources import lock_source
+from factory.runtime.workflow_sources import SOURCE, lock_source
 from factory.tasks.contracts import Task
 
 
@@ -168,6 +170,9 @@ def _revise(
     require(not active_commands(s), "Unresolved project commands")
     check_config(s)
     graph = parse_graph(graph)
+    for name, proposal in graph["sources"].items():
+        if "hash" not in proposal:
+            graph["sources"][name] = SOURCE.validate_python(lock_source(journal.root, proposal))
     new_nodes = validate_graph(graph, s["config"], journal.root)
     old = s["graph"]
     if graph == old and retry_tests is None:
@@ -219,13 +224,12 @@ def _revise(
             n["task"] in strengthened and n["stage"] in {"verify", "review", "accept"}
         ):
             invalidate.add(n["id"])
-    invalidate |= {k for k in new_nodes if ancestors(new_nodes, k) & invalidate}
+    dependencies = execution_graph(new_nodes)
+    invalidate = dependencies.affected_by(invalidate)
     test_retry = None
     if retry_tests is not None:
         test_retry = _prepare_test_retry(journal, s, graph, new_nodes, retry_tests, invalidate)
-        invalidate |= {test_retry["node"]} | {
-            k for k in new_nodes if test_retry["node"] in ancestors(new_nodes, k)
-        }
+        invalidate.update(dependencies.affected_by({test_retry["node"]}))
     for a, old_assignment in old["agents"].items():
         if a in s["sessions"]:
             require(
@@ -264,15 +268,13 @@ def _revise(
                     and n["task"] not in s.get("escalation_stops", {})
                 )
             ):
-                s["nodes"][n["id"]] = {
-                    "status": "pending",
-                    "attempt": prev["attempt"],
-                }
+                s["nodes"][n["id"]] = invalidate_attempt(prev)
     details: dict[str, object] = {}
     if test_retry is not None:
         tests = test_retry["node"]
         RetryBudget.for_task(s, new_nodes[tests]["task"], "tests").spend()
-        s["nodes"][tests] = {"status": "pending", "attempt": test_retry["attempt"]}
+        s["nodes"][tests] = invalidate_attempt(s["nodes"][tests])
+        s["nodes"][tests]["attempt"] = test_retry["attempt"]
         details["test_retry"] = test_retry
     journal.save(s, "revised", reason=reason, previous_graph=old, **details)
 
@@ -297,6 +299,15 @@ def _targeted_check_request(
     ]
     if not extra:
         return False
+    requested = {
+        key
+        for assessment in report.get("criterion_assessments", {}).values()
+        for key in assessment.get("requested_checks", [])
+    }
+    require(
+        {key for item in extra for key in item.get("required_check_ids", [])} == requested,
+        "Focused assignment must match the Judge's requested checks",
+    )
     extra_ids = {entry["id"] for entry in extra}
     require(set(nodes) - old_ids == extra_ids, "Check request adds only focused verification nodes")
     require(old["agents"] == state["graph"]["agents"], "Check request cannot change agents")
@@ -448,7 +459,7 @@ def _refresh_config(
     old_policy = old_config["_project"]
     old_data = old_policy["data"]
     new_config = deepcopy(old_config)
-    contents = new_config.setdefault("_documents", {})
+    contents = new_config["_documents"]
     hashes = new_config.setdefault("_project_documents", {})
     requested = {str(relative(root, name)) for name in documents or []}
     documents_in_config = document_paths(old_config)
@@ -550,12 +561,9 @@ def reintake(
             n["id"]: (
                 previous_nodes[n["id"]]
                 if n["id"] in previous_nodes and previous_nodes[n["id"]]["status"] == "blocked"
-                else {
-                    "status": "pending",
-                    "attempt": previous_nodes[n["id"]]["attempt"]
-                    if n["id"] in previous_nodes
-                    else 0,
-                }
+                else invalidate_attempt(previous_nodes[n["id"]])
+                if n["id"] in previous_nodes
+                else {"status": "pending", "attempt": 0}
             )
             for n in graph["nodes"]
         }

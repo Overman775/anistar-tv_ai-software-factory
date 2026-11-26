@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from factory.diagnostics.diagnostic_journal import DiagnosticJournal
+    from factory.processes.records import ProcessRepository
     from factory.runtime.history.history_repository import HistoryRepository
     from factory.runtime.knowledge.case_index import CaseIndex
     from factory.runtime.knowledge.lesson_index import LessonIndex
@@ -19,6 +20,12 @@ if TYPE_CHECKING:
 
 class SQLiteDatabaseBackend:
     """Route each operation to the SQLite database that owns its data."""
+
+    @property
+    def processes(self) -> ProcessRepository:
+        from factory.database.sqlite import sqlite_process_repository
+
+        return sqlite_process_repository
 
     @property
     def runs(self) -> RunRepository:
@@ -83,13 +90,24 @@ class SQLiteDatabaseBackend:
     def has_active_workflow(self, factory_root: Path) -> bool:
         """Read-only preflight runs before the factory environment or package exists."""
         import sqlite3
-        from contextlib import closing
+
+        from factory.database.sqlite.layout import layout_present, read_snapshot
+        from factory.database.sqlite.workflow_schema import SCHEMA
 
         state = factory_root / "memory/workflow.sqlite3"
         if not state.exists():
             return False
-        with closing(sqlite3.connect(state.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+
+        def active(db: sqlite3.Connection) -> bool:
             return (
-                db.execute("SELECT 1 FROM runs WHERE current=1 AND status='active'").fetchone()
+                layout_present(db, SCHEMA, "workflow database")
+                and db.execute(
+                    "SELECT 1 FROM runs WHERE current=1 AND status='active' UNION ALL SELECT 1 FROM process_runs WHERE closed=0 LIMIT 1"
+                ).fetchone()
                 is not None
             )
+
+        try:
+            return read_snapshot(state.resolve(), active, 5)
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Workflow database: {exc}") from exc

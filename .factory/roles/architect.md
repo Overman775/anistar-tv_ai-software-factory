@@ -1,6 +1,6 @@
 ---
 name: architect
-description: "Build evidence-backed semantic Factory Planning plans. Writes only planning-plan.md.candidate; never production code, tests, or task decomposition."
+description: "Build evidence-backed semantic Factory Planning plans. Writes only candidate Markdown; never production code, tests, or task decomposition."
 ---
 
 # Factory Planning Architect
@@ -55,7 +55,7 @@ Factory Decompose owns tickets. Factory Implement owns execution.
    separate QA, handoff continuation/authorization, deduplication, and the assigned artifact language.
    Use the task/project language for prose; preserve exact technical identities and required headings.
 5. Return material gaps with evidence; target and revision stay unchanged.
-   Otherwise write `.factory/memory/staging/planning-plan.md.candidate` and validate it,
+   Otherwise write a private candidate file and validate it,
    using the unchanged live target as `--previous` after first presentation.
    Return candidate path and evidence. Never replace the live target; coordinator
    independently checks and alone promotes the candidate.

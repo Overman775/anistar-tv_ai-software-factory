@@ -1,9 +1,9 @@
 # Doc Writer Contract
 
-For assigned Implement findings, follow the supplied review finding transitions.
-Delegated handoff follows `.factory/contracts/common/worker-rules.md`. For long work,
-emit progress after coverage check, document write, and reference verification;
-parent validates checkpoints and explicit failures.
+Inspect `workflow note NODE --dispatch TICKET` to recover edited files and missing
+reviews. Record edits with `--request ID --kind documents --path FILE
+--observation TEXT`. Record the content and link check with `--kind document-review`.
+One terminal report can supply both records in `role_material`.
 
 ## Required Reading
 

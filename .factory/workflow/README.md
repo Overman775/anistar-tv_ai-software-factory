@@ -1,6 +1,6 @@
 # Workflow helpers
 
-The parent agent is the scheduler. These Python helpers load YAML, validate a
+The Orchestrator follows the scheduling graph. Claim returns a single adapter action for the ticket. A replay returns a reconciliation instruction. These Python helpers load YAML, validate a
 proposed graph, reserve local resources, preserve evidence/counters and invoke
 ACP and declared required check commands. They are not a daemon, sandbox, semantic verifier or cross-machine queue.
 Prepare Python 3.14 with [factory setup](../skills/factory-install/references/integration.md#interpreter).
@@ -46,21 +46,19 @@ index; Git data are shared and process access is governed by the actual host.
 
 ## Configuration and preparation
 
-Set `CONFIG_SNAPSHOT` to a writable path in OS temporary storage.
+Read the instructions and create the run with the same pin.
 
 ```bash
-.factory/tooling/bin/cli workflow config > "$CONFIG_SNAPSHOT"
-.factory/tooling/bin/cli workflow read-instructions "$CONFIG_SNAPSHOT" roles/orchestrator.md
-.factory/tooling/bin/cli workflow validate workflow.json
-.factory/tooling/bin/cli workflow init workflow.json --config-pin "$CONFIG_SNAPSHOT"
+config_pin="$(.factory/tooling/bin/cli workflow config)"
+.factory/tooling/bin/cli workflow read-instructions "$config_pin" roles/orchestrator.md
+proposal_id="$(PYTHONPATH=.factory/tooling .factory/.venv/bin/python .factory/tooling/examples/example_workflow.py)"
+.factory/tooling/bin/cli workflow validate "$proposal_id"
+.factory/tooling/bin/cli workflow init "$proposal_id" --config-pin "$config_pin"
 ```
 
-The CLI passes the decoded snapshot to `Ledger.init(graph, config, config_pin=...)`. The Python entry point checks the path and file hashes before creating the run.
-
-For Implement, save the snapshot in OS temporary storage and use verified
-`read-instructions` content for factory instructions. See [orchestration entry](orchestration.md#entry)
-for the complete reading sequence. Bare `init` remains a low-level compatibility
-interface; it does not verify what the coordinator read before initialization.
+The pin identifies the configuration path and the hashes of all accepted instructions.
+Each pre-run read reloads the configuration and verifies the bytes it returns.
+Initialization checks the pin before opening the run. See the [orchestration entry](orchestration.md#entry).
 
 Human edits `.factory/factory.yaml`; the orchestrator writes the graph. Profile
 paths are relative to YAML. `models.*.id: null` explicitly permits the backend's
@@ -70,7 +68,7 @@ adapter mapping. The shipped native model is a configurable choice, not proof
 of availability on another account. Native defaults to Codex; changing native
 harness/profile requires the matching host adapter.
 
-The file `.factory/tooling/examples/example.workflow.json` is a runnable structural example
+The file `.factory/tooling/examples/example_workflow.py` is a runnable structural example
 for a small low-risk label correction. Replace source/outcome/scope with the real
 request, and replace the explicit REPLACE_WITH_ACTUAL_TEST command placeholder.
 It does not authorize edits or supply actual PASS evidence.
@@ -80,7 +78,11 @@ Graph:
 - `sources`: stable ID → `text` for a direct instruction, or project-relative
   `path`; init records raw content_hash plus normalized semantic hash and copies a snapshot. Approved-plan sources
   additionally require the existing plan validator/approval tuple at intake. Every source
-  carries `acceptance`; bounded runs may declare `selected_acceptance_ids`.
+  carries `acceptance`. For a bounded approved plan pass `scope`, `selected_acceptance_ids` and any
+  `directive` to `graph_inputs.propose_plan`. Pass the completed Decompose process ID as `decomposition_run` for a published task set.
+  `workflow status` exposes a stop ID for each pending external prerequisite under `source_stops`.
+  Resolve one with `workflow resume-task TASK EVIDENCE --stop STOP_ID`. The graph preserves other pending
+  prerequisites, resolution evidence and retry budgets.
 - `tasks`: stable ID → `slice`, `source`, `outcome`, `reason`, `risk`
   (`low|moderate|high`), `kind` (`feature|task|refactor|fix|docs|integration`),
   `independent_review`, exact changed-file `scope`, task `depends_on`,
@@ -114,10 +116,10 @@ Role ownership and mandatory project command choice are also semantic checks.
 ## Native/ACP dispatch and results
 
 ```bash
-.factory/tooling/bin/cli workflow claim write-label
+.factory/tooling/bin/cli workflow claim write-label --ticket TICKET
 # Parent inspects actual host capacity and uses selected adapter to start/continue.
-.factory/tooling/bin/cli workflow bind write-label ACTUAL_HANDLE ACTUAL_MODEL
-.factory/tooling/bin/cli workflow finish write-label /path/to/result.json
+.factory/tooling/bin/cli workflow bind write-label ACTUAL_HANDLE ACTUAL_MODEL --dispatch DISPATCH_ID
+.factory/tooling/bin/cli workflow finish write-label REPORT_ID
 ```
 
 Claim is atomic and creates `dispatch_id` before external side effects. It blocks
@@ -139,13 +141,13 @@ packet inline or by the file route below; ACP persists it in its prompt.
 ```
 
 The workflow ledger lives in `.factory/memory/workflow.sqlite3` from intake through
-cleanup. Use `cli workflow show` to inspect the current run. A successful close
+cleanup. Use `cli workflow status` to inspect the current run. A successful close
 commits the terminal state and the final Teacher job together. Cancellation commits
 the state alone. Cleanup releases the current run slot. Search reads the published
 rows from the database. Query `closed_steps` for each final node and
 `closed_attempts` for its report references. Packets, original reports, check logs, telemetry and attachments live in the same database.
 Native delivery reads the stored packet. ACPX materializes a temporary packet for its file interface.
-Workflow schema 2 retains local Teacher search evidence. Only eligible production observations enter the OTLP delivery feed. Version 1 data migrates locally on first open. Packet receipts reference the stored packet by artifact ID and track served and acknowledged counts per recipient. Cleanup verifies the stored bytes and removes registered working copies.
+The workflow database retains local Teacher search evidence. Only eligible production observations enter the OTLP delivery feed. An empty database is initialized on first use. Existing databases must match the current layout. Packet receipts reference the stored packet by artifact ID and track served and acknowledged counts per recipient. Cleanup verifies the stored bytes and removes registered working copies.
 
 After closing a run, query `acpx_sessions` for collection status and session cost,
 `acpx_request_usage` for per-request counters, and `acpx_attempts` for dispatch and model
@@ -170,11 +172,12 @@ User instructions and lesson cards travel separately in Git.
 ## Repair, revision and recovery
 
 ```bash
-.factory/tooling/bin/cli workflow unknown write-label "Lost transport outcome"
+.factory/tooling/bin/cli workflow unknown write-label "Lost transport outcome" --dispatch DISPATCH_ID
 # Reconcile actual runtime/files first; evidence below must be real.
-.factory/tooling/bin/cli workflow retry write-label recovery "Reason" "Proof old writer stopped"
-.factory/tooling/bin/cli workflow revise /path/to/revised-graph.json "Reason for technical change"
-.factory/tooling/bin/cli workflow reintake /path/to/revised-graph.json "User changed the baseline" "Reference to actual authorization" --document docs/development.md
+.factory/tooling/bin/cli workflow resolve write-label blocked "Observed old worker terminated" --dispatch DISPATCH_ID
+.factory/tooling/bin/cli workflow retry write-label recovery "Reason" "Proof old writer stopped" --dispatch DISPATCH_ID
+.factory/tooling/bin/cli workflow revise PROPOSAL_ID "Reason for technical change"
+.factory/tooling/bin/cli workflow reintake PROPOSAL_ID "User changed the baseline" "Reference to actual authorization" --document docs/development.md
 .factory/tooling/bin/cli workflow replace-session author "Reason" "Proof old session stopped" "Handoff summary"
 ```
 
@@ -200,7 +203,7 @@ When BugHunter traces a blocked Tester verification to production code, submit
 the revision and the test retry together, before Implementer edits the files:
 
 ```bash
-.factory/tooling/bin/cli workflow revise /path/to/revised-graph.json "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
+.factory/tooling/bin/cli workflow revise PROPOSAL_ID "Diagnosis connects this failure to the production repair" --retry-tests TEST_NODE FAILED_DISPATCH DIAGNOSIS_NODE REPAIR_NODE
 ```
 
 Identify the exact failure in the diagnosis and explain the owner's responsibility
@@ -218,9 +221,7 @@ instructions and `read-project` returns accepted coordinator policy and
 instructions. Workers receive accepted source and instruction snapshots in both
 native and ACP packets. Candidate edits may proceed inside ownership and remain
 subject to current scope and command-input checks. Changing executable tooling
-or runtime settings requires compatible tooling for the run. For a legacy
-hash-only document, restore bytes matching the recorded digest, or explicitly
-authorize a replacement through re-intake where supported.
+or runtime settings requires compatible tooling for the run. The graph must contain the accepted document snapshots.
 Do not reset budgets by moving the same failure into another stage/run.
 
 The operating system releases the workflow lock when its holder exits. Keep the lock file in place
@@ -234,8 +235,11 @@ without memory. Reviewers never inherit an author's session.
 The graph carries `"after_archive": "teacher"` from intake. Omitted input uses this default. The run-level step depends on successful archival of all accepted tasks. `cli workflow status` reports its status and the exact job ID once queued. Cancelled runs show `skipped`.
 
 Render with `cli workflow diagram`; the projection uses unique logical-agent
-lifelines and dispatch/dependency order. With `--json`, the workflow result contains
-`run_id`, `status`, the locked `graph`, and `node_statuses` keyed by node ID.
+lifelines and dispatch/dependency order. With `--json`, the result contains the run ID and Mermaid diagram.
+Use `cli workflow diagram --view pydantic` to inspect the executable steps and their final join.
+A step with multiple incoming prerequisites lists its additional waits in its label.
+With `--json` this view returns `run_id` and the Mermaid source in `mermaid`.
+The matching `cli decompose graph --view pydantic` renders task dependencies after the normal gates.
 Use `cli workflow status` for scheduling and recovery actions. The configured
 [router](router.md) selects roles, team composition
 and model profiles; `factory.yaml` supplies the available options. See `.factory/workflow/orchestration.md` for interpretation and loops.
@@ -247,7 +251,7 @@ pass argv without shell interpolation, materialize profile instructions, journal
 create/prompt before transport and leave outcome interpretation to the parent.
 Configuration/fixture checks do not establish live Codex/ZCode behavior.
 
-For recovered output use `resolve NODE running EVIDENCE`, then validate/finish
+For recovered output use `resolve NODE running EVIDENCE --dispatch DISPATCH_ID`, then validate/finish
 the original dispatch without a repeat. A confirmed terminal failure/cancellation
 may resolve to blocked. Only an unbound, unsent creation can resolve to reserved.
 For a failed unbound ACP creation, reconcile it to blocked, replace the session
@@ -335,7 +339,7 @@ read-only verification procedure.
 The annotated example additionally shows ZCode/GLM and Pi/DeepSeek; verify
 backend IDs, credentials and required tools before selecting them.
 
-After `claim NODE`, `cli workflow packet NODE` saves the generated inline packet in SQLite and returns it. It
+After `claim NODE --ticket TICKET`, `cli workflow packet NODE` saves the generated inline packet in SQLite and returns it. It
 uses `cli context` to return role/contract, worker adapter, shared assignment,
 stage-specific rules, project documents, locked source, dependency results and
 review findings, task-scoped correction/replacement history, assignment IDs,
@@ -360,7 +364,7 @@ The receipt records served and acknowledged ordinals for the bound handle.
 The CLI compares the caller-supplied handle with the ledger's bound recipient.
 Host events establish which worker was sent the bootstrap and issued each call,
 and whether output was displayed in full. Ledger acknowledgements establish
-transport progress. Legacy acknowledgements and receipts require replay from chunk one.
+transport progress.
 
 Use `prepare-packet NODE --with-diagnostics` to get separate `bootstrap` and
 `diagnostics` objects. Send only `bootstrap` to the worker. Diagnostics report
@@ -427,8 +431,8 @@ After claim/bind of a node with `project-checks`, run:
 
 The coordinator or the bound role may call this helper; it does not call an LLM
 or require an additional model turn just to execute a command. Normal node/session
-identity remains in the ledger. The JSON `result` is the check record to copy
-unchanged into `checks` in the role report. Read `result.result`: CLI `ok: true`
+identity remains in the ledger. Pass the returned execution ID to `workflow prepare-report NODE DRAFT_ID EXECUTION_ID`
+to attach the authoritative receipt. Read `result.result`: CLI `ok: true`
 means the execution record was saved, not that the check passed. Missing program,
 timeout or interruption is BLOCKED, a nonzero exit is FAIL. No receipt means NOT_RUN,
 not PASS. Required checks cannot be excused via report `not_applicable`; applicability
@@ -495,11 +499,15 @@ through its own process and the selected parent adapter before delivery.
 
 ## Correct a failed assignment or hand off a blocker
 
-After all in-flight work is terminal and reconciled, the coordinator writes a
-JSON decision (paths below belong to the consuming project's state directory):
+After all in-flight work is terminal and reconciled, read `workflow status` and select the
+owner and evidence dispatch from `repair_routes`. Register a typed correction in the run checkout:
 
-```json
-{
+```python
+from pathlib import Path
+from factory.runtime.graph_inputs import propose_correction
+from factory.runtime.scheduling.escalation import CorrectionRequest
+
+request: CorrectionRequest = {
   "author_dispatch_id": "COPY_FROM_CORRECTED_NODE",
   "evidence_node": "verify-label",
   "evidence_dispatch_id": "COPY_FROM_TERMINAL_REPORT",
@@ -509,11 +517,12 @@ JSON decision (paths below belong to the consuming project's state directory):
   "terminal_evidence": "Actual runtime/process termination evidence",
   "handoff": "Source/AC, current changes, rejected hypotheses, exact logs and next question"
 }
+print(propose_correction(Path.cwd(), request))
 ```
 
 ```bash
-.factory/tooling/bin/cli workflow correct write-label .factory/memory/state/correction.json
-.factory/tooling/bin/cli workflow resume-task label "Verified resolution or human decision"
+.factory/tooling/bin/cli workflow correct write-label CORRECTION_ID
+.factory/tooling/bin/cli workflow resume-task label "Verified resolution or human decision" --stop STOP_ID
 ```
 
 `correct` supports profiles with escalation in Implement. Cause is
@@ -551,8 +560,8 @@ For escalating profiles, ordinary recovery cannot bypass a terminal FAIL/BLOCKED
 report: use correct, followed by resume-task for a resolved blocker.
 
 For `replace-session`, a single-task agent accepts a plain handoff string.
-A multi-task agent requires a JSON object string mapping every assigned task ID
-to its own handoff; packets select only the current task's entry. Replacement
+A multi-task agent requires one `--task-handoff TASK SUMMARY` per assigned task.
+Each packet receives only its task's entry. Replacement
 itself remains bookkeeping, not backend termination or a budgeted correction.
 
 ## Continue after an external approval
@@ -585,7 +594,7 @@ review are required. Use ordinary correction for test or code failures.
 ## Audit corrections: integration and source recovery
 
 After an authorized reintake of a SOURCE_DRIFT-blocked run, a source_reintake stop
-retains the old report/history. Use `resume-task TASK RESOLUTION_EVIDENCE`
+retains the old report/history. Use `resume-task TASK RESOLUTION_EVIDENCE --stop STOP_ID`
 to reopen drift-blocked work and its dependents, spending the separate recovery
 budget. Quality failures are not converted into free source recovery. Environment
 stops also use recovery exhaustion, not an unrelated exhausted tests/static budget.
@@ -621,7 +630,7 @@ actions, dispatches, command ownership, correction routes and blockers.
 `next` remains an alias. Pass the returned cursor as `--after CURSOR` to detect
 an unchanged response.
 Reconcile recorded handles and unknown dispatches before retry. Read immutable
-reports with `read-report REF.json`, then acknowledge a processed result with
+reports with `read-report RUN NODE DISPATCH`, then acknowledge a processed result with
 `ack-result NODE DISPATCH_ID`. `pause REASON` and `resume` record the user's
 decision. Final completion requires successful `archive completed SUMMARY`.
 The native adapter depends on the host coordinator for launches and wakeups.

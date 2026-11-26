@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 
 from factory import file_reader
 from factory.decompose.contracts import Envelope, LoadedTask
+from factory.dependency_graph import compile_dependencies
 from factory.gates.gate_contract import (
     EvidenceText,
     GateCheck,
@@ -71,76 +72,74 @@ def check_decomposition_gates(
     records: dict[str, GateCheck] = {}
     details: dict[str, dict[str, object]] = {}
     payload = json.dumps({"tasks": tasks, "envelopes": envelopes}, ensure_ascii=False)
-    while len(records) < len(checks):
-        ready = [
-            c for c in checks if c["id"] not in records and set(c.get("after", [])) <= set(records)
-        ]
-        if not ready:
-            raise ValueError("Unresolved project check dependency")
-        for check in ready:
-            cid = check["id"]
-            references = [str(receipt), cid]
-            if any(records[k]["status"] != "PASS" for k in check.get("after", [])):
-                records[cid] = evidence(
-                    cid, "BLOCKED", "Prerequisite check did not pass", references
-                )
-                continue
-            try:
-                check_frozen(policy["files"])
-                if artifact_hash(staging, source_lock) != before:
-                    raise ValueError("Decomposition artifacts changed during checks")
-                if check["kind"] == "observation":
-                    raise ValueError("Decomposition check must be a command")
-                execution = check["execution"]
-                argv = [
-                    sys.executable,
-                    str(safe_path(root, execution["argv"][1])),
-                    *execution["argv"][2:],
-                ]
-                for rel in execution["inputs"]:
-                    safe_path(root, rel)
-                cwd = safe_path(root, execution["cwd"], exists=False)
-                if not cwd.is_dir():
-                    raise ValueError("Missing gate working directory")
-                prefix = Path(output_dir) / (cid + "-" + uuid.uuid4().hex)
-                stdout, stderr = Path(str(prefix) + ".stdout"), Path(str(prefix) + ".stderr")
-                result = run_process(
-                    execution | {"argv": argv},
-                    cwd,
-                    stdout,
-                    stderr=stderr,
-                    input_bytes=payload.encode("utf-8"),
-                )
-                details[cid] = {
-                    "argv": argv,
-                    "cwd": str(cwd),
-                    **result,
-                    "stdout": file_reader.read_text(stdout, encoding="utf-8", errors="replace"),
-                    "stderr": file_reader.read_text(stderr, encoding="utf-8", errors="replace"),
-                    "stdout_path": str(stdout),
-                    "stderr_path": str(stderr),
-                }
-                if result["error"]:
-                    raise ValueError(result["error"])
-                check_frozen(policy["files"])
-                if artifact_hash(staging, source_lock) != before:
-                    raise ValueError("Decomposition artifacts changed during project checks")
-                answer = SKILL_CHECK_RESULT.validate_json(file_reader.read_bytes(stdout))
-                status = answer["status"]
-                if result["exit_code"] != {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[status]:
-                    raise ValueError("Check status/exit code mismatch")
-                records[cid] = evidence(
-                    cid, status, answer["message"], answer["evidence"] + references
-                )
-            except ValidationError as exc:
-                records[cid] = evidence(
-                    cid,
-                    "BLOCKED",
-                    validation_message("Invalid skill gate result", exc, SKILL_CHECK_RESULT),
-                    references,
-                )
-            except (ValueError, TypeError, OSError) as exc:
-                records[cid] = evidence(cid, "BLOCKED", str(exc), references)
+    by_id = {check["id"]: check for check in checks}
+    try:
+        graph = compile_dependencies({cid: check.get("after", []) for cid, check in by_id.items()})
+    except ValueError as exc:
+        raise ValueError("Unresolved project check dependency") from exc
+
+    def run_check(cid: str, parents: frozenset[str]) -> None:
+        check = by_id[cid]
+        references = [str(receipt), cid]
+        if any(records[k]["status"] != "PASS" for k in parents):
+            records[cid] = evidence(cid, "BLOCKED", "Prerequisite check did not pass", references)
+            return
+        try:
+            check_frozen(policy["files"])
+            if artifact_hash(staging, source_lock) != before:
+                raise ValueError("Decomposition artifacts changed during checks")
+            if check["kind"] == "observation":
+                raise ValueError("Decomposition check must be a command")
+            execution = check["execution"]
+            argv = [
+                sys.executable,
+                str(safe_path(root, execution["argv"][1])),
+                *execution["argv"][2:],
+            ]
+            for rel in execution["inputs"]:
+                safe_path(root, rel)
+            cwd = safe_path(root, execution["cwd"], exists=False)
+            if not cwd.is_dir():
+                raise ValueError("Missing gate working directory")
+            prefix = Path(output_dir) / (cid + "-" + uuid.uuid4().hex)
+            stdout, stderr = Path(str(prefix) + ".stdout"), Path(str(prefix) + ".stderr")
+            result = run_process(
+                execution | {"argv": argv},
+                cwd,
+                stdout,
+                stderr=stderr,
+                input_bytes=payload.encode("utf-8"),
+            )
+            details[cid] = {
+                "argv": argv,
+                "cwd": str(cwd),
+                **result,
+                "stdout": file_reader.read_text(stdout, encoding="utf-8", errors="replace"),
+                "stderr": file_reader.read_text(stderr, encoding="utf-8", errors="replace"),
+                "stdout_path": str(stdout),
+                "stderr_path": str(stderr),
+            }
+            if result["error"]:
+                raise ValueError(result["error"])
+            check_frozen(policy["files"])
+            if artifact_hash(staging, source_lock) != before:
+                raise ValueError("Decomposition artifacts changed during project checks")
+            answer = SKILL_CHECK_RESULT.validate_json(file_reader.read_bytes(stdout))
+            status = answer["status"]
+            if result["exit_code"] != {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[status]:
+                raise ValueError("Check status/exit code mismatch")
+            records[cid] = evidence(cid, status, answer["message"], answer["evidence"] + references)
+        except ValidationError as exc:
+            records[cid] = evidence(
+                cid,
+                "BLOCKED",
+                validation_message("Invalid skill gate result", exc, SKILL_CHECK_RESULT),
+                references,
+            )
+        except (ValueError, TypeError, OSError) as exc:
+            records[cid] = evidence(cid, "BLOCKED", str(exc), references)
+
+    graph.run(run_check)
     results = [
         conclude(
             g["id"],

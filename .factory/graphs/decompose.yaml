@@ -1,0 +1,28 @@
+id: decompose
+entry: next
+nodes:
+  next:
+    decision: decomposition_phase
+    routes:
+      - {outcome: intake, target: author}
+      - {outcome: material_ready, target: verify}
+      - {outcome: coverage_gap, target: author}
+      - {outcome: checked, target: reviewer}
+      - {outcome: changes_requested, target: authorize}
+      - {outcome: authorized, target: repair}
+      - {outcome: repair_ready, target: verify}
+      - {outcome: rechecked, target: final_review}
+      - {outcome: semantic_gap, target: planning}
+      - {outcome: approved, target: prepare}
+      - {outcome: install_ready, target: install}
+      - {outcome: published, target: finish}
+  author: {operation: generate_tasks}
+  verify: {operation: verify_coverage}
+  reviewer: {operation: inspect_tasks}
+  authorize: {operation: authorize_repair}
+  repair: {operation: repair_tasks}
+  final_review: {operation: inspect_repair}
+  planning: {operation: return_planning}
+  prepare: {operation: stage_bundle}
+  install: {operation: install_bundle}
+  finish: {operation: complete_bundle}

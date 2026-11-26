@@ -1,481 +1,701 @@
-#!/usr/bin/env python3
-"""Local Review lifecycle. No model calls, remote writes, or Implement graph."""
+"""Coordinate three independent review assignments on the pinned process graph."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
-from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
-from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from uuid import uuid4
 
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
+from pydantic_graph import StepContext
 
-from factory import file_reader
-from factory.cli_output import emit_error
+from factory.cli_output import emit_json
+from factory.database.provider import current_database
+from factory.dependency_graph import compile_dependencies
+from factory.graphs.program import Operations
 from factory.paths import FACTORY_ROOT
-from factory.review.protocol.contracts import IDENTITY_FIELDS, validate_manifest
+from factory.processes import engine
+from factory.processes.records import Attempt, ProcessRun
+from factory.review import subject
+from factory.review.protocol.artifact_io import load_object
+from factory.review.protocol.contracts import IDENTITY_FIELDS
 from factory.review.protocol.diff import load_diff_context
 from factory.review.protocol.evidence import validate_tool_results
 from factory.review.protocol.lenses import validate_lens
-from factory.review.protocol.plan import prepare, questions
-from factory.review.protocol.shapes import InputLock, ReviewAssignment
-from factory.review.render_review_report import render_report
-from factory.review.run_tool_checks import collect_results
+from factory.review.protocol.plan import questions
+from factory.review.protocol.shapes import CommandResult, ReviewAssignment
+from factory.review.render_review_report import render_report_text
+from factory.review.run_tool_checks import collect_results, run_command
 from factory.review.validate_review_protocol import validate_protocol
-from factory.runtime.workflow_config import default_profile
-from factory.runtime.workflow_core import atomic_json, lock
-from factory.validation import validation_message
+from factory.runtime.workflow_core import graph_identity, lock, require
 
-INPUT_LOCK = TypeAdapter[InputLock](InputLock)
 REVIEW_ASSIGNMENT = TypeAdapter[ReviewAssignment](ReviewAssignment)
+DIRECTIONS = {
+    "system-design": "architecture",
+    "runtime-safety": "runtime",
+    "verification-quality": "acceptance",
+}
 
 
-def read(path: str | Path) -> dict[str, Any]:
-    return decode_artifact(path, file_reader.read_bytes(Path(path)))
+async def review_assignment(ctx: StepContext) -> engine.Offer:
+    phase = cast(ProcessRun, ctx.inputs).state.phase
+    direction = next((name for name, expected in DIRECTIONS.items() if phase == expected), None)
+    if direction is None:
+        return engine.Offer("hold", reason="A Reviewer assignment requires an eligible direction")
+    return engine.Offer(direction, "reviewer")
 
 
-def decode_artifact(path: str | Path, raw: bytes) -> dict[str, Any]:
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeError) as exc:
-        raise ValueError(f"{path}: invalid JSON: {exc}") from None
-    if not isinstance(value, dict):
-        raise ValueError(f"{path}: Review artifact must be a JSON object")
-    return value
-
-
-def write(path: str | Path, data: object) -> None:
-    # Immutable attempt files; callers may never replace a healthy result.
-    with Path(path).open("x", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-
-
-@contextmanager
-def locked(run: Path, legacy_owner_pid: int | None = None) -> Iterator[None]:
-    if not (run / "inputs.json").is_file():
-        raise ValueError("review run is not initialized")
-    with lock(run / ".review.lock", create_parents=False):
-        marker = run / ".busy"
-        if marker.exists() or marker.is_symlink():
-            if legacy_owner_pid is None:
-                raise ValueError(
-                    "legacy .busy has no owner identity; verify the old operation stopped"
-                )
-            if marker.is_symlink() or not marker.is_dir() or any(marker.iterdir()):
-                raise ValueError("legacy .busy is not an empty directory")
-        if legacy_owner_pid is not None:
-            if os.name == "nt" or legacy_owner_pid <= 0:
-                raise ValueError("legacy owner PID verification requires a positive POSIX PID")
-            try:
-                os.kill(legacy_owner_pid, 0)
-            except ProcessLookupError:
-                pass
-            else:
-                raise ValueError("legacy owner PID is still active")
-        yield
-        if legacy_owner_pid is not None and marker.is_dir():
-            marker.rmdir()
-
-
-def hashes(paths: Iterable[str]) -> dict[str, str | None]:
-    return {
-        p: sha256(file_reader.read_bytes(Path(p))).hexdigest() if Path(p).is_file() else None
-        for p in sorted(set(paths))
-    }
-
-
-def fresh(run: Path, *, upgrade_legacy: bool = False) -> dict[str, Any]:
-    manifest_path = run / "manifest.json"
-    manifest_bytes = file_reader.read_bytes(manifest_path)
-    try:
-        lock = INPUT_LOCK.validate_python(read(run / "inputs.json"))
-    except ValidationError as exc:
-        raise ValueError(validation_message("Invalid review input lock", exc, INPUT_LOCK)) from None
-    if sha256(manifest_bytes).hexdigest() != lock["manifest_sha256"]:
-        raise ValueError("review manifest drift")
-    manifest = decode_artifact(manifest_path, manifest_bytes)
-    if Path.cwd().resolve() != Path(lock["workspace"]):
-        raise ValueError("run must be used from its reviewed workspace")
-    actual = hashes(lock["files"])
-    changed = {p for p in actual if actual[p] != lock["files"][p]}
-    if changed:
-        # Lock-only migration from the three exact files present in dfe5cfba.
-        legacy = {
-            str(
-                (FACTORY_ROOT / "tooling/factory/runtime/command_worker.py").resolve()
-            ): "1f3d94ab067ff89e744fc518901a31fb35f9792bc5596599c65cea0adb095e22",
-            str(
-                (FACTORY_ROOT / "tooling/factory/review/review_run.py").resolve()
-            ): "f8fbac0a730eb92908f0da6fea92fc6097785de4441fe677dff2fcf3b98916ec",
-            str(
-                (FACTORY_ROOT / "skills/factory-code-review/references/run-contract.md").resolve()
-            ): "5296c319ffd9af0d04f21e2265d4549a522de0dc4d96b1ea76fcd6295fd5afa2",
-        }
-        reviewed = set(manifest["scope_files"]) | set(manifest["source_evidence"])
-        reviewed.update(p for c in manifest["checks"] for p in c["execution"].get("inputs", []))
-        if manifest.get("diff_file"):
-            reviewed.add(manifest["diff_file"])
-        reviewed_paths = {str(Path(p).resolve()) for p in reviewed}
-        if (
-            not upgrade_legacy
-            or not changed <= legacy.keys()
-            or any(lock["files"].get(p) != digest for p, digest in legacy.items())
-            or any(str(Path(p).resolve()) in reviewed_paths for p in changed)
-            or any(actual[p] is None for p in changed)
-        ):
-            if upgrade_legacy:
-                raise ValueError(
-                    "review source drift outside the supported lock-only upgrade; "
-                    "start a new run and retain this run"
-                )
-            raise ValueError("review source drift; start a new run")
-    if (
-        manifest["mode"] in {"pr", "branch"}
-        and subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        != manifest["head_sha"]
-    ):
-        raise ValueError("review HEAD changed; new intake required")
-    if manifest["mode"] in {"pr", "branch"} and subprocess.check_output(
-        ["git", "status", "--porcelain", "--untracked-files=no"], text=True
-    ):
-        raise ValueError("review checkout changed; new intake required")
-    errors = validate_manifest(manifest)
-    if errors:
-        raise ValueError("; ".join(errors))
-    if changed:
-        lock["files"] = actual
-        atomic_json(run / "inputs.json", INPUT_LOCK.validate_python(lock))
-    return manifest
-
-
-def attempts(run: Path, kind: str, key: str) -> list[tuple[int, Path]]:
-    """Enumerate only this exact ID's numbered attempt files."""
-    prefix = f"{kind}-{key}-"
-    pattern = re.compile(re.escape(prefix) + r"([1-9][0-9]*)\.json")
-    found = []
-    for path in run.glob(prefix + "*.json"):
-        match = pattern.fullmatch(path.name)
-        if match:
-            found.append((int(match.group(1)), path))
-    return sorted(found)
-
-
-def current(run: Path, kind: str, key: str) -> Path | None:
-    paths = attempts(run, kind, key)
-    return paths[-1][1] if paths else None
-
-
-def tools(run: Path, manifest: dict[str, Any]) -> list[Path]:
-    return [p for c in manifest["checks"] if (p := current(run, "check", c["id"]))]
-
-
-def inspect(run: Path, manifest: dict[str, Any]) -> dict[str, Any]:
-    diff, errors = load_diff_context(manifest)
-    _, counts, tool_errors, _ = validate_tool_results(tools(run, manifest), manifest)
-    registry = {a["id"]: a["criteria"] for a in manifest["assignments"]}
-    result = {}
-    for a in manifest["assignments"]:
-        path = current(run, "reviewer", a["id"])
-        if path is None:
-            result[a["id"]] = {"status": "PENDING", "errors": []}
-            continue
-        try:
-            _, _, failures, _ = validate_lens(read(path), manifest, diff, counts, registry)
-            result[a["id"]] = {"status": "FAILED" if failures else "COMPLETE", "errors": failures}
-        except (ValueError, KeyError, TypeError) as exc:
-            result[a["id"]] = {"status": "FAILED", "errors": [str(exc)]}
-    return {
-        "reviewers": result,
-        "source_errors": errors,
-        "check_errors": tool_errors,
-        "checks": {
-            c["id"]: read(p)["status"] if (p := current(run, "check", c["id"])) else "PENDING"
-            for c in manifest["checks"]
+def operations() -> Operations:
+    return engine.register(
+        ("intake", "architecture", "runtime", "acceptance", "command", "verification", "archived"),
+        "review_boundary",
+        {
+            "present_review": engine.offer("coordinate"),
+            "review_assignment": review_assignment,
+            "run_project_check": engine.offer("check"),
+            "verify_results": engine.offer("finish"),
+            "review_history": engine.offer("history"),
         },
-    }
+    )
 
 
-def attempt_path(run: Path, kind: str, key: str) -> Path:
-    paths = attempts(run, kind, key)
-    if len(paths) >= 2 or (paths and paths[-1][0] >= 2):
-        raise ValueError("recovery exhausted; retain partial results")
-    return run / f"{kind}-{key}-{paths[-1][0] + 1 if paths else 1}.json"
+def identifier(name: str | Path) -> str:
+    key = str(name)
+    return (
+        key
+        if re.fullmatch(r"code-review-[0-9a-f]{28}", key)
+        else engine.identifier("code-review", key)
+    )
 
 
-def reconcile_check(run: Path, manifest: dict[str, Any]) -> None:
-    marker = run / ".check-in-progress"
-    if not marker.exists():
-        return
-    pending = read(marker)
-    check_id, attempt = pending.get("id"), pending.get("attempt")
-    path = current(run, "check", check_id) if isinstance(check_id, str) else None
-    results, _, errors, _ = validate_tool_results([path] if path else [], manifest)
-    relevant = [
-        e
-        for e in errors
-        if not e.endswith(": missing result") and ": command unavailable: " not in e
-    ]
-    value = results.get(check_id) if isinstance(check_id, str) else None
-    legacy_complete = attempt is None and value is not None and value["status"] in {"PASS", "FAIL"}
-    if path is None or (path.name != attempt and not legacy_complete) or value is None or relevant:
-        raise ValueError(
-            f"{marker}: interrupted check has unknown outcome; inspect the command and logs before starting a new review"
+def record(name: str | Path) -> ProcessRun:
+    return current_database().processes.get(Path.cwd(), identifier(name))
+
+
+def initialize(request: Path, name: str | Path) -> dict[str, Any]:
+    root = Path.cwd()
+    run_id = identifier(name)
+    raw = load_object(request)
+    repo = current_database().processes
+    if repo.exists(root, run_id):
+        run = repo.get(root, run_id)
+        require(
+            run.subject["request_hash"] == graph_identity(raw),
+            "Review intake already binds a different subject",
         )
-    marker.unlink()
-
-
-def initialize(request: Path, run: Path) -> dict[str, Any]:
-    manifest = prepare(read(request), default_profile(FACTORY_ROOT / "factory.yaml", "reviewer"))
-    errors = validate_manifest(manifest)
-    _, diff_errors = load_diff_context(manifest)
-    if errors or diff_errors:
-        raise ValueError("; ".join(errors + diff_errors))
-    if manifest["mode"] in {"pr", "branch"}:
-        head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-        dirty = subprocess.check_output(
-            ["git", "status", "--porcelain", "--untracked-files=no"], text=True
+    else:
+        require(run_id != str(name), "Unknown review ID; use a new intake name")
+        captured = subject.capture(request, FACTORY_ROOT)
+        captured["request_hash"] = graph_identity(raw)
+        run = engine.start(
+            root,
+            "code-review",
+            str(name),
+            captured,
+            FACTORY_ROOT / "graphs",
+            definitions=subject.accepted_graph(captured["manifest"], FACTORY_ROOT),
         )
-        if head != manifest["head_sha"] or dirty:
-            raise ValueError(
-                "review needs clean checkout at pinned head; preserve user work and use a separate checkout"
-            )
-    if manifest["mode"] in {"pr", "branch"}:
-        actual = subprocess.check_output(
+    return {"run_id": run.run_id, **inspect(run, run.subject["manifest"])}
+
+
+def inspect(run: ProcessRun, manifest: dict[str, Any]) -> dict[str, Any]:
+    facts = run.state.facts
+    checks = facts.get("checks", {})
+    _, counts, errors, _ = validate_tool_results(
+        [bucket[-1] for bucket in checks.values()], manifest
+    )
+    diff, issues = load_diff_context(manifest)
+    registry = {a["id"]: a["criteria"] for a in manifest["assignments"]}
+    reviewers = {}
+    for direction in registry:
+        reports = facts.get("reports", {}).get(direction, [])
+        failures = (
+            validate_lens(reports[-1], manifest, diff, counts, registry)[2] if reports else []
+        )
+        reviewers[direction] = {
+            "status": "PENDING" if not reports else "FAILED" if failures else "COMPLETE",
+            "errors": failures,
+        }
+    commands = []
+    if run.state.terminal:
+        commands.append(
             [
-                "git",
-                "diff",
-                "--no-ext-diff",
-                "--no-color",
-                manifest["base_sha"] + "..." + manifest["head_sha"],
+                "review",
+                "run",
+                "report" if run.state.terminal == "completed" else "history",
+                "--run",
+                run.run_id,
             ]
         )
-        if actual != file_reader.read_bytes(Path(manifest["diff_file"])):
-            raise ValueError(
-                "diff differs from reviewed Git comparison; capture canonical git diff"
-            )
-    for p, value in manifest["source_evidence"].items():
+    else:
+        for direction in registry:
+            attempts = run.state.attempts.get(direction, [])
+            last = attempts[-1] if attempts else None
+            if select(run, DIRECTIONS[direction]).action != direction:
+                continue
+            if last is None or (last.status == "failed" and len(attempts) < 2):
+                commands.append(
+                    [
+                        "review",
+                        "run",
+                        "assignment",
+                        "--id",
+                        direction,
+                        "--run",
+                        run.run_id,
+                        "--request",
+                        "REQUEST_ID",
+                    ]
+                )
+            elif last.status == "running":
+                commands.append(
+                    [
+                        "review",
+                        "run",
+                        "packet",
+                        "--id",
+                        direction,
+                        "--run",
+                        run.run_id,
+                        "--dispatch",
+                        last.dispatch,
+                        "--handle",
+                        last.handle or "HANDLE",
+                    ]
+                )
+            elif last.status in {"reserved", "unknown"}:
+                commands.append(
+                    [
+                        "review",
+                        "run",
+                        "bind",
+                        "--id",
+                        direction,
+                        "--run",
+                        run.run_id,
+                        "--dispatch",
+                        last.dispatch,
+                        "--handle",
+                        "OBSERVED_HANDLE",
+                        "--request",
+                        "REQUEST_ID",
+                    ]
+                )
+        for check in manifest["checks"]:
+            key = check["id"]
+            history = checks.get(key, [])
+            if pending := facts.get("executing", {}).get(key):
+                commands.append(
+                    [
+                        "review",
+                        "run",
+                        "reconcile-check",
+                        "--id",
+                        key,
+                        "--run",
+                        run.run_id,
+                        "--original-request",
+                        pending["request"],
+                        "--evidence",
+                        "CONFIRMED_STOP",
+                        "--request",
+                        "REQUEST_ID",
+                    ]
+                )
+                continue
+            if len(history) >= 2:
+                continue
+            if history and history[-1]["status"] not in {"BLOCKED", "NOT_RUN"}:
+                continue
+            if (
+                all(
+                    checks.get(dep) and checks[dep][-1]["status"] == "PASS"
+                    for dep in check.get("after", [])
+                )
+                and select(run, "command").action == "check"
+            ):
+                commands.append(
+                    [
+                        "review",
+                        "run",
+                        "check",
+                        "--id",
+                        key,
+                        "--run",
+                        run.run_id,
+                        "--request",
+                        "REQUEST_ID",
+                    ]
+                )
         if (
-            not Path(p).is_file()
-            or file_reader.read_text(Path(p), encoding="utf-8") != value["content"]
+            facts.get("reports")
+            and not facts.get("executing")
+            and select(run, "verification").action == "finish"
         ):
-            raise ValueError("source evidence does not match reviewed checkout")
-    paths = list(manifest["scope_files"]) + list(manifest["source_evidence"])
-    for c in manifest["checks"]:
-        for p in c["execution"].get("inputs", []):
-            if not Path(p).is_file():
-                raise ValueError(f"missing check input: {p}")
-            paths.append(p)
-    paths += [
-        str(p.resolve())
-        for directory, pattern in [
-            ("contracts/common", "*.md"),
-            ("skills/factory-code-review/references", "*.md"),
-        ]
-        for p in (FACTORY_ROOT / directory).glob(pattern)
-    ]
-    paths += [
-        str((FACTORY_ROOT / p).resolve())
-        for p in [
-            "factory.yaml",
-            "roles/reviewer.md",
-            "contracts/reviewer.md",
-            "gates/roles/reviewer.md",
-            "gates/common/verification-rules.md",
-            "tooling/factory/context/context.py",
-            "tooling/factory/checks/command.py",
-            "tooling/factory/runtime/commands/process.py",
-            "skills/factory-code-review/SKILL.md",
-        ]
-    ]
-    paths += [str(p.resolve()) for p in (FACTORY_ROOT / "tooling/factory").rglob("*.py")]
-    paths.extend(
-        str(FACTORY_ROOT / path)
-        for path in ("tooling/bootstrap.py", "tooling/bin/cli", "tooling/bin/cli.cmd")
-    )
-    paths.append(str(Path(__file__).resolve()))
-    if manifest.get("diff_file"):
-        paths.append(manifest["diff_file"])
-    run.mkdir(parents=True, exist_ok=False)
-    write(run / "manifest.json", manifest)
-    inputs_pending = run / ".inputs-pending.json"
-    write(
-        inputs_pending,
-        INPUT_LOCK.validate_python(
+            commands.append(
+                [
+                    "review",
+                    "run",
+                    "finish",
+                    "--run",
+                    run.run_id,
+                    "--input",
+                    "QA_FILE",
+                    "--request",
+                    "REQUEST_ID",
+                ]
+            )
+    return {
+        "commands": commands,
+        "reviewers": reviewers,
+        "source_errors": issues,
+        "check_errors": errors,
+        "checks": {
+            c["id"]: checks[c["id"]][-1]["status"] if c["id"] in checks else "PENDING"
+            for c in manifest["checks"]
+        },
+        "outstanding_checks": facts.get("executing", {}),
+        "terminal": run.state.terminal,
+    }
+
+
+def select(run: ProcessRun, phase: str) -> engine.Offer:
+    focused = run.model_copy(update={"state": run.state.model_copy(update={"phase": phase})})
+    return engine.resolve(focused)
+
+
+def packet(run: ProcessRun, manifest: dict[str, Any], attempt: Attempt) -> dict[str, Any]:
+    direction = attempt.node
+    assignment = next(a for a in manifest["assignments"] if a["id"] == direction)
+    return dict(
+        REVIEW_ASSIGNMENT.validate_python(
             {
-                "workspace": str(Path.cwd().resolve()),
-                "files": hashes(paths),
-                "manifest_sha256": sha256(
-                    file_reader.read_bytes(run / "manifest.json")
-                ).hexdigest(),
+                **{k: manifest[k] for k in IDENTITY_FIELDS},
+                "dispatch": attempt.dispatch,
+                "name": assignment["name"],
+                "profile": assignment["profile"],
+                "lens": direction,
+                "source": {"kind": "review", "target": manifest["target"]},
+                "task": {"scope": manifest["scope_files"]},
+                "project_policy": manifest["project_policy"],
+                "manifest": run.run_id,
+                "context": manifest["context"],
+                "owned_gates": questions(manifest, direction),
+                "parent_evidence": list(run.state.facts.get("checks", {})),
+                "check_receipts": {
+                    key: bucket[-1] for key, bucket in run.state.facts.get("checks", {}).items()
+                },
             }
-        ),
+        )
     )
-    os.replace(inputs_pending, run / "inputs.json")
-    return inspect(run, manifest)
 
 
-def build_parser(
-    parser: argparse.ArgumentParser | None = None,
-) -> argparse.ArgumentParser:
+def worker_action(
+    run: ProcessRun, manifest: dict[str, Any], args: argparse.Namespace, value: dict[str, Any]
+) -> dict[str, Any]:
+    direction = args.id
+    require(direction in DIRECTIONS, "Unknown reviewer direction")
+    selected = select(run, DIRECTIONS[direction])
+    require(
+        selected.role == "reviewer" and selected.action == direction,
+        "Direction is unavailable in the pinned graph",
+    )
+    if args.action == "assignment":
+        attempts = run.state.attempts.get(direction, [])
+        if not attempts or attempts[-1].status == "failed":
+            require(len(attempts) < 2, "recovery exhausted; retain partial results")
+            engine.claim(run, selected)
+        worker = run.state.attempts[direction][-1]
+        require(
+            worker.status in {"reserved", "running", "unknown"},
+            "Healthy assignment cannot be replaced",
+        )
+        return packet(run, manifest, worker)
+    worker = engine.active(run, direction, args.dispatch)
+    require(worker.status in {"reserved", "running", "unknown"}, "Assignment is closed")
+    require(
+        worker.status != "unknown" or args.action in {"bind", "stopped", "lost"},
+        "Reconcile the original reviewer handle",
+    )
+    if args.action == "bind":
+        require(
+            args.handle and worker.handle in {None, args.handle}, "Bind the actual reviewer handle"
+        )
+        require(
+            not any(
+                a.handle == args.handle
+                for k, attempts in run.state.attempts.items()
+                if k != direction
+                for a in attempts
+            ),
+            "Each direction needs an independent reviewer",
+        )
+        worker.handle, worker.status = args.handle, "running"
+        return {"dispatch": worker.dispatch, "handle": worker.handle}
+    require(
+        (worker.handle and args.handle == worker.handle)
+        or (args.action == "stopped" and worker.handle is None and not args.handle),
+        "Report or next step must use the original reviewer handle",
+    )
+    if args.action == "lost":
+        require(args.evidence, "Supply the session observation")
+        worker.status = "unknown"
+        worker.evidence.append({"transport": "unknown", "observation": args.evidence})
+        return {"dispatch": worker.dispatch, "action": "reconcile", "handle": worker.handle}
+    if args.action == "stopped":
+        require(args.evidence, "Supply evidence the previous reviewer stopped")
+        worker.status = "failed"
+        worker.evidence.append({"transport": "stopped", "observation": args.evidence})
+        return {
+            "dispatch": worker.dispatch,
+            "action": "retry" if worker.number < 2 else "exhausted",
+        }
+    if args.action == "note":
+        require(args.evidence, "Supply partial observations")
+        worker.evidence.append({"observation": args.evidence})
+        return {"dispatch": worker.dispatch, "observations": worker.evidence}
+    require(args.action == "submit" and value.get("lens") == direction, "Wrong assignment")
+    reports = run.state.facts.setdefault("reports", {}).setdefault(direction, [])
+    require(len(reports) < 2, "recovery exhausted; retain partial results")
+    diff, _ = load_diff_context(manifest)
+    checks = run.state.facts.get("checks", {})
+    _, counts, _, _ = validate_tool_results([b[-1] for b in checks.values()], manifest)
+    registry = {a["id"]: a["criteria"] for a in manifest["assignments"]}
+    if reports:
+        retained = validate_lens(reports[-1], manifest, diff, counts, registry)[1]
+        supplied = value.get("findings")
+        findings = list(supplied) if isinstance(supplied, list) else []
+        for finding in retained:
+            original = {k: v for k, v in finding.items() if k not in {"found_by", "source_ids"}}
+            matches = [
+                f
+                for f in findings
+                if isinstance(f, dict) and f.get("finding_id") == finding["finding_id"]
+            ]
+            require(
+                all(f == original for f in matches), "Recovery cannot rewrite a validated finding"
+            )
+            if not matches:
+                findings.append(original)
+        value = {**value, "findings": findings}
+    reports.append(value)
+    issues = validate_lens(value, manifest, diff, counts, registry)[2]
+    worker.status = "failed" if issues else "done"
+    worker.outcome = "INCOMPLETE" if issues else "COMPLETE"
+    return {
+        "lens": direction,
+        "dispatch": worker.dispatch,
+        "status": worker.outcome,
+        "errors": issues,
+    }
+
+
+def check_lock(root: Path, run_id: str, key: str) -> Path:
+    return root / ".factory/memory/review-logs" / run_id / (graph_identity(key) + ".lock")
+
+
+def check(name: str, key: str, request: str) -> dict[str, Any]:
+    root = Path.cwd()
+    run_id = identifier(name)
+    with lock(check_lock(root, run_id, key)):
+        return execute_check(root, run_id, key, request)
+
+
+def execute_check(root: Path, run_id: str, key: str, request: str) -> dict[str, Any]:
+    repo = current_database().processes
+
+    def reserve(run: ProcessRun, _: engine.Offer) -> dict[str, Any]:
+        manifest = subject.fresh(run.subject)
+        require(select(run, "command").action == "check", "Project checks are unavailable")
+        commands = {c["id"]: c for c in manifest["checks"]}
+        require(key in commands, "Unknown check")
+        facts = run.state.facts
+        active = facts.setdefault("executing", {})
+        require(
+            key not in active,
+            "An interrupted check has unknown outcome; reconcile the original execution",
+        )
+        previous = facts.get("checks", {}).get(key, [])
+        require(len(previous) < 2, "recovery exhausted; retain partial results")
+        require(
+            not previous or previous[-1]["status"] in {"BLOCKED", "NOT_RUN"},
+            "Completed command cannot be rerun",
+        )
+        graph = compile_dependencies({k: c.get("after", []) for k, c in commands.items()})
+        passed = frozenset(
+            k for k, b in facts.get("checks", {}).items() if b[-1]["status"] == "PASS"
+        )
+        require(key in graph.ready(passed), "Check dependency has no current PASS")
+        active[key] = {"request": request, "attempt": len(previous) + 1}
+        return dict(active[key])
+
+    inputs = {"check": key}
+    # Claim once before side effects. A second caller must observe an unknown owner until the receipt commits.
+    owner = uuid4().hex
+
+    def claim_command(run: ProcessRun, selected: engine.Offer) -> dict[str, Any]:
+        reserved = reserve(run, selected)
+        reserved["owner"] = owner
+        return reserved
+
+    receipt = engine.change(
+        root, "code-review", run_id, request, "reserve-check", inputs, claim_command
+    )
+    run = repo.get(root, run_id)
+    finish_key = "internal:review-check:" + graph_identity(request)
+    finished = repo.receipt(root, run_id, finish_key, graph_identity(["check", inputs]))
+    if finished is not None:
+        return finished
+    if reconciled := run.state.facts.get("check_reconciliations", {}).get(request):
+        return dict(reconciled)
+    require(
+        receipt["owner"] == owner,
+        "An interrupted check has unknown outcome; reconcile the original execution",
+    )
+    manifest = subject.fresh(run.subject)
+    declaration = next(c for c in manifest["checks"] if c["id"] == key)["execution"]
+    execution = {k: v for k, v in declaration.items() if k in {"argv", "cwd", "timeout_seconds"}}
+
+    def accepted_tool(argv: list[str], cwd: str, timeout: int) -> CommandResult:
+        with subject.command_arguments(run.subject["tool_revision"], argv, cwd) as effective:
+            observation = run_command(
+                effective, cwd, timeout, log_dir=root / ".factory/memory/review-logs" / run_id
+            )
+            observation["argv"] = argv
+            return observation
+
+    value = collect_results(
+        manifest,
+        key,
+        [json.dumps(execution)],
+        run=accepted_tool,
+    )
+
+    def finish(record: ProcessRun, _: engine.Offer) -> dict[str, Any]:
+        facts = record.state.facts
+        require(facts["executing"][key]["request"] == request, "Different pending check")
+        del facts["executing"][key]
+        facts.setdefault("checks", {}).setdefault(key, []).append(value)
+        return value
+
+    result = engine.change(root, "code-review", run_id, finish_key, "check", inputs, finish)
+    subject.fresh(run.subject)
+    return result
+
+
+def reconcile_check(
+    run: ProcessRun, key: str, original: str | None, evidence: str | None
+) -> dict[str, Any]:
+    facts = run.state.facts
+    pending = facts.get("executing", {}).get(key)
+    require(
+        pending and original == pending["request"] and evidence and evidence.strip(),
+        "Identify the original execution and supply an observation that it stopped",
+    )
+    manifest = run.subject["manifest"]
+    operation = next(c["execution"] for c in manifest["checks"] if c["id"] == key)
+    result = {
+        **{field: manifest[field] for field in IDENTITY_FIELDS},
+        "tool_id": key,
+        "status": "BLOCKED",
+        "commands": [
+            {
+                **{k: v for k, v in operation.items() if k in {"argv", "cwd", "timeout_seconds"}},
+                "exit_code": None,
+                "error": "Stopped without a confirmed exit status: " + str(evidence),
+                "stdout_excerpt": "",
+                "stderr_excerpt": "",
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+            }
+        ],
+    }
+    del facts["executing"][key]
+    facts.setdefault("checks", {}).setdefault(key, []).append(result)
+    facts.setdefault("check_reconciliations", {})[original] = result
+    return result
+
+
+def build_parser(parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
     parser = parser or argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=["init", "status", "assignment", "check", "submit", "finish", "recover-legacy"],
+        choices=[
+            "init",
+            "status",
+            "history",
+            "diagram",
+            "assignment",
+            "bind",
+            "packet",
+            "note",
+            "lost",
+            "stopped",
+            "check",
+            "reconcile-check",
+            "cancel",
+            "submit",
+            "finish",
+            "clean",
+            "report",
+        ],
     )
-    parser.add_argument("--run", type=Path, required=True)
-    parser.add_argument("--input", type=Path)
-    parser.add_argument("--id")
-    parser.add_argument("--legacy-owner-pid", type=int)
+    parser.add_argument("--run", required=True, help="Stable intake name or returned process ID")
+    parser.add_argument(
+        "--input", type=Path, help="Delivered review subject, report or QA evidence"
+    )
+    parser.add_argument("--id", help="Direction or registered check ID")
+    parser.add_argument("--dispatch", help="Original worker ticket")
+    parser.add_argument("--handle", help="Bound worker session handle")
+    parser.add_argument(
+        "--original-request", help="Reservation being reconciled after confirmed stop"
+    )
+    parser.add_argument("--evidence", help="Partial observation")
+    parser.add_argument("--request", help="Stable mutation ID; reuse after a lost reply")
     return parser
 
 
+def operate(args: argparse.Namespace) -> dict[str, Any]:
+    name = args.run
+    if args.dispatch and args.action in {
+        "assignment",
+        "history",
+        "report",
+        "check",
+        "reconcile-check",
+        "cancel",
+        "finish",
+        "init",
+        "clean",
+        "diagram",
+    }:
+        raise ValueError("The worker ticket permits only its own packet, observations or report")
+    if args.action == "status" and args.dispatch:
+        args.action = "packet"
+    if args.action == "init":
+        require(args.input, "Supply the authorized review --input")
+        return initialize(args.input, name)
+    saved = record(name)
+    repo = current_database().processes
+    if args.action == "history":
+        return {
+            "run_id": saved.run_id,
+            "subject": saved.subject,
+            "state": saved.state.model_dump(),
+            "events": repo.history(Path.cwd(), saved.run_id),
+        }
+    if args.action == "diagram":
+        graph = engine.program(saved.process, tuple(sorted(saved.definitions.items())))
+        return {"run_id": saved.run_id, "mermaid": graph.render(direction="LR")}
+    if args.action == "clean":
+        require(saved.state.terminal, "Only a completed review can be cleaned")
+        return {"run_id": saved.run_id, "history": "retained"}
+    if args.action == "report":
+        require(saved.state.facts.get("final"), "No QA report yet")
+        return {"markdown": render_report_text(saved.state.facts["final"][-1]["result"])}
+    if args.action == "status":
+        return {"run_id": saved.run_id, **inspect(saved, subject.fresh(saved.subject))}
+    if args.action == "packet":
+        worker = engine.active(saved, args.id, args.dispatch)
+        require(
+            args.handle and worker.handle == args.handle and worker.status == "running",
+            "Need the live ticket and its bound handle",
+        )
+        return {
+            **packet(saved, subject.fresh(saved.subject), worker),
+            "observations": worker.evidence,
+        }
+    request = args.request or uuid4().hex
+    require(not request.startswith("internal:"), "Reserved internal request namespace")
+    if args.action == "check":
+        return check(name, args.id, request)
+    value = load_object(args.input) if args.input else {}
+
+    def apply(current: ProcessRun, _: engine.Offer) -> dict[str, Any]:
+        if args.action == "reconcile-check":
+            return reconcile_check(current, args.id, args.original_request, args.evidence)
+        if args.action == "cancel":
+            require(
+                args.evidence
+                and not current.state.facts.get("executing")
+                and not any(
+                    a.status in {"reserved", "running", "unknown"}
+                    for group in current.state.attempts.values()
+                    for a in group
+                ),
+                "Reconcile active checks and stop outstanding workers before cancellation",
+            )
+            current.state.terminal = "cancelled"
+            current.state.facts["reason"] = args.evidence
+            return {"terminal": "cancelled", "reason": args.evidence}
+        manifest = (
+            current.subject["manifest"]
+            if args.action == "stopped"
+            else subject.fresh(current.subject)
+        )
+        if args.action != "finish":
+            return worker_action(current, manifest, args, value)
+        require(
+            select(current, "verification").action == "finish", "Final review gate is unavailable"
+        )
+        require(args.input, "Supply QA evidence")
+        facts = current.state.facts
+        require(not facts.get("executing"), "Reconcile outstanding checks before QA")
+        result, exit_code = validate_protocol(
+            argparse.Namespace(
+                manifest=manifest,
+                qa_output=value,
+                lens_output=[b[-1] for b in facts.get("reports", {}).values()],
+                tool_result=[b[-1] for b in facts.get("checks", {}).values()],
+            )
+        )
+        subject.fresh(current.subject)
+        facts.setdefault("final", []).append({"qa": value, "result": result})
+        if result["pipeline_status"] == "COMPLETE":
+            current.state.terminal = "completed"
+            current.state.phase = "archived"
+        return dict(result)
+
+    inputs = {
+        "id": args.id,
+        "dispatch": args.dispatch,
+        "handle": args.handle,
+        "evidence": args.evidence,
+        "value": value,
+        "original_request": args.original_request,
+    }
+    if args.action == "reconcile-check":
+        with lock(check_lock(Path.cwd(), saved.run_id, args.id)):
+            return engine.change(
+                Path.cwd(), "code-review", saved.run_id, request, args.action, inputs, apply
+            )
+    return engine.change(
+        Path.cwd(), "code-review", saved.run_id, request, args.action, inputs, apply
+    )
+
+
 def run(args: argparse.Namespace) -> int:
-    as_json = getattr(args, "json", False)
-    if as_json and args.action in {"init", "submit", "finish"} and args.input is None:
-        emit_error("review_run", f"review run {args.action} requires --input")
-        return 1
     try:
-        _operate(args)
-    except (subprocess.CalledProcessError, StopIteration, TypeError) as exc:
-        if not as_json:
-            raise
-        message = str(exc) or f"Unknown review assignment or check: {args.id}"
-        emit_error("review_run", message)
+        emit_json(operate(args))
+    except (
+        ValueError,
+        OSError,
+        KeyError,
+        subprocess.CalledProcessError,
+        StopIteration,
+        TypeError,
+    ) as exc:
+        if getattr(args, "json", False):
+            from factory.cli_output import emit_error
+
+            emit_error("review_run", str(exc))
+        else:
+            import sys
+
+            print(str(exc) or "Unknown review assignment", file=sys.stderr)
         return 1
     return 0
-
-
-def _operate(args: argparse.Namespace) -> None:
-    run = args.run.resolve()
-    if args.action == "init":
-        print(json.dumps(initialize(args.input, run), ensure_ascii=False))
-        return
-    if args.action == "recover-legacy" and args.legacy_owner_pid is None:
-        raise ValueError("recover-legacy requires --legacy-owner-pid")
-    if args.action != "recover-legacy" and args.legacy_owner_pid is not None:
-        raise ValueError("--legacy-owner-pid requires recover-legacy")
-    with locked(run, args.legacy_owner_pid):
-        m = fresh(run, upgrade_legacy=args.action == "recover-legacy")
-        state = inspect(run, m)
-        reconcile_check(run, m)
-        if args.action in {"status", "recover-legacy"}:
-            result = state
-        elif args.action == "assignment":
-            a = next(a for a in m["assignments"] if a["id"] == args.id)
-            result = dict(
-                REVIEW_ASSIGNMENT.validate_python(
-                    {
-                        **{k: m[k] for k in IDENTITY_FIELDS},
-                        "name": a["name"],
-                        "profile": a["profile"],
-                        "lens": a["id"],
-                        "source": {"kind": "review", "target": m["target"]},
-                        "task": {"scope": m["scope_files"]},
-                        "project_policy": m["project_policy"],
-                        "manifest": str(run / "manifest.json"),
-                        "context": m["context"],
-                        "owned_gates": questions(m, a["id"]),
-                        "parent_evidence": [str(p) for p in tools(run, m)],
-                    }
-                )
-            )
-        elif args.action == "check":
-            c = next(c for c in m["checks"] if c["id"] == args.id)
-            previous = current(run, "check", c["id"])
-            if previous and read(previous)["status"] not in {"BLOCKED", "NOT_RUN"}:
-                raise ValueError("completed command cannot be rerun inside this review identity")
-            if any(state["checks"][dep] != "PASS" for dep in c.get("after", [])):
-                raise ValueError("dependency has no current PASS")
-            path = attempt_path(run, "check", c["id"])
-            from functools import partial
-
-            from factory.review.run_tool_checks import run_command
-
-            execution = {
-                k: v for k, v in c["execution"].items() if k in {"argv", "cwd", "timeout_seconds"}
-            }
-            marker = run / ".check-in-progress"
-            write(marker, {"id": c["id"], "attempt": path.name})
-            result = collect_results(
-                m, c["id"], [json.dumps(execution)], run=partial(run_command, log_dir=run / "logs")
-            )
-            write(path, result)
-            fresh(run)  # A command changing reviewed input never leaves acceptable evidence.
-            marker.unlink()
-        elif args.action == "submit":
-            if args.id not in state["reviewers"]:
-                raise ValueError("unknown assignment")
-            if state["reviewers"][args.id]["status"] == "COMPLETE":
-                raise ValueError("healthy assignment cannot be replaced")
-            value = read(args.input)
-            if not isinstance(value, dict):
-                value = {"lens": args.id, "malformed_result": value}
-            if value.get("lens") != args.id:
-                raise ValueError("wrong assignment")
-            previous = current(run, "reviewer", args.id)
-            if previous:
-                diff, _ = load_diff_context(m)
-                _, counts, _, _ = validate_tool_results(tools(run, m), m)
-                registry = {a["id"]: a["criteria"] for a in m["assignments"]}
-                _, retained, _, _ = validate_lens(read(previous), m, diff, counts, registry)
-                supplied = value.get("findings", [])
-                if not isinstance(supplied, list):
-                    supplied = []
-                for finding in retained:
-                    original = {
-                        k: v for k, v in finding.items() if k not in {"found_by", "source_ids"}
-                    }
-                    matches = [
-                        f
-                        for f in supplied
-                        if isinstance(f, dict) and f.get("finding_id") == finding["finding_id"]
-                    ]
-                    if matches and any(f != original for f in matches):
-                        raise ValueError(
-                            "recovery cannot rewrite a validated finding; use QA with evidence"
-                        )
-                    if not matches:
-                        supplied.append(original)
-                value["findings"] = supplied
-            write(attempt_path(run, "reviewer", args.id), value)
-            result = inspect(run, m)
-        else:
-            # Immutable final attempts preserve QA decisions and partial reports.
-            folder = run / f"final-{len(list(run.glob('final-*'))) + 1}"
-            folder.mkdir()
-            write(folder / "qa.json", read(args.input))
-            final_result, _ = validate_protocol(
-                argparse.Namespace(
-                    manifest=run / "manifest.json",
-                    lens_output=[
-                        p for a in m["assignments"] if (p := current(run, "reviewer", a["id"]))
-                    ],
-                    tool_result=tools(run, m),
-                    qa_output=folder / "qa.json",
-                )
-            )
-            fresh(run)
-            write(folder / "result.json", final_result)
-            render_report(folder / "report.md", final_result)
-            print(json.dumps(final_result, ensure_ascii=False, indent=2))
-            return
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-
-
-def main() -> None:
-    parser = build_parser()
-    raise SystemExit(run(parser.parse_args()))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (OSError, ValueError, KeyError, StopIteration, TypeError) as exc:
-        raise SystemExit(f"Review blocked: {exc}") from exc

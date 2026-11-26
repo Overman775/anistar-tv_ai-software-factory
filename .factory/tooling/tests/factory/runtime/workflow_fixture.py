@@ -5,14 +5,35 @@ import tempfile
 from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
+from examples.example_workflow import proposal
+
 from factory.runtime.contracts import State, agent_key
+from factory.runtime.scheduling.assignment import ImplementPacket, validate_packet
+from factory.runtime.scheduling.orchestrator_graph import assignment_ticket
 from factory.runtime.workflow import Ledger
 from factory.runtime.workflow_config import load_config
-from factory.runtime.workflow_core import digest, read_json, snapshot
+from factory.runtime.workflow_core import digest, snapshot
 from tests.fixture_bundle import ROOT as ROOT
+
+
+def bound_teacher(root: Path, key: str) -> str | None:
+    """Bind the final run reviewer before exercising its worker-side commands."""
+    from factory.database.provider import current_database
+    from factory.runtime import teacher
+    from factory.runtime.scheduling.teacher_dispatch import deliver
+
+    event = teacher.read_event(root, key)
+    if event.incidents is None:
+        return None
+    if event.attempts:
+        return event.attempts[-1].dispatch_id
+    jobs = current_database().teacher
+    token = str(deliver(root, key, None, None, None, jobs)["dispatch_id"])
+    deliver(root, key, None, [token, "fixture-teacher"], None, jobs)
+    return token
 
 
 class WorkflowFixture:
@@ -43,7 +64,7 @@ class WorkflowFixture:
         self.config["profiles"]["implementer"].pop("escalation", None)
         self.config["_roles"]["implementer"].append("implementer")
         self.config["_defaults"]["implementer"] = "implementer"
-        self.g = read_json(ROOT / "tooling/examples/example.workflow.json")
+        self.g: Any = cast(dict[str, Any], deepcopy(proposal()))
         self.g["agents"]["author"]["profile"] = "implementer"
         self.g["tasks"]["label"].pop("project_check_inputs", None)
         self.g["tasks"]["label"].pop("policy_decisions", None)
@@ -63,6 +84,21 @@ class WorkflowFixture:
     def init(self) -> State:
         return self.ledger.init(self.g, self.config)
 
+    def claim(self, node: str) -> dict[str, object]:
+        state = self.ledger.read()
+        ticket = assignment_ticket(
+            state["run_id"], state["revision"], node, state["nodes"][node]["attempt"] + 1
+        )
+        return self.ledger.claim(node, ticket=ticket)
+
+    def stored_packet(self, node: str) -> ImplementPacket:
+        ref = self.ledger.read()["nodes"][node]["packet_file"]
+        return validate_packet(
+            self.ledger.history.document(
+                self.root, ref["run_id"], ref["path"], ref["sha256"], "packet"
+            )
+        )
+
     def report(self, node: str, outcome: str = "PASS", **extra: Any) -> dict[str, Any]:
         s = self.ledger.read()
         n = next(n for n in s["graph"]["nodes"] if n["id"] == node)
@@ -79,6 +115,19 @@ class WorkflowFixture:
             "terminal": True,
             "outcome": outcome,
             "summary": "Fixture result",
+            **(
+                {
+                    "write_result": {
+                        "code": list(n["owns"]),
+                        "tests": [check["id"]],
+                        "docs_current": "The fixture edits an internal label with no public contract change.",
+                    }
+                }
+                if n.get("owns")
+                and s["nodes"][node].get("role") == "implementer"
+                and outcome == "PASS"
+                else {}
+            ),
             "files": snapshot(self.root, task["scope"]),
             "stage_result": "WRITES_READY" if n.get("owns") else "VERIFIED",
             "checks": (
@@ -111,7 +160,7 @@ class WorkflowFixture:
         }
 
     def start(self, node: str, handle: str | None = None) -> None:
-        self.ledger.claim(node)
+        self.claim(node)
         state = self.ledger.read()
         n = next(n for n in state["graph"]["nodes"] if n["id"] == node)
         profile = state["config"]["profiles"][state["graph"]["agents"][agent_key(n)]["profile"]]

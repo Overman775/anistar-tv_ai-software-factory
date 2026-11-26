@@ -31,12 +31,12 @@ from factory.cli_output import (
 )
 from factory.cli_topics import ERROR_GUIDANCE, command_summary, help_details
 from factory.context import context
-from factory.decompose import assemble, generate_task_graph, source_lock
-from factory.decompose.staging import metadata
+from factory.decompose import generate_task_graph, source_lock
 from factory.diagnostics.records import error_code
 from factory.gates import catalog
 from factory.github import fetch_note, fetch_recent_notes
 from factory.planning import validate_plan
+from factory.processes import cli as process_cli
 from factory.project import project
 from factory.review import review_run, run_tool_checks, validate_review_protocol
 from factory.runtime import workflow_cli
@@ -85,14 +85,16 @@ def routes() -> tuple[Command | Group, ...]:
         Group("tooling", (parser_command("check", quality.build_parser, quality.run),)),
         Group(
             "planning",
-            (command("validate", validate_plan.build_parser, validate_plan.run),),
+            (
+                command("validate", validate_plan.build_parser, validate_plan.run),
+                command("run", process_cli.build_parser, partial(process_cli.execute, "planning")),
+            ),
         ),
         Group(
             "decompose",
             (
+                command("run", process_cli.build_parser, partial(process_cli.execute, "decompose")),
                 command("graph", generate_task_graph.build_parser, generate_task_graph.run),
-                parser_command("assemble", assemble.build_parser, assemble.run),
-                parser_command("metadata", metadata.build_parser, metadata.run),
                 command("source-lock", source_lock.build_parser, source_lock.run),
             ),
         ),

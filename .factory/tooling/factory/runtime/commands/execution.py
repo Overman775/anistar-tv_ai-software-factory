@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 from factory.runtime.contracts import Dispatch, ExecutionReceipt, PendingCheck
-from factory.runtime.workflow_core import identity, require
+from factory.runtime.workflow_core import graph_identity, require
 
 
 @dataclass(frozen=True)
@@ -14,7 +14,7 @@ class CheckExecution:
     @staticmethod
     def request_key(run: str, node: str, dispatch: str | None, request: str) -> str:
         require(request.strip(), "Execution request ID required")
-        return identity([run, node, dispatch, request])
+        return graph_identity([run, node, dispatch, request])
 
     def require_same_check(self, check_id: str) -> None:
         require(

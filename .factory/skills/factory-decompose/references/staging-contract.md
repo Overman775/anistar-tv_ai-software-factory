@@ -1,35 +1,12 @@
-# Decompose staging and envelope
-
-## Mechanical metadata projection
-
-After authoring the structured envelopes and Markdown prose, run:
-
-```bash
-.factory/tooling/bin/cli decompose metadata \
-  .factory/memory/staging/tasks .factory/memory/staging/decomposition-source.json \
-  --checkpoint UNIQUE_CHECKPOINT_ID
-```
-
-The helper checks the source and staging digests and target paths, saves the
-complete staging tree in a new checkpoint, and writes derived headers and totals via atomic sibling files. It
-returns only paths and counts; author prose remains. Use one authorized writer.
-The helper does not lock out concurrent writers. On interruption or failure,
-reconcile partial staging against its checkpoint before retrying with a new ID.
-Run the normal graph and independent review gates after the helper. It does not
-authorize assembly or substitute for semantic review.
+# Decompose delivery
 
 ## Transactional staging
 
-Write internal envelopes and drafts through temporary sibling paths, validate,
-then atomically rename. Keep last complete checkpoint under
-`.factory/memory/staging/checkpoints/`. Interrupt or failed retry must not delete
-last valid draft. Cleanup may remove only artifacts owned by current run after
-final assembly succeeds.
+A delivery records exact bytes and their relative name under the assignment in SQLite. The worker may author in its own temporary directory. Use the hashes returned by the process to identify missing bytes on resume. Only the public task Markdown and its generated companion files are installed in the requested destination.
 
 ## Internal Envelope
 
-Each scope writes
-`.factory/memory/staging/tasks/{scope}/task_result.json`:
+Deliver each scope envelope under `{scope}/task_result.json`:
 
 ```json
 {
@@ -89,5 +66,3 @@ Gate every envelope:
   exactly matches final `-NN` sequence of task ID; for example,
   `orders-list-core-01` becomes `01-orders-list-core.md`.
 
-Missing file is generation failure, not empty scope. Formatting/save mismatch
-gets one fast-fix retry. Semantic mismatch returns `NEEDS_PLANNING`.

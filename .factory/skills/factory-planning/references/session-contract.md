@@ -1,21 +1,8 @@
 # Factory Planning Working Session
 
-Internal discovery checkpoint used before a user-reviewable plan revision exists.
-It protects recursive reasoning from interrupts without becoming another plan,
-approval surface, or downstream contract.
-
 ## Artifact
 
-- Path: `.factory/memory/staging/planning-session.md`.
-- Audience: Factory Planning orchestrator only.
-- Format: loose Markdown, not schema-validated.
-- Lifecycle: mutable until a plan candidate is ready; retain on cancel, failure,
-  or interruption.
-- Downstream skills must ignore it. Only approved `docs/plans/{plan_id}.md` is a
-  semantic execution/decomposition source.
-
-Write it transactionally through a temporary sibling and atomic rename. Never
-replace `.factory/memory/staging/planning-plan.md` with an incomplete session.
+The Planning run retains the working evidence, cited questions, owner answers, draft and review in SQLite. Resume by run ID. Read its bound worker packet to continue an assignment. Published plans are ordinary Markdown in the agreed project location.
 
 ## Minimum Working Map
 
@@ -63,31 +50,4 @@ required fact remains `BLOCKED_REQUIREMENTS` at session level.
 
 ## Candidate and Preflight Loop
 
-When discovery exit criteria hold:
-
-1. Give Architect source lock and working map once. Complete maps use the fast
-   path: do not repeat Reality Check or source search. Reopen only for missing
-   evidence or contradiction. Apply the shared checkpoint contract; explicit
-   terminal failure may continue this candidate inline, never through a second
-   concurrent Architect.
-2. Render a temporary complete candidate. Check behavior, decisions, full
-   capability coverage, architecture/ownership, typed contracts, external
-   handling, readiness, QA boundary, downstream usability, and section-role
-   deduplication. Keep source-required detail; never shorten against a word
-   target.
-3. Semantic gaps return to this session and decision rules without consuming a
-   revision. Machine-only defects get one internal repair and full check rerun.
-4. Run `.factory/tooling/bin/cli planning validate --phase draft --plan CANDIDATE --json`.
-   After first promotion, add `--previous PROMOTED_PLAN`.
-   Atomically promote only after both checks pass.
-
-First promoted user-reviewable plan is `revision: 1`. Before that promotion,
-answers, candidate rewrites, and machine-only fixes create no revision. After a
-revision has been presented, any semantic change creates revision `N+1`; a
-nonsemantic correction keeps `N`.
-
-Approval publication retains one canonical `docs/plans/{plan_id}.md`. Before an
-approved replacement, record explicit authorization for requirements changes and
-Git commit containing prior approved bytes. Record new approved commit when
-available. Preserve immutable history; no revision files. Candidate promotion is
-coordinator-only, after independent preflight; Architect never replaces live target.
+Architect returns the complete draft and any execution sketch through its dispatch. Validate machine structure with `cli planning validate --phase draft --plan CANDIDATE --json`. The coordinator independently checks scope, behavior, architecture, coverage, external handling, QA and the source of each decision. Resolve semantic gaps with the owner or delegated authority. Preserve the current public revision until approval and publication. Version semantics and the canonical template are in the [plan contract](plan-contract.md).

@@ -90,12 +90,7 @@ Preserve source, diffs, and valid artifacts. Recovery starts only after explicit
 failure or invalid returned handoff, never while the original role remains
 running.
 
-| Delegated work | Recovery after explicit failure/invalid handoff |
-| :--- | :--- |
-| Read-only investigation | Parent finishes the bounded investigation inline, or retries the same role once when role isolation is required. |
-| Factory Planning Architect | Verify `planning-plan.md`, then parent may render/validate the same candidate inline from `planning-session.md`; do not start a concurrent second Architect. |
-| Transactional writer | Resume/retry the same role once from source lock and last valid checkpoint. |
-| Parallel focused reviewers | Retry only the failed focus once; never restart healthy focuses or synthesize missing findings. |
+Use the process status and original ticket after a lost response. A live handle continues its assigned work. Record a stopped handle and the transport evidence before a replacement. Planning and Decompose retain earlier observations and exact delivered bytes. Standalone Review keeps each healthy direction and its confirmed findings. An agent's silence is never evidence that its session stopped.
 
 If allowed recovery also returns explicit failure or an invalid handoff, use
 `BLOCKED_AGENT_FAILURE` with role, last valid stage, artifact, recovery attempted,

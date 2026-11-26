@@ -28,19 +28,14 @@ def read(path: Path) -> str:
 
 class FactoryDecomposeContractTest(unittest.TestCase):
     def test_skill_accepts_only_approved_planning_plan(self) -> None:
-        skill = read(SKILL)
-        self.assertIn("cli planning validate", skill)
-        self.assertIn("BLOCKED_NO_APPROVED_PLAN", skill)
-        self.assertIn("NEEDS_PLANNING", skill)
-        self.assertIn("docs/plans/{plan_id}.md", skill)
+        self.assertIn("decompose run init", read(SKILL))
+        self.assertIn("--plan docs/plans/PLAN.md", read(SKILL))
+        self.assertIn("plan ID, revision, hash", read(SKILL))
+        self.assertIn("--authorization", read(SKILL))
 
     def test_skill_has_no_semantic_planner_or_second_approval_loop(self) -> None:
-        content = " ".join(
-            " ".join(read(path).split()) for path in (SKILL, POLICY, GENERATION, DETAIL_CONTRACT)
-        )
-        self.assertNotIn("decompose-plan.md", content)
-        self.assertNotIn("implementation-plan.md", content)
-        self.assertIn("does not ask the\nuser to approve another plan revision", read(SKILL))
+        self.assertIn("approved plan is immutable", read(SKILL))
+        self.assertIn("unresolved product decision goes back to Planning", read(SKILL))
 
     def test_decomposition_owns_tasks_not_plan_semantics(self) -> None:
         content = "\n".join(read(path) for path in (SKILL, POLICY, DECOMPOSER))
@@ -52,7 +47,7 @@ class FactoryDecomposeContractTest(unittest.TestCase):
             "affected_layers",
         ):
             self.assertIn(token.lower(), content.lower())
-        self.assertIn("Approved plan is immutable", read(SKILL))
+        self.assertIn("approved plan is immutable", read(SKILL))
 
     def test_human_task_has_plan_provenance_and_qa(self) -> None:
         template = read(TEMPLATE)
@@ -82,7 +77,6 @@ class FactoryDecomposeContractTest(unittest.TestCase):
             "one bounded targeted lookup",
             "contract-level wording",
             "alone never returns `NEEDS_PLANNING`",
-            "no internal-envelope fields",
         ):
             self.assertIn(token, content)
         template = read(TEMPLATE)
@@ -110,7 +104,7 @@ class FactoryDecomposeContractTest(unittest.TestCase):
         template = read(TEMPLATE)
         reviewer = read(REVIEWER)
         self.assertIn("Write task and epic prose in the task/project language", skill)
-        self.assertIn("no language ratio, glossary, or code lookup", skill)
+        self.assertIn("template headings", skill)
         self.assertIn("Ordinary prose follows the assigned artifact language", reviewer)
         for mixed_phrase in (
             "For each independent flow",
@@ -165,32 +159,15 @@ class FactoryDecomposeContractTest(unittest.TestCase):
         self.assertNotIn("recheck of changed sections", reviewer)
         self.assertIn("transport, session and media contracts", reviewer)
         skill = " ".join(read(SKILL).split())
-        self.assertIn("empty document catalog is valid", skill)
-        self.assertIn("complete final task set", skill)
+        self.assertIn("project profile", skill)
+        self.assertIn("complete corrected set", skill)
 
     def test_graph_gate_is_documented_as_strict(self) -> None:
-        skill = read(SKILL)
-        self.assertIn("../../gates/skills/decompose/gate.md", skill)
-        skill += read(FACTORY_ROOT / "gates/skills/decompose/gate.md")
-        generation = read(GENERATION)
-        self.assertIn("--source-lock", skill)
-        self.assertIn("review request", generation)
-        self.assertIn("Every reported violation is a hard block", generation)
-        self.assertIn("complete review request succeeds", generation)
-        self.assertIn("coordinator runs the initial", read(DECOMPOSER))
-        self.assertIn("Do not run it separately", read(DECOMPOSER))
-        self.assertIn("review request succeeds (exit 0", generation)
-        self.assertNotIn("only after `Graph gate: PASS`", generation)
-        review_contract = " ".join(
-            read(FACTORY_ROOT / "gates/skills/decompose/review-contract.md").split()
-        )
-        self.assertIn("`cli decompose assemble review-request` as preflight", review_contract)
-        self.assertIn("Start TaskReviewer only after the request succeeds", review_contract)
-        self.assertIn("Do not run a separate preflight in the normal route", review_contract)
-        self.assertIn(
-            "Single-task/list payloads, version tags and inferred filenames are rejected",
-            read(STAGING),
-        )
+        self.assertIn("run validate", read(ROOT / ".factory/gates/skills/decompose/gate.md"))
+        self.assertIn("coverage", read(ROOT / ".factory/gates/skills/decompose/gate.md"))
+        self.assertIn("cycles", read(ROOT / ".factory/gates/skills/decompose/gate.md"))
+        self.assertIn("project checks", read(ROOT / ".factory/gates/skills/decompose/gate.md"))
+        self.assertIn("independent verdict", read(ROOT / ".factory/gates/skills/decompose/gate.md"))
 
     def test_task_template_has_single_implemented_body(self) -> None:
         template = read(TEMPLATE)
@@ -200,57 +177,43 @@ class FactoryDecomposeContractTest(unittest.TestCase):
 
     def test_language_rule_preserves_project_language_and_technical_identity(self) -> None:
         for path in (SKILL, DECOMPOSER, REVIEWER):
-            self.assertIn("technical identity", read(path))
+            self.assertIn("technical identit", read(path))
         template = read(TEMPLATE)
         self.assertIn("If translation does not change technical identity", template)
         self.assertIn("Exact template headings and machine values remain unchanged", template)
 
     def test_final_tasks_exclude_machine_technical_contract(self) -> None:
-        output = read(OUTPUT)
-        self.assertIn("no internal task_result.json envelope", output)
-        self.assertIn("publication composition", output)
-        self.assertIn("not technical\nimplementation contract", output)
+        self.assertIn("public task Markdown", read(STAGING))
+        self.assertIn("Internal schema never appears in final task Markdown", read(STAGING))
 
     def test_personas_route_semantic_gaps_to_planning(self) -> None:
         decomposer = read(DECOMPOSER)
         reviewer = read(REVIEWER)
-        self.assertIn("NEEDS_PLANNING", decomposer)
+        self.assertIn("SEMANTIC_GAP", decomposer)
         self.assertIn("generation-contract.md", decomposer)
-        self.assertIn("NEEDS_PLANNING", reviewer)
-        self.assertIn("affected_capabilities", reviewer)
+        self.assertIn("SEMANTIC_GAP", reviewer)
+        self.assertIn("affected capabilities", reviewer)
         self.assertNotIn("BLOCKED_PLAN_GAP", decomposer + reviewer)
 
     def test_transactional_staging_is_required(self) -> None:
-        self.assertIn("staging-contract.md#transactional-staging", read(SKILL))
-        self.assertIn("atomically rename", read(STAGING))
-        self.assertIn("generation-contract.md", read(DECOMPOSER))
-        self.assertIn("Transaction", read(OUTPUT))
+        self.assertIn("in SQLite", read(STAGING) + read(OUTPUT))
+        self.assertIn("exact bytes", read(STAGING) + read(OUTPUT))
+        self.assertIn("prepare-publication", read(STAGING) + read(OUTPUT))
+        self.assertIn("lost response", read(STAGING) + read(OUTPUT))
+        self.assertIn("foreign directory", read(STAGING) + read(OUTPUT))
 
     def test_agent_checkpoint_preserves_checkpoint_and_retry_budget(self) -> None:
-        content = "\n".join(read(path) for path in (SKILL, DECOMPOSER, REVIEWER, CHECKPOINT))
-        for token in (
-            "task-decomposer",
-            "task-reviewer",
-            "Keep waiting",
-            "BLOCKED_AGENT_FAILURE",
-            "last valid checkpoint",
-            "Recovery does not consume graph fast-fix or reviewer repair\niteration",
-            "Never run two writer roles concurrently",
-        ):
-            self.assertIn(token, content)
-        self.assertNotIn("STALLED_AGENT", content)
+        self.assertIn("original ticket", read(CHECKPOINT))
+        self.assertIn("lost response", read(CHECKPOINT))
+        self.assertIn("terminal", read(CHECKPOINT))
+        self.assertIn("Never run two writer roles concurrently", read(CHECKPOINT))
 
     def test_role_lifecycles_are_bounded_by_plan_tuple_and_gate(self) -> None:
-        normalized = " ".join(read(SKILL).split())
-        for token in (
-            "`plan_id + revision + plan_hash + canonical role`",
-            "Transactional checkpoint is continuation evidence, not identity",
-            "one decomposer graph fast-fix before Graph Gate `PASS`",
-            "reviewer repair plus focused recheck",
-            "Terminalize at those boundaries",
-            "new approved revision uses fresh roles and full decomposition rerun",
-        ):
-            self.assertIn(" ".join(token.split()), normalized)
+        self.assertIn("plan ID, revision, hash", read(SKILL))
+        self.assertIn("first assignment reads", read(SKILL))
+        self.assertIn("allowed files", read(SKILL))
+        self.assertIn("fresh verdict", read(SKILL))
+        self.assertIn("complete corrected set", read(SKILL))
 
     def test_obsolete_planner_files_are_absent(self) -> None:
         obsolete = (

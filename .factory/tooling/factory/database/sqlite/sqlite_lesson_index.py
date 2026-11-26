@@ -4,30 +4,22 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from factory.database.sqlite.layout import check_layout, preflight_recovery
 from factory.diagnostics.events import event
 from factory.diagnostics.records import error_code
 from factory.runtime.knowledge.lesson_index import IndexDocument, LessonIndexError
 from factory.runtime.workflow_core import digest, relative, require
 
+SCHEMA = """
+CREATE TABLE lesson_files(file_id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, revision TEXT NOT NULL);
+CREATE VIRTUAL TABLE lessons USING fts5(id, content, tokenize='porter unicode61');
+"""
+
 
 def _sync_index(
     db: sqlite3.Connection, files: dict[str, bytes], describe: IndexDocument
 ) -> dict[str, str]:
-    version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version == 0:
-        # Rebuild the old checkout-local cache from its authoritative Markdown.
-        db.execute("DROP TABLE IF EXISTS version")
-        db.execute("DROP TABLE IF EXISTS lessons")
-        db.execute(
-            "CREATE TABLE lesson_files(file_id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, revision TEXT NOT NULL)"
-        )
-        db.execute(
-            "CREATE VIRTUAL TABLE lessons USING fts5(id, content, tokenize='porter unicode61')"
-        )
-        db.execute("PRAGMA user_version=1")
-    else:
-        require(version == 1, "Unsupported lesson index")
-
+    check_layout(db, SCHEMA, "lesson index", initialize=True)
     saved = {
         path: (rowid, revision)
         for rowid, path, revision in db.execute("SELECT file_id,path,revision FROM lesson_files")
@@ -71,8 +63,9 @@ def search(
     for suffix in ("-journal", "-wal", "-shm"):
         relative(root, f".factory/memory/cache/lessons.sqlite3{suffix}")
     try:
+        preflight_recovery(cache, SCHEMA, "lesson index", 5)
         with closing(sqlite3.connect(cache)) as db, db:
-            db.execute("BEGIN")
+            db.execute("BEGIN IMMEDIATE")
             revisions = _sync_index(db, files, describe)
             rows = db.execute(
                 """SELECT f.path FROM lessons JOIN lesson_files f ON f.file_id=lessons.rowid

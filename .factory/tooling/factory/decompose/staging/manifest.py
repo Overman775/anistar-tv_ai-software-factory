@@ -5,14 +5,12 @@ import re
 from pathlib import Path, PureWindowsPath
 from typing import Annotated, Literal, NotRequired
 
-from pydantic import ConfigDict, Field, StringConstraints, TypeAdapter, ValidationError, with_config
+from pydantic import ConfigDict, Field, StringConstraints, TypeAdapter, with_config
 from typing_extensions import TypedDict
 
 from factory import file_reader
 from factory.decompose.contracts import Text
-from factory.decompose.staging.output_safety import reject_symlink_ancestors
 from factory.project.profile_io import sha
-from factory.validation import validation_message
 
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
@@ -34,24 +32,6 @@ class DoneSignal(TypedDict):
 
 
 DONE_SIGNAL = TypeAdapter[DoneSignal](DoneSignal)
-
-
-def read_done_signal(path: str | Path, staging: str | Path) -> dict[str, str]:
-    root = Path(staging).absolute()
-    reject_symlink_ancestors(root)
-    try:
-        done = DONE_SIGNAL.validate_json(file_reader.read_bytes(Path(path)))
-    except ValidationError as exc:
-        raise ValueError(validation_message("Invalid Done Signal", exc, DONE_SIGNAL)) from None
-    if Path(done["staging_root"]).resolve() != root.resolve():
-        raise ValueError("Done Signal staging root does not match the selected staging root")
-    files = {entry["path"]: entry["sha256"] for entry in done["files"]}
-    if len(files) != len(done["files"]):
-        raise ValueError("Duplicate path in Done Signal")
-    expected, count = staged_manifest(root)
-    if count != done["task_count"] or files != expected:
-        raise ValueError("Done Signal file manifest or task count differs from staged tasks")
-    return files
 
 
 def staged_manifest(root: Path) -> tuple[dict[str, str], int]:

@@ -1,0 +1,4 @@
+id: role-assignment
+entry: handoff
+nodes:
+  handoff: {operation: assess_assignment}
