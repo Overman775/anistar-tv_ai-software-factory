@@ -29,6 +29,54 @@ class TaskRouteTests(unittest.TestCase):
         f.require_fixture_review()
         self.assertIn("review-label", f.ledger.init(f.g, config)["nodes"])
 
+    def test_judge_observation_stays_with_review_and_green_tester_can_report_gap(self) -> None:
+        f = WorkflowFixture(self.addCleanup)
+        task = f.g["tasks"]["label"]
+        observation = {
+            "id": "owner-assessment",
+            "kind": "observation",
+            "category": "acceptance",
+            "method": "Assess owner criterion",
+            "criteria": task["acceptance_ids"],
+            "assessor": "judge",
+        }
+        task["required_checks"].append(observation)
+        with self.assertRaisesRegex(Invalid, "Missing final review"):
+            f.init()
+        f.require_fixture_review()
+        f.init()
+        f.start("write-label")
+        f.ledger.finish("write-label", f.report("write-label"))
+        f.start("verify-label")
+        packet = f.ledger.packet("verify-label")
+        self.assertIn("prepare-report", packet["report_command"])
+        self.assertNotIn(observation, packet["finish_requirements"]["allowed_checks"])
+        report = f.report("verify-label", coverage_notes=["Only the registered examples ran."])
+        failed = {**report, "outcome": "FAIL", "stage_result": "FAIL_CODE"}
+        draft = {k: v for k, v in failed.items() if k != "files"}
+        with self.assertRaisesRegex(Invalid, "Assigned commands passed"):
+            f.ledger.prepare_report("verify-label", draft, [])
+        with self.assertRaisesRegex(Invalid, "Assigned commands passed"):
+            f.ledger.finish("verify-label", failed)
+        f.ledger.finish("verify-label", report)
+        f.start("review-label")
+        review = f.ledger.packet("review-label")
+        self.assertIn(observation, review["finish_requirements"]["required_checks"])
+        delivered = review["dependency_results"]
+        self.assertNotIn("coverage_notes", delivered["verify-label"]["report"])
+        self.assertNotIn("Fixture result", str(delivered["write-label"]["report"]))
+        self.assertEqual(
+            report["coverage_notes"],
+            f.ledger.read()["nodes"]["verify-label"]["report"]["coverage_notes"],
+        )
+        self.assertIn("report_ref", delivered["verify-label"])
+        judged = f.report("review-label", verdict="APPROVE")
+        with self.assertRaisesRegex(Invalid, "Missing required check"):
+            f.ledger.finish("review-label", judged)
+        judged["checks"] = [{**observation, "result": "PASS", "evidence": "Independent assessment"}]
+        f.ledger.finish("review-label", judged)
+        f.ledger.accept("accept-label")
+
     def test_roles_and_owner_minimum_at_public_entry(self) -> None:
         scenarios = [
             ("feature", "feature", "moderate", None, False, "implementer", True),

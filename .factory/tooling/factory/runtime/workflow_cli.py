@@ -269,8 +269,10 @@ def build_parser(
     reference.add_argument("dispatch_id")
     report = command("prepare-report", _dispatch_packets_checks)
     report.add_argument("node")
-    report.add_argument("report")
-    report.add_argument("receipt_ids", nargs="*")
+    report.add_argument("report", help="Stored draft ID, or - to read one JSON draft from stdin")
+    report.add_argument(
+        "execution_ids", nargs="*", help="Execution IDs of registered check receipts"
+    )
     f = command("finish", _dispatch_completion)
     f.add_argument("node")
     f.add_argument("report")
@@ -563,8 +565,12 @@ def _dispatch_packets_checks(args: argparse.Namespace, ledger: Ledger) -> tuple[
             ledger, args.node, args.dispatch, args.request, offer, dry_run=args.dry_run
         )
     elif args.action == "prepare-report":
-        draft = ledger.runs.read_input(ledger.root, "draft", args.report)
-        report = ledger.prepare_report(args.node, draft, args.receipt_ids, submit=True)
+        draft = (
+            json.load(sys.stdin)
+            if args.report == "-"
+            else ledger.runs.read_input(ledger.root, "draft", args.report)
+        )
+        report = ledger.prepare_report(args.node, draft, args.execution_ids, submit=True)
         result = {
             "report_id": graph_identity(["submission", report]),
             "dispatch_id": report["dispatch_id"],

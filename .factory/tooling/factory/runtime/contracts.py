@@ -39,6 +39,7 @@ class CheckEvidence(TypedDict, total=False):
     category: str
     criteria: list[str]
     method: str
+    assessor: Literal["tester", "judge"]
     execution: CommandExecution
     result: str
     evidence: str
@@ -194,7 +195,14 @@ class LockedGraph(GraphTopology):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class CheckApprovalPolicy(TypedDict):
+    action: Nonblank
+    path_regex: NotRequired[Nonblank]
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class FinishRequirements(TypedDict):
+    approval_policies: NotRequired[dict[CheckId, CheckApprovalPolicy]]
     allowed_checks: list[CheckSpec]
     required_checks: list[CheckSpec]
     gates: list[BoundaryGate]
@@ -434,7 +442,7 @@ class FindingView(TypedDict):
     id: Nonblank
     status: Literal["open", "ready", "fixed", "dismissed"]
     blocking: bool
-    owner_role: Literal["implementer", "doc-writer", "developer", "test-writer", "generalist"]
+    owner_role: Literal["implementer", "doc-writer"]
     owner_node_id: Nonblank
     task_id: NotRequired[Nonblank]
     summary: Nonblank
@@ -544,6 +552,7 @@ class CriterionAssessment(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class ReportEvidence(TypedDict, total=False):
+    coverage_notes: list[Nonblank]
     role_material: list[RoleMaterial]
     criterion_assessments: dict[Nonblank, CriterionAssessment]
     write_result: WriteOffer
@@ -616,6 +625,7 @@ class ReportSubmission(TypedDict):
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class Dispatch(TypedDict, total=False):
     document_baseline: dict[str, str]
+    initial_owned_files: dict[str, str]
     role_records: list[RoleRecord]
     write_deliveries: list[WriteDelivery]
     terminal_input: Nonblank
@@ -800,6 +810,7 @@ class CorrectionSummary(TypedDict):
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class CorrectionRecord(CorrectionSummary):
+    baseline_repair: NotRequired[bool]
     request_hash: Nonblank
     task_id: Nonblank
     node_id: Nonblank

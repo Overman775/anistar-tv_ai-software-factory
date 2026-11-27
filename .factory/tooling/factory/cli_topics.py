@@ -27,15 +27,16 @@ Resuming coordinator
   evidence about the named attempt. Use --after with the returned cursor when
   checking for changes in the same run.
 
-Worker with an assignment
+Agent worker with an assignment
   Run the packet's read_command in its read_shell. Follow its instructions for
   reading each chunk and supplying the final acknowledgement to confirm_command.
-  Follow the packet's roles and scope. Run assigned check commands with the
+  Follow the assigned role and scope. Delegate registered checks to the command
+  worker using the issued run_command with the
   provided node, dispatch, check and request IDs. Review result.result before
-  preparing a report. Use the exact receipt IDs from checks results:
-  {cli} workflow prepare-report NODE DRAFT_ID RECEIPT_ID --json
-  Supply the receipt IDs required by the assignment. Save the result object as
-  the report JSON for the coordinator.
+  preparing a report. Use the execution IDs from checks results:
+  {cli} workflow prepare-report NODE - EXECUTION_ID --json
+  {cli} workflow prepare-report NODE DRAFT_ID EXECUTION_ID --json
+  Send the returned report_id to the coordinator for workflow finish.
 
 Blocked or missing a check response
   Read workflow status and copy the attempt command from result.read_commands.

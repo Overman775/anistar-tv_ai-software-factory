@@ -21,7 +21,12 @@ On a verify node, use outcome `BLOCKED` and stage_result `APPROVAL_REQUIRED` onl
 when the single failed check needs the approval action named in project rules.
 Include its real runner receipt in checks and add approval_request with action,
 execution_id, evidence and files. Files maps exact candidate paths to SHA-256
-digests of the inspected bytes. Include paths outside the current task only where
+digests of the inspected bytes. If the generated candidate is a separate file,
+hash that file and use the intended destination as the map key. For example, if
+the destination is `test/goldens/label.txt` and the generated file is
+`out/label.txt`, read its digest with `shasum -a 256 out/label.txt` on macOS,
+`sha256sum out/label.txt` on Linux or `(Get-FileHash out/label.txt).Hash.ToLowerInvariant()`
+in PowerShell. Include paths outside the current task only where
 the project check explicitly permits approval of those paths. Evidence identifies the candidate and
 explains why the failure requires only an external decision. Run the other
 required commands and keep their receipts current. Commands downstream of the

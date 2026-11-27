@@ -188,7 +188,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         adapter = str(ROOT / "adapters/acpx.md")
         self.assertIn(adapter, self.config["_files"])
         p = self.config_file(
-            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
+            lambda c: c["agent_workers"]["implementer"]["variants"]["middle-implementer"].update(
                 adapter="missing"
             )
         )
@@ -261,16 +261,16 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
     def test_duplicate_profile_transport_is_rejected(self) -> None:
         p = self.config_file(
-            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
+            lambda c: c["agent_workers"]["implementer"]["variants"]["middle-implementer"].update(
                 runner="native"
             )
         )
-        with self.assertRaisesRegex(Invalid, r"profiles.*variants.*extra field"):
+        with self.assertRaisesRegex(Invalid, r"agent_workers.*variants.*extra field"):
             load_config(p)
 
     def test_malformed_capabilities_rejected(self) -> None:
         p = self.config_file(
-            lambda c: c["profiles"]["implementer"]["capabilities"].update(edit="false")
+            lambda c: c["agent_workers"]["implementer"]["capabilities"].update(edit="false")
         )
         with self.assertRaisesRegex(Invalid, r"capabilities.edit: .*boolean"):
             load_config(p)
@@ -293,7 +293,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
 
         example = yaml.safe_load((ROOT / "factory.example.yaml").read_text())
         self.assertTrue(self.config["profiles"]["task-reviewer"]["capabilities"]["edit"])
-        self.assertTrue(example["profiles"]["task-reviewer"]["capabilities"]["edit"])
+        self.assertTrue(example["agent_workers"]["task-reviewer"]["capabilities"]["edit"])
         self.g["agents"]["author"] = {"role": "task-reviewer", "profile": "task-reviewer"}
         with self.assertRaisesRegex(Invalid, "Role outside Implement workflow: task-reviewer"):
             self.init()
@@ -533,6 +533,23 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
         self.ledger.finish("write-label", self.report("write-label", "FAIL"))
         with self.assertRaisesRegex(Invalid, "BUDGET"):
             self.ledger.retry("write-label", "tests", "same issue", "writer terminal")
+
+    def test_completed_archive_consumes_each_result_once_even_after_manual_ack(self) -> None:
+        self.init()
+        self.complete()
+        state = self.ledger.read()
+        self.ledger.acknowledge_result("write-label", state["nodes"]["write-label"]["dispatch_id"])
+        self.ledger.archive("completed", "done")
+        self.ledger.archive("completed", "done")
+        archived = self.ledger.read()
+        expected = sorted(state["report_index"])
+        self.assertEqual(expected, sorted(archived["processed_results"]))
+        self.assertEqual(
+            expected,
+            sorted(
+                e["dispatch_id"] for e in archived["events"] if e["event"] == "result_acknowledged"
+            ),
+        )
 
     def test_history_survives_cleanup_and_unknown_file_is_preserved(self) -> None:
         self.init()
@@ -1232,7 +1249,7 @@ class WorkflowTests(unittest.TestCase, WorkflowFixture):
                 "id": "openrouter/z-ai/glm-5.3",
                 "effort": "max",
             }
-            raw["profiles"]["implementer"]["variants"]["implementer"].update(
+            raw["agent_workers"]["implementer"]["variants"]["implementer"].update(
                 adapter="opencode", model="openrouter-glm"
             )
 

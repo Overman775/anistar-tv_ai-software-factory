@@ -21,6 +21,10 @@ def needs_judge(task: Task, config: Config, owned: Iterable[str]) -> bool:
     public = config["_project"]["data"].get("public_contracts", {})
     return bool(
         task["independent_review"]
+        or any(
+            c["kind"] == "observation" and c.get("assessor") == "judge"
+            for c in task["required_checks"]
+        )
         or task["risk"] != "low"
         or task.get("owner_review_ref")
         or task["kind"] == "integration"

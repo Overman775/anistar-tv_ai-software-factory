@@ -300,6 +300,15 @@ class Ledger(RunJournal):
                 }
             )
             current["assignment"] = assignment
+            if current["role"] == "implementer" and current["attempt"] == 1 and n.get("owns"):
+                current["initial_owned_files"] = snapshot(
+                    self.root,
+                    [
+                        path
+                        for path in s["graph"]["tasks"][n["task"]]["scope"]
+                        if overlaps([path], n["owns"])
+                    ],
+                )
             if current["role"] == "doc-writer" and n.get("owns"):
                 current["document_baseline"] = snapshot(self.root, n["owns"])
             self.save(

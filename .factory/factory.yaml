@@ -41,9 +41,10 @@ execution:
     recovery: 1
   on_budget_exhausted: human
 
-# Specialties: shared permissions and tools, then model and adapter variants.
+# Agent workers receive goals and choose their next action within the assignment.
+# Registered checks run as command workers using the accepted check definition.
 # Variants do not override shared fields. Variant names are unique across the factory.
-profiles:
+agent_workers:
   implementer:
     capabilities: {read: true, edit: true, commands: true, web: true}
     enforcement: instructions

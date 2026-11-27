@@ -21,9 +21,9 @@ class ProfileGroupTests(unittest.TestCase):
         self.raw = yaml.safe_load((ROOT / "factory.yaml").read_text())
 
     def test_expansion_preserves_variants_and_copies_mutable_policy(self) -> None:
-        original = deepcopy(self.raw["profiles"])
+        original = deepcopy(self.raw["agent_workers"])
         profiles, defaults = expand_profiles(original)
-        self.assertEqual(original, self.raw["profiles"])
+        self.assertEqual(original, self.raw["agent_workers"])
         self.assertEqual("middle-implementer", defaults["roles/implementer.md"])
         self.assertEqual("terra", profiles["middle-implementer"]["model"])
         self.assertEqual("luna", profiles["junior-implementer"]["model"])
@@ -35,10 +35,10 @@ class ProfileGroupTests(unittest.TestCase):
         policy["to"] = "human"
         self.assertTrue(profiles["junior-implementer"]["capabilities"]["edit"])
         self.assertTrue(profiles["junior-implementer"]["mcp"])
-        self.assertEqual(original, self.raw["profiles"])
+        self.assertEqual(original, self.raw["agent_workers"])
 
     def test_omitted_paths_preserve_profiles_and_defaults(self) -> None:
-        original = deepcopy(self.raw["profiles"])
+        original = deepcopy(self.raw["agent_workers"])
         expected = expand_profiles(original)
         for omitted in (("role", "contract"), ("role",), ("contract",)):
             groups = deepcopy(original)
@@ -52,7 +52,7 @@ class ProfileGroupTests(unittest.TestCase):
         config = load_config(ROOT / "factory.yaml")
         self.assertEqual("reviewer", config["_defaults"]["reviewer"])
         self.assertEqual("middle-implementer", config["_defaults"]["implementer"])
-        groups = deepcopy(self.raw["profiles"])
+        groups = deepcopy(self.raw["agent_workers"])
         groups["reviewer"]["default"] = "reviewer"
         self.assertEqual("reviewer", expand_profiles(groups)[1]["roles/reviewer.md"])
 
@@ -79,11 +79,11 @@ class ProfileGroupTests(unittest.TestCase):
             ),
         ]
         for change in changes:
-            groups = deepcopy(self.raw["profiles"])
+            groups = deepcopy(self.raw["agent_workers"])
             change(groups)
             with self.subTest(change=change), self.assertRaises(Invalid):
                 expand_profiles(groups)
-        flat, _ = expand_profiles(self.raw["profiles"])
+        flat, _ = expand_profiles(self.raw["agent_workers"])
         with self.assertRaises(Invalid):
             expand_profiles(flat)
 
@@ -93,9 +93,10 @@ class ProfileGroupTests(unittest.TestCase):
         original = yaml.safe_load(path.read_text())
         changes: list[Callable[[Any], object]] = [
             lambda c: c.update(routing={"defaults": {}}),
-            lambda c: c.update(profliles={}),
-            lambda c: c["profiles"]["implementer"].update(defualt="middle-implementer"),
-            lambda c: c["profiles"]["implementer"]["variants"]["middle-implementer"].update(
+            lambda c: c.update(profiles={}),
+            lambda c: c.update(profiles=c.pop("agent_workers")),
+            lambda c: c["agent_workers"]["implementer"].update(defualt="middle-implementer"),
+            lambda c: c["agent_workers"]["implementer"]["variants"]["middle-implementer"].update(
                 effort="high"
             ),
             lambda c: c["models"]["terra"].update(efort="high"),

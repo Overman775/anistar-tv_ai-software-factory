@@ -25,6 +25,32 @@ class TesterProjectionTests(unittest.TestCase):
         predecessor = next(n for n in self.state["graph"]["nodes"] if n["id"] == "verify-label")
         self.state["graph"]["agents"][agent_key(predecessor)]["role"] = "tester"
 
+    def test_mixed_verification_counts_stay_with_their_scope(self) -> None:
+        report = self.state["nodes"]["verify-label"]["report"]
+        receipt = self.state["executions"][report["checks"][0]["execution_id"]]
+        receipt["verification"] = [
+            {
+                "suite": scope,
+                "phase": "verify",
+                "result": "PASS",
+                "scope": scope,
+                "counts": {"selected": count, "completed": count},
+                "failures": [],
+                "diagnostics": ["passing-name"],
+            }
+            for scope, count in [("filtered", 1), ("full", 2)]
+        ]
+        delivered = implement_packet(self.state, "review-label")["dependency_results"][
+            "verify-label"
+        ]
+        facts = delivered["report"]["verification"]
+        self.assertEqual(
+            {"filtered": {"selected": 1, "completed": 1}, "full": {"selected": 2, "completed": 2}},
+            {item["scope"]: item["counts"] for item in facts},
+        )
+        self.assertTrue(all(item["failures"] == [] and item["diagnostics"] == [] for item in facts))
+        self.assertIn("report_ref", delivered)
+
     def test_delivered_packets(self) -> None:
         for suite, failed, infra in (
             ("unit", 2, False),
@@ -231,6 +257,61 @@ class TesterProjectionTests(unittest.TestCase):
         self.assertEqual(failure["check_id"], "behavior")
         self.assertIn("expected true", failure["diagnostic"])
         self.assertNotIn("files", history["evidence"])
+
+    def test_assigned_failed_observation_reaches_author_beside_passing_command(self) -> None:
+        fixture = WorkflowFixture(self.addCleanup)
+        fixture.g["agents"]["author"]["profile"] = "middle-implementer"
+        fixture.config["_defaults"]["implementer"] = "middle-implementer"
+        observation = {
+            "id": "visible-unit",
+            "kind": "observation",
+            "assessor": "tester",
+            "category": "acceptance",
+            "criteria": ["AC-01"],
+            "method": "Inspect the output unit",
+        }
+        fixture.g["tasks"]["label"]["required_checks"].append(observation)
+        fixture.init()
+        fixture.start("write-label")
+        fixture.ledger.finish("write-label", fixture.report("write-label"))
+        fixture.start("verify-label")
+        passed = fixture.ledger.run_check("verify-label", "behavior")
+        detail = "Rendered total on line 1 uses USD; expected EUR."
+        failed = {**observation, "result": "FAIL", "evidence": detail}
+        report = fixture.report(
+            "verify-label", "FAIL", stage_result="FAIL_CODE", checks=[passed, failed]
+        )
+        report.pop("evidence")  # The assigned observation carries the only failure evidence.
+        fixture.ledger.finish("verify-label", report)
+        state = fixture.ledger.read()
+        record = fixture.ledger.correct(
+            "write-label",
+            {
+                "author_dispatch_id": state["nodes"]["write-label"]["dispatch_id"],
+                "evidence_node": "verify-label",
+                "evidence_dispatch_id": report["dispatch_id"],
+                "kind": "quality",
+                "cause": "tests",
+                "reason": "Assigned observation failed",
+                "terminal_evidence": "Tester has finished",
+                "handoff": "Correct the displayed unit",
+            },
+        )
+        self.assertIn(record["decision"], {"retry", "escalate"})
+        fixture.claim("write-label")
+        item = fixture.ledger.packet("write-label")["correction"]["history"][-1]
+        self.assertEqual(item["report_ref"], state["nodes"]["verify-label"]["report_ref"])
+        self.assertEqual(
+            item["evidence"]["checks"],
+            [
+                {
+                    "kind": "observation",
+                    "id": "visible-unit",
+                    "result": "FAIL",
+                    "evidence": detail,
+                }
+            ],
+        )
 
     def test_generic_zero_incomplete_and_skipped_counts(self) -> None:
         log = self.f.root / "unittest.log"

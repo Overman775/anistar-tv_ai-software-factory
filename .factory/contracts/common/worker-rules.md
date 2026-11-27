@@ -1,5 +1,9 @@
 # Worker Rules
 
+These instructions apply to an agent acting as a worker on a delegated assignment.
+Choose investigative steps within the assigned scope. Use the issued check command
+when the assignment delegates a registered check to the command worker.
+
 Read the current assignment, your role/contract, supplied worker adapter,
 AGENTS.md and mandatory project documents before dependent work. Implement
 supplies accepted copies of mandatory reading in the packet. Read selected project

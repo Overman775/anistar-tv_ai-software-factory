@@ -18,8 +18,8 @@ assigned source/evidence, missing inputs and paths read.
 ## Allowed Writes
 
 - Documentation files in assigned scope.
-- The exact assigned runtime evidence/report path, with current assignment identity.
-- Existing `AGENTS.md` and the project documentation index documentation indexes when required.
+- Submit assignment evidence with `workflow prepare-report` and return its `report_id` to the coordinator.
+- Existing `AGENTS.md` and the project documentation index when required.
 
 ## Forbidden Writes
 

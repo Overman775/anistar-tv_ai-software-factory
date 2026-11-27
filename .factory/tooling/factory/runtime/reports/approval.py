@@ -8,6 +8,7 @@ from factory.project.profile_rules import project_check_graph, project_checks
 from factory.runtime.commands.evidence import check_receipts
 from factory.runtime.contracts import (
     ApprovalRequest,
+    ExecutionReceipt,
     LockedGraph,
     Node,
     Report,
@@ -112,6 +113,29 @@ def bind_request(root: Path, state: State, node: Node, task: Task, report: Repor
     ]
     bound["id"] = graph_identity(identity)
     report["approval_request"] = bound
+
+
+def protect_scope(state: State, task_id: str, added_paths: set[str]) -> None:
+    """Protected destinations of an unresolved failed check enter scope through owner approval."""
+    if not added_paths:
+        return
+    nodes = {
+        n["id"] for n in state["graph"]["nodes"] if n["task"] == task_id and n["stage"] == "verify"
+    }
+    latest: dict[tuple[str, str], ExecutionReceipt] = {}
+    for record in state.get("executions", {}).values():
+        if record["node_id"] in nodes:
+            key = record["node_id"], record["spec"]["id"]
+            if key not in latest or latest[key]["started_at"] < record["started_at"]:
+                latest[key] = record
+    failed = {cid for (_, cid), record in latest.items() if record["status"] == "FAIL"}
+    for check in project_checks(state["config"]["_project"]["data"], all_processes=False):
+        pattern = check.get("approval_path_regex")
+        if check["id"] in failed and check.get("approval_action") and pattern:
+            require(
+                not any(re.fullmatch(pattern, path) for path in added_paths),
+                "Failed approval-controlled check: use the bound owner request before adding its candidate destination",
+            )
 
 
 def expanded_graph(state: State, node: Node, report: Report) -> LockedGraph:

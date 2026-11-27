@@ -43,7 +43,7 @@ Event = TeacherJob
 def launch_profile(config: Config) -> TeacherProfile:
     name = config["_defaults"].get("teacher")
     if name is None:
-        raise ValueError("Configure profiles.teacher in .factory/factory.yaml")
+        raise ValueError("Configure agent_workers.teacher in .factory/factory.yaml")
     profile = config["profiles"][name]
     model = config["models"][profile["model"]]
     require(model["id"] and model.get("effort"), "Teacher requires an explicit model ID and effort")

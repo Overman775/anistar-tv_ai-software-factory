@@ -17,7 +17,7 @@ before releasing the resource. Use foreground commands within the runner tree.
 
 Verify supplies all required checks plus applicable static/tests/docs evidence or
 justified not_applicable reasons; high risk cannot skip tests. Required checks
-cannot be waived via not_applicable. Tester owns verification receipts. Judge inspects current receipts on review.
+cannot be waived via not_applicable. The command worker produces the execution receipt. Tester inspects it and owns the verification report. Judge inspects current receipts on review.
 Later writes or changed inputs invalidate prior evidence. Self-review is never an
 independent APPROVE. Correct assertions and nonzero test selection need inspection.
 

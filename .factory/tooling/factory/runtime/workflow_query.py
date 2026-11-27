@@ -292,6 +292,13 @@ def next_actions(
                                 if report and "criterion_assessments" in report
                                 else {}
                             ),
+                            **(
+                                {"approval_request": report["approval_request"]}
+                                if action == "resume-approved"
+                                and report
+                                and "approval_request" in report
+                                else {}
+                            ),
                             "node_id": key,
                         }
                         for action in outcome.corrections

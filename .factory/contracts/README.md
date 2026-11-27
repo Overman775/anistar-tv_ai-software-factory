@@ -1,5 +1,9 @@
 # Agent Contracts
 
+A worker carries out an assignment for another participant. An agent chooses the
+next step toward a goal in light of earlier results. A Tester agent can delegate a
+registered check to a command worker, inspect its receipt and decide what to report.
+
 Contracts describe what each canonical agent may read, write, return, and refuse.
 They are runtime-independent. Adapters decide which concrete tool performs an
 action.

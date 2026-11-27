@@ -1,4 +1,4 @@
-"""Run registered commands under a durable, single-launch supervisor."""
+"""Execute a registered check as a command worker and record its process evidence."""
 
 from __future__ import annotations
 

@@ -7,10 +7,12 @@ Copy identities from the assignment. Use the displayed `finish_requirements`.
 For projected integration work, `task.scope` shows the worker's local paths.
 Use `prepare-report` to capture the authoritative snapshot at handoff.
 `checks` contains actual results, never planned commands masquerading as evidence.
-At author handoff, publish the typed draft with
-`factory.runtime.graph_inputs.draft_report(workspace, draft)`. Pass the returned ID to
-`cli workflow prepare-report NODE DRAFT_ID [RECEIPT_ID ...]`. Both native and ACP workers
-use the same command. Its response contains the dispatch ID and immutable report ID.
+At author handoff, pipe one typed draft as JSON on stdin to the assignment's
+`report_command` (`workflow prepare-report NODE -`). Append the execution IDs of
+the selected check receipts as positional arguments. The stream is transient. The
+validated submission is stored in the workflow ledger. Native and ACP workers use
+this same public CLI. A caller with a stored draft ID can pass that ID in place
+of the dash. Its response contains the dispatch ID and immutable report ID.
 If the response is lost, the coordinator can recover both from `workflow status`.
 The draft carries run_id, dispatch_id, source_hash and node_id from the assignment,
 author fields and any observation checks,

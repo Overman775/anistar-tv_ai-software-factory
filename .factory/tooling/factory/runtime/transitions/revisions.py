@@ -23,6 +23,7 @@ from factory.runtime.contracts import (
     agent_key,
 )
 from factory.runtime.history import report_history
+from factory.runtime.reports import approval
 from factory.runtime.run_journal import RunJournal
 from factory.runtime.scheduling import escalation
 from factory.runtime.scheduling.assignment import worker_node
@@ -177,6 +178,11 @@ def _revise(
     old = s["graph"]
     if graph == old and retry_tests is None:
         return
+    for task_id, task in old["tasks"].items():
+        if task_id in graph["tasks"]:
+            approval.protect_scope(
+                s, task_id, set(graph["tasks"][task_id]["scope"]) - set(task["scope"])
+            )
     _preserve_test_retry_dependencies(s, new_nodes)
     validate_assignment_change(s, graph)
     require(

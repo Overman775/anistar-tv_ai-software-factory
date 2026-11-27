@@ -352,6 +352,17 @@ class CheckRunnerTests(unittest.TestCase):
         prepared = f.ledger.runs.read_input(f.root, "submission", ref)
         assert isinstance(prepared, dict)
         self.assertEqual([result], prepared["checks"])
+        stream = [*workflow, "prepare-report", "verify-label", "-", result["execution_id"]]
+        submitted = subprocess.run(
+            stream, input=json.dumps(draft), capture_output=True, text=True, check=True
+        )
+        self.assertEqual(ref, json.loads(submitted.stdout)["result"]["report_id"])
+        for invalid in ("[1]", "not JSON", json.dumps({**draft, "dispatch_id": "stale"})):
+            denied = subprocess.run(
+                stream, input=invalid, capture_output=True, text=True, check=False
+            )
+            self.assertNotEqual(0, denied.returncode)
+        self.assertEqual(ref, f.ledger.read()["nodes"]["verify-label"]["submission"]["report_id"])
         rejected = subprocess.run(
             [*workflow, "prepare-report", "verify-label", ref],
             check=False,
@@ -644,6 +655,10 @@ class CheckRunnerTests(unittest.TestCase):
             f.ledger.finish(node, {**self.report(failure), "outcome": "FAIL"})
             f.ledger.retry(node, "tests", "diagnosed and stopped", "terminal test fixture")
         f.start(node, "judge")
+        policies = f.ledger.packet(node)["finish_requirements"]["approval_policies"]
+        self.assertEqual(set(policies), {"baseline"})
+        self.assertEqual(policies["baseline"]["action"], "update-baseline")
+        self.assertRegex(path, policies["baseline"]["path_regex"])
         ok = f.ledger.run_check(node, "behavior")
         failed = f.ledger.run_check(node, "baseline")
         report = self.report(ok)
@@ -673,7 +688,19 @@ class CheckRunnerTests(unittest.TestCase):
             )
         f.ledger.finish(node, {**report, "approval_request": request})
         state = f.ledger.read()
+        with self.assertRaisesRegex(Invalid, "owner request"):
+            f.ledger.expand_scope("label", [path], "Inspect candidate and target")
+        self.assertEqual(state, f.ledger.read())
         request_id = state["nodes"][node]["report"]["approval_request"]["id"]
+        [owner] = [
+            item
+            for item in f.ledger.next_actions()["handoffs"][node]
+            if item["command"] == "workflow resume-approved"
+        ]
+        self.assertEqual(
+            state["nodes"][node]["report"]["approval_request"], owner["approval_request"]
+        )
+        self.assertEqual({path: digest(candidate.read_bytes())}, owner["approval_request"]["files"])
         bypass = subprocess.run(
             [
                 *CLI,

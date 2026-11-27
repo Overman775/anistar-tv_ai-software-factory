@@ -32,7 +32,12 @@ from factory.runtime.history import report_history
 from factory.runtime.history.history_repository import HistoryRepository
 from factory.runtime.reports import review_findings as review_findings
 from factory.runtime.reports.acceptance import ensure as ensure
-from factory.runtime.reports.summary import REPORT_SUMMARY, compact_tester_report
+from factory.runtime.reports.acceptance import has_failed_observation
+from factory.runtime.reports.summary import (
+    REPORT_SUMMARY,
+    compact_tester_report,
+    unchanged_readiness,
+)
 from factory.runtime.scheduling.attempt_graph import invalidate
 from factory.runtime.scheduling.escalation_policy import CAUSES as CAUSES
 from factory.runtime.scheduling.escalation_policy import RetryBudget, correction_decision
@@ -90,6 +95,7 @@ class CorrectionEvidence:
 
 @dataclass(frozen=True)
 class CorrectionDecision:
+    baseline_repair: bool
     failures: int
     budget_cause: Literal["static", "tests", "docs", "review", "recovery"]
     budget: RetryBudget
@@ -272,6 +278,12 @@ def validate_correction(
         ensure(
             report.get("unsuccessful_attempt")
             or report.get("evidence")
+            or (
+                evidence_node["stage"] == "verify"
+                and has_failed_observation(
+                    original["requirements"]["allowed_checks"], report.get("checks", [])
+                )
+            )
             or any(
                 c.get("execution_id") and c.get("result") == "FAIL"
                 for c in report.get("checks", [])
@@ -290,26 +302,65 @@ def validate_correction(
     return CorrectionEvidence(nodes, node, task_id, assignment, profile_id, policy, report)
 
 
+def first_baseline_repair(
+    state: State, request: CorrectionRequest, evidence: CorrectionEvidence
+) -> bool:
+    """A supplemental repro on an untouched, previously verified candidate starts its first repair."""
+    source = evidence.nodes[request["evidence_node"]]
+    author = state["nodes"][evidence.node["id"]]
+    baseline = author.get("initial_owned_files")
+    failed_checks = {
+        c["id"]
+        for c in evidence.report.get("checks", [])
+        if c.get("execution_id") and c.get("result") == "FAIL"
+    }
+    if (
+        request["kind"] != "quality"
+        or evidence.report["stage_result"] not in {"FAIL_CODE", "FAIL_TEST"}
+        or source["stage"] != "verify"
+        or not failed_checks.intersection(source.get("required_check_ids", []))
+        or source["task"] != evidence.task_id
+        or not baseline
+        or not unchanged_readiness(author)
+        or any(evidence.report["files"].get(path) != sha for path, sha in baseline.items())
+        or any(record["node_id"] == evidence.node["id"] for record in state.get("corrections", []))
+    ):
+        return False
+    return any(
+        node["task"] == source["task"]
+        and node["stage"] == "verify"
+        and "required_check_ids" not in node
+        and state["nodes"][node["id"]]["status"] == "done"
+        and (verified := state["nodes"][node["id"]].get("report")) is not None
+        and verified["outcome"] == "PASS"
+        and verified["source_hash"] == evidence.report["source_hash"]
+        and verified["files"] == evidence.report["files"]
+        for node in evidence.nodes.values()
+    )
+
+
 def choose_correction(
     state: State,
     request: CorrectionRequest,
     evidence: CorrectionEvidence,
 ) -> CorrectionDecision:
     task_id, profile_id, policy = evidence.task_id, evidence.profile_id, evidence.policy
+    baseline_repair = first_baseline_repair(state, request, evidence)
     failures = sum(
         r["task_id"] == task_id
         and r["cause"] == request["cause"]
         and r["from_profile"] == profile_id
         and r["kind"] == "quality"
+        and not r.get("baseline_repair")
         for r in state.get("corrections", [])
     )
-    failures += request["kind"] == "quality"
+    failures += request["kind"] == "quality" and not baseline_repair
     budget_cause = "recovery" if request["kind"] == "environment" else request["cause"]
     budget = RetryBudget.for_task(state, task_id, budget_cause)
     target, decision = correction_decision(
         request["kind"], profile_id, policy, failures, budget.used, budget.limit
     )
-    return CorrectionDecision(failures, budget_cause, budget, target, decision)
+    return CorrectionDecision(baseline_repair, failures, budget_cause, budget, target, decision)
 
 
 def apply_correction(
@@ -350,6 +401,8 @@ def apply_correction(
         budget_cause=budget_cause,
         budget_remaining=budget.remaining,
     )
+    if choice.baseline_repair:
+        record["baseline_repair"] = True
     if decision in {"blocked", "human"}:
         state.setdefault("escalation_stops", {})[task_id] = dict(
             reason=request["reason"],
@@ -398,7 +451,7 @@ def apply_correction(
                 dict(at=time.time(), event="invalidated", node=key, previous=old)
             )
             state["nodes"][key] = invalidate(old)
-        if request["kind"] == "quality":
+        if request["kind"] == "quality" and not choice.baseline_repair:
             budget.spend()
     record["budget_remaining"] = budget.remaining
     validated = CORRECTION_RECORD.validate_python(record)

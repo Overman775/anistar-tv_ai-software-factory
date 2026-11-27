@@ -43,7 +43,7 @@ storage without committing credentials; global registration is not a substitute.
 Compare existing target files before replacing them. Preserve local changes;
 show conflicts rather than overwriting. Do not use AniStar project/runtime settings
 as defaults for another application. Preserve existing `factory.yaml`; for a new
-configuration use the example as a schema guide, choosing actual available profiles,
+configuration use the example as a schema guide, choosing available agent worker profiles in `agent_workers`,
 models, adapters and permissions. Remove inapplicable sample MCP grants instead of
 installing the sample's application tools. Never invent project commands or gates.
 Finish this step with an explicit result: selected runtime profiles configured and

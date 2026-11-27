@@ -119,12 +119,14 @@ def prepare_report(
                     ):
                         selected_ids.append(child_id)
                         selected_checks.add(stage["spec"]["id"])
+        obligations = finish_requirements.for_node(state, node)
         for receipt_id in selected_ids:
             record = state.get("executions", {}).get(receipt_id)
             if record is None or record.get("result") is None:
                 raise Invalid("Unknown or incomplete receipt")
             require(record["result"].get("execution_id") == receipt_id, "Receipt ID mismatch")
-            require(record["spec"] in task["required_checks"], "Receipt is not required")
+
+            require(record["spec"] in obligations["allowed_checks"], "Receipt is not assigned")
             check_receipts(
                 journal.root,
                 state,
@@ -141,7 +143,6 @@ def prepare_report(
         check_receipts(
             journal.root, state, node_id, draft_checks, complete=False, require_pass=require_pass
         )
-        obligations = finish_requirements.for_node(state, node)
         acceptance_guard(finish_requirements.validate_selection, obligations, checks)
         result = parse_report(
             {
@@ -159,6 +160,9 @@ def prepare_report(
                     ),
                 ),
             }
+        )
+        acceptance_guard(
+            finish_requirements.validate_tester_outcome, state, node, obligations, result
         )
         if require_pass:
             acceptance_guard(finish_requirements.validate_pass, obligations, result)
@@ -271,6 +275,7 @@ def finish(journal: RunJournal, node_id: str, raw: object) -> None:
                     "Failed/incomplete command evidence",
                 )
         acceptance_guard(finish_requirements.validate_selection, obligations, checks)
+        acceptance_guard(finish_requirements.validate_tester_outcome, s, n, obligations, report)
         if outcome == "PASS":
             acceptance_guard(finish_requirements.validate_pass, obligations, report)
         check_receipts(

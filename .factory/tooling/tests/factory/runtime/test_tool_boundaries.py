@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 import unittest
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -49,7 +50,7 @@ def configuration() -> dict[str, Any]:
             "on_budget_exhausted": "human",
         },
         models={"fixture": {"id": "fixture-model"}},
-        profiles={
+        agent_workers={
             "tester": dict(
                 profile,
                 role="roles/tester.md",
@@ -191,7 +192,10 @@ class ToolBoundaryTests(unittest.TestCase):
             config_file = bundle / "factory.yaml"
             config_file.write_text(yaml.safe_dump(configuration()), encoding="utf-8")
             config = load_config(config_file)
+            # The graph event loop needs its local wakeup socket before transport I/O is blocked.
             with (
+                closing(asyncio.new_event_loop()) as loop,
+                patch("asyncio.get_event_loop", return_value=loop),
                 patch("subprocess.Popen", side_effect=AssertionError("External process forbidden")),
                 patch("os.system", side_effect=AssertionError("Shell forbidden")),
                 patch("socket.socket", side_effect=AssertionError("Network forbidden")),
@@ -330,7 +334,7 @@ class ToolBoundaryTests(unittest.TestCase):
     def test_disabled_escalation_survives_state_roundtrip(self) -> None:
         fixture = workflow_fixture.WorkflowFixture(self.addCleanup)
         config_file = fixture.config_file(
-            lambda c: c["profiles"]["implementer"]["variants"]["implementer"].update(
+            lambda c: c["agent_workers"]["implementer"]["variants"]["implementer"].update(
                 escalation=None
             )
         )

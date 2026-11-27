@@ -114,8 +114,9 @@ class CLIHelpTests(unittest.TestCase):
             self.assertIn(f"{LAUNCHER} workflow status --json", text)
             self.assertIn(f"{LAUNCHER} checks results EXECUTION_ID --json", text)
             self.assertIn(
-                f"{LAUNCHER} workflow prepare-report NODE DRAFT_ID RECEIPT_ID --json", text
+                f"{LAUNCHER} workflow prepare-report NODE DRAFT_ID EXECUTION_ID --json", text
             )
+            self.assertIn("Send the returned report_id to the coordinator", text)
             for line in text.splitlines():
                 if line.startswith(f"  {LAUNCHER} "):
                     build_parser().parse_args(self.example_args(line.strip()))

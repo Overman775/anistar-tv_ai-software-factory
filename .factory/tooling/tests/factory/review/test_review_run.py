@@ -663,7 +663,7 @@ with patch('factory.review.review_run.collect_results',side_effect=lambda *a,**k
                 shutil.copytree(fixture, bundle)
                 config_path = bundle / "factory.yaml"
                 settings = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-                group = settings["profiles"]["reviewer"]
+                group = settings["agent_workers"]["reviewer"]
                 variant = next(iter(group["variants"].values()))
                 group["variants"] = {name: deepcopy(variant) for name in variants}
                 group.pop("default", None)

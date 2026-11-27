@@ -35,6 +35,11 @@ are outside this run, not PASS. Direct/external source extraction is checked by
 the parent. Never select fewer criteria merely to make a failing run pass.
 
 Every task declares non-empty `acceptance_ids` and `required_checks`.
+Use `independent_review` for an independent verdict, and `owner_review_ref` when the
+owner requested it. For a separately evidenced acceptance observation, set
+`assessor: judge` if it requires independent judgment, or `assessor: tester` if
+it requires Tester. An observation without an assessor is included in full Verify.
+A project review criterion is assessed at its declared review boundary.
 When the source explicitly requires a durable author handoff to a downstream
 task, retain that requirement in the source registry at intake (reuse the
 matching approved-plan criterion; never alter a locked registry). Assign the

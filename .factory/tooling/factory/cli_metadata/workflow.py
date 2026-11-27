@@ -263,9 +263,10 @@ WORKFLOW_HELP = (
     details(
         "workflow prepare-report",
         "Validate a report draft with its check receipts.",
-        RUN + " A draft ID from graph_inputs.draft_report and any required receipt IDs.",
+        RUN
+        + " Use - for one JSON draft on stdin, or a stored draft ID. Append the execution IDs of the selected command receipts.",
         "Attaches the validated report to the current dispatch and returns its report_id.",
-        "NODE DRAFT_ID RECEIPT_ID --json",
+        "NODE DRAFT_ID EXECUTION_ID --json",
         writes=("workflow-state", "diagnostics"),
     ),
     details(

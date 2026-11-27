@@ -10,7 +10,7 @@ from factory.decompose.graph.task_data import load_source_lock
 from factory.paths import FACTORY_ROOT
 from factory.project.contracts import Policy
 from factory.project.profile_io import parse_yaml, safe_path, sha
-from factory.runtime.workflow_config import expand_profiles
+from factory.runtime.workflow_config import expand_profiles, validate_settings
 
 
 def atomic_write_text(path: str | Path, content: str) -> None:
@@ -133,12 +133,13 @@ def review_worker_materials(config: str | Path, selected: dict[str, str]) -> dic
     """Bind the same documents that the selected Decompose packets receive."""
     location = Path(config).resolve()
     settings = parse_yaml(file_reader.read_bytes(location))
-    if "profiles" not in settings:
+    if isinstance(settings, dict) and set(settings) == {"project"}:
         # A graph-only configuration may carry just a project profile.
         location = FACTORY_ROOT / "factory.yaml"
         settings = parse_yaml(file_reader.read_bytes(location))
-    profiles, defaults = expand_profiles(settings["profiles"])
-    adapters = settings["adapters"]
+    config_settings = validate_settings(settings)
+    profiles, defaults = expand_profiles(config_settings["agent_workers"])
+    adapters = config_settings["adapters"]
     result: dict[str, object] = {}
     for role in ("task-decomposer", "task-reviewer"):
         role_path = f"roles/{role}.md"

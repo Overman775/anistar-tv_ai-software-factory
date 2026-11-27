@@ -66,7 +66,7 @@ ProfileGroups = Annotated[dict[Alias, ProfileGroup], Field(min_length=1)]
 class FactoryConfig(Settings):
     telemetry: NotRequired[TelemetrySettings]
     logs: NotRequired[TelemetrySettings]
-    profiles: ProfileGroups
+    agent_workers: ProfileGroups
 
 
 FACTORY_CONFIG = TypeAdapter[FactoryConfig](FactoryConfig)
@@ -151,24 +151,30 @@ def _validate_adapters(
             files[str(f)] = digest(file_reader.read_bytes(f))
 
 
+def validate_settings(data: object) -> FactoryConfig:
+    try:
+        return FACTORY_CONFIG.validate_python(data)
+    except ValidationError as exc:
+        raise Invalid(
+            validation_message("Invalid factory configuration", exc, FACTORY_CONFIG)
+        ) from None
+
+
 def _read_settings(path: Path) -> tuple[FactoryConfig, bytes]:
     if yaml is None:
         raise Invalid("Install .factory/tooling/requirements.txt in a virtualenv")
     raw = file_reader.read_bytes(path)
     try:
-        return FACTORY_CONFIG.validate_python(parse_yaml(raw)), raw
-    except ValidationError as exc:
-        raise Invalid(
-            validation_message("Invalid factory configuration", exc, FACTORY_CONFIG)
-        ) from None
+        data = parse_yaml(raw)
     except ValueError as exc:
         raise Invalid(f"Invalid factory configuration: {exc}") from exc
+    return validate_settings(data), raw
 
 
 def default_profile(path: str | Path, role: str) -> str:
     """Resolve a route from factory settings without loading project policy."""
     settings, _ = _read_settings(Path(path).resolve())
-    profiles, defaults = _expand_profiles(settings["profiles"])
+    profiles, defaults = _expand_profiles(settings["agent_workers"])
     _, runtime_defaults = acceptance_guard(escalation.routing, profiles, defaults)
     return runtime_defaults[role]
 
@@ -176,7 +182,7 @@ def default_profile(path: str | Path, role: str) -> str:
 def load_config(path: str | Path, *, policy: Policy | None = None) -> Config:
     path = Path(path).resolve()
     settings, raw = _read_settings(path)
-    profiles, defaults = _expand_profiles(settings["profiles"])
+    profiles, defaults = _expand_profiles(settings["agent_workers"])
     models = settings["models"]
     if "orchestrator" in settings:
         require(settings["orchestrator"]["model"] in models, "Unknown orchestrator model alias")
@@ -227,7 +233,7 @@ def load_config(path: str | Path, *, policy: Policy | None = None) -> Config:
 
     roles, runtime_defaults = acceptance_guard(escalation.routing, profiles, defaults)
     result = {
-        **settings,
+        **{key: value for key, value in settings.items() if key != "agent_workers"},
         "profiles": profiles,
         "routing": {"defaults": defaults},
         "_roles": roles,

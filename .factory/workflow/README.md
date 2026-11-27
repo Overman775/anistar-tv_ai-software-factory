@@ -102,7 +102,8 @@ Graph:
 
 All task work must reach exactly one accept node. Authoritative verify follows
 all writers. Independent review follows verification and has a different agent.
-High risk uses separate production and test authors. Dependencies across tasks
+Implementer authors product code and tests. High-risk work requires test evidence
+from Tester and independent review by Judge. Dependencies across tasks
 include predecessor acceptance. A batch of several tasks needs one integration
 task depending on all others with union scope. Its verification checks the actual
 combined tree; local acceptance alone does not finish the batch.
@@ -334,7 +335,7 @@ instruction hashes too. Runner/harness/connection on profiles are rejected to
 avoid two competing sources. Configuration, graph and run state have no schema
 version field; graph revisions and frozen file hashes track actual changes.
 There is no repeated `roles` list. `roles/<role-id>.md` and matching contract
-define specialty; `profiles.<role>.default` selects its normal profile. Implementer profiles share one procedure and contract. Tester uses a separate
+define specialty; `agent_workers.<role>.default` selects its normal profile. Implementer profiles share one procedure and contract. Tester uses a separate
 read-only verification procedure.
 The annotated example additionally shows ZCode/GLM and Pi/DeepSeek; verify
 backend IDs, credentials and required tools before selecting them.

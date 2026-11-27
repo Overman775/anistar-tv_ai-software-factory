@@ -23,6 +23,11 @@ An attempt without usable output can report FAIL_CODE or FAIL_TEST with attempte
 work, unmet requirement and evidence. Prediction, silence and transport delay
 cannot count as a failed attempt.
 
+When a supplemental verification exposes a defect in the unchanged initial candidate after
+full verification passed, `correct` uses the first author dispatch's captured file hashes.
+The first repair stays with that author and is recorded as `baseline_repair`. Subsequent
+failed work uses the configured threshold and budget.
+
 Submit quality corrections through `correct` after confirming terminal status
 and current applicability. The configured threshold and task/cause budget
 govern escalation. Environment and requirements blockers retain their own

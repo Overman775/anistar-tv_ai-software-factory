@@ -181,11 +181,11 @@ class WorkflowFixture:
         import yaml
 
         raw = yaml.safe_load((ROOT / "factory.yaml").read_text())
-        raw["profiles"]["implementer"]["variants"]["implementer"] = dict(
-            raw["profiles"]["implementer"]["variants"]["middle-implementer"]
+        raw["agent_workers"]["implementer"]["variants"]["implementer"] = dict(
+            raw["agent_workers"]["implementer"]["variants"]["middle-implementer"]
         )
-        raw["profiles"]["implementer"]["variants"]["implementer"].pop("escalation", None)
-        raw["profiles"]["implementer"]["default"] = "implementer"
+        raw["agent_workers"]["implementer"]["variants"]["implementer"].pop("escalation", None)
+        raw["agent_workers"]["implementer"]["default"] = "implementer"
         mutate(raw)
         # Use absolute existing canonical file paths via a fixture bundle copy.
         import shutil

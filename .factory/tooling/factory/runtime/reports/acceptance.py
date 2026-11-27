@@ -46,6 +46,16 @@ def check_plan(task: Task, available: dict[str, Criterion]) -> None:
     ensure(covered == selected, "Acceptance criterion has no required check")
 
 
+def has_failed_observation(specifications: list[CheckSpec], checks: list[CheckResult]) -> bool:
+    observed = {spec["id"] for spec in specifications if spec["kind"] == "observation"}
+    return any(
+        check["id"] in observed
+        and check.get("result") == "FAIL"
+        and bool(check.get("evidence", "").strip())
+        for check in checks
+    )
+
+
 def successful(check: CheckResult) -> bool:
     if check.get("kind") == "observation":
         return check.get("result") == "PASS" and bool(check.get("evidence"))

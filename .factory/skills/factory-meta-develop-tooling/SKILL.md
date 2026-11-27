@@ -121,5 +121,7 @@ with the verified implementation.
 - Launcher setup and local checks — [interpreter setup](../factory-install/references/integration.md#interpreter) and [target checks](references/python.md#target-checks).
 - Role responsibilities and acceptance evidence — [agent contracts](../../contracts/README.md) and [verification rules](../../gates/common/verification-rules.md).
 
-In Lab, read `specs/workflow-graphs.md` for the graph contract and `specs/tooling.md`
-for the CLI, code map and checker. Both paths start at the selected variant root, beside `src/`.
+In Lab, start at the selected variant root, beside `src/`. Use `specs/domain-map.md`
+to find who owns a decision and `specs/domain-glossary.md` for assignment and
+evidence terms. Read `specs/workflow-graphs.md` for transitions and `specs/tooling.md`
+for the CLI, code map and checker.

@@ -118,11 +118,11 @@ Report any failed archival or cleanup with the remaining path and cause.
 
 ## Final integration execution
 
-Slice acceptance releases its own dependents. Final acceptance needs evidence for all project and owner obligations against the combined changes. Tester owns execution. Judge owns any required independent verdict. Record the actual checks, exclusions, source and revision.
+Slice acceptance releases its own dependents. Final acceptance needs evidence for all project and owner obligations against the combined changes. For an owner-requested verdict, set `independent_review` and `owner_review_ref`. If a task-level acceptance observation specifically needs Judge, set its `assessor` to `judge`; use `tester` for a Tester-only observation. For the first review of an unchanged candidate, dispatch the Judge with the packet and source. Preserve upstream hypotheses in their original reports while the Judge assesses the candidate independently. Assign checks by authority, including on a full verification. Tester owns execution. Judge owns any required independent verdict. Record the actual checks, exclusions, source and revision.
 
 ## Reconciliation
 
-Use the returned action and exact run, node and ticket for every handoff. Reconcile a recorded execution before issuing another command. Acknowledge a terminal result via `ack-result`. For a missing or ambiguous rule retain the reported branch, facts and reason. Healthy independent branches can proceed while that branch waits.
+Use the returned action and exact run, node and ticket for every handoff. Reconcile a recorded execution before issuing another command. Acknowledge each consumed terminal result via `ack-result NODE DISPATCH_ID`. Successful finalize records any outstanding acknowledgements atomically with the archive. For an approval hold, present the bound `approval_request` in the handoff, including destination path, candidate SHA-256 and request ID. Wait for the owner before resuming. For a missing or ambiguous rule retain the reported branch, facts and reason. Healthy independent branches can proceed while that branch waits.
 
 ## Task guidance
 

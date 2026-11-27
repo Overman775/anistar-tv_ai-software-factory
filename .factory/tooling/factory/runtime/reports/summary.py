@@ -1,12 +1,47 @@
 """Select receipt-backed verification facts for a worker handoff."""
 
+from collections import defaultdict
 from copy import deepcopy
 
 from pydantic import TypeAdapter
 
-from factory.runtime.contracts import CheckEvidence, CheckResult, ReportSummary, State
+from factory.runtime.commands.verification import Verification
+from factory.runtime.contracts import CheckEvidence, CheckResult, Dispatch, ReportSummary, State
 
 REPORT_SUMMARY = TypeAdapter[ReportSummary](ReportSummary)
+
+
+def unchanged_readiness(dispatch: Dispatch) -> bool:
+    baseline = dispatch.get("initial_owned_files")
+    report = dispatch.get("report")
+    return bool(
+        dispatch.get("attempt") == 1
+        and baseline
+        and report
+        and report["outcome"] == "PASS"
+        and report["stage_result"] == "WRITES_READY"
+        and all(report["files"].get(path) == sha for path, sha in baseline.items())
+    )
+
+
+def initial_review_facts(report: ReportSummary) -> ReportSummary:
+    """Keep verifiable delivery facts; the author's original remains accessible by its reference."""
+    facts: ReportSummary = {
+        "run_id": report["run_id"],
+        "dispatch_id": report["dispatch_id"],
+        "node_id": report["node_id"],
+        "source_hash": report["source_hash"],
+        "terminal": True,
+        "outcome": report["outcome"],
+        "summary": "Existing candidate submitted for independent assessment",
+        "stage_result": report["stage_result"],
+        "task_id": report["task_id"],
+        "slice_id": report["slice_id"],
+        "checks": report["checks"],
+    }
+    if "verification" in report:
+        facts["verification"] = report["verification"]
+    return facts
 
 
 def compact_tester_report(state: State, node_id: str, report: ReportSummary) -> ReportSummary:
@@ -19,7 +54,7 @@ def compact_tester_report(state: State, node_id: str, report: ReportSummary) -> 
     result.pop("gate_results", None)
     result.pop("findings", None)
     checks: list[CheckResult] = []
-    observations = []
+    observations: list[Verification] = []
     for check in report["checks"]:
         execution_id = check.get("execution_id")
         receipt = state.get("executions", {}).get(execution_id or "")
@@ -72,42 +107,59 @@ def compact_tester_report(state: State, node_id: str, report: ReportSummary) -> 
             compact["execution_id"] = execution_id or ""
             if receipt.get("error"):
                 compact["reason"] = receipt["error"] or ""
+        elif not execution_id and check.get("kind") in {None, "observation"}:
+            observation_evidence = check.get("evidence", "").strip()
+            if observation_evidence:
+                compact.pop("reason", None)
+                compact["evidence"] = observation_evidence
+                if check.get("kind") == "observation":
+                    compact["kind"] = "observation"
         checks.append(compact)
-    counts: dict[str, int] = {}
+    groups: dict[str, list[Verification]] = defaultdict(list)
     for observation in observations:
-        for key, value in observation["counts"].items():
-            counts[key] = counts.get(key, 0) + value
-    scopes = {item["scope"] for item in observations}
-    result["verification"] = [
+        groups[observation["scope"]].append(observation)
+    result["verification"] = [scope_summary(scope, items) for scope, items in groups.items()] or [
         {
             "suite": "overall",
-            "scope": next(iter(scopes)) if len(scopes) == 1 else "unknown",
+            "scope": "unknown",
             "phase": "verify",
-            "result": result["outcome"],
-            "counts": counts,
-            "failures": [failure for item in observations for failure in item["failures"]],
+            "result": report["outcome"],
+            "counts": {},
+            "failures": [],
             "diagnostics": [
-                text
-                for item in observations
-                if item["result"] != "PASS"
-                for text in item["diagnostics"]
+                "Structured diagnostics unavailable; inspect immutable report/check evidence"
             ]
-            or (
+            + (
                 [
-                    "Structured diagnostics unavailable; inspect immutable report/check evidence",
-                    *(
-                        [
-                            "Unstructured reporter observation: "
-                            + (report.get("evidence") or report["summary"])[:500]
-                        ]
-                        if report["outcome"] != "PASS"
-                        else []
-                    ),
+                    "Unstructured reporter observation: "
+                    + (report.get("evidence") or report["summary"])[:500]
                 ]
-                if not observations
+                if report["outcome"] != "PASS"
                 else []
             ),
         }
     ]
     result["checks"] = checks
     return result
+
+
+def scope_summary(scope: str, observations: list[Verification]) -> Verification:
+    counts: dict[str, int] = {}
+    for item in observations:
+        for key, value in item["counts"].items():
+            counts[key] = counts.get(key, 0) + value
+    statuses = {item["result"] for item in observations}
+    return {
+        "suite": "overall",
+        "scope": scope,
+        "phase": "verify",
+        "result": "FAIL" if "FAIL" in statuses else "BLOCKED" if "BLOCKED" in statuses else "PASS",
+        "counts": counts,
+        "failures": [failure for item in observations for failure in item["failures"]],
+        "diagnostics": [
+            text
+            for item in observations
+            if item["result"] != "PASS"
+            for text in item["diagnostics"]
+        ],
+    }

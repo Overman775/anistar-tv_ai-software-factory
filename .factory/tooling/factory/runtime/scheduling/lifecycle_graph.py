@@ -98,6 +98,20 @@ async def completion_gate(ctx: StepContext) -> Finalizing:
     prepared = cast(Finalizing, ctx.inputs)
     c = prepared.command
     c.ledger.check_completion(c.state)
+    # The coordinator has consumed the terminal evidence for this successful run.
+    processed = c.state.setdefault("processed_results", [])
+    acknowledged = set(processed)
+    for dispatch_id, ref in c.state.get("report_index", {}).items():
+        if dispatch_id not in acknowledged:
+            processed.append(dispatch_id)
+            c.state["events"].append(
+                {
+                    "event": "result_acknowledged",
+                    "at": time.time(),
+                    "node": ref["node_id"],
+                    "dispatch_id": dispatch_id,
+                }
+            )
     c.state["status"] = "completed"
     return prepared
 

@@ -1,6 +1,6 @@
 """Shared declarations for checks selected by policy and used by runtime."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, NotRequired
 
 from pydantic import ConfigDict, Field, StringConstraints, with_config
 from typing_extensions import TypedDict
@@ -24,6 +24,7 @@ class CheckDeclaration(TypedDict):
 @with_config(ConfigDict(strict=True, extra="forbid"))
 class ObservationCheck(CheckDeclaration):
     kind: Literal["observation"]
+    assessor: NotRequired[Literal["tester", "judge"]]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))

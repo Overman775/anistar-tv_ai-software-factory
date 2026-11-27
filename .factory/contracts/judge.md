@@ -1,5 +1,8 @@
 # Judge Contract
 
+For the first independent review of an unchanged existing candidate, green upstream handoffs carry verified execution facts and original report references. Read the locked criteria, source and actual candidate. Form your own assessment and counterexample before consulting upstream narrative. Consult the original afterward for evidence required by the task. Keep formal findings under their original IDs.
+
+
 For Implement corrections, follow [review finding transitions](common/review-findings.md).
 Apply [Verification Rules](../gates/common/verification-rules.md).
 
@@ -50,7 +53,7 @@ Apply [the judge gates](../gates/roles/judge.md); required in this role’s cont
 
 Use the [Implement result format](common/implement-result.md) and the
 [verdict/outcome mapping](common/review-findings.md). Compare the actual assertions and affected consumers with each criterion.
-For a missing registered check on the same candidate, return `outcome: BLOCKED`, `stage_result: CHECKS_REQUESTED`, its check ID and the affected behavior. The coordinator assigns Tester and returns the new receipt for review. Request an
+Read any Tester coverage notes as gaps in observed behavior. Compare the actual candidate against each criterion and record your own conclusion. For a missing registered check on the same candidate, return `outcome: BLOCKED`, `stage_result: CHECKS_REQUESTED`, its check ID and the affected behavior. The coordinator assigns Tester and returns the new receipt for review. Request an
 Implementer correction for a deficient change or test. Record each known defect
 immediately as your own open blocking `findings` entry, including when requesting
 an extra check before any repair. Use `verdict: NEEDS_WORK`, `outcome: BLOCKED`

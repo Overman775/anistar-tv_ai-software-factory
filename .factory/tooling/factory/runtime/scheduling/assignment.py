@@ -12,7 +12,7 @@ from typing_extensions import TypedDict
 from factory.context import context
 from factory.dependency_graph import compile_dependencies
 from factory.runtime import upstream
-from factory.runtime.agent_commands import check_commands
+from factory.runtime.agent_commands import check_commands, factory_command
 from factory.runtime.contracts import (
     FindingView,
     LockedSource,
@@ -24,7 +24,12 @@ from factory.runtime.contracts import (
 )
 from factory.runtime.history import report_history
 from factory.runtime.reports import finish_requirements, review_findings
-from factory.runtime.reports.summary import REPORT_SUMMARY, compact_tester_report
+from factory.runtime.reports.summary import (
+    REPORT_SUMMARY,
+    compact_tester_report,
+    initial_review_facts,
+    unchanged_readiness,
+)
 from factory.runtime.scheduling import escalation
 from factory.runtime.workflow_core import graph_identity
 from factory.tasks.contracts import Task
@@ -66,6 +71,7 @@ class ImplementPacket(context.ContextPacket):
     review_findings: dict[str, FindingView]
     correction: escalation.WorkerCorrection
     source_resolutions: NotRequired[dict[str, str]]
+    report_command: str
     check_commands: NotRequired[list[dict[str, str]]]
 
 
@@ -97,6 +103,16 @@ def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
     }
     selected = compile_dependencies(visible).ancestors(node["id"])
 
+    writers = [
+        key for key in selected if nodes[key]["task"] == node["task"] and nodes[key].get("owns")
+    ]
+    initial_review = (
+        node["stage"] == "review"
+        and state["nodes"][node["id"]].get("attempt", 0) <= 1
+        and not state.get("review_findings", {}).get(node["task"])
+        and bool(writers)
+        and all(unchanged_readiness(state["nodes"][key]) for key in writers)
+    )
     results: dict[str, DependencyResult] = {}
     for key in sorted(selected):
         saved = state["nodes"][key]
@@ -114,6 +130,13 @@ def dependency_results(state: State, node: Node) -> dict[str, DependencyResult]:
             role = predecessor_agent["role"] if predecessor_agent is not None else None
             if role == "tester" and predecessor["stage"] == "verify":
                 item["report"] = compact_tester_report(state, key, item["report"])
+            if (
+                initial_review
+                and predecessor["task"] == node["task"]
+                and role in {"implementer", "tester"}
+                and item["report"]["outcome"] == "PASS"
+            ):
+                item["report"] = initial_review_facts(item["report"])
             if "report_ref" in saved:
                 item["report_ref"] = saved["report_ref"]
         results[key] = item
@@ -272,6 +295,14 @@ def implement_packet(state: State, node_id: str) -> dict[str, Any]:
         node=worker_node(node),
         source=projected_source(source, task, node),
         finish_requirements=obligations,
+        report_command=factory_command(
+            Path(state["workspace"]),
+            state["config"]["_path"],
+            "workflow",
+            "prepare-report",
+            node_id,
+            "-",
+        ),
         assignment_sha256=graph_identity(report_history.assignment(state, node, obligations)),
         source_hash=state["graph"]["sources"][task["source"]]["hash"],
         dependency_results=dependency_results(state, node),

@@ -1209,7 +1209,7 @@ class TeacherDispatchTests(unittest.TestCase):
         self.assertEqual("contracts/teacher.md", route["profile"]["contract"])
         self.assertEqual("native", route["adapter"]["runner"])
 
-        group = config["profiles"]["teacher"]
+        group = config["agent_workers"]["teacher"]
         group["default"] = "alternate-teacher"
         group["variants"]["alternate-teacher"] = {"model": "alternate", "adapter": "claude"}
         config["models"]["alternate"] = {"id": "configured-model", "effort": "high"}
@@ -1228,8 +1228,8 @@ class TeacherDispatchTests(unittest.TestCase):
             self.assertNotEqual(0, blocked.returncode)
             self.assertIn("explicit model ID and effort", blocked.stderr)
 
-        del config["profiles"]["teacher"]
+        del config["agent_workers"]["teacher"]
         path.write_text(yaml.safe_dump(config))
         blocked = launch()
         self.assertNotEqual(0, blocked.returncode)
-        self.assertIn("Configure profiles.teacher", blocked.stderr)
+        self.assertIn("Configure agent_workers.teacher", blocked.stderr)

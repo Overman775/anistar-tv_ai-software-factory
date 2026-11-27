@@ -521,7 +521,7 @@ def routing_operations() -> Operations:
             "prepare_acp": deliver("prepare_acp"),
             "continue_native": deliver("continue"),
             "spawn_native": deliver("spawn"),
-            "wait_approval": correction_action("resume-approved"),
+            "wait_approval": correction_action("resume-approved", "owner"),
             "wait_owner": correction_action("resume-task"),
             "reintake": correction_action("reintake"),
             "request_checks": correction_action("revise", "tester"),

@@ -7,7 +7,14 @@ from factory.project.profile_rules import (
     project_checks,
     registered_check,
 )
-from factory.runtime.contracts import CheckResult, Node, Report, State, agent_key
+from factory.runtime.contracts import (
+    CheckApprovalPolicy,
+    CheckResult,
+    Node,
+    Report,
+    State,
+    agent_key,
+)
 from factory.runtime.contracts import FinishRequirements as FinishRequirements
 from factory.runtime.reports import acceptance
 from factory.runtime.workflow_core import acceptance_guard
@@ -36,11 +43,22 @@ def requirements(
     verification_ids = {
         check["id"]
         for check in all_checks
-        if check["kind"] == "observation" or not check["execution"].get("outputs")
+        if (
+            check.get("assessor") != "judge"
+            if check["kind"] == "observation"
+            else not check["execution"].get("outputs")
+        )
     }
     required = gated | (verification_ids if full else set(selected or []))
+    if selected is not None:
+        acceptance.ensure(set(selected) <= set(by_id), "Unknown node required check")
     if role == "judge":
         required = {cid for cid in required if by_id[cid]["kind"] == "observation"}
+        required.update(
+            check["id"]
+            for check in all_checks
+            if check["kind"] == "observation" and check.get("assessor") == "judge"
+        )
     commands = "project-checks" in node.get("resources", [])
     if selected is not None:
         acceptance.ids(selected, "node required_check_ids", empty=True)
@@ -51,9 +69,10 @@ def requirements(
         for check in all_checks
         if (selected is None or check["id"] in required)
         and (
-            check["kind"] == "observation"
+            (check["kind"] == "observation" and check.get("assessor") in {None, role})
             or (
-                commands
+                check["kind"] != "observation"
+                and commands
                 and (
                     (
                         role == "tester"
@@ -81,7 +100,17 @@ def requirements(
         required <= available,
         "Required checks need project-checks reservation and exact output ownership",
     )
+    approval_policies: dict[str, CheckApprovalPolicy] = {}
     for entry in project_checks(profile):
+        if (
+            role == "tester"
+            and stage == "verify"
+            and entry["id"] in available
+            and (action := entry.get("approval_action"))
+        ):
+            approval_policies[entry["id"]] = {"action": action}
+            if pattern := entry.get("approval_path_regex"):
+                approval_policies[entry["id"]]["path_regex"] = pattern
         if entry["id"] in required:
             acceptance.ensure(
                 set(entry.get("after", [])) <= available,
@@ -108,7 +137,7 @@ def requirements(
             )
     test_receipt = False
     kinds = ["static", "tests", "docs"] if full else []
-    return {
+    result: FinishRequirements = {
         "allowed_checks": allowed,
         "required_checks": [check for check in all_checks if check["id"] in required],
         "gates": gates,
@@ -126,6 +155,9 @@ def requirements(
         and not any(check["kind"] == "codegen" for check in allowed),
         "require_evidence": stage == "verify",
     }
+    if approval_policies:
+        result["approval_policies"] = approval_policies
+    return result
 
 
 def validate_selection(obligations: FinishRequirements, checks: list[CheckResult]) -> None:
@@ -139,6 +171,34 @@ def validate_selection(obligations: FinishRequirements, checks: list[CheckResult
             or check.get("id") in allowed,
             f"Check not assigned to this node: {check.get('id')}",
         )
+
+
+def validate_tester_outcome(
+    state: State, node: Node, obligations: FinishRequirements, report: Report
+) -> None:
+    if node["stage"] != "verify" or report["stage_result"] not in {"FAIL_CODE", "FAIL_TEST"}:
+        return
+    assigned = {
+        check["id"] for check in obligations["required_checks"] if check["kind"] != "observation"
+    }
+    latest = {
+        record["spec"]["id"]: record["status"]
+        for record in state.get("executions", {}).values()
+        if record["node_id"] == node["id"] and record["dispatch_id"] == report["dispatch_id"]
+    }
+    if not assigned or not all(latest.get(cid) == "PASS" for cid in assigned):
+        return
+    checks = report.get("checks", [])
+    acceptance.ensure(
+        acceptance.has_failed_observation(obligations["allowed_checks"], checks)
+        or any(
+            check.get("result") == "FAIL"
+            and bool(check.get("evidence", "").strip())
+            and latest.get(check["id"]) == "FAIL"
+            for check in checks
+        ),
+        "Assigned commands passed. Return VERIFIED with coverage_notes for Judge, or include an assigned failed observation.",
+    )
 
 
 def validate_pass(obligations: FinishRequirements, report: Report) -> None:

@@ -358,8 +358,15 @@ class ReviewFindingTests(unittest.TestCase):
             )
         self.assertEqual(before, state)
 
+    def test_first_supplemental_failure_on_untouched_candidate_reopens_original_author(
+        self,
+    ) -> None:
+        self.test_judge_requested_existing_check_keeps_author_and_final_receipts(
+            baseline_failure=True
+        )
+
     def test_judge_requested_existing_check_keeps_author_and_final_receipts(
-        self, known_defect: bool = False
+        self, known_defect: bool = False, baseline_failure: bool = False
     ) -> None:
         from factory.project.profile_io import load_profile
 
@@ -392,6 +399,12 @@ gates:
           timeout_seconds: 10
           inputs: [extra-input.txt]
 """
+        if baseline_failure:
+            f.fixture_policy = f.fixture_policy.replace(
+                "print('focused extra')", "raise SystemExit(1)"
+            )
+            f.g["agents"]["author"]["profile"] = "middle-implementer"
+            f.config["_defaults"]["implementer"] = "middle-implementer"
         f.fixture_policy = f.fixture_policy.replace('"{python}"', json.dumps(sys.executable))
         (f.root / "extra-input.txt").write_text("original input")
         f.fixture_profile.write_text(f.fixture_policy)
@@ -478,6 +491,34 @@ gates:
         self.assertEqual("pending", revised["nodes"]["review-label"]["status"])
         f.start("requested-behavior")
         focused = f.report("requested-behavior")
+        if baseline_failure:
+            self.assertEqual("FAIL", focused["checks"][0]["result"])
+            focused.update(outcome="FAIL", stage_result="FAIL_CODE")
+            f.ledger.finish("requested-behavior", focused)
+            request = {
+                "author_dispatch_id": before["nodes"]["write-label"]["dispatch_id"],
+                "evidence_node": "requested-behavior",
+                "evidence_dispatch_id": focused["dispatch_id"],
+                "cause": "tests",
+                "kind": "quality",
+                "reason": "Current consumer fails.",
+                "terminal_evidence": "Supplemental verification returned.",
+                "handoff": "Repair the rejected candidate.",
+            }
+            decision = f.ledger.correct("write-label", request)
+            self.assertEqual(
+                (True, 0, "retry", "middle-implementer"),
+                (
+                    decision.get("baseline_repair"),
+                    decision["failure_count"],
+                    decision["decision"],
+                    decision["to_profile"],
+                ),
+            )
+            self.assertEqual(decision, f.ledger.correct("write-label", request))
+            self.assertEqual(before["counters"], f.ledger.read()["counters"])
+            self.assertIn("write-label", f.ledger.next_actions()["runnable"])
+            return
         forged = deepcopy(focused)
         forged["checks"][0]["execution_id"] = "forged"
         before_forged = f.ledger.read()
