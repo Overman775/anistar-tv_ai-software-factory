@@ -176,6 +176,7 @@ def _check_intent(
     )
     output = f".factory/memory/history/{state['run_id']}/checks/{rid}.log"
     relative(journal.root, output)
+    factory_python = platform.python_version()
     return {
         "run_id": state["run_id"],
         "node_id": node_id,
@@ -190,7 +191,8 @@ def _check_intent(
         "output": output,
         "environment": {
             "platform": "-".join((platform.system(), platform.release(), platform.machine())),
-            "python": platform.python_version(),
+            "factory_python": factory_python,
+            "python": factory_python,
             "executable": shutil.which(execution["argv"][0]) if execution["argv"] else None,
         },
         "composite_stages": [
@@ -334,7 +336,12 @@ def _complete_check(
         "BLOCKED" if error else "PASS" if code == 0 else "FAIL"
     )
     result: CommandResult = {
-        **spec,
+        "id": spec["id"],
+        "category": spec["category"],
+        "criteria": spec["criteria"],
+        "method": spec["method"],
+        "kind": spec["kind"],
+        "execution": execution,
         "command": execution["argv"]
         or "registered stages: " + ", ".join(execution.get("stages", [])),
         "cwd": execution["cwd"],
@@ -343,6 +350,8 @@ def _complete_check(
         "evidence": record["output"],
         "execution_id": rid,
     }
+    if observed is not None and "reported_runtime" in observed:
+        result["reported_runtime"] = observed["reported_runtime"]
     record.update(
         {
             "status": status,

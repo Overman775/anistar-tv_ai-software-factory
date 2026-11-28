@@ -5,8 +5,10 @@ planning/decomposition `.factory/memory/staging/`.
 
 After actual worker termination, save additional required evidence in the run's
 history directory, archive the completed/cancelled run, then invoke `cli workflow clean`.
-Keep packets while downstream work may need them. Cleanup verifies terminal history and each removal path, then removes verified working copies of transport, checks and attachments
-and releases the current run slot in the workflow database.
+Keep packets while downstream work may need them. Cleanup verifies terminal history
+and each removal path against the run inventory. It removes only exact registered
+working copies of transport, checks and attachments with verified ownership and
+hashes, then releases the current run slot in the workflow database.
 It removes directories only when empty.
 Reject symlinks, directories, traversal, foreign paths and ambiguous ownership.
 Unknown files remain. Do not delete application code, tests, docs, source tasks,

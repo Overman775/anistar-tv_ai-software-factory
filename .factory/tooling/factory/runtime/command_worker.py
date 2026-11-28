@@ -16,7 +16,13 @@ from pydantic import TypeAdapter, ValidationError
 from factory import file_reader
 from factory.runtime.commands import verification, windows_job
 from factory.runtime.commands.process import run_process
-from factory.runtime.contracts import ExecutionReceipt, ProcessFacts, ProcessOwner, TestSelection
+from factory.runtime.contracts import (
+    ExecutionReceipt,
+    ProcessFacts,
+    ProcessOwner,
+    ReportedCheckRuntime,
+    TestSelection,
+)
 from factory.runtime.workflow_config import check_config
 from factory.runtime.workflow_core import (
     Invalid,
@@ -33,6 +39,8 @@ if TYPE_CHECKING:
 PROCESS_OWNER = TypeAdapter[ProcessOwner](ProcessOwner)
 PROCESS_FACTS = TypeAdapter[ProcessFacts](ProcessFacts)
 TEST_SELECTION = TypeAdapter[TestSelection](TestSelection)
+REPORTED_RUNTIME = TypeAdapter[ReportedCheckRuntime](ReportedCheckRuntime)
+RUNTIME_MARKER = b"FACTORY_CHECK_RUNTIME "
 
 
 def artifact(root: Path, record: ExecutionReceipt, suffix: str) -> Path:
@@ -140,6 +148,23 @@ def test_selection(log: Path, mode: Literal["full", "filtered"] = "full") -> Tes
         or len(set(files)) != len(files)
     ):
         return None
+    return report
+
+
+def reported_runtime(log: Path) -> ReportedCheckRuntime | None:
+    """Read one runtime record emitted by the registered check itself."""
+    report = None
+    line_start = True
+    with file_reader.open_binary(log) as stream:
+        while line := stream.readline(4097):
+            if line_start and line.startswith(RUNTIME_MARKER):
+                if report is not None or len(line) > 4096:
+                    return None
+                try:
+                    report = REPORTED_RUNTIME.validate_json(line[len(RUNTIME_MARKER) :])
+                except ValidationError:
+                    return None
+            line_start = line.endswith(b"\n")
     return report
 
 
@@ -294,6 +319,8 @@ def supervise(ledger: RunJournal, execution_id: str) -> None:
                 "verification": verification_result,
                 **result,
             }
+            if result["exit_code"] is not None and (runtime := reported_runtime(log)):
+                results[stage_id]["reported_runtime"] = runtime
             final_result = {"exit_code": result["exit_code"], "error": result["error"]}
             if result["error"] or result["exit_code"] != 0:
                 break

@@ -55,6 +55,12 @@ class CheckEvidence(TypedDict, total=False):
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))
+class ReportedCheckRuntime(TypedDict):
+    python: Annotated[str, StringConstraints(pattern=r"^\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?$")]
+    executable: Nonblank
+
+
+@with_config(ConfigDict(strict=True, extra="forbid"))
 class CommandResult(ExecutableCheck):
     command: list[str] | str
     cwd: str
@@ -62,6 +68,7 @@ class CommandResult(ExecutableCheck):
     result: Literal["PASS", "FAIL", "BLOCKED"]
     evidence: Nonblank
     execution_id: Nonblank
+    reported_runtime: NotRequired[ReportedCheckRuntime]
 
 
 CheckResult = CommandResult | CheckEvidence
@@ -687,6 +694,7 @@ class StageFacts(TypedDict):
     mode: NotRequired[Literal["full", "filtered", "update"] | None]
     selection: NotRequired[TestSelection | None]
     verification: NotRequired[list[Verification]]
+    reported_runtime: NotRequired[ReportedCheckRuntime]
 
 
 @with_config(ConfigDict(strict=True, extra="forbid"))

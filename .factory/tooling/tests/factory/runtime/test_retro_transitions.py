@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import signal
 import subprocess
 import sys
@@ -299,7 +300,12 @@ class RetroTransitionsTests(TestCase):
         self, selection: str, exit_code: int = 0, *, extra_stages: bool = False
     ) -> None:
         f = self.f
-        payload = f"print('FACTORY_TEST_SELECTION ' + {selection!r}); raise SystemExit({exit_code})"
+        payload = (
+            "import json, platform, sys; "
+            "print('FACTORY_CHECK_RUNTIME ' + json.dumps("
+            "{'python': platform.python_version(), 'executable': sys.executable})); "
+            f"print('FACTORY_TEST_SELECTION ' + {selection!r}); raise SystemExit({exit_code})"
+        )
         tests = {
             "id": "actual-tests",
             "level": "final",
@@ -371,6 +377,10 @@ class RetroTransitionsTests(TestCase):
         self.assertEqual("PASS", parent["result"])
         _, child = f.ledger.check_results(parent["execution_id"])
         self.assertEqual("actual-tests", child["id"])
+        self.assertNotIn("reported_runtime", parent)
+        runtime = child["reported_runtime"]
+        self.assertEqual(platform.python_version(), runtime["python"])
+        self.assertEqual(os.path.realpath(sys.executable), os.path.realpath(runtime["executable"]))
         with self.assertRaisesRegex(Invalid, "actual-tests"):
             f.ledger.finish(
                 "verify-label",

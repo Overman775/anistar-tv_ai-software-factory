@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 import sys
 import time
@@ -14,6 +15,7 @@ from unittest.mock import patch
 
 from factory.project.profile_io import load_profile
 from factory.project.profile_rules import required_checks
+from factory.runtime import command_worker
 from factory.runtime.contracts import RoleMaterialKind
 from factory.runtime.history.task_records import read_evidence
 from factory.runtime.reports import role_material
@@ -421,17 +423,53 @@ class CheckRunnerTests(unittest.TestCase):
             f.ledger.prepare_report("verify-label", draft, [result["execution_id"]])
 
     def test_actual_output_is_preserved_through_archive_and_cleanup(self) -> None:
-        f = self.ready()
+        code = (
+            "import json, platform, sys; "
+            "print('FACTORY_CHECK_RUNTIME ' + json.dumps("
+            "{'python': platform.python_version(), 'executable': sys.executable})); "
+            "print('real output')"
+        )
+        f = self.ready(code)
         result = f.ledger.run_check("verify-label", "behavior")
         assert result["result"] != "RUNNING"
-        self.assertEqual("real output\n", (f.root / result["evidence"]).read_text())
+        runtime = result["reported_runtime"]
+        self.assertEqual(platform.python_version(), runtime["python"])
+        self.assertEqual(Path(sys.executable).resolve(), Path(runtime["executable"]).resolve())
+        output = f.root / result["evidence"]
+        self.assertEqual(
+            "FACTORY_CHECK_RUNTIME " + json.dumps(runtime) + "\nreal output\n", output.read_text()
+        )
+        output_bytes = output.read_bytes()
+        self.assertEqual(
+            runtime, f.ledger.check_results(result["execution_id"])[0]["reported_runtime"]
+        )
+        receipt = f.ledger.read()["executions"][result["execution_id"]]
+        self.assertEqual(platform.python_version(), receipt["environment"]["factory_python"])
         f.ledger.finish("verify-label", self.report(result))
         f.ledger.accept("accept-label")
         run_id = f.ledger.read()["run_id"]
         f.ledger.archive("completed", "done")
         f.ledger.clean()
         self.assertFalse((f.root / result["evidence"]).exists())
-        self.assertEqual(b"real output\n", read_evidence(f.root, result["evidence"], run_id=run_id))
+        self.assertEqual(output_bytes, read_evidence(f.root, result["evidence"], run_id=run_id))
+
+    def test_missing_or_ambiguous_runtime_stays_unknown(self) -> None:
+        log = self.f.root / "check.log"
+        marker = 'FACTORY_CHECK_RUNTIME {"python":"3.15.2","executable":"/check/python3"}\n'
+        for output in (
+            "plain output\n",
+            "FACTORY_CHECK_RUNTIME {}\n",
+            marker + marker,
+            "x" * 4097 + marker,
+        ):
+            with self.subTest(output=output):
+                log.write_text(output, encoding="utf-8")
+                self.assertIsNone(command_worker.reported_runtime(log))
+        log.write_text("x" * 4097 + "\n" + marker, encoding="utf-8")
+        self.assertEqual(
+            {"python": "3.15.2", "executable": "/check/python3"},
+            command_worker.reported_runtime(log),
+        )
 
     def test_check_waits_for_native_delivery_and_valid_confirmation(self) -> None:
         f = self.ready()

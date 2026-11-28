@@ -304,6 +304,8 @@ class LessonTests(unittest.TestCase):
             teacher.apply(self.root, key, self.card.model_copy(update={"id": "extra-1"}), None)
 
     def test_user_creation_edit_delete_through_cli(self) -> None:
+        teacher.complete(self.root, self.key)
+
         def cli(*args: str) -> str:
             result = subprocess.run(
                 [*CLI, "lessons", "--workspace", str(self.root), *args],
@@ -335,14 +337,38 @@ class LessonTests(unittest.TestCase):
         self.assertTrue(
             all(s.startswith("user:chat/") for s in updated["lesson"]["sources"]["case"])
         )
+        path = self.root / updated["path"]
+        before = path.read_bytes()
+        tag_event = json.loads(cli("user", "msg21", "chat/msg21", "Add badge-counter tag"))
+        tagged_card = card.model_copy(update={"tags": [*card.tags, "badge-counter"]})
+        proposal = graph_inputs.propose_lesson(self.root, tagged_card)
+        tagged = json.loads(cli("publish", tag_event, proposal, "--revision", updated["revision"]))
+        # Retrying the same event against the original revision must not duplicate its edit.
+        replay = json.loads(cli("publish", tag_event, proposal, "--revision", updated["revision"]))
+        self.assertEqual(tagged, replay)
+        expected = before.replace(b"- item-count\n", b"- item-count\n- badge-counter\n", 1)
+        expected = expected.replace(
+            f"- user:chat/msg2#{edited}\n".encode(),
+            f"- user:chat/msg2#{edited}\n- user:chat/msg21#{tag_event}\n".encode(),
+            1,
+        )
+        self.assertNotEqual(before, expected)
+        self.assertEqual(expected, path.read_bytes())
+        self.assertEqual(updated["lesson"]["sources"], tagged["lesson"]["sources"])
+        self.assertEqual(
+            [*updated["lesson"]["edits"], f"user:chat/msg21#{tag_event}"],
+            tagged["lesson"]["edits"],
+        )
+        cli("complete", tag_event)
+        self.assertEqual([], json.loads(cli("pending")))
         self.assertEqual(["packet"], [r["id"] for r in json.loads(cli("search", "передача"))])
         deletion = json.loads(
             cli("user", "case", "chat/msg3", "Delete packet", "--delete", "packet")
         )
         with self.assertRaisesRegex(Invalid, "Lesson changed"):
             teacher.delete(self.root, deletion, entry["revision"])
-        cli("delete", deletion, "--revision", updated["revision"])
-        cli("delete", deletion, "--revision", updated["revision"])
+        cli("delete", deletion, "--revision", tagged["revision"])
+        cli("delete", deletion, "--revision", tagged["revision"])
         cli("complete", deletion)
         self.assertEqual([], json.loads(cli("search", "передача")))
         self.assertFalse((self.root / updated["path"]).exists())

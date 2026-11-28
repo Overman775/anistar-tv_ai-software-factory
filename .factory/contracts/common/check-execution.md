@@ -78,6 +78,14 @@ Runner receipts cover declared commands/inputs, not all external state. The ledg
 is not a tamper-proof sandbox. Observations/additional diagnostics still require
 honest evidence; full command recovery belongs to the coordinator.
 
+The receipt's `environment.factory_python` records the Factory interpreter.
+Older receipts use `environment.python` for the same fact.
+When a Python check reports its own interpreter from the process running the
+check, that process can emit one line beginning with `FACTORY_CHECK_RUNTIME `
+followed by a JSON object with `python` (version) and `executable` (path).
+The CLI preserves that record as `reported_runtime` in the command result for
+that physical stage. Missing, malformed or repeated reports leave the check's
+runtime unknown. The field records what the check reported.
 
 An assigned check may declare registered ordered `execution.stages` and an empty
 `argv`. The runner executes each registered read-only full stage once and records distinct
